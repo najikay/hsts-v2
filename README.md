@@ -1,4 +1,4 @@
-# HSTS — Homework & Study Test System (Prototype)
+# HSTS (Prototype)
 
 A monolithic **3-tier desktop application** built on the **Thin Client / Fat Server**
 paradigm. A JavaFX client lets a user view and edit exam questions; all logic and
