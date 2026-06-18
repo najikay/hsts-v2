@@ -8,3 +8,6 @@ target/
 
 # Course assignment specs — kept locally, not committed
 *.pdf
+
+# Internal planning/design notes — kept locally, not published
+docs/

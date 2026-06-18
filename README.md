@@ -1,29 +1,29 @@
-# HSTS (Prototype)
+# HSTS — High School Test System (Prototype)
 
 A monolithic **3-tier desktop application** built on the **Thin Client / Fat Server**
 paradigm. A JavaFX client lets a user view and edit exam questions; all logic and
 persistence live on a server reached over the OCSF networking framework, backed by MySQL.
 
-> **Status:** Assignment Part C prototype — lean by design, but architected so every
-> decision scales into enterprise infrastructure (Docker/Kubernetes, JSON AI metadata,
-> a multi-provider LLM gatekeeper). See [`docs/demo_guide.md`](docs/demo_guide.md) for the
-> scaling roadmap and [`docs/defense_prep.md`](docs/defense_prep.md) for the defense Q&A.
+> **Scope:** This is the **working prototype (Part C)** of a larger course project — the
+> full HSTS handles question banks, exam building/execution/grading, statistics, an AI
+> study-bot, and multiple user roles. The prototype deliberately implements just one
+> vertical slice (view → select → edit → update a question) end-to-end, on an
+> architecture shaped so the rest of the system slots in cleanly.
 
 ---
 
-## 1. Project Overview
+## 1. What it does
 
-HSTS is a question-management prototype demonstrating a full client → server → database
-→ client round trip:
+A complete client → server → database → client round trip:
 
-1. The client requests and displays the list of questions.
-2. The user selects and edits a question.
+1. The client connects to the server and requests the list of questions.
+2. The user selects a question and edits its text / answer.
 3. The update is sent to the server over OCSF.
-4. The server persists it to MySQL and returns the refreshed data.
-5. The client re-displays the updated question.
+4. The server validates it and persists it to MySQL via the DAO.
+5. The server returns the refreshed list; the client re-renders the saved state.
 
-**Stack:** JavaFX 17 (UI) · native OCSF (networking) · MySQL via JDBC (data) ·
-Maven + `maven-shade-plugin` (single double-clickable Fat JAR). Built solo on Ubuntu/WSL, Java 17.
+**Stack:** JavaFX 17 (FXML + CSS UI) · native OCSF (networking) · MySQL via JDBC (data) ·
+Maven + `maven-shade-plugin` (single double-clickable Fat JAR).
 
 ### Tiers
 
@@ -38,154 +38,142 @@ Maven + `maven-shade-plugin` (single double-clickable Fat JAR). Built solo on Ub
 
 ## 2. Quick Start
 
-**Prerequisites:** Java 17, MySQL, Maven.
+**Prerequisites:** Java 17+, MySQL, Maven.
 
 ```bash
-# 1. Seed the database (one-time)
+# 1. Create + seed the database (one-time)
 mysql -u root -p < src/main/resources/schema.sql
 mysql -u root -p < src/main/resources/seed.sql
 
 # 2. Build the Fat JAR
 mvn clean package
 
-# 3. Launch everything with one double-click (server + client boot together)
+# 3. Launch — one double-click boots the server and client together
 java -jar target/hsts-prototype.jar
 ```
 
-Default DB credentials live in `server/db/DatabaseConfig.java` (`root`/`root` @
-`localhost:3306/hsts_db`) — edit the constants to match your machine. Full presentation
-walkthrough in [`docs/demo_guide.md`](docs/demo_guide.md).
+Default DB credentials live in `server/db/DatabaseConfig.java` (`root` / `root` @
+`localhost:3306/hsts_db`) — edit the constants to match your machine.
+
+A pre-built runnable jar is committed at `target/hsts-prototype.jar` for convenience.
 
 ---
 
-## 3. Architectural Justifications
+## 3. User Interface
 
-Every pattern here was chosen for **traceability now, scalability later**.
+The UI is defined in **FXML** with a shared **CSS** theme, so layout and styling are
+separated from the controller logic.
 
-### 3.1 Thin Client / Fat Server
-The client holds **no business logic and no database credentials**. It renders UI and
-relays intent; the server owns all rules, validation, and persistence. This keeps the
-client trivially replaceable and — crucially — means the server is the *only* tier that
-must be trusted, secured, and scaled. When we containerize, only the server moves.
-
-### 3.2 Native OCSF behind an Adapter (`IClientConnection`)
-OCSF (Object Client/Server Framework) provides the socket + object-serialization
-transport. Rather than scatter OCSF calls through the UI, we hide it behind the
-**Adapter pattern**: the UI depends only on the `IClientConnection` interface, and
-`HSTSClient` is the OCSF-backed implementation. **Why:** a future migration to gRPC or
-REST (e.g. for a Kubernetes ingress) becomes a *single new adapter class* — zero UI
-changes. The framework is vendored natively under `src/main/java/ocsf/`, so the project
-is 100% self-contained (no external jar).
-
-### 3.3 DAO / ORM pattern (`QuestionDAO`)
-All SQL is isolated in the Data Access Object. Callers (the server handlers) speak in
-`Question` objects, never SQL strings. **Why:** we can add the future `ai_metadata` JSON
-column, change queries, or swap the persistence engine without touching the logic tier.
-
-### 3.4 Why we deliberately did **not** use an Event Bus
-An event bus (publish/subscribe) is tempting for decoupling, but for a prototype whose
-chief goal is **demonstrable, auditable correctness**, it is the wrong tool:
-
-- **Traceability.** Our flow is strictly synchronous and linear: a UI action sends one
-  `Message`, the server handles it, one response comes back. You can read the entire data
-  path top-to-bottom in `handleMessageFromClient`. An event bus would scatter that path
-  across loosely-coupled subscribers, making the demo and the defense *harder* to reason about.
-- **Determinism.** Request/response gives one obvious place where each command is handled
-  and answered — no hidden fan-out, no ordering surprises.
-- **Right-sizing.** An event bus solves problems (many-to-many async events, decoupled
-  producers/consumers) that this prototype does not have. Adding it would be architecture
-  for its own sake.
-
-We kept the data flow **synchronous and point-to-point** on purpose. The one place we
-*do* cross threads — receiving server responses — is handled explicitly and visibly via
-`Platform.runLater` (see §4), not buried in a bus.
+- **Connect screen** (`ConnectView`) — branded splash that opens the OCSF connection on a
+  background thread; on success it asks the navigation controller to swap to the main
+  screen, on failure it shows an inline error + Retry.
+- **Main screen** (`QuestionsView`) — a master-detail layout: a scrollable, multi-line
+  question list on the left; an editor on the right with unsaved-changes tracking, a
+  Revert action, and a transient "Saved" confirmation after a successful write.
+- **Branding** (`Logo`) — a vector graduation-cap mark on the app's indigo gradient,
+  reused on the splash, in the header, and as the window icon. Source: `branding/hsts-logo.svg`.
 
 ---
 
-## 4. Concurrency Model
+## 4. Architecture & Design Choices
 
-OCSF reads from the socket on a **background thread**. JavaFX forbids touching the scene
-graph from any thread but the **JavaFX Application Thread**. The boundary is crossed in
-exactly one place: `HSTSClient.handleMessageFromServer` wraps the hand-off to the UI in
-`Platform.runLater(...)`. This keeps the entire view (`QuestionsView`) free of threading
-concerns — it only ever runs on the FX thread — while the network read loop never blocks
-the UI.
+Every decision favours **traceable, demonstrable correctness now**, with clean seams for
+later growth.
+
+### 4.1 Thin Client / Fat Server
+The client holds **no business logic and no database credentials** — it renders UI and
+relays intent. The server owns all rules, validation, and persistence. The client is
+trivially replaceable, and the server is the only tier that must be trusted and scaled.
+
+### 4.2 Native OCSF behind an Adapter (`IClientConnection`)
+OCSF provides the socket + object-serialization transport. The UI never touches OCSF
+directly — it depends only on the `IClientConnection` interface, implemented by the
+OCSF-backed `HSTSClient` (**Adapter pattern**). A future protocol swap (REST, gRPC,
+WebSocket) becomes a single new adapter class, with zero UI changes. OCSF is vendored as
+source under `src/main/java/ocsf/`, so the project is self-contained.
+
+### 4.3 DAO pattern (`QuestionDAO`)
+All SQL is isolated in the Data Access Object; callers speak in `Question` objects, never
+SQL strings. Persistence can change (new columns, a different engine) without touching the
+logic tier.
+
+### 4.4 Why no Event Bus
+The flow is intentionally **synchronous and point-to-point**: one UI action sends one
+`Message`, the server handles it in one place (`handleMessageFromClient`), and one
+response comes back. This keeps the whole data path readable top-to-bottom and the
+behaviour deterministic. An event bus would scatter that path across subscribers and solve
+problems this prototype doesn't have.
 
 ---
 
-## 5. Security
+## 5. Concurrency Model
 
-### 5.1 The Fat Server as Gatekeeper
-The server is the **single choke point** for all data access. Clients cannot reach MySQL
-directly; they can only send `Message` requests, which the server validates (type-checks
-the envelope, switches on a known `Command`, rejects anything else with an `ERROR`) before
-touching the DAO. This is the foundation for the future **LLM gatekeeper**: the same
-trusted boundary that mediates DB access will mediate AI-provider access — holding API
-keys, enforcing rate limits, and sanitizing prompts server-side so a client can never
-exfiltrate credentials or inject a malicious prompt.
-
-### 5.2 SQL injection neutralized by `PreparedStatement`
-Every query in `QuestionDAO` uses a parameterized `PreparedStatement`. User input is
-bound as **typed parameters** (`ps.setString`, `ps.setInt`), never concatenated into SQL
-text. The database driver sends the query template and the values **separately**, so input
-can never change the structure of the statement — classic injection (`'; DROP TABLE …`)
-is treated as a literal string value, not executable SQL.
+OCSF reads from the socket on a **background thread**; JavaFX may only be touched from the
+**JavaFX Application Thread**. That boundary is crossed in exactly one place —
+`HSTSClient.handleMessageFromServer` wraps the hand-off to the UI in
+`Platform.runLater(...)`. The view code therefore only ever runs on the FX thread, and the
+network read loop never blocks the UI.
 
 ---
 
-## 6. Design Patterns at a Glance
+## 6. Security
+
+- **Fat Server as gatekeeper.** The server is the single choke point for data access.
+  Clients cannot reach MySQL directly — they send `Message` requests, which the server
+  type-checks and routes on a known `Command` (rejecting anything else with an `ERROR`)
+  before touching the DAO. The same trusted boundary is where future user-auth and
+  AI-provider mediation will live.
+- **SQL injection neutralized.** Every query in `QuestionDAO` uses a parameterized
+  `PreparedStatement`; user input is bound as typed parameters, never concatenated into SQL
+  text — so input can never alter the statement's structure.
+
+---
+
+## 7. Design Patterns at a Glance
 
 | Pattern | Where | Purpose |
 |---------|-------|---------|
 | **Singleton** | `client.ui.ScreenManager` | One owner of the Stage + connection; central navigation |
 | **Template Method** | `client.ui.AbstractScreenUI` | Fixed screen lifecycle (`render()` → `onShown()`), variable steps in subclasses |
-| **Adapter** | `client.network.IClientConnection` / `HSTSClient` | Hide OCSF; enable future protocol swap |
+| **Adapter** | `client.network.IClientConnection` / `HSTSClient` | Hide OCSF; enable a future protocol swap |
 | **DAO** | `server.db.QuestionDAO` | Isolate SQL from logic |
-| **Abstract entity (planned)** | `common.entities.User` (future) | Polymorphic role subclasses |
 
 ---
 
-## 7. Project Structure
+## 8. Project Structure
 
 ```
 HSTS/
 ├── pom.xml                       # Maven build + shade (Fat JAR, Main-Class = Launcher)
 ├── README.md
-├── docs/
-│   ├── prd.md                    # Requirements & design patterns
-│   ├── plan.md                   # Phased implementation plan
-│   ├── todo.md                   # Granular task checklist (100% complete)
-│   ├── demo_guide.md             # Presentation script + enterprise roadmap
-│   └── defense_prep.md           # Examiner Q&A
+├── target/hsts-prototype.jar     # pre-built runnable jar
 └── src/main/
     ├── java/
-    │   ├── client/ui/            # Launcher, ClientApp, ScreenManager, AbstractScreenUI, QuestionsView
+    │   ├── client/ui/            # Launcher, ClientApp, ScreenManager, AbstractScreenUI,
+    │   │                         #   ConnectView, QuestionsView, Logo
     │   ├── client/network/       # IClientConnection (Adapter), HSTSClient
     │   ├── common/entities/      # Question (Serializable)
     │   ├── common/network/       # Message + Command enum (Serializable protocol)
-    │   ├── ocsf/                 # Native OCSF: server.AbstractServer, server.ConnectionToClient, client.AbstractClient
+    │   ├── ocsf/                 # Native OCSF: server.{AbstractServer, ConnectionToClient},
+    │   │                         #   client.AbstractClient
     │   └── server/               # HSTSServer, ServerMain, db/{DatabaseConfig, QuestionDAO}
-    └── resources/                # schema.sql, seed.sql
+    └── resources/
+        ├── schema.sql, seed.sql  # database setup
+        ├── fxml/                 # ConnectView.fxml, QuestionsView.fxml
+        ├── css/app.css           # shared theme
+        └── branding/             # hsts-logo.svg
 ```
 
 ---
 
-## 8. Build Notes
+## 9. Build Notes
 
 - **Single-click launch.** `client.ui.Launcher` is the manifest `Main-Class` (a plain,
   non-`Application` class — required to bypass JavaFX module restrictions in a shaded jar).
   It boots the server on a daemon thread, waits for the port to bind, then starts the
   JavaFX client.
-- **Self-contained.** OCSF is native source, not a dependency; only JavaFX and MySQL
-  Connector/J resolve from Maven Central.
-- **Platform note.** The classpath Fat JAR bundles OS-specific JavaFX natives — a Linux
-  build runs on Linux. Per-platform classifiers would produce a Windows-runnable jar.
-
----
-
-## 9. Roadmap
-
-See [`docs/demo_guide.md`](docs/demo_guide.md) Part 2 for the full enterprise scaling story:
-Dockerized server + Kubernetes load balancing, the `ai_metadata` JSON column for prompt
-provenance & token accounting, and the Fat Server's evolution into a multi-provider
-(OpenAI, Anthropic/Claude, …) LLM gatekeeper.
+- **Self-contained deps.** OCSF is native source, not a dependency; only JavaFX and the
+  MySQL connector resolve from Maven Central.
+- **Platform note.** The Fat JAR bundles the JavaFX natives for the OS it was built on, so
+  build on the platform you intend to run (or add per-platform classifiers for a
+  cross-platform jar).
