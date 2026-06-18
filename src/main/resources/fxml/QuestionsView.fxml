@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Circle?>
+<!-- StackPane (logo slot) imported above; controller fills it with client.ui.Logo -->
+
+
+<!--
+  QuestionsView — main screen (Presentation tier), master-detail layout.
+
+  No fx:controller: the controller is set via loader.setController(this) in
+  QuestionsView.render(), so the AbstractScreenUI-managed instance (Template
+  Method) stays the controller and the Singleton/Adapter wiring is untouched.
+  Header (status + count) · left question list · right editor card · status bar.
+-->
+<VBox prefHeight="640.0" prefWidth="980.0"
+      xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml">
+
+    <!-- ===== Header bar ===== -->
+    <HBox styleClass="header-bar">
+        <StackPane fx:id="logoBox"/>
+        <VBox spacing="2.0">
+            <Label styleClass="header-title" text="HSTS · Question Bank"/>
+            <Label styleClass="header-subtitle" text="High School Test System — prototype"/>
+        </VBox>
+        <Region HBox.hgrow="ALWAYS"/>
+        <HBox styleClass="status-pill">
+            <Circle radius="5.0" styleClass="status-dot"/>
+            <Label text="Connected"/>
+        </HBox>
+        <Label fx:id="countBadge" styleClass="count-badge" text="0 questions"/>
+    </HBox>
+
+    <!-- ===== Body: master / detail ===== -->
+    <HBox styleClass="body" VBox.vgrow="ALWAYS">
+
+        <!-- Left: question list -->
+        <VBox prefWidth="320.0" spacing="12.0" styleClass="card">
+            <Label styleClass="section-title" text="Questions"/>
+            <ListView fx:id="listView" styleClass="questions-list" VBox.vgrow="ALWAYS"/>
+        </VBox>
+
+        <!-- Right: editor -->
+        <VBox spacing="14.0" styleClass="card" HBox.hgrow="ALWAYS">
+            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                <Label styleClass="section-title" text="Edit Question"/>
+                <Label fx:id="idBadge" managed="false" styleClass="id-badge" visible="false"/>
+            </HBox>
+
+            <StackPane VBox.vgrow="ALWAYS">
+                <!-- Empty state -->
+                <VBox fx:id="placeholderBox" styleClass="placeholder-box">
+                    <Label styleClass="placeholder-icon" text="✎"/>
+                    <Label styleClass="placeholder-text" text="Select a question from the list to edit it"/>
+                </VBox>
+
+                <!-- Editor form -->
+                <VBox fx:id="editorBox" managed="false" spacing="10.0" visible="false">
+                    <Label styleClass="field-label" text="QUESTION"/>
+                    <TextArea fx:id="questionField" prefRowCount="3" promptText="Question text" wrapText="true"/>
+                    <Label styleClass="field-label" text="ANSWER"/>
+                    <TextArea fx:id="answerArea" promptText="Answer" wrapText="true" VBox.vgrow="ALWAYS"/>
+                    <HBox alignment="CENTER_RIGHT" spacing="10.0">
+                        <Label fx:id="dirtyLabel" managed="false" styleClass="dirty-indicator"
+                               text="● Unsaved changes" visible="false"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="revertButton" disable="true" onAction="#onRevert"
+                                styleClass="secondary-button" text="Revert"/>
+                        <Button fx:id="saveButton" disable="true" onAction="#onSave"
+                                styleClass="primary-button" text="Save Update"/>
+                    </HBox>
+                </VBox>
+            </StackPane>
+        </VBox>
+    </HBox>
+
+    <!-- ===== Status bar ===== -->
+    <HBox styleClass="status-bar">
+        <Label fx:id="statusLabel" styleClass="status-text" text="Loading…"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="savedLabel" managed="false" styleClass="saved-indicator"
+               text="✓ Saved" visible="false"/>
+    </HBox>
+</VBox>

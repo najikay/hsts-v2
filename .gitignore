@@ -5,3 +5,6 @@ target/
 *.iml
 *.log
 .DS_Store
+
+# Course assignment specs — kept locally, not committed
+*.pdf

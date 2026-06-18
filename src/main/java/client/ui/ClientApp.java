@@ -2,15 +2,16 @@ package client.ui;
 
 import client.network.HSTSClient;
 import javafx.application.Application;
-import javafx.scene.control.Alert;
 import javafx.stage.Stage;
 
 /**
  * JavaFX application entry point (Presentation tier).
  *
  * <p>Bootstraps the client: wires the {@link ScreenManager} singleton to the
- * primary stage, opens the OCSF-backed {@link HSTSClient} adapter to the Fat
- * Server at localhost:5555, then loads the {@link QuestionsView}.
+ * primary stage, creates the OCSF-backed {@link HSTSClient} adapter for the Fat
+ * Server at localhost:5555, then shows the {@link ConnectView}. The connect
+ * screen opens the socket asynchronously and, on success, asks the
+ * {@link ScreenManager} to swap to {@link QuestionsView}.
  *
  * <p>NOTE: Because this class extends {@link Application}, it must NOT be the
  * Fat JAR's Main-Class. The manifest Main-Class is {@link Launcher}, which calls
@@ -28,23 +29,11 @@ public class ClientApp extends Application {
         ScreenManager manager = ScreenManager.getInstance();
         manager.init(primaryStage);
 
-        // Open the network adapter (Adapter Pattern) to the Fat Server.
+        // Create the network adapter (Adapter Pattern); ConnectView opens it.
         client = new HSTSClient(SERVER_HOST, SERVER_PORT);
         manager.setClient(client);
 
-        try {
-            client.connect();
-        } catch (Exception e) {
-            Alert alert = new Alert(Alert.AlertType.ERROR,
-                    "Could not connect to the HSTS server at "
-                            + SERVER_HOST + ":" + SERVER_PORT
-                            + "\n\nIs ServerMain running?\n\n" + e.getMessage());
-            alert.setHeaderText("Connection failed");
-            alert.showAndWait();
-            // Still show the (empty) screen so the window isn't blank-on-crash.
-        }
-
-        manager.setScreen(new QuestionsView());
+        manager.setScreen(new ConnectView());
     }
 
     @Override

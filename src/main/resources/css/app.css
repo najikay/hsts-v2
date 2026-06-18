@@ -1,0 +1,239 @@
+/* =====================================================================
+   HSTS — application stylesheet (Presentation tier)
+   A single shared theme applied by ScreenManager to every screen's Scene.
+   Indigo accent · white cards · soft shadows · clear interactive states.
+   ===================================================================== */
+
+.root {
+    -fx-font-family: "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -fx-background-color: #f3f5f9;
+    -fx-focus-color: #4263eb;
+    -fx-faint-focus-color: transparent;
+}
+
+/* ---------------------------------------------------------------------
+   Header bar
+   --------------------------------------------------------------------- */
+.header-bar {
+    -fx-background-color: linear-gradient(to right, #4263eb, #5c7cfa);
+    -fx-padding: 16 24 16 24;
+    -fx-alignment: center-left;
+    -fx-spacing: 14;
+}
+.header-title {
+    -fx-text-fill: white;
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+}
+.header-subtitle {
+    -fx-text-fill: rgba(255, 255, 255, 0.82);
+    -fx-font-size: 12px;
+}
+.status-pill {
+    -fx-background-color: rgba(255, 255, 255, 0.18);
+    -fx-background-radius: 20;
+    -fx-padding: 5 13 5 11;
+    -fx-spacing: 7;
+    -fx-alignment: center;
+}
+.status-pill .label {
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+.status-dot {
+    -fx-fill: #69db7c;
+}
+.count-badge {
+    -fx-background-color: rgba(255, 255, 255, 0.18);
+    -fx-background-radius: 20;
+    -fx-padding: 6 13 6 13;
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+/* ---------------------------------------------------------------------
+   Body & cards
+   --------------------------------------------------------------------- */
+.body {
+    -fx-padding: 18;
+    -fx-spacing: 18;
+}
+.card {
+    -fx-background-color: white;
+    -fx-background-radius: 14;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.08), 14, 0, 0, 4);
+    -fx-padding: 18;
+}
+.section-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f2937;
+}
+.field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #475569;
+}
+.id-badge {
+    -fx-background-color: #edf2ff;
+    -fx-text-fill: #4263eb;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-background-radius: 8;
+    -fx-padding: 4 10 4 10;
+}
+
+/* ---------------------------------------------------------------------
+   Questions list
+   --------------------------------------------------------------------- */
+.questions-list,
+.questions-list .virtual-flow,
+.questions-list .clipped-container {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+.questions-list {
+    -fx-padding: 0;
+}
+.questions-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 12 14 12 16;
+    -fx-border-width: 0 0 1 3;
+    -fx-border-color: transparent transparent #eef1f6 transparent;
+    -fx-text-fill: #334155;
+    -fx-font-size: 13px;
+}
+.questions-list .list-cell:filled:hover {
+    -fx-background-color: #f5f7ff;
+}
+.questions-list .list-cell:filled:selected {
+    -fx-background-color: #edf2ff;
+    -fx-border-color: transparent transparent #eef1f6 #4263eb;
+}
+/* Multi-line cell content (full question + answer preview) */
+.q-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #334155;
+}
+.q-sub {
+    -fx-font-size: 12px;
+    -fx-text-fill: #94a3b8;
+}
+.questions-list .list-cell:filled:selected .q-title { -fx-text-fill: #1e3a8a; }
+.questions-list .list-cell:filled:selected .q-sub   { -fx-text-fill: #5c7cfa; }
+
+/* ---------------------------------------------------------------------
+   Text areas
+   --------------------------------------------------------------------- */
+.text-area {
+    -fx-background-color: #f8fafc;
+    -fx-background-radius: 10;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-font-size: 13px;
+}
+.text-area .content {
+    -fx-background-color: transparent;
+    -fx-padding: 8;
+}
+.text-area:focused {
+    -fx-border-color: #4263eb;
+    -fx-background-color: white;
+}
+
+/* ---------------------------------------------------------------------
+   Buttons
+   --------------------------------------------------------------------- */
+.primary-button {
+    -fx-background-color: #4263eb;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 10;
+    -fx-padding: 10 22 10 22;
+    -fx-cursor: hand;
+}
+.primary-button:hover  { -fx-background-color: #3b5bdb; }
+.primary-button:pressed { -fx-background-color: #364fc7; }
+.primary-button:disabled {
+    -fx-background-color: #c7d2fe;
+    -fx-text-fill: #eef2ff;
+    -fx-cursor: default;
+}
+.secondary-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #4263eb;
+    -fx-font-size: 13px;
+    -fx-border-color: #c7d2fe;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 10 18 10 18;
+    -fx-cursor: hand;
+}
+.secondary-button:hover { -fx-background-color: #eef2ff; }
+.secondary-button:disabled { -fx-opacity: 0.45; -fx-cursor: default; }
+
+/* ---------------------------------------------------------------------
+   Empty-state placeholder
+   --------------------------------------------------------------------- */
+.placeholder-box {
+    -fx-alignment: center;
+    -fx-spacing: 12;
+}
+.placeholder-icon {
+    -fx-font-size: 44px;
+    -fx-text-fill: #cbd5e1;
+}
+.placeholder-text {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------
+   Status bar
+   --------------------------------------------------------------------- */
+.status-bar {
+    -fx-padding: 10 24 10 24;
+    -fx-background-color: white;
+    -fx-border-color: #e9edf3;
+    -fx-border-width: 1 0 0 0;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+.status-text     { -fx-text-fill: #64748b; -fx-font-size: 12px; }
+.saved-indicator { -fx-text-fill: #2f9e44; -fx-font-size: 12px; -fx-font-weight: bold; }
+.dirty-indicator { -fx-text-fill: #e8590c; -fx-font-size: 12px; -fx-font-weight: bold; }
+
+/* ---------------------------------------------------------------------
+   Connect / splash screen
+   --------------------------------------------------------------------- */
+.connect-root {
+    -fx-background-color: linear-gradient(to bottom right, #4263eb, #5c7cfa);
+}
+.connect-card {
+    -fx-background-color: white;
+    -fx-background-radius: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 30, 0, 0, 10);
+    -fx-padding: 40 48 40 48;
+    -fx-alignment: center;
+    -fx-spacing: 14;
+}
+.connect-wordmark {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f2937;
+}
+.connect-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f2937;
+}
+.connect-subtitle { -fx-text-fill: #94a3b8; -fx-font-size: 13px; }
+.connect-status   { -fx-text-fill: #64748b; -fx-font-size: 13px; }
+.connect-error    { -fx-text-fill: #e03131; -fx-font-size: 13px; }
+.progress-indicator { -fx-progress-color: #4263eb; }
