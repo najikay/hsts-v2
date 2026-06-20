@@ -23,7 +23,7 @@ A complete client → server → database → client round trip:
 5. The server returns the refreshed list; the client re-renders the saved state.
 
 **Stack:** JavaFX 17 (FXML + CSS UI) · native OCSF (networking) · MySQL via JDBC (data) ·
-Maven + `maven-shade-plugin` (single double-clickable Fat JAR).
+Maven + `maven-shade-plugin` (two deployable Fat JARs — server and client).
 
 ### Tiers
 
@@ -45,17 +45,59 @@ Maven + `maven-shade-plugin` (single double-clickable Fat JAR).
 mysql -u root -p < src/main/resources/schema.sql
 mysql -u root -p < src/main/resources/seed.sql
 
-# 2. Build the Fat JAR
-mvn clean package
+'''powershell
+Get-Content src/main/resources/schema.sql | mysql -u root -p
+Get-Content src/main/resources/seed.sql | mysql -u root -p
 
-# 3. Launch — one double-click boots the server and client together
-java -jar target/hsts-prototype.jar
+# 2. Build both Fat JARs + copy deployment properties into target/
+mvn clean package
+```
+-Build using the wrapper
+.\mvnw clean package
+
+After the build, `target/` contains:
+
+| Artifact | Purpose |
+|----------|---------|
+| `hsts-server.jar` | Fat Server — OCSF listener + MySQL access |
+| `hsts-client.jar` | JavaFX Thin Client |
+| `server.properties` | DB credentials for the server |
+| `client.properties` | Server host/port for the client |
+
+Edit the properties files to match your environment, then launch **server first,
+client second** (separate processes — the intended deployment model):
+
+```bash
+# Terminal 1 — start the Fat Server
+java -jar target/hsts-server.jar
+
+# Terminal 2 — start the JavaFX client
+java -jar target/hsts-client.jar
 ```
 
-Default DB credentials live in `server/db/DatabaseConfig.java` (`root` / `root` @
-`localhost:3306/hsts_db`) — edit the constants to match your machine.
+### Configuration
 
-A pre-built runnable jar is committed at `target/hsts-prototype.jar` for convenience.
+Both JARs load an external properties file from the **same directory as the JAR**
+(if present), then fall back to bundled defaults inside the JAR, then hard-coded
+fallbacks.
+
+**`server.properties`** (beside `hsts-server.jar`):
+
+```properties
+db.user=root
+db.password=root
+```
+
+**`client.properties`** (beside `hsts-client.jar`):
+
+```properties
+server.host=localhost
+server.port=5555
+```
+
+For a two-machine demo, run the server on one machine and set `server.host` on the
+client to that machine's LAN IP. The database host/port (`localhost:3306/hsts_db`) are
+fixed in `server/db/DatabaseConfig.java` for the prototype.
 
 ---
 
@@ -144,20 +186,28 @@ network read loop never blocks the UI.
 
 ```
 HSTS/
-├── pom.xml                       # Maven build + shade (Fat JAR, Main-Class = Launcher)
+├── pom.xml                       # Maven build + shade (two Fat JARs)
+├── client.properties             # deployment template → copied to target/ on build
+├── server.properties             # deployment template → copied to target/ on build
 ├── README.md
-├── target/hsts-prototype.jar     # pre-built runnable jar
 └── src/main/
     ├── java/
-    │   ├── client/ui/            # Launcher, ClientApp, ScreenManager, AbstractScreenUI,
-    │   │                         #   ConnectView, QuestionsView, Logo
-    │   ├── client/network/       # IClientConnection (Adapter), HSTSClient
+    │   ├── client/
+    │   │   ├── config/           # ClientConfig — loads client.properties
+    │   │   ├── ui/               # ClientLauncher, ClientApp, ScreenManager,
+    │   │   │                     #   AbstractScreenUI, ConnectView, QuestionsView, Logo
+    │   │   └── network/          # IClientConnection (Adapter), HSTSClient
     │   ├── common/entities/      # Question (Serializable)
     │   ├── common/network/       # Message + Command enum (Serializable protocol)
     │   ├── ocsf/                 # Native OCSF: server.{AbstractServer, ConnectionToClient},
     │   │                         #   client.AbstractClient
-    │   └── server/               # HSTSServer, ServerMain, db/{DatabaseConfig, QuestionDAO}
+    │   └── server/
+    │       ├── config/           # ServerConfig — loads server.properties
+    │       ├── db/               # DatabaseConfig, QuestionDAO
+    │       ├── HSTSServer.java, ServerMain.java
     └── resources/
+        ├── client.properties     # bundled default for the client JAR
+        ├── server.properties     # bundled default for the server JAR
         ├── schema.sql, seed.sql  # database setup
         ├── fxml/                 # ConnectView.fxml, QuestionsView.fxml
         ├── css/app.css           # shared theme
@@ -168,12 +218,15 @@ HSTS/
 
 ## 9. Build Notes
 
-- **Single-click launch.** `client.ui.Launcher` is the manifest `Main-Class` (a plain,
-  non-`Application` class — required to bypass JavaFX module restrictions in a shaded jar).
-  It boots the server on a daemon thread, waits for the port to bind, then starts the
-  JavaFX client.
+- **Two Fat JARs.** `maven-shade-plugin` produces separate deployable artifacts:
+  - `hsts-server.jar` — `Main-Class = server.ServerMain`; includes MySQL driver, excludes JavaFX.
+  - `hsts-client.jar` — `Main-Class = client.ui.ClientLauncher`; includes JavaFX, excludes MySQL driver.
+  Both are plain (non-`Application`) entry points to satisfy JavaFX module restrictions in a shaded jar.
+- **External configuration.** Root-level `client.properties` and `server.properties` are copied
+  into `target/` at package time so they sit beside the JARs out of the box. Edit those copies
+  (or place your own next to the JARs at deploy time) without rebuilding.
 - **Self-contained deps.** OCSF is native source, not a dependency; only JavaFX and the
   MySQL connector resolve from Maven Central.
-- **Platform note.** The Fat JAR bundles the JavaFX natives for the OS it was built on, so
-  build on the platform you intend to run (or add per-platform classifiers for a
-  cross-platform jar).
+- **Platform note.** The client JAR bundles the JavaFX natives for the OS it was built on, so
+  build on the platform you intend to run the client (or add per-platform classifiers for
+  cross-platform client builds). The server JAR has no native dependencies.

@@ -28,6 +28,12 @@ public interface IClientConnection {
     /** @return true if the connection is currently open. */
     boolean isConnectionOpen();
 
+    /** @return configured server hostname or IP. */
+    String getHost();
+
+    /** @return configured server port. */
+    int getPort();
+
     /**
      * Registers the handler that receives server responses. Implementations
      * guarantee the handler is invoked on the JavaFX Application Thread.

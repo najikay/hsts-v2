@@ -111,7 +111,8 @@ public class ConnectView extends AbstractScreenUI {
         spinner.setVisible(false);
         spinner.setManaged(false);
         statusLabel.setText("Could not reach the HSTS server.");
-        errorLabel.setText("localhost:5555 — is the server running?\n" + e.getMessage());
+        errorLabel.setText(client().getHost() + ":" + client().getPort()
+                + " — is the server running?\n" + e.getMessage());
         setNodeShown(errorLabel, true);
         setNodeShown(retryButton, true);
     }

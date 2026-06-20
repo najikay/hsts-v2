@@ -1,5 +1,8 @@
 package server.db;
 
+import server.config.ServerConfig;
+import server.config.ServerConfig.Credentials;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -7,18 +10,14 @@ import java.sql.SQLException;
 /**
  * Central JDBC configuration for the Data tier.
  *
- * <p>Connection parameters are exposed as easily editable constants. For the
- * prototype these are standard local MySQL credentials; in a real deployment
- * they would be externalized (env vars / properties file) rather than compiled in.
+ * <p>Host, port, and database name are fixed for the prototype. Credentials are
+ * loaded from {@code server.properties} via {@link ServerConfig}.
  */
 public final class DatabaseConfig {
 
-    // ===== Easily editable connection constants ===========================
     public static final String HOST     = "localhost";
     public static final int    PORT     = 3306;
     public static final String DATABASE = "hsts_db";
-    public static final String USER     = "root";
-    public static final String PASSWORD = "root";
 
     /** Extra JDBC params: TLS off for local dev, sane timezone handling. */
     private static final String PARAMS =
@@ -38,6 +37,7 @@ public final class DatabaseConfig {
      * @return a live {@link Connection}; caller is responsible for closing it.
      */
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USER, PASSWORD);
+        Credentials creds = ServerConfig.load();
+        return DriverManager.getConnection(URL, creds.user(), creds.password());
     }
 }
