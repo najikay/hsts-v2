@@ -1,0 +1,14 @@
+# Normalize line endings for everyone, regardless of local git settings
+* text=auto
+
+# Windows scripts stay CRLF, unix scripts stay LF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+mvnw text eol=lf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.jar binary

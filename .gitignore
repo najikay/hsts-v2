@@ -10,8 +10,7 @@ logs/
 # assignment PDFs kept local
 *.pdf
 
-# secrets &
-  machine-local config — never committed
+# secrets & machine-local config — never committed
 .env
 /server.properties
 /client.properties
