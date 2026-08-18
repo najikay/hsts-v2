@@ -1,6 +1,9 @@
 package client.core;
 
+import client.events.ClientEventBus;
+import client.events.FxThreadPoster;
 import client.net.IClientConnection;
+import client.net.RequestDispatcher;
 import javafx.scene.Parent;
 
 /**
@@ -36,5 +39,18 @@ public abstract class AbstractScreenUI {
     /** Convenience accessor for the shared network adapter. */
     protected IClientConnection client() {
         return ScreenManager.getInstance().getClient();
+    }
+
+    /** Convenience accessor for the shared request/response correlator. */
+    protected RequestDispatcher dispatcher() {
+        return ScreenManager.getInstance().getDispatcher();
+    }
+
+    /**
+     * The single hop back onto the JavaFX Application Thread (ARCHITECTURE §6).
+     * Screens completing a {@code dispatcher()} future wrap their UI work in this.
+     */
+    protected FxThreadPoster onFxThread() {
+        return ClientEventBus.getInstance().poster();
     }
 }

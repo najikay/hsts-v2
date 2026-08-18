@@ -1,8 +1,11 @@
 package client.core;
 
 import client.core.ClientConfig.Settings;
+import client.events.ClientEventBus;
+import client.events.PushEventBridge;
 import client.features.connect.ConnectView;
 import client.net.HSTSClient;
+import client.net.RequestDispatcher;
 import javafx.application.Application;
 import javafx.stage.Stage;
 
@@ -34,6 +37,15 @@ public class ClientApp extends Application {
         // Create the network adapter (Adapter Pattern); ConnectView opens it.
         client = new HSTSClient(settings.host(), settings.port());
         manager.setClient(client);
+
+        // Protocol v2 plumbing: every inbound message goes to the dispatcher,
+        // which completes the matching request future or — for a PUSH — hands it
+        // to the event bus (which posts it on the FX thread).
+        RequestDispatcher dispatcher = new RequestDispatcher(client);
+        dispatcher.setPushListener(new PushEventBridge(ClientEventBus.getInstance()));
+        client.setServerMessageHandler(dispatcher::dispatchIncoming);
+        client.setConnectionLostHandler(dispatcher::failAllPending);
+        manager.setDispatcher(dispatcher);
 
         manager.setScreen(new ConnectView());
     }

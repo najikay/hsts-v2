@@ -35,8 +35,15 @@ public interface IClientConnection {
     int getPort();
 
     /**
-     * Registers the handler that receives server responses. Implementations
-     * guarantee the handler is invoked on the JavaFX Application Thread.
+     * Registers the sink for every inbound message — responses and pushes alike.
+     *
+     * <p>The handler is invoked on the implementation's read thread, <b>not</b>
+     * on the JavaFX Application Thread: in the running app it is
+     * {@link RequestDispatcher#dispatchIncoming(Message)}, and the single hop to
+     * the FX thread happens further along in
+     * {@code client.events.FxThreadPoster} (ARCHITECTURE §6). Handlers
+     * registered here must therefore be thread-safe and must not touch the scene
+     * graph directly.
      */
     void setServerMessageHandler(Consumer<Message> handler);
 }

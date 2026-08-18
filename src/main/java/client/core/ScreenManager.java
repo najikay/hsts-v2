@@ -1,6 +1,7 @@
 package client.core;
 
 import client.net.IClientConnection;
+import client.net.RequestDispatcher;
 import client.ui.components.Logo;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -26,6 +27,7 @@ public final class ScreenManager {
 
     private Stage primaryStage;
     private IClientConnection client;
+    private RequestDispatcher dispatcher;
 
     private ScreenManager() {
     }
@@ -59,6 +61,16 @@ public final class ScreenManager {
 
     public IClientConnection getClient() {
         return client;
+    }
+
+    /** Wires the shared request/response correlator (called once from ClientApp). */
+    public void setDispatcher(RequestDispatcher dispatcher) {
+        this.dispatcher = dispatcher;
+    }
+
+    /** @return the shared dispatcher every screen sends its requests through. */
+    public RequestDispatcher getDispatcher() {
+        return dispatcher;
     }
 
     /**

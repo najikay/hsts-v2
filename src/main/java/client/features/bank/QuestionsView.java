@@ -4,7 +4,7 @@ import client.core.AbstractScreenUI;
 import client.ui.components.Logo;
 import common.dto.bank.Question;
 import common.protocol.Message;
-import common.protocol.Message.Command;
+import common.protocol.Verb;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
 
 /**
  * The main prototype screen (Presentation tier), defined in FXML.
@@ -43,8 +44,10 @@ import java.util.Objects;
  *       the next successful save.</li>
  * </ul>
  *
- * <p>Server responses arrive (already on the FX thread) at
- * {@link #onServerMessage(Message)}.
+ * <p>Requests go through the shared {@code RequestDispatcher} (protocol v2): the
+ * screen gets a future per request instead of a global message handler, and the
+ * result is applied inside {@code onFxThread()} — the single documented hop back
+ * onto the JavaFX Application Thread.
  */
 public class QuestionsView extends AbstractScreenUI {
 
@@ -68,14 +71,8 @@ public class QuestionsView extends AbstractScreenUI {
     private String originalQuestion = "";
     private String originalAnswer = "";
 
-    /** True while an update we sent is awaiting its server confirmation. */
-    private boolean awaitingSaveConfirm = false;
-
     @Override
     public Parent render() {
-        // Register this view as the handler for server responses.
-        client().setServerMessageHandler(this::onServerMessage);
-
         FXMLLoader loader = new FXMLLoader(getClass().getResource(FXML_PATH));
         loader.setController(this);
         try {
@@ -115,12 +112,10 @@ public class QuestionsView extends AbstractScreenUI {
     // ===== Outbound requests =============================================
 
     private void requestAllQuestions() {
-        try {
-            statusLabel.setText("Loading questions…");
-            client().send(new Message(Command.GET_ALL_QUESTIONS));
-        } catch (IOException e) {
-            statusLabel.setText("Send failed: " + e.getMessage());
-        }
+        statusLabel.setText("Loading questions…");
+        dispatcher().send(Verb.GET_ALL_QUESTIONS, null)
+                .whenComplete((response, failure) ->
+                        onFxThread().run(() -> onQuestionList(response, failure, false)));
     }
 
     @FXML
@@ -131,16 +126,12 @@ public class QuestionsView extends AbstractScreenUI {
         }
         selected.setQuestionText(questionField.getText());
         selected.setAnswer(answerArea.getText());
-        System.out.println("[QuestionsView] onSave -> UPDATE_QUESTION id=" + selected.getId());
-        try {
-            awaitingSaveConfirm = true;
-            clearSavedBadge();
-            statusLabel.setText("Saving update…");
-            client().send(new Message(Command.UPDATE_QUESTION, selected));
-        } catch (IOException e) {
-            awaitingSaveConfirm = false;
-            statusLabel.setText("Update failed: " + e.getMessage());
-        }
+
+        clearSavedBadge();
+        statusLabel.setText("Saving update…");
+        dispatcher().send(Verb.UPDATE_QUESTION, selected)
+                .whenComplete((response, failure) ->
+                        onFxThread().run(() -> onQuestionList(response, failure, true)));
     }
 
     @FXML
@@ -150,37 +141,47 @@ public class QuestionsView extends AbstractScreenUI {
         statusLabel.setText("Reverted to last saved values.");
     }
 
-    // ===== Inbound responses (already on the JavaFX thread) ===============
+    // ===== Inbound responses (posted back onto the JavaFX thread) =========
 
-    /** Routes a server response. Invoked on the FX thread by HSTSClient. */
+    /**
+     * Applies the outcome of a GET_ALL_QUESTIONS / UPDATE_QUESTION future. Both
+     * verbs answer with the full, freshly read list, so one renderer serves both.
+     */
     @SuppressWarnings("unchecked")
-    public void onServerMessage(Message msg) {
-        switch (msg.getCommand()) {
-            case SUCCESS:
-                Object payload = msg.getPayload();
-                if (payload instanceof List) {
-                    boolean wasSave = awaitingSaveConfirm;
-                    awaitingSaveConfirm = false;
-                    updateData((List<Question>) payload);
-                    if (wasSave) {
-                        // Show the badge AFTER the re-render so it isn't cleared by it.
-                        showSavedBadge();
-                        statusLabel.setText("Update saved to the database.");
-                    } else {
-                        statusLabel.setText("Questions loaded.");
-                    }
-                }
-                break;
-            case ERROR:
-                awaitingSaveConfirm = false;
-                statusLabel.setText("Server error.");
-                Alert alert = new Alert(Alert.AlertType.ERROR, String.valueOf(msg.getPayload()));
-                alert.setHeaderText("Server returned an error");
-                alert.showAndWait();
-                break;
-            default:
-                statusLabel.setText("Unexpected response: " + msg.getCommand());
+    private void onQuestionList(Message response, Throwable failure, boolean wasSave) {
+        if (failure != null) {
+            showServerError(rootCause(failure).getMessage());
+            return;
         }
+        if (response.isError()) {
+            showServerError(response.errorMessage());
+            return;
+        }
+        if (!(response.getPayload() instanceof List)) {
+            statusLabel.setText("Unexpected response payload from the server.");
+            return;
+        }
+
+        updateData((List<Question>) response.getPayload());
+        if (wasSave) {
+            // Show the badge AFTER the re-render so it isn't cleared by it.
+            showSavedBadge();
+            statusLabel.setText("Update saved to the database.");
+        } else {
+            statusLabel.setText("Questions loaded.");
+        }
+    }
+
+    private void showServerError(String detail) {
+        statusLabel.setText("Server error.");
+        Alert alert = new Alert(Alert.AlertType.ERROR, String.valueOf(detail));
+        alert.setHeaderText("Server returned an error");
+        alert.showAndWait();
+    }
+
+    private static Throwable rootCause(Throwable failure) {
+        return failure instanceof CompletionException && failure.getCause() != null
+                ? failure.getCause() : failure;
     }
 
     /**
