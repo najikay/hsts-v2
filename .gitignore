@@ -10,3 +10,12 @@ target/
 
 # Internal planning/design notes — kept locally, not published
 docs/
+
+# --- v2 additions ---
+.env
+server.properties
+client.properties
+*.local.properties
+logs/
+.idea/
+*.iml
