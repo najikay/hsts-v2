@@ -94,7 +94,7 @@ coordinators(subject_code, teacher)               -- coordinator per subject (S-
 
 questions(id PK, course, serial3, display_id5 UQ) -- identity row
 question_versions(id PK, question_id FK, version_no, text, a1..a4,
-                  correct_mask TINYINT, topic, difficulty ENUM, image BLOB NULL,
+                  correct_answer TINYINT (1..4), topic, difficulty ENUM, image BLOB NULL,
                   created_by, created_at)         -- immutable versions (C-2)
 
 exams(id PK, course, serial2, display_id6 UQ, author FK)
@@ -106,7 +106,7 @@ exam_version_questions(exam_version_id, question_version_id, points, ord)
 
 exam_executions(id PK, exam_version_id FK, code CHAR4, open_at, close_at,
                 extra_minutes INT DEFAULT 0, status ENUM(SCHEDULED,LIVE,CLOSED),
-                created_by, stats: avg, median, deciles JSON NULL,
+                created_by, stats: avg, median, stddev, min, max, deciles JSON NULL,
                 started_count, finished_count, timed_out_count)    -- S-2, S-21, S-25
 
 exam_attempts(id PK, execution_id FK, student_id FK, started_at, ended_at,
@@ -127,7 +127,7 @@ notifications(id PK, user_id FK, type, title, body, ref_type, ref_id,
               created_at, read_at NULL)
 ```
 
-All tables utf8mb4; entities carry `@Version` where editable. Correct answers live only in `question_versions` — the take-exam DTO mapper cannot even see `correct_mask` (separate projection), making the v1 "student sees answers" leak structurally impossible.
+All tables utf8mb4; entities carry `@Version` where editable. Correct answers live only in `question_versions` — the take-exam DTO mapper cannot even see `correct_answer` (separate projection), making the v1 "student sees answers" leak structurally impossible.
 
 ## 6. Client internals
 

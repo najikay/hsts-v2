@@ -16,8 +16,8 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 | C-4 | Bot lockout scope | **Per-student:** the bot (all courses) is unavailable to a student who has an exam attempt in progress (matches T-14 note, simple to prove). Message explains why + when it unlocks. |
 | C-5 | Statistics vs reports | Statistics (avg/median/deciles) are **computed and stored per execution** (S-25); the report engine (T-12) reads stored stats and compares across executions. |
 | C-6 | Exam vs execution | Distinct entities. `Exam` (versioned definition, in the drawer) ↔ `ExamExecution` (one "taking out of the drawer": window, code, time override, participants, stats). One exam → many executions (S-2). |
-| C-7 | Question shape | text + 4 answers + **correct answer(s)** + optional illustration + course + **topic** + **difficulty** (needed by auto-generation, S-13). |
-| C-8 | Multiple correct answers | Allowed but flagged: editor shows a **warning + explicit confirmation** ("This question has 2 correct answers — save anyway?"). Grading rule: a student's answer is correct if it is any marked-correct option. (Single-choice answering UI stays — one selection per question.) |
+| C-7 | Question shape | text + 4 answers + **exactly one correct answer** + optional illustration + course + **topic** + **difficulty** (needed by auto-generation, S-13). |
+| C-8 | Answer validity | **Exactly one correct answer, enforced** (spec: "תשובה נכונה", singular — UI is radio-select, server validates). Additionally the 4 answers must be **pairwise distinct**: two answers identical word-for-word (compared after trimming + whitespace collapse, case-insensitive) are rejected with inline validation. Grading: correct ⇔ student's selection equals the correct answer. |
 
 ---
 
@@ -31,7 +31,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F1.5** [T-15] Client has a connect screen (host/port with sensible defaults, remembered locally) before login.
 
 ### F2 — Question bank
-- **F2.1** [T-2.1] Teacher adds a question **only for courses she teaches** (S-5): text, 4 answers, correct answer(s) (C-8 warning flow), illustration (optional image upload), topic, difficulty (Easy/Medium/Hard).
+- **F2.1** [T-2.1] Teacher adds a question **only for courses she teaches** (S-5): text, 4 non-empty pairwise-distinct answers, exactly one marked correct (radio-select, C-8), illustration (optional image upload), topic, difficulty (Easy/Medium/Hard).
 - **F2.2** [S-8] Question ID: 5 digits = 2-digit course code + 3-digit serial, allocated by the server, shown read-only.
 - **F2.3** [T-2.2] Edit creates a **new version**; previous version remains in the bank (viewable in a version history panel). Exams referencing an old version keep it; building a new exam offers the latest version and marks questions that have newer versions.
 - **F2.4** [T-2.3] Browse bank: filterable by course/topic/difficulty/text search, list + detail layout, image preview loaded lazily (NFR-18).
@@ -75,15 +75,15 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F7.3** [S-21] Execution record persists: date+time, actually allotted duration (incl. extensions), #started, #finished on their own, #didn't make it in time.
 
 ### F8 — Grading
-- **F8.1** [T-8.1] On submission, auto-check computes the score (per-question points; C-8 rule for multi-correct).
+- **F8.1** [T-8.1] On submission, auto-check computes the score (per-question points; correct ⇔ selection equals the single correct answer, C-8).
 - **F8.2** [T-8.2] Teacher reviews per-student results, approves grades (bulk approve + per-student), may add comments to the student (S-22).
 - **F8.3** [T-8.3, S-23] Manual grade change **requires** a justification; original auto grade + change + reason are all stored (audit trail).
 - **F8.4** [S-24, C-3] Only after approval does the student see: grade + her checked form with wrong answers marked + teacher comments. Push notification "Your grade for X is available".
-- **F8.5** [S-25/26] On grading completion, statistics per execution (average, median, decile distribution 0–100) are computed and stored; never visible to students.
+- **F8.5** [S-25/26] On grading completion, statistics per execution are computed and stored: average, median, **standard deviation**, min/max, pass rate, decile distribution 0–100. Never visible to students.
 
 ### F9 — Results, data & reports
 - **F9.1** [T-9] Student: list of her exams with grades; opening one shows the checked form (F8.4); copy obtainable (S-36 — export/print to PDF-style view). She can never access others' grades (server-enforced).
-- **F9.2** [T-10, S-35] Teacher: results for all exams **she wrote** (even executed by others): table + **histogram**, per execution, with stored stats.
+- **F9.2** [T-10, S-35] Teacher: results for all exams **she wrote** (even executed by others): table + a **first-class histogram view** (v1's was a graded weak point — this one is a wow-moment): score-bucket bars styled to the active theme/palette, overlaid **mean, median and ±1σ (std) markers** with labels, hover tooltips (bucket range, count, %, student count), count↔percentage toggle, animated bar entrance, stat cards above (avg · median · std · min/max · pass rate · participants), and an empty/insufficient-data state. Same chart component reused by the report engine (F9.4). |
 - **F9.3** [T-11, S-7] Principal: read-only browse of question bank, exams, results — literally zero mutating verbs authorized for the role.
 - **F9.4** [T-12, S-37] Report engine: avg/median/decile distribution compared across — executions of the same teacher / same course / same student. Built as one **parameterized report mechanism** (dimension = Strategy) so a new report type is a new strategy class + menu entry, nothing else — that's our answer to "minimal development for new reports".
 
@@ -141,12 +141,13 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 ## 4. UX specification
 
 ### 4.1 Design system
+- **Guiding principle — information-rich, never cluttered:** every screen answers "what do I need to know here?" before the user asks. Dashboards carry live counts and next actions; lists carry status chips, relative times, and secondary metadata; detail views carry context panels (who/when/version/stats); every number that can carry a comparison gets one (vs. average, vs. last execution). Prime UX bar for screen reviews: zero dead screens, zero mystery states, nothing that requires asking "what now?".
 - **Base:** AtlantaFX (Primer Light / Primer Dark) + our `hsts.css` token layer.
 - **Theme settings (persisted per user, applied instantly, no restart):**
   - Mode: Light / Dark / follow-OS-default.
   - Accent palette (predefined selection, applied via CSS accent tokens): **Indigo** (default), **Emerald**, **Amber**, **Rose**, **Slate**. Preview swatches in settings.
 - **Type & spacing:** Inter-like default (system font stack), 4px spacing grid, 8/12px radius cards.
-- **Component library (reused everywhere, built once):** app shell (top navbar + collapsible side rail), page header with breadcrumbs, data table (sort/filter/empty-state), search field, form field w/ inline validation, primary/secondary/danger buttons, status chips, modal + WarnConfirm dialog (the C-8 pattern: warning icon, explanation, explicit confirm), toast stack, notification bell + panel, skeleton loaders, progress overlay, empty-state with illustration, avatar + role badge, countdown timer widget, histogram/statistics chart (JavaFX charts, styled).
+- **Component library (reused everywhere, built once):** app shell (top navbar + collapsible side rail), page header with breadcrumbs, data table (sort/filter/empty-state), search field, form field w/ inline validation, primary/secondary/danger buttons, status chips, modal + WarnConfirm dialog (warning icon, explanation, explicit confirm — for legal-but-unusual actions: submitting with unanswered questions, closing a live exam early, deleting), toast stack, notification bell + panel, skeleton loaders, progress overlay, empty-state with illustration, avatar + role badge, countdown timer widget, **StatChart** — our custom-styled histogram/statistics component (score buckets, mean/median/±σ overlays, tooltips, count/% toggle, theme-aware, animated) used by teacher results and reports.
 - **Animations (subtle, fast, consistent):** screen transitions (fade/slide 150–200ms), list item entrance stagger, button hover/press scale, toast slide-in, bell badge pop, timer pulse when low, skeleton shimmer. Utility class `Animations` wraps JavaFX transitions; AnimateFX allowed for entrances. Rule: nothing longer than 250ms, everything interruptible.
 - **Illustrations:** curated unDraw set (free, recolorable to accent) exported as PNG @2x for: login, empty states, course cards, bot mascot, success screens. No Lottie (no mature JavaFX runtime) — native animation + illustrations achieve the effect reliably.
 - **Responsive:** layouts verified at 1280×720, 1600×900, 1920×1080; side rail collapses to icons below 1400px width.
@@ -161,7 +162,7 @@ Home dashboards are role-specific with live cards (upcoming executions, pending 
 ## 5. Seed dataset (NFR-17) — "well-filled, not overstuffed"
 - 2 subjects (Mathematics=10, Computer Science=20), 4 courses (Algebra 11, Calculus 12, Java Programming 21, Databases 22).
 - Users: 1 principal, 5 teachers (one per course + one co-teacher on Java; 2 of them coordinators), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
-- ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions, two with 2 correct answers (to demo the warning).
+- ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions.
 - 6 exams in mixed states (draft / pending / rejected-with-reason / approved), 4 executions (one closed & fully graded with stats, one closed awaiting grading, one scheduled for "today" for the live demo, one live).
 - Grades + stats for the closed execution (a realistic distribution so the histogram looks good), 2 bot sources per course with real content, ~8 recorded bot sessions, seeded notifications.
 - All passwords BCrypt-hashed; demo credentials listed in `docs/DEMO_ACCOUNTS.md` (not in the submission doc).
@@ -172,7 +173,7 @@ Home dashboards are role-specific with live cards (upcoming executions, pending 
 Every item must have a **server answer** (correct behavior, enforced) and a **UI answer** (clear feedback). Tested in E21.
 
 **Auth/session:** wrong password ×5 → throttle · duplicate login · disconnect drops session + releases locks · expired client acting after disconnect · role tampering (student sending teacher verbs) → server rejects.
-**Bank:** save with <4 answers / no correct answer / no course → inline validation · 2+ correct → WarnConfirm · delete question used in exam → blocked with list · concurrent edit → lock + read-only · huge image → size limit message · Hebrew text round-trip.
+**Bank:** save with <4 answers / no correct answer / no course → inline validation · marking a second answer correct → impossible (radio) · two word-for-word identical answers → inline validation error (server re-checks) · delete question used in exam → blocked with list · concurrent edit → lock + read-only · huge image → size limit message · Hebrew text round-trip.
 **Builder:** points ≠ 100 → save disabled with live delta · auto-gen infeasible → no exam + precise report · duplicate question in exam → prevented · editing approved exam → creates new DRAFT version, approved one untouched.
 **Approval:** reject without reason → blocked · exam edited (new version) while pending → old version's request invalidated & coordinator sees notice.
 **Release/take:** release unapproved version → impossible (not listed) · open ≥ close → validation · student enters wrong code / before open / after close → distinct messages · wrong ID → rejected · double attempt → "already submitted" · client killed mid-exam → reconnect resumes with server time · time expires with client offline → server force-submits anyway · answer arriving after expiry → rejected server-side · two students answering simultaneously → isolated attempts.

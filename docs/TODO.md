@@ -40,7 +40,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 - [ ] E2.1 Flyway bootstrap on server start; migration naming convention; test that migrations run clean on empty DB
 - [ ] E2.2 V1 core: subjects, courses, users, course_teachers, enrollments, coordinators
-- [ ] E2.3 V2 bank: questions, question_versions (correct_mask, topic, difficulty, image)
+- [ ] E2.3 V2 bank: questions, question_versions (correct_answer 1..4, topic, difficulty, image)
 - [ ] E2.4 V3 exams: exams, exam_versions, exam_version_questions
 - [ ] E2.5 V4 executions: exam_executions (+stats columns), exam_attempts, attempt_answers
 - [ ] E2.6 V5 grading: grades (audit fields)
@@ -49,7 +49,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [ ] E2.9 JPA entities for all tables (+`@Version` on editables), enums, converters (JSON transcript ↔ objects)
 - [ ] E2.10 HibernateUtil (Singleton SessionFactory from HikariCP) + `Transactions` helper (`inTx(fn)`) with tests
 - [ ] E2.11 Repositories: UserRepo, CourseRepo, QuestionRepo, ExamRepo, ExecutionRepo, AttemptRepo, GradeRepo, BotRepo, NotificationRepo — query-per-need, projections for wire DTOs
-- [ ] E2.12 Take-exam projection that structurally excludes `correct_mask` (F6.6) + test proving the DTO has no correctness data ⚑
+- [ ] E2.12 Take-exam projection that structurally excludes `correct_answer` (F6.6) + test proving the DTO has no correctness data ⚑
 - [ ] E2.13 Repo test suites: H2 fast suite + MySQL suite (test base class = Template Method wipe/reseed)
 - [ ] E2.14 ID allocators: 5-digit question display id (course2+serial3), 6-digit exam id (subject2+course2+serial2), concurrency-safe, with tests (S-8, S-10)
 - [ ] E2.15 Seed migration/loader per PRD §5 (idempotent, one command + server-console button)
@@ -82,7 +82,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [ ] E4.10 App shell: top navbar (logo, breadcrumbs, bell, avatar/role, settings), collapsible side rail per role
 - [ ] E4.11 Component: DataTable wrapper (sorting, filtering hook, empty-state slot, loading skeleton)
 - [ ] E4.12 Component: form field with inline validation message + invalid styling
-- [ ] E4.13 Component: WarnConfirm dialog (icon, explanation, explicit confirm) — the C-8 pattern, reused everywhere ⚑
+- [ ] E4.13 Component: WarnConfirm dialog (icon, explanation, explicit confirm) — for legal-but-unusual actions (unanswered submit, close-early, deletes), reused everywhere ⚑
 - [ ] E4.14 Component: toast stack (success/error/info, auto-dismiss, slide-in)
 - [ ] E4.15 Component: status chips (exam/exec/grade states), role badges
 - [ ] E4.16 Component: progress overlay + skeleton loaders for async screens
@@ -110,7 +110,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 Server:
 - [ ] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
-- [ ] E6.2 Multi-correct detection → response flag consumed by UI warning; server accepts after confirmed=true (C-8) ⚑
+- [ ] E6.2 Answer validity enforcement (C-8): exactly one correct answer; 4 answers pairwise distinct (trim + whitespace-collapse, case-insensitive compare) — server-side validation with precise error messages ⚑
 - [ ] E6.3 Edit → new immutable version; version history query; latest-version resolution
 - [ ] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
 - [ ] E6.5 Browse/filter query (course/topic/difficulty/text) + pagination
@@ -119,8 +119,8 @@ Server:
 - [ ] E6.8 Verbs + DTOs (list item, detail, editor payload, version history) — frozen with [L]
 Client:
 - [ ] E6.9 Bank screen: master list (DataTable, filters, search) + detail pane with image lazy-load
-- [ ] E6.10 Question editor: form, answer rows with correct-toggles, topic/difficulty pickers, image picker+preview+remove
-- [ ] E6.11 Multi-correct WarnConfirm flow wired ⚑
+- [ ] E6.10 Question editor: form, answer rows with single-correct radio-select, topic/difficulty pickers, image picker+preview+remove
+- [ ] E6.11 Editor validation UX: duplicate-answer inline error live while typing, exactly-one-correct guaranteed by radio group; server errors mapped to fields ⚑
 - [ ] E6.12 Version history panel (timeline, view old version read-only, diff highlight of changed fields)
 - [ ] E6.13 Delete flow: blocked dialog listing exams / confirm dialog otherwise
 - [ ] E6.14 Edit-lock integration: acquire on editor open, "being edited by X" read-only mode, live release (E18 dependency)
@@ -205,14 +205,14 @@ Client:
 
 ## E12 — Grading [B]
 
-- [ ] E12.1 GradingService.autoGrade: per-question correctness (multi-correct rule C-8), weighted score, persist AUTO grade
+- [ ] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade
 - [ ] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3)
 - [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22)
-- [ ] E12.4 Stats computation on execution fully graded: avg, median, deciles → stored (S-25) ⚑
+- [ ] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑
 - [ ] E12.5 Grading queue screen: executions awaiting grading, per-execution student table (auto scores, status)
 - [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve
 - [ ] E12.7 Bulk approve with summary confirm
-- [ ] E12.8 Session + integration tests (auto-grade correctness incl. multi-correct, override w/o reason blocked, idempotent approve, stats values verified against hand-computed fixture)
+- [ ] E12.8 Session + integration tests (auto-grade correctness, override w/o reason blocked, idempotent approve, stats values verified against hand-computed fixture)
 - [ ] E12.9 Acceptance pass vs T-8 ⚑
 
 ## E13 — Student results [B]
@@ -228,9 +228,10 @@ Client:
 ## E14 — Teacher results & statistics [B]
 
 - [ ] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
-- [ ] E14.2 Results screen: exam → execution picker → student table (sortable) + summary stat cards (avg/median/participants)
-- [ ] E14.3 Histogram (JavaFX BarChart styled to theme; decile buckets) ⚑
-- [ ] E14.4 Table/histogram toggle (T-10 note), stat cards, export-friendly layout
+- [ ] E14.2 Results screen: exam → execution picker → student table (sortable) + stat cards (avg · median · std · min/max · pass rate · participants)
+- [ ] E14.3 **StatChart component** (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance, theme/palette-aware colors, empty & insufficient-data states ⚑
+- [ ] E14.3b Wire StatChart into teacher results; visual QA against seed data distribution ⚑
+- [ ] E14.4 Table/histogram toggle (T-10 note), export/print-friendly layout
 - [ ] E14.5 Session tests + acceptance pass vs T-10 ⚑
 
 ## E15 — Principal & reports [B]
@@ -238,7 +239,7 @@ Client:
 - [ ] E15.1 Principal read-only services: browse bank, exams, results (S-7 — zero mutating verbs authorized; negative tests)
 - [ ] E15.2 Principal data browser screen: tabbed (questions/exams/results) with filters — reusing bank/results components read-only
 - [ ] E15.3 Report engine: `ReportDimension` Strategy (ByTeacher / ByCourse / ByStudent) over stored execution stats (C-5); comparison result DTO (S-37 extensibility story) ⚑
-- [ ] E15.4 Reports screen: dimension picker, subject/entity selectors, comparison table + grouped bar chart (avg/median), decile distribution view
+- [ ] E15.4 Reports screen: dimension picker, subject/entity selectors, comparison table + grouped bar chart (avg/median/std), decile distribution view (reuses StatChart)
 - [ ] E15.5 Empty/degenerate data handling (no executions, one student) per PRD catalog
 - [ ] E15.6 Session tests + acceptance pass vs T-11, T-12 ⚑
 
@@ -299,7 +300,8 @@ Client:
 - [ ] E20.1 Final JAR names `G<Num>_Server` / `G<Num>_Client` (group number parameterized in pom)
 - [ ] E20.2 Double-click verified on clean Windows machine (no IDE, only JRE/JDK 21) ⚑
 - [ ] E20.3 Terminal run shows the colorized log stream (defense view) ⚑
-- [ ] E20.4 Externalized properties beside JARs + first-run defaults; client remembers last server
+- [ ] E20.4 Externalized properties beside JARs + first-run defaults; client remembers last server; pom copies from `*.properties.example` when the gitignored real files are absent (fresh clone/CI currently ships no adjacent config)
+- [ ] E20.4b Final defense JARs must be built on Windows — JavaFX natives are baked in at build time (hard gate, add to day-of checklist)
 - [ ] E20.5 Two-machine LAN checklist doc (firewall rule, IP from console, smoke script) — rehearsed ⚑
 - [ ] E20.6 DB setup path for a fresh machine: install MySQL → run server → Flyway + seed → done (documented, timed)
 

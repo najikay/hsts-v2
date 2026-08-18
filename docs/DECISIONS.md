@@ -39,8 +39,17 @@ All exam timing lives on the server (`TimerService`, one scheduled executor): st
 ## ADR-011 — Exam ≠ Execution; versions are immutable
 The single biggest modeling consequence of the spec (S-2, S-19, S-21): `Exam` → versioned definitions; `ExamExecution` → each release with its own window/code/extension/participants/stats. Question and exam edits create immutable versions; approval and scheduling bind to a version (S-14). Grades reference the exact question versions answered — history can never be corrupted by later edits (v1 bug: edited questions mutated past exams).
 
-## ADR-012 — Multiple correct answers: allow with warning + confirmation
-Spec implies one correct answer; reality (and our retro) says legit questions sometimes have two. Editor permits marking several correct but interposes the WarnConfirm dialog; grading counts any marked-correct selection as correct; the same WarnConfirm component generalizes to every "legal but unusual" action in the app. Documented so the defense sees it as deliberate design, not a bug.
+## ADR-012 — ~~Multiple correct answers: allow with warning + confirmation~~ *(superseded by ADR-016, 2026-08-18 — team lead decision: spec says exactly one)*
+
+## ADR-016 — Exactly one correct answer, enforced; duplicate answers rejected
+**Context.** The spec is explicit: a question has 4 answers and **a** correct answer (singular). An earlier idea to allow multiple correct answers behind a warning (ADR-012) contradicted it.
+**Decision.** The editor uses a radio group (a second correct selection is impossible in the UI) and the server independently validates exactly-one-correct. Additionally, the 4 answers must be pairwise distinct — two answers identical word-for-word (compared after trimming and whitespace collapse, case-insensitive) are rejected, because a duplicated answer makes the "one correct answer" ambiguous for the student. Grading: correct ⇔ selection equals the correct answer.
+**Consequences.** Simpler grading and no defense-time debate about spec deviation; the WarnConfirm component remains as a general pattern for other legal-but-unusual actions (unanswered submit, close-early, deletes).
+
+## ADR-017 — Client fat-JAR uses a shade allow-list, not a deny-list
+**Context.** Excluding only the named server-side artifacts (mysql, hibernate, flyway, poi, pdfbox, anthropic-java) still shipped ~30MB of their *transitive* dependencies (kotlin/okhttp/protobuf behind the Anthropic SDK, byte-buddy/antlr/jakarta behind Hibernate, commons/xmlbeans behind POI) into the client JAR.
+**Decision.** The client shade config includes an explicit allow-list (project classes, JavaFX, AtlantaFX, Ikonli, EventBus, bcrypt, slf4j/logback, jackson); everything else is excluded by default. New client-side dependencies must be added to the list consciously.
+**Consequences.** Client JAR 39MB → 13.3MB; a server-only dependency can never leak into the client by transitivity. Cost: adding a client dependency is a two-line change (dependency + allow-list entry) — documented here so nobody debugs a "class not found in client jar" blindly.
 
 ## ADR-013 — Feature-based packages
 `client/features/x`, `server/features/x`, `common/dto/x` — three people work without merge collisions, the structure mirrors the requirement list, and NFR-19 flexibility is demonstrable ("adding a feature touches one new package + one Verb group").

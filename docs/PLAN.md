@@ -35,7 +35,7 @@ It actually contains useful backend material (services, DAOs, versioned schema V
 **Policy:** we never merge that branch. We *read* it as a reference for entity shapes, protocol verbs, SQL, and test fixtures — then rewrite clean in our new structure. Anything copied must pass our review + tests.
 
 ### 1.3 Biggest failures to kill (from team retro)
-1. Exams: multiple-correct warning missing, edited questions not propagating, timer/extension broken, exam stayed open after timer end, students could see correct answers, coordinator couldn't view the exam properly
+1. Exams: no correct-answer validation (multiple/duplicate correct options possible — v2 enforces exactly one, C-8), edited questions not propagating, timer/extension broken, exam stayed open after timer end, students could see correct answers, coordinator couldn't view the exam properly
 2. Bot: completely non-functional
 3. No sessions saved, weak passwords in DB, no notification center, no server UI, no automatic network detection, no event bus, non-responsive UI, no test coverage, bad team split
 
