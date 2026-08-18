@@ -13,7 +13,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 | C-1 | Execution code: 4 digits [T-5] vs digits+letters [S-16] | Code is **4 alphanumeric characters**, teacher may choose all-digits. Validation accepts `[A-Za-z0-9]{4}`, case-insensitive on entry. Demo uses digits. |
 | C-2 | Versioning of questions/exams | **Immutable versions.** Editing creates version n+1; old versions remain queryable and are referenced by past exams/executions/grades. Approval + scheduling attach to a specific exam **version** (S-14). |
 | C-3 | When grade is visible | Spec order wins: auto-check → teacher approval → **only then** visible to student, together with the checked form (S-24). |
-| C-4 | Bot lockout scope | **Per-student:** the bot (all courses) is unavailable to a student who has an exam attempt in progress (matches T-14 note, simple to prove). Message explains why + when it unlocks. |
+| C-4 | Bot lockout scope | **Per-course, per the spec (§6.2)** — the bot of course X is unavailable to a student while she has an in-progress attempt on an exam of course X (message explains why + when it unlocks). **Cross-course integrity net (our addition):** a student with any attempt in progress *may* open another course's bot (spec doesn't forbid it), but first sees a notice: "You are currently taking an exam — continuing will inform the exam's teacher." If she proceeds, the bot works normally and the teacher running that execution gets a real-time notification + the student's row in the execution monitor is flagged ("used <course> bot at <time>"). Spec-compliant, doesn't degrade legitimate use, and possible cheating is surfaced instead of silently allowed. |
 | C-5 | Statistics vs reports | Statistics (avg/median/deciles) are **computed and stored per execution** (S-25); the report engine (T-12) reads stored stats and compares across executions. |
 | C-6 | Exam vs execution | Distinct entities. `Exam` (versioned definition, in the drawer) ↔ `ExamExecution` (one "taking out of the drawer": window, code, time override, participants, stats). One exam → many executions (S-2). |
 | C-7 | Question shape | text + 4 answers + **exactly one correct answer** + optional illustration + course + **topic** + **difficulty** (needed by auto-generation, S-13). |
@@ -66,7 +66,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F6.5** [S-19] Actual solving time (minutes) recorded per student, whether submitted manually or timed out.
 - **F6.6** [X] The form never contains correct-answer data (v1 leak): the wire DTO for taking an exam physically has no correctness fields.
 - **F6.7** [X] One attempt per student per execution; re-entering the code after submitting shows "already submitted".
-- **F6.8** [T-14 note] While an attempt is in progress the bot is locked for that student (C-4).
+- **F6.8** [T-14 note, C-4] While an attempt is in progress: the exam's own course bot is locked for that student; any *other* course's bot shows the integrity notice first, and proceeding notifies the executing teacher + flags the student's monitor row.
 - **F6.9** [X] Confirm-before-submit dialog listing unanswered questions ("3 unanswered — submit anyway?").
 
 ### F7 — Extension & live monitoring
@@ -94,7 +94,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F10.4** [X] Applies to: questions, exams, bot sources, releases (editing schedule), grading a student's submission.
 
 ### F11 — Notifications (cross-cutting, real-time)
-- **F11.1** [X] Persistent notifications (DB) + live push when online: exam submitted for approval (→coordinator), approved/rejected+reason (→teacher), release opening soon (→teacher), extension granted (→active students), grade published (→student), bot source changed (→course teachers).
+- **F11.1** [X] Persistent notifications (DB) + live push when online: exam submitted for approval (→coordinator), approved/rejected+reason (→teacher), release opening soon (→teacher), extension granted (→active students), grade published (→student), bot source changed (→course teachers), **possible-cheating alert: student used another course's bot mid-attempt (→teacher running that execution, C-4)**.
 - **F11.2** [X] Navbar bell with unread badge; panel lists notifications (relative time, icon per type, click-through navigation); mark-read/mark-all-read.
 - **F11.3** [X] Toasts for transient feedback (saved/error/success) — separate from persistent notifications.
 
@@ -180,5 +180,5 @@ Every item must have a **server answer** (correct behavior, enforced) and a **UI
 **Extension:** extend by 0/negative → validation · extension lands while a student has 10s left → timer grows live · extension after close → blocked.
 **Grading:** grade change without justification → blocked · approve twice → idempotent · student polls another student's grade id → authorization error.
 **Reports:** empty execution (no participants) → stats N/A, UI empty-state · single-student execution → median==avg handled.
-**Bot:** student not enrolled → blocked · bot inactive → message · student mid-exam → lockout message · DeepSeek down → Anthropic silently takes over (logged) · both down → S-32 message · source PDF unparsable → upload error · prompt injection in a source document → bot declines to obey it · student asks "what's on tomorrow's exam" → bot has no exam data, by construction.
+**Bot:** student not enrolled → blocked · bot inactive → message · student mid-exam opens same course's bot → lockout message with unlock time · student mid-exam opens another course's bot → integrity notice, on proceed teacher notified + monitor row flagged (verify notification actually arrives live) · DeepSeek down → Anthropic silently takes over (logged) · both down → S-32 message · source PDF unparsable → upload error · prompt injection in a source document → bot declines to obey it · student asks "what's on tomorrow's exam" → bot has no exam data, by construction.
 **Server:** DB down at start → console error state, not a crash · client flood of malformed messages → rejected + logged, connection survives · restart server → clients show reconnect banner and recover.

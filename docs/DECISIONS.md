@@ -60,6 +60,11 @@ Coverage is enforced in `mvn verify` starting at M0 so it shapes design (logic i
 ## ADR-015 — Cloudflare domain: not used for the assignment
 Phase 1 is LAN-only by spec (S-42). The owned domain is noted as a phase-2 asset (tunnel/hosted bot proxy) in the defense's "future work" slide — introducing it now adds risk with zero graded value.
 
+## ADR-018 — Bot lockout is per-course (spec-exact) with a cross-course integrity net
+**Context.** The spec (§6.2) scopes bot unavailability to *the course whose exam is being taken*. A global lockout would be simpler but deviates from the requirement; a literal per-course lock leaves a hole — a student mid-exam can freely consult *another* course's bot.
+**Decision.** Implement the lock exactly as specified (same-course bot blocked during the student's in-progress attempt, with a clear unlock-time message). For any other course's bot during an attempt: allow it, but show a one-time notice ("continuing will inform the exam's teacher"); on proceed, push a real-time possible-cheating notification to the teacher running the execution and flag the student's row in the live monitor with course + timestamp. Fired at most once per attempt per bot so the student experience isn't degraded.
+**Consequences.** Requirement satisfied word-for-word; the unmentioned scenario is surfaced to the person who can act on it instead of being silently permitted or over-blocked; a strong defense talking point (spec fidelity + threat modeling). Cost: BotService needs live attempt-state lookup and one extra notification type.
+
 ---
 
 *Supersede pattern: "ADR-0XX superseded by ADR-0YY (date, reason)".*

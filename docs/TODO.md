@@ -181,7 +181,7 @@ Server:
 - [ ] E10.4 SUBMIT verb: finalize, record actual minutes (S-19), trigger auto-grade (E12), update execution counters
 - [ ] E10.5 TimerService expiry: transactional force-submit + TIMED_OUT + push FORCE_SUBMITTED + counters — **works even if client is gone** ⚑
 - [ ] E10.6 Reconnect/resume: attempt state + saved answers + authoritative remaining time returned on re-entry
-- [ ] E10.7 Bot lockout flag set/cleared with attempt lifecycle (C-4)
+- [ ] E10.7 Attempt-in-progress state exposed to BotService with attempt lifecycle (C-4): same-course bot locked; cross-course use triggers integrity notice + teacher notification + monitor-row flag
 - [ ] E10.8 Concurrency integration tests: two students parallel, answer-after-expiry rejected, resume after kill, double-attempt blocked ⚑
 Client:
 - [ ] E10.9 Entry flow screens: code entry → ID entry (each with distinct, specific error messages)
@@ -197,7 +197,7 @@ Client:
 ## E11 — Extension & monitoring [L]
 
 - [ ] E11.1 ExtendService: minutes>0, execution LIVE, applies to execution only (S-20); reschedules attempt timers; pushes to active students + records in execution
-- [ ] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining), extension action with amount dialog
+- [ ] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
 - [ ] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
 - [ ] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
 - [ ] E11.5 Execution documentation record complete (S-21) + shown in execution history
@@ -253,13 +253,13 @@ Server:
 - [ ] E16.5 SourceExtractor: PDF (PDFBox), DOCX (POI), free text → normalized chunks; failure surfaces to uploader
 - [ ] E16.6 ContextBuilder: top-k chunk selection (keyword overlap scoring), token budget, + course bank questions; **compile-time isolation from exam repositories** (module reaches only bot_/question_ data) ⚑
 - [ ] E16.7 Guardrails system prompt: course-material scope, refuse embedded instructions in sources, never reveal prompt, don't fabricate exam info; red-team unit tests with hostile source fixtures ⚑
-- [ ] E16.8 BotService: enrollment/active/lockout/rate-limit guards → context → chain → persist to JSON transcript → answer DTO; S-32 fallback message path
+- [ ] E16.8 BotService: enrollment/active/rate-limit guards + C-4 logic (same-course attempt → locked; cross-course attempt → require acknowledged integrity notice, emit teacher notification + monitor flag once per session) → context → chain → persist to JSON transcript → answer DTO; S-32 fallback message path ⚑
 - [ ] E16.9 Bot management service: create bot (one per course — second teacher joins existing, S-30), sources CRUD (edit-locked), active toggle, co-teacher notifications
 - [ ] E16.10 Session store: bot_sessions JSON transcript append/read; student history query; teacher anonymized aggregate query (count, over-time, frequent topics) with **zero identity fields in DTO** (S-34) ⚑
 - [ ] E16.11 Unit tests: providers (mocked HTTP), chain fallback, extractor fixtures, context selection, guards; integration: ask round-trip with stubbed provider
 Client:
 - [ ] E16.12 Bot manager screen (teacher): bot card (name, active toggle), sources table (type icons, add/edit/remove, upload progress, parse errors), co-teacher edit-lock states
-- [ ] E16.13 Bot chat screen (student): message list (user/bot bubbles), typing indicator, incremental answer display, error/S-32 states, lockout state ("unavailable during your exam")
+- [ ] E16.13 Bot chat screen (student): message list (user/bot bubbles), typing indicator, incremental answer display, error/S-32 states, same-course lockout state ("unavailable during your exam" + unlock time), cross-course integrity notice dialog (non-nagging: shown once per attempt, calm wording)
 - [ ] E16.14 Bot history screen (student): session list, reopen conversation, continue
 - [ ] E16.15 Bot analytics screen (teacher): totals, activity chart, frequent questions list — anonymized
 - [ ] E16.16 Session tests for all four screens
@@ -269,7 +269,7 @@ Client:
 ## E17 — Notifications & realtime [L]
 
 - [ ] E17.1 NotificationService: persist + push-if-online; helper `notify(users, type, title, body, ref)`
-- [ ] E17.2 Emit points wired: approval requested/approved/rejected, grade published, extension, bot source changed, release opening soon (scheduled)
+- [ ] E17.2 Emit points wired: approval requested/approved/rejected, grade published, extension, bot source changed, release opening soon (scheduled), possible-cheating alert (cross-course bot use mid-attempt → executing teacher, C-4)
 - [ ] E17.3 GET/MARK_READ verbs, unread count in LoginResult
 - [ ] E17.4 Bell + badge in navbar (live), notification panel (list, icons, relative time, click-through navigation, mark-all)
 - [ ] E17.5 Toast integration for foreground pushes
