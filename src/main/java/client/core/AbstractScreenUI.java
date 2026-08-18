@@ -1,6 +1,6 @@
-package client.ui;
+package client.core;
 
-import client.network.IClientConnection;
+import client.net.IClientConnection;
 import javafx.scene.Parent;
 
 /**

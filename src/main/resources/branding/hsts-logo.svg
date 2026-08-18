@@ -2,7 +2,7 @@
 <!--
   HSTS brand mark — graduation cap on the app's indigo gradient tile.
   Cap glyph: Lucide "graduation-cap" (ISC licensed, free for commercial use).
-  Mirrors the in-app vector logo in client.ui.Logo.
+  Mirrors the in-app vector logo in client.ui.components.Logo.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
   <defs>

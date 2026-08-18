@@ -1,4 +1,4 @@
-package common.entities;
+package common.dto.bank;
 
 import java.io.Serializable;
 

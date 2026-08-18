@@ -1,6 +1,6 @@
-package client.ui;
+package client.core;
 
-import server.ServerMain;
+import server.core.ServerMain;
 
 /**
  * Non-JavaFX, single-click entry point for the Fat JAR (manifest Main-Class).
@@ -19,7 +19,7 @@ import server.ServerMain;
  *
  * <p>NOTE: this in-process co-launch is a demo convenience. The architecture is
  * still a true Thin Client / Fat Server — the server can equally be run on its
- * own (e.g. {@code java -cp <jar> server.ServerMain}) and serve remote clients.
+ * own (e.g. {@code java -cp <jar> server.core.ServerMain}) and serve remote clients.
  */
 public class Launcher {
 

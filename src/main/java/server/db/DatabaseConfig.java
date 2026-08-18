@@ -1,7 +1,7 @@
 package server.db;
 
-import server.config.ServerConfig;
-import server.config.ServerConfig.Credentials;
+import server.core.ServerConfig;
+import server.core.ServerConfig.Credentials;
 
 import java.sql.Connection;
 import java.sql.DriverManager;

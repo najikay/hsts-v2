@@ -1,6 +1,6 @@
 package server.db;
 
-import common.entities.Question;
+import common.dto.bank.Question;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;

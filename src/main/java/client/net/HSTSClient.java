@@ -1,6 +1,6 @@
-package client.network;
+package client.net;
 
-import common.network.Message;
+import common.protocol.Message;
 import javafx.application.Platform;
 import ocsf.client.AbstractClient;
 

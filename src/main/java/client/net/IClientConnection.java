@@ -1,6 +1,6 @@
-package client.network;
+package client.net;
 
-import common.network.Message;
+import common.protocol.Message;
 
 import java.io.IOException;
 import java.util.function.Consumer;

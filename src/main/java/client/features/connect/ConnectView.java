@@ -1,5 +1,9 @@
-package client.ui;
+package client.features.connect;
 
+import client.core.AbstractScreenUI;
+import client.core.ScreenManager;
+import client.features.bank.QuestionsView;
+import client.ui.components.Logo;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -20,7 +24,7 @@ import java.io.UncheckedIOException;
 /**
  * Splash / connection screen (Presentation tier), defined in FXML.
  *
- * <p>The first screen shown by {@link ClientApp}. It opens the OCSF connection on
+ * <p>The first screen shown by {@link client.core.ClientApp}. It opens the OCSF connection on
  * a background thread (so the FX thread never blocks), shows a spinner while it
  * waits, and on success asks the {@link ScreenManager} singleton to swap to
  * {@link QuestionsView}. On failure it surfaces an inline error and a Retry

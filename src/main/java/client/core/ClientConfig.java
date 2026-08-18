@@ -1,4 +1,4 @@
-package client.config;
+package client.core;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,13 +35,23 @@ public final class ClientConfig {
     public record Settings(String host, int port) {}
 
     public static Settings load() {
+        return load(resolveExternalConfigPath(), "/" + CONFIG_FILE);
+    }
+
+    /**
+     * Resolution core, with both sources injected — visible for testing so the
+     * external-file / classpath / defaults branches can each be exercised.
+     *
+     * @param external          candidate external file (may be {@code null} or absent)
+     * @param classpathResource absolute classpath resource name (may be absent)
+     */
+    static Settings load(Path external, String classpathResource) {
         Properties props = new Properties();
-        Path external = resolveExternalConfigPath();
 
         if (external != null && Files.isRegularFile(external)) {
             loadFromFile(props, external);
             System.out.println("[ClientConfig] Loaded " + CONFIG_FILE + " from " + external.toAbsolutePath());
-        } else if (!loadFromClasspath(props)) {
+        } else if (!loadFromClasspath(props, classpathResource)) {
             System.out.println("[ClientConfig] No " + CONFIG_FILE + " found — using defaults ("
                     + DEFAULT_HOST + ":" + DEFAULT_PORT + ")");
         }
@@ -54,17 +64,27 @@ public final class ClientConfig {
     private static Path resolveExternalConfigPath() {
         try {
             URI codeSource = ClientConfig.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            Path location = Paths.get(codeSource);
-            if (Files.isRegularFile(location)) {
-                return location.getParent().resolve(CONFIG_FILE);
-            }
+            return externalPathFor(Paths.get(codeSource));
         } catch (Exception ignored) {
             // Fall through to cwd (IDE / exploded classes).
+            return Paths.get(CONFIG_FILE);
+        }
+    }
+
+    /**
+     * Maps this class's code-source location to the config file beside it:
+     * next to the JAR when running packaged, otherwise the working directory.
+     * Visible for testing.
+     */
+    static Path externalPathFor(Path codeSourceLocation) {
+        if (Files.isRegularFile(codeSourceLocation)) {
+            return codeSourceLocation.getParent().resolve(CONFIG_FILE);
         }
         return Paths.get(CONFIG_FILE);
     }
 
-    private static void loadFromFile(Properties props, Path path) {
+    /** Visible for testing (unreadable-file branch). */
+    static void loadFromFile(Properties props, Path path) {
         try (InputStream in = Files.newInputStream(path)) {
             props.load(in);
         } catch (IOException e) {
@@ -72,8 +92,8 @@ public final class ClientConfig {
         }
     }
 
-    private static boolean loadFromClasspath(Properties props) {
-        try (InputStream in = ClientConfig.class.getResourceAsStream("/" + CONFIG_FILE)) {
+    private static boolean loadFromClasspath(Properties props, String resource) {
+        try (InputStream in = ClientConfig.class.getResourceAsStream(resource)) {
             if (in == null) {
                 return false;
             }

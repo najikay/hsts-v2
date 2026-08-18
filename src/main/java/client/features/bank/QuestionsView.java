@@ -1,8 +1,10 @@
-package client.ui;
+package client.features.bank;
 
-import common.entities.Question;
-import common.network.Message;
-import common.network.Message.Command;
+import client.core.AbstractScreenUI;
+import client.ui.components.Logo;
+import common.dto.bank.Question;
+import common.protocol.Message;
+import common.protocol.Message.Command;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;

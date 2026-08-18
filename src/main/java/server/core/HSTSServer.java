@@ -1,8 +1,8 @@
-package server;
+package server.core;
 
-import common.entities.Question;
-import common.network.Message;
-import common.network.Message.Command;
+import common.dto.bank.Question;
+import common.protocol.Message;
+import common.protocol.Message.Command;
 import ocsf.server.AbstractServer;
 import ocsf.server.ConnectionToClient;
 import server.db.QuestionDAO;

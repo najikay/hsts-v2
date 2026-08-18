@@ -29,10 +29,10 @@ Maven + `maven-shade-plugin` (two deployable Fat JARs — server and client).
 
 | Tier | Responsibility | Key types |
 |------|---------------|-----------|
-| **Presentation** | Render UI, capture intent | `client.ui.*`, `client.network.*` |
-| **Logic (Fat Server)** | Route requests, enforce rules, gatekeep data | `server.HSTSServer`, `server.ServerMain` |
+| **Presentation** | Render UI, capture intent | `client.core.*`, `client.ui.*`, `client.features.*`, `client.net.*` |
+| **Logic (Fat Server)** | Route requests, enforce rules, gatekeep data | `server.core.HSTSServer`, `server.core.ServerMain` |
 | **Data** | Persistence | `server.db.QuestionDAO`, `DatabaseConfig`, MySQL |
-| **Common** | Shared wire types | `common.entities.Question`, `common.network.Message` |
+| **Common** | Shared wire types | `common.dto.bank.Question`, `common.protocol.Message` |
 
 ---
 
@@ -175,9 +175,9 @@ network read loop never blocks the UI.
 
 | Pattern | Where | Purpose |
 |---------|-------|---------|
-| **Singleton** | `client.ui.ScreenManager` | One owner of the Stage + connection; central navigation |
-| **Template Method** | `client.ui.AbstractScreenUI` | Fixed screen lifecycle (`render()` → `onShown()`), variable steps in subclasses |
-| **Adapter** | `client.network.IClientConnection` / `HSTSClient` | Hide OCSF; enable a future protocol swap |
+| **Singleton** | `client.core.ScreenManager` | One owner of the Stage + connection; central navigation |
+| **Template Method** | `client.core.AbstractScreenUI` | Fixed screen lifecycle (`render()` → `onShown()`), variable steps in subclasses |
+| **Adapter** | `client.net.IClientConnection` / `HSTSClient` | Hide OCSF; enable a future protocol swap |
 | **DAO** | `server.db.QuestionDAO` | Isolate SQL from logic |
 
 ---
@@ -193,18 +193,19 @@ HSTS/
 └── src/main/
     ├── java/
     │   ├── client/
-    │   │   ├── config/           # ClientConfig — loads client.properties
-    │   │   ├── ui/               # ClientLauncher, ClientApp, ScreenManager,
-    │   │   │                     #   AbstractScreenUI, ConnectView, QuestionsView, Logo
-    │   │   └── network/          # IClientConnection (Adapter), HSTSClient
-    │   ├── common/entities/      # Question (Serializable)
-    │   ├── common/network/       # Message + Command enum (Serializable protocol)
+    │   │   ├── core/             # ClientLauncher, ClientApp, Launcher, ScreenManager,
+    │   │   │                     #   AbstractScreenUI, ClientConfig — loads client.properties
+    │   │   ├── net/              # IClientConnection (Adapter), HSTSClient
+    │   │   ├── ui/components/    # Logo (design-system components)
+    │   │   └── features/         # connect/ConnectView, bank/QuestionsView
+    │   ├── common/dto/bank/      # Question (Serializable)
+    │   ├── common/protocol/      # Message + Command enum (Serializable protocol)
     │   ├── ocsf/                 # Native OCSF: server.{AbstractServer, ConnectionToClient},
     │   │                         #   client.AbstractClient
     │   └── server/
-    │       ├── config/           # ServerConfig — loads server.properties
-    │       ├── db/               # DatabaseConfig, QuestionDAO
-    │       ├── HSTSServer.java, ServerMain.java
+    │       ├── core/             # HSTSServer, ServerMain,
+    │       │                     #   ServerConfig — loads server.properties
+    │       └── db/               # DatabaseConfig, QuestionDAO
     └── resources/
         ├── client.properties     # bundled default for the client JAR
         ├── server.properties     # bundled default for the server JAR
@@ -219,8 +220,8 @@ HSTS/
 ## 9. Build Notes
 
 - **Two Fat JARs.** `maven-shade-plugin` produces separate deployable artifacts:
-  - `hsts-server.jar` — `Main-Class = server.ServerMain`; includes MySQL driver, excludes JavaFX.
-  - `hsts-client.jar` — `Main-Class = client.ui.ClientLauncher`; includes JavaFX, excludes MySQL driver.
+  - `hsts-server.jar` — `Main-Class = server.core.ServerMain`; includes MySQL driver, excludes JavaFX.
+  - `hsts-client.jar` — `Main-Class = client.core.ClientLauncher`; includes JavaFX, excludes MySQL driver.
   Both are plain (non-`Application`) entry points to satisfy JavaFX module restrictions in a shaded jar.
 - **External configuration.** Root-level `client.properties` and `server.properties` are copied
   into `target/` at package time so they sit beside the JARs out of the box. Edit those copies

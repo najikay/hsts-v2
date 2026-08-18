@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Baseline logging configuration (E0.4).
+  Console only for now; the rolling file appender and the in-memory ring
+  appender that feeds the server console UI arrive with E3.6.
+-->
+<configuration>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Our own code: debug-friendly during development -->
+    <logger name="client" level="DEBUG"/>
+    <logger name="server" level="DEBUG"/>
+    <logger name="common" level="DEBUG"/>
+
+    <!-- Third-party noise floor -->
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+    <logger name="org.flywaydb" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>

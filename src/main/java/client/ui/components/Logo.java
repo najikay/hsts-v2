@@ -1,4 +1,4 @@
-package client.ui;
+package client.ui.components;
 
 import javafx.scene.Group;
 import javafx.scene.SnapshotParameters;

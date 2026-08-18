@@ -1,8 +1,8 @@
-package client.ui;
+package client.core;
 
-import client.config.ClientConfig;
-import client.config.ClientConfig.Settings;
-import client.network.HSTSClient;
+import client.core.ClientConfig.Settings;
+import client.features.connect.ConnectView;
+import client.net.HSTSClient;
 import javafx.application.Application;
 import javafx.stage.Stage;
 
@@ -13,7 +13,7 @@ import javafx.stage.Stage;
  * primary stage, creates the OCSF-backed {@link HSTSClient} adapter using
  * {@link ClientConfig}, then shows the {@link ConnectView}. The connect screen
  * opens the socket asynchronously and, on success, asks the
- * {@link ScreenManager} to swap to {@link QuestionsView}.
+ * {@link ScreenManager} to swap to {@link client.features.bank.QuestionsView}.
  *
  * <p>NOTE: Because this class extends {@link Application}, it must NOT be the
  * client JAR's Main-Class. The manifest Main-Class is {@link ClientLauncher},

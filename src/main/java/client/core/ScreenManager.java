@@ -1,6 +1,7 @@
-package client.ui;
+package client.core;
 
-import client.network.IClientConnection;
+import client.net.IClientConnection;
+import client.ui.components.Logo;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;

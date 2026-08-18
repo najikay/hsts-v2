@@ -1,4 +1,4 @@
-package client.ui;
+package client.core;
 
 /**
  * Non-JavaFX entry point for the client Fat JAR (manifest {@code Main-Class}).

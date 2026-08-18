@@ -9,7 +9,7 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.shape.Circle?>
-<!-- StackPane (logo slot) imported above; controller fills it with client.ui.Logo -->
+<!-- StackPane (logo slot) imported above; controller fills it with client.ui.components.Logo -->
 
 
 <!--
