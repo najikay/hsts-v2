@@ -106,8 +106,10 @@ exam_version_questions(exam_version_id, question_version_id, points, ord)
 
 exam_executions(id PK, exam_version_id FK, code CHAR4, open_at, close_at,
                 extra_minutes INT DEFAULT 0, status ENUM(SCHEDULED,LIVE,CLOSED),
-                created_by, stats: avg, median, stddev, min, max, deciles JSON NULL,
-                started_count, finished_count, timed_out_count)    -- S-2, S-21, S-25
+                created_by, stats: avg, median, stddev, min, max, deciles,
+                participation {started, finished, timed_out} JSON NULL)   -- S-2, S-21, S-25
+   -- participation counts are DERIVED from exam_attempts (COUNT by status) while live —
+   -- no mutable counters, no increment races — and frozen into stats JSON at close (S-21)
 
 exam_attempts(id PK, execution_id FK, student_id FK, started_at, ended_at,
               actual_minutes, status ENUM(IN_PROGRESS,SUBMITTED,TIMED_OUT),
@@ -122,6 +124,10 @@ bot_sources(id PK, bot_id FK, type ENUM(PDF,DOCX,TEXT), title, raw BLOB,
             extracted_text MEDIUMTEXT, added_by, updated_at, version INT)
 bot_sessions(id PK, bot_id FK, student_id FK, started_at, updated_at,
              transcript JSON)                                       -- [{role,q/a,ts}] (S-33)
+bot_messages(id PK, bot_id FK, session_id FK, student_id FK, question, answer,
+             provider, asked_at)   -- dual-written with the transcript in the same tx;
+                                   -- analytics/aggregates query THIS, never the JSON.
+                                   -- student_id is internal only — S-34 DTOs carry no identity
 
 notifications(id PK, user_id FK, type, title, body, ref_type, ref_id,
               created_at, read_at NULL)
@@ -148,6 +154,7 @@ student msg ─► BotService.ask(course, student, sessionId, text)
                    timeout 30s, 1 retry) → AnthropicProvider (official anthropic-java SDK,
                    model claude-opus-5, configurable) → NoAnswer (S-32 message)
    persist: append {q, a, provider, ts} to bot_sessions.transcript JSON
+            + insert bot_messages row (same tx) — the analytics-facing copy
    respond: answer DTO (+ "degraded" flag logged, not shown)
 ```
 

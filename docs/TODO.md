@@ -44,7 +44,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [ ] E2.4 V3 exams: exams, exam_versions, exam_version_questions
 - [ ] E2.5 V4 executions: exam_executions (+stats columns), exam_attempts, attempt_answers
 - [ ] E2.6 V5 grading: grades (audit fields)
-- [ ] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript)
+- [ ] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript), bot_messages (normalized analytics copy, dual-written)
 - [ ] E2.8 V7 notifications
 - [ ] E2.9 JPA entities for all tables (+`@Version` on editables), enums, converters (JSON transcript ↔ objects)
 - [ ] E2.10 HibernateUtil (Singleton SessionFactory from HikariCP) + `Transactions` helper (`inTx(fn)`) with tests
@@ -178,7 +178,7 @@ Server:
 - [ ] E10.1 AttemptService.start: code lookup (live executions), student identity check (own ת"ז), enrollment check, window check, single-attempt check → create attempt, start server timer (S-18)
 - [ ] E10.2 Exam form DTO via the no-correctness projection (E2.12) ⚑
 - [ ] E10.3 SAVE_ANSWER verb: upsert attempt_answers, reject if attempt not IN_PROGRESS or past deadline (server clock) ⚑
-- [ ] E10.4 SUBMIT verb: finalize, record actual minutes (S-19), trigger auto-grade (E12), update execution counters
+- [ ] E10.4 SUBMIT verb: finalize, record actual minutes (S-19), trigger auto-grade (E12); participation counts derived from attempts (no counter mutation) + pushed to monitor
 - [ ] E10.5 TimerService expiry: transactional force-submit + TIMED_OUT + push FORCE_SUBMITTED + counters — **works even if client is gone** ⚑
 - [ ] E10.6 Reconnect/resume: attempt state + saved answers + authoritative remaining time returned on re-entry
 - [ ] E10.7 Attempt-in-progress state exposed to BotService with attempt lifecycle (C-4): same-course bot locked; cross-course use triggers integrity notice + teacher notification + monitor-row flag
@@ -200,7 +200,7 @@ Client:
 - [ ] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
 - [ ] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
 - [ ] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
-- [ ] E11.5 Execution documentation record complete (S-21) + shown in execution history
+- [ ] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
 - [ ] E11.6 Acceptance pass vs T-7 ⚑
 
 ## E12 — Grading [B]
@@ -255,7 +255,7 @@ Server:
 - [ ] E16.7 Guardrails system prompt: course-material scope, refuse embedded instructions in sources, never reveal prompt, don't fabricate exam info; red-team unit tests with hostile source fixtures ⚑
 - [ ] E16.8 BotService: enrollment/active/rate-limit guards + C-4 logic (same-course attempt → locked; cross-course attempt → require acknowledged integrity notice, emit teacher notification + monitor flag once per session) → context → chain → persist to JSON transcript → answer DTO; S-32 fallback message path ⚑
 - [ ] E16.9 Bot management service: create bot (one per course — second teacher joins existing, S-30), sources CRUD (edit-locked), active toggle, co-teacher notifications
-- [ ] E16.10 Session store: bot_sessions JSON transcript append/read; student history query; teacher anonymized aggregate query (count, over-time, frequent topics) with **zero identity fields in DTO** (S-34) ⚑
+- [ ] E16.10 Session store: bot_sessions JSON transcript append/read (student history/replay) + bot_messages dual-write in same tx; teacher aggregates (count, over-time, frequent questions) query bot_messages with **zero identity fields in DTO** (S-34) ⚑
 - [ ] E16.11 Unit tests: providers (mocked HTTP), chain fallback, extractor fixtures, context selection, guards; integration: ask round-trip with stubbed provider
 Client:
 - [ ] E16.12 Bot manager screen (teacher): bot card (name, active toggle), sources table (type icons, add/edit/remove, upload progress, parse errors), co-teacher edit-lock states
@@ -318,6 +318,7 @@ Client:
 
 ## E22 — Submission & defense [B writes, L reviews]
 
+- [ ] E22.0 Reverse traceability matrix (`docs/TRACEABILITY.md`): every T-n/S-n → PRD feature → package/class → test(s) — the completeness proof for the submission doc & defense
 - [ ] E22.1 Acceptance-test results table (scenario, steps, expected, actual, bugs found + which case exposed them)
 - [ ] E22.2 Submission doc: cover page (group, names, IDs), per-member responsibilities, test table, design/coding-problem answer (from PROBLEMS.md — pick the best story, e.g. exam-vs-execution modeling or timer race)
 - [ ] E22.3 Export to required format, assemble `G<Num>_Assignment3.zip` (doc + 2 JARs), verify zip contents against spec ⚑

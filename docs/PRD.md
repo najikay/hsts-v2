@@ -72,7 +72,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 ### F7 — Extension & live monitoring
 - **F7.1** [T-7] Teacher can extend the duration of a **live execution**; extension applies to the current execution only (S-20 — stored exam untouched), applies to all active students **immediately via push** (timer visibly grows + toast "Extended by 15 minutes").
 - **F7.2** [X] Teacher monitor screen per live execution: started / submitted / timed-out counts, per-student status, time remaining — all live-pushed.
-- **F7.3** [S-21] Execution record persists: date+time, actually allotted duration (incl. extensions), #started, #finished on their own, #didn't make it in time.
+- **F7.3** [S-21] Execution record: date+time, actually allotted duration (incl. extensions), #started, #finished on their own, #didn't make it in time — counts **derived** from attempts while live (no mutable counters → no increment races), frozen into the stored stats at close.
 
 ### F8 — Grading
 - **F8.1** [T-8.1] On submission, auto-check computes the score (per-question points; correct ⇔ selection equals the single correct answer, C-8).
@@ -162,7 +162,7 @@ Home dashboards are role-specific with live cards (upcoming executions, pending 
 ## 5. Seed dataset (NFR-17) — "well-filled, not overstuffed"
 - 2 subjects (Mathematics=10, Computer Science=20), 4 courses (Algebra 11, Calculus 12, Java Programming 21, Databases 22).
 - Users: 1 principal, 5 teachers (one per course + one co-teacher on Java; 2 of them coordinators), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
-- ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions.
+- ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions. **One deliberately thin topic** (e.g. "Recursion" in Java: 2 questions, no Hard ones) so the auto-generation infeasibility report (F3.3) can be demoed live without touching the DB.
 - 6 exams in mixed states (draft / pending / rejected-with-reason / approved), 4 executions (one closed & fully graded with stats, one closed awaiting grading, one scheduled for "today" for the live demo, one live).
 - Grades + stats for the closed execution (a realistic distribution so the histogram looks good), 2 bot sources per course with real content, ~8 recorded bot sessions, seeded notifications.
 - All passwords BCrypt-hashed; demo credentials listed in `docs/DEMO_ACCOUNTS.md` (not in the submission doc).
