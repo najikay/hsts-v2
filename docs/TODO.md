@@ -74,7 +74,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [ ] E4.2 ScreenManager + Navigator (typed params, back-stack where sensible), ScreenFactory FXML cache
 - [ ] E4.3 AbstractScreen lifecycle (onShow/onHide, auto EventBus register/unregister) — Template Method
 - [ ] E4.4 ClientEventBus setup + typed event classes; FX-thread posting rule enforced in one place
-- [ ] E4.5 Connect screen: host/port defaults, remembered last host, connecting state, retry, error detail
+- [ ] E4.5 Connect screen: manual host/port entry pre-filled from defaults (client.properties → last server → localhost:5555), connecting state, retry, error detail; discovery picker slot added in E19.10 (manual path never blocked by discovery)
 - [ ] E4.6 Reconnect banner + auto-retry when the socket drops mid-session (bounded backoff)
 - [ ] E4.7 ThemeManager: AtlantaFX light/dark + OS-default detection, accent palette injection, persistence, `ThemeChangedEvent`
 - [ ] E4.8 `hsts.css` token layer + the 5 accent palette stylesheets (Indigo/Emerald/Amber/Rose/Slate)
@@ -294,6 +294,11 @@ Client:
 - [ ] E19.5 Manual IP override + copy-to-clipboard; `--headless` mode verified
 - [ ] E19.6 Seed-data button (loads/reloads demo dataset with confirm)
 - [ ] E19.7 Console styled with the same design system (dark by default) ⚑
+- [ ] E19.8 Discovery responder (F13.3): UDP listener on its own port, reply {ip, port, name, fingerprint}; fingerprint generated on first boot + persisted; console shows it next to the address; console toggle on/off; malformed/flood packets ignored + logged (fuzz test) ⚑
+- [ ] E19.9 Fingerprint persistence + regeneration path (server reinstall) — documented behavior, test
+- [ ] E19.10 Client discovery (F13.4): broadcast + ~2s collect, picker UI (name · address · fingerprint), TOFU pinning of {address, fingerprint}, auto-connect to pinned server, mismatch → prominent warning dialog requiring explicit confirm; "nothing found" → manual entry with defaults ⚑
+- [ ] E19.11 Discovery tests: responder round-trip, timeout path, pin/mismatch state machine, isolation-network fallback (responder off) — all without real multicast in CI (loopback/injected transport seam)
+- [ ] E19.12 **[GATED — decide at M6, criteria in ADR-019]** TLS over OCSF: SSLServerSocket in vendored OCSF, self-signed cert generated on first boot, discovery ID becomes the cert's fingerprint (no UX change), client verifies pinned fingerprint against the presented cert; encrypts credentials in transit. ~2–3 days incl. keystore handling + demo-machine rehearsal. If not taken: phase-2 slide + cleartext-transit limitation stated in submission doc
 
 ## E20 — Packaging & deployment [L]
 
@@ -302,7 +307,7 @@ Client:
 - [ ] E20.3 Terminal run shows the colorized log stream (defense view) ⚑
 - [ ] E20.4 Externalized properties beside JARs + first-run defaults; client remembers last server; pom copies from `*.properties.example` when the gitignored real files are absent (fresh clone/CI currently ships no adjacent config)
 - [ ] E20.4b Final defense JARs must be built on Windows — JavaFX natives are baked in at build time (hard gate, add to day-of checklist)
-- [ ] E20.5 Two-machine LAN checklist doc (firewall rule, IP from console, smoke script) — rehearsed ⚑
+- [ ] E20.5 Two-machine LAN checklist doc (firewall rules incl. UDP discovery port, IP from console, smoke script, **test discovery on the actual demo network type — bring a hotspot as fallback**, manual-IP path rehearsed too) — rehearsed ⚑
 - [ ] E20.6 DB setup path for a fresh machine: install MySQL → run server → Flyway + seed → done (documented, timed)
 
 ## E21 — Hardening & test completion [all, coordinated by L]
