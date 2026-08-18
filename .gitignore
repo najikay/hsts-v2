@@ -1,21 +1,18 @@
 target/
 *.class
+*.log
+logs/
+.DS_Store
 .idea/
 *.iml
-*.log
-.DS_Store
+*.jar
 
-# Course assignment specs — kept locally, not committed
+# assignment PDFs kept local
 *.pdf
 
-# Internal planning/design notes — kept locally, not published
-docs/
-
-# --- v2 additions ---
+# secrets &
+  machine-local config — never committed
 .env
-server.properties
-client.properties
+/server.properties
+/client.properties
 *.local.properties
-logs/
-.idea/
-*.iml
