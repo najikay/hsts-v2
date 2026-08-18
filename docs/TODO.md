@@ -187,9 +187,9 @@ Client:
 - [ ] E10.9 Entry flow screens: code entry → ID entry (each with distinct, specific error messages)
 - [ ] E10.10 Exam form: general text header, question cards (text, image, 4 options single-select), progress bar (answered x/y), question navigator strip
 - [ ] E10.11 Debounced auto-save with saved-state indicator ("All changes saved ✓")
-- [ ] E10.12 Countdown widget wired to server sync + TIMER_EXTENDED push (timer grows live + toast)
-- [ ] E10.13 Submit flow: unanswered-questions WarnConfirm → success screen (illustration)
-- [ ] E10.14 Timeout UX: locked screen "Time is up — answers submitted" on FORCE_SUBMITTED push (or on resume) ⚑
+- [ ] E10.12 Countdown widget wired to server sync + TIMER_EXTENDED push as a designed moment (F7.1 / *Time Extended* mockup): green flash + glow pulse on the timer, floating "+mm:ss", toast with teacher + new end time ⚑
+- [ ] E10.13 Manual submit flow (F6.9 / *Submit Confirm* mockup): WarnConfirm with answer-summary grid (chips clickable → jump to question), remaining-time note → *Submitted* success screen (F6.10): check animation, handed-in time, solving minutes, summary, Back to dashboard
+- [ ] E10.14 Time-up takeover (F6.4 / *Time Up* mockup) on FORCE_SUBMITTED push or on resume: full-screen, animated clock, NO confirmation, answers locked (server already enforces), submitted-summary grid, single Back-to-dashboard navigation, exam unreachable afterwards ⚑
 - [ ] E10.15 Disconnect mid-exam UX: reconnect banner, resume seamlessly, no lost answers
 - [ ] E10.16 Session tests: full state machine incl. expiry/resume/push paths
 - [ ] E10.17 Acceptance pass vs T-6 ⚑
