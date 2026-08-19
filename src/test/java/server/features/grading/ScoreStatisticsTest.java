@@ -61,6 +61,27 @@ class ScoreStatisticsTest {
         }
 
         @Test
+        @DisplayName("pass rate is 8/8 — the seed's lowest final score is exactly the pass mark")
+        void passRateOfTheSeededFixture() {
+            ScoreStatistics stats = compute(SEEDED_4821);
+
+            assertThat(stats.passCount()).isEqualTo(8);
+            assertThat(stats.passRate()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("the seeded override moved yael.azulay from fail to pass: auto 51 -> final 55")
+        void theOverrideChangedTheOutcome() {
+            // Seed §9.1: her AUTO score was 51, below the mark; the justified override
+            // to 55 (the mark exactly) is what makes her a pass. Grading on the auto
+            // scores would give 7/8, so the override demo visibly changes the statistic.
+            List<Integer> autoScores = List.of(92, 78, 85, 64, 71, 96, 51, 83);
+
+            assertThat(compute(autoScores).passCount()).isEqualTo(7);
+            assertThat(compute(SEEDED_4821).passCount()).isEqualTo(8);
+        }
+
+        @Test
         @DisplayName("σ is exactly √(1368/8) — the population form, divisor n")
         void populationStandardDeviation() {
             ScoreStatistics stats = compute(SEEDED_4821);
@@ -123,6 +144,7 @@ class ScoreStatisticsTest {
             assertThat(stats.standardDeviation()).isZero();
             assertThat(stats.min()).isEqualTo(73);
             assertThat(stats.max()).isEqualTo(73);
+            assertThat(stats.passRate()).isEqualTo(1.0);
         }
 
         @Test
@@ -137,6 +159,45 @@ class ScoreStatisticsTest {
         }
 
         @Test
+        @DisplayName("the pass mark is inclusive: 55 passes, 54 fails")
+        void passMarkBoundary() {
+            assertThat(ScoreStatistics.PASS_MARK).isEqualTo(55);
+
+            ScoreStatistics stats = compute(List.of(54, 55));
+
+            assertThat(stats.passCount()).isEqualTo(1);
+            assertThat(stats.passRate()).isEqualTo(0.5);
+        }
+
+        @Test
+        @DisplayName("forced-submit zeros stay in the denominator — they were sat and failed")
+        void zerosCountInTheDenominator() {
+            // Four attempts, two of them forced-submit zeros. Dropping the zeros would
+            // report 100% and flatter the execution; the rule is every attempt with a
+            // final score counts (F8.5).
+            ScoreStatistics stats = compute(List.of(0, 0, 80, 90));
+
+            assertThat(stats.count()).isEqualTo(4);
+            assertThat(stats.passCount()).isEqualTo(2);
+            assertThat(stats.passRate()).isEqualTo(0.5);
+        }
+
+        @Test
+        @DisplayName("nobody passing is 0.0, not an empty or undefined rate")
+        void everybodyFailed() {
+            ScoreStatistics stats = compute(List.of(10, 20, 54));
+
+            assertThat(stats.passCount()).isZero();
+            assertThat(stats.passRate()).isZero();
+        }
+
+        @Test
+        @DisplayName("passRate is a fraction in [0,1], never a percentage")
+        void passRateIsAFraction() {
+            assertThat(compute(List.of(60, 60, 60, 10)).passRate()).isEqualTo(0.75);
+        }
+
+        @Test
         @DisplayName("a timed-out attempt scoring 0 is a participant, not a missing row")
         void zeroScoreCounts() {
             ScoreStatistics stats = compute(List.of(0, 100));
@@ -146,6 +207,7 @@ class ScoreStatisticsTest {
             assertThat(stats.min()).isZero();
             assertThat(stats.max()).isEqualTo(100);
             assertThat(stats.deciles().get(0)).isEqualTo(1);
+            assertThat(stats.passCount()).isEqualTo(1);
         }
 
         @Test
