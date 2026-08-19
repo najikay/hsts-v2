@@ -54,6 +54,12 @@ adding the next version.
   seed must stay idempotent and re-runnable, which a versioned migration is not.
 - Cross-row invariants (points summing to 100) belong in the service layer plus a
   test, per §5. A `CHECK` cannot span rows.
+- **Adding a constant to a Java enum in `server.db.entities` requires a migration.**
+  These columns are native MySQL `ENUM`s, so a new constant without an
+  `ALTER TABLE … MODIFY` compiles, passes Hibernate's schema validation — which does not
+  compare enum members at all — and then fails at the first insert with "Data truncated
+  for column". `SchemaColumnComparisonTest` compares the two sides so the build catches
+  it, but the fix is always a new migration, never a change to the enum alone.
 
 ## Adding a migration
 
