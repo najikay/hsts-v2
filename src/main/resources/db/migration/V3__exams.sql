@@ -56,17 +56,28 @@ CREATE TABLE exam_versions (
 -- Points across one exam version must sum to 100. Per ARCHITECTURE §5 that
 -- is enforced in the service layer and asserted in tests — deliberately NOT
 -- a DDL constraint, since a table-level CHECK cannot span rows.
+-- question_id is denormalised alongside question_version_id (PR1 review) so the DB
+-- itself forbids the same question appearing twice in one exam version through two
+-- different versions of it — PRD §6 "duplicate question in exam → prevented", which the
+-- link table alone could not express because its key is the VERSION id.
+--
+-- The foreign key is deliberately COMPOSITE: (question_version_id, question_id) must
+-- match a real (id, question_id) pair in question_versions. Without that, question_id
+-- would be an unpoliced copy — write the wrong one and the UNIQUE below silently guards
+-- nothing. The composite key makes the duplicate impossible rather than merely unlikely.
 CREATE TABLE exam_version_questions (
     exam_version_id     BIGINT NOT NULL,
+    question_id         BIGINT NOT NULL,
     question_version_id BIGINT NOT NULL,
     points              INT    NOT NULL,
     ord                 INT    NOT NULL,
     CONSTRAINT pk_exam_version_questions PRIMARY KEY (exam_version_id, question_version_id),
+    CONSTRAINT uq_exam_version_questions_question UNIQUE (exam_version_id, question_id),
     CONSTRAINT uq_exam_version_questions_ord UNIQUE (exam_version_id, ord),
     CONSTRAINT fk_evq_exam_version FOREIGN KEY (exam_version_id)
         REFERENCES exam_versions (id) ON DELETE CASCADE,
-    CONSTRAINT fk_evq_question_version FOREIGN KEY (question_version_id)
-        REFERENCES question_versions (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_evq_question_version FOREIGN KEY (question_version_id, question_id)
+        REFERENCES question_versions (id, question_id) ON DELETE RESTRICT,
     CONSTRAINT ck_evq_points CHECK (points BETWEEN 1 AND 100),
     CONSTRAINT ck_evq_ord CHECK (ord >= 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

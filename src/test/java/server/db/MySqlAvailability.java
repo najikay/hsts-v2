@@ -21,6 +21,11 @@ import java.sql.SQLException;
  * in one place rather than once per test. Every value can be overridden by environment
  * variable for a machine that runs MySQL somewhere unusual.
  *
+ * <p>Skipping is right on a developer machine with no MySQL, and wrong in CI: there a
+ * skip is a false green, because the whole point of the job is to prove the migrations
+ * run. Setting {@code HSTS_REQUIRE_MYSQL=true} — which the workflow does — turns an
+ * unreachable server into a loud failure instead.
+ *
  * <p><b>This class is the one place to change</b> if the team later adds the Failsafe
  * plugin and moves the MySQL suite to {@code *IT} classes — the gating decision lives
  * here and nowhere else.
@@ -38,6 +43,9 @@ final class MySqlAvailability {
 
     /** Probing must not hang a build on an unreachable host. */
     private static final int PROBE_TIMEOUT_SECONDS = 3;
+
+    /** Environment variable CI sets so an unreachable MySQL fails instead of skipping. */
+    static final String REQUIRE_FLAG = "HSTS_REQUIRE_MYSQL";
 
     private static Boolean cachedReachable;
 
@@ -78,7 +86,31 @@ final class MySqlAvailability {
         if (cachedReachable == null) {
             cachedReachable = probe();
         }
-        return cachedReachable;
+        return gate(cachedReachable, isRequired());
+    }
+
+    /** Whether this environment insists the MySQL suite actually runs. */
+    static boolean isRequired() {
+        return Boolean.parseBoolean(env(REQUIRE_FLAG, "false"));
+    }
+
+    /**
+     * The skip-or-fail decision, kept as a pure function so every branch is testable
+     * without a database and without mutating the environment.
+     *
+     * @param reachable whether a server answered
+     * @param required  whether an unreachable server must fail the build
+     * @return whether the MySQL-backed tests should run
+     * @throws IllegalStateException when the suite is required but MySQL is absent
+     */
+    static boolean gate(boolean reachable, boolean required) {
+        if (!reachable && required) {
+            throw new IllegalStateException(REQUIRE_FLAG + "=true, but no MySQL answered at "
+                    + HOST + ":" + PORT + ". This flag exists so CI can never report green on a"
+                    + " silently skipped migration suite. Start MySQL, or unset " + REQUIRE_FLAG
+                    + " to allow skipping on a machine without one.");
+        }
+        return reachable;
     }
 
     private static boolean probe() {

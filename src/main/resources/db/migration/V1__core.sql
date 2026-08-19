@@ -32,10 +32,14 @@ CREATE TABLE users (
     role          ENUM('STUDENT','TEACHER','PRINCIPAL') NOT NULL,
     national_id   VARCHAR(20)  NOT NULL,
     CONSTRAINT pk_users PRIMARY KEY (id),
-    CONSTRAINT uq_users_username UNIQUE (username)
+    CONSTRAINT uq_users_username UNIQUE (username),
+    -- UNIQUE, not a plain index (PR1 review): S-18 identifies the student by national id
+    -- when starting an attempt, so two students sharing one makes that lookup ambiguous.
+    -- The unique constraint builds its own index, which is why the former
+    -- ix_users_national_id is gone rather than kept alongside — it would be a duplicate
+    -- index paid for on every write.
+    CONSTRAINT uq_users_national_id UNIQUE (national_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE INDEX ix_users_national_id ON users (national_id);
 
 -- A course may be taught by more than one teacher (seed: co-teacher on Java).
 CREATE TABLE course_teachers (

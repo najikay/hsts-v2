@@ -24,7 +24,11 @@ CREATE TABLE exam_executions (
     open_at         DATETIME(3) NOT NULL,
     close_at        DATETIME(3) NOT NULL,
     extra_minutes   INT         NOT NULL DEFAULT 0,
-    status          ENUM('SCHEDULED','LIVE','CLOSED') NOT NULL,
+    -- CANCELLED (F5.5, added in PR1 review): cancelling a scheduled release must not be
+    -- a row delete — the RESTRICT below would block it the moment anyone had sat it, and
+    -- CLOSED would pollute the F9.4 report corpus with a zero-participant execution.
+    -- Cancelled executions are excluded from statistics and reports (service rule, E9).
+    status          ENUM('SCHEDULED','LIVE','CLOSED','CANCELLED') NOT NULL,
     created_by      BIGINT      NOT NULL,
     stats           JSON        NULL,
     participation   JSON        NULL,
