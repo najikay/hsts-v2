@@ -43,72 +43,95 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 
 ## 3. Users (18 — 1 principal, 5 teachers, 12 students)
 
-Password convention is demo-only and uniform: `Hsts!2026`. The loader BCrypts it.
+**The five usernames marked ★ are fixed by `docs/DEMO_ACCOUNTS.md`** and are mirrored here
+verbatim, per that file's own rule: the E5 fixture directory is replaced by the seeded DB in
+E2 PR3, "the usernames stay (the seed mirrors them)". The other 13 are mine.
 
-| id | username | full_name | role | national_id |
-|---|---|---|---|---|
-| 1 | `dana.almog` | דנה אלמוג | PRINCIPAL | `301548202` |
-| 2 | `rina.barak` | רינה ברק | TEACHER | `214703951` |
-| 3 | `yossi.mizrahi` | יוסי מזרחי | TEACHER | `248190639` |
-| 4 | `avi.cohen` | אבי כהן | TEACHER | `273056416` |
-| 5 | `michal.sharon` | מיכל שרון | TEACHER | `296481724` |
-| 6 | `tamar.levi` | תמר לוי | TEACHER | `315729046` |
-| 7 | `noa.friedman` | נועה פרידמן | STUDENT | `338106727` |
-| 8 | `itay.regev` | איתי רגב | STUDENT | `349251082` |
-| 9 | `shira.dahan` | שירה דהן | STUDENT | `352074611` |
-| 10 | `omer.katz` | עומר כץ | STUDENT | `361489206` |
-| 11 | `maya.ben-david` | מאיה בן-דוד | STUDENT | `374301851` |
-| 12 | `adam.peretz` | אדם פרץ | STUDENT | `385612098` |
-| 13 | `yael.azulay` | יעל אזולאי | STUDENT | `390745362` |
-| 14 | `daniel.shapira` | דניאל שפירא | STUDENT | `402186936` |
-| 15 | `lior.gabay` | ליאור גבאי | STUDENT | `413860529` |
-| 16 | `tal.harari` | טל הררי | STUDENT | `425097185` |
-| 17 | `roni.malka` | רוני מלכה | STUDENT | `436712400` |
-| 18 | `eitan.solomon` | איתן סולומון | STUDENT | `448521062` |
+`full_name` is Hebrew throughout — the school is Israeli and RTL must round-trip in every
+screen that shows a name. `DEMO_ACCOUNTS.md` writes the five in Latin transliteration; same
+people, same usernames.
+
+Seed password is one uniform demo value, BCrypted by the loader. **`DEMO_ACCOUNTS.md` uses
+`demo123` for the E5 fixture** — the seed keeps that value so the demo script does not change
+when the fixture is replaced.
+
+| id | username | full_name | role (stored) | national_id | |
+|---|---|---|---|---|---|
+| 1 | `principal.avia` | אביה שלו | PRINCIPAL | `301548202` | ★ |
+| 2 | `dana.cohen` | דנה כהן | TEACHER | `214703951` | ★ |
+| 3 | `rina.barak` | רינה ברק | TEACHER | `248190639` | ★ |
+| 4 | `avi.mizrahi` | אבי מזרחי | TEACHER | `273056416` | |
+| 5 | `tamar.shani` | תמר שני | TEACHER | `296481724` | |
+| 6 | `michal.sharon` | מיכל שרון | TEACHER | `315729046` | |
+| 7 | `noa.friedman` | נועה פרידמן | STUDENT | `338106727` | |
+| 8 | `itay.regev` | איתי רגב | STUDENT | `349251082` | |
+| 9 | `shira.dahan` | שירה דהן | STUDENT | `352074611` | |
+| 10 | `omer.katz` | עומר כץ | STUDENT | `361489206` | |
+| 11 | `maya.levi` | מאיה לוי | STUDENT | `374301851` | ★ |
+| 12 | `noam.peretz` | נועם פרץ | STUDENT | `385612098` | ★ |
+| 13 | `yael.azulay` | יעל אזולאי | STUDENT | `390745362` | |
+| 14 | `daniel.shapira` | דניאל שפירא | STUDENT | `402186936` | |
+| 15 | `lior.gabay` | ליאור גבאי | STUDENT | `413860529` | |
+| 16 | `tal.harari` | טל הררי | STUDENT | `425097185` | |
+| 17 | `roni.malka` | רוני מלכה | STUDENT | `436712400` | |
+| 18 | `eitan.solomon` | איתן סולומון | STUDENT | `448521062` | |
+
+> **No stored COORDINATOR role.** `users.role` is `ENUM('STUDENT','TEACHER','PRINCIPAL')`.
+> `DEMO_ACCOUNTS.md` lists `rina.barak` as COORDINATOR because that is the **wire** role:
+> ARCHITECTURE §5 round-2 makes it derived at login — stored TEACHER plus a `coordinators`
+> row → wire `Role.COORDINATOR`. She is seeded TEACHER, and §5 below gives her the row.
 
 ## 4. Course teachers (`course_teachers`)
 
 | course | teacher | note |
 |---|---|---|
-| `11` | 2 rina.barak | |
-| `12` | 3 yossi.mizrahi | |
-| `21` | 4 avi.cohen | |
-| `21` | 6 tamar.levi | co-teacher (PRD §5) — proves a course with two teachers |
-| `22` | 5 michal.sharon | |
+| `11` אלגברה | 2 dana.cohen | ★ `DEMO_ACCOUNTS.md`: dana.cohen teaches Algebra 11 |
+| `12` חדו"א | 2 dana.cohen | ★ same teacher, second course |
+| `12` חדו"א | 3 rina.barak | ★ `DEMO_ACCOUNTS.md`: rina.barak teaches Calculus 12 |
+| `21` Java | 4 avi.mizrahi | |
+| `21` Java | 5 tamar.shani | co-teacher on Java (PRD §5) |
+| `22` Databases | 6 michal.sharon | |
+
+Coverage: every course has at least one teacher (S-1), **Calculus and Java each have two**,
+and `dana.cohen` teaches two courses. See deviation 3 in the PR report — PRD §5 describes
+"one per course + one co-teacher on Java", and DEMO_ACCOUNTS.md forces a second co-taught
+course. The richer shape is defensible on S-1 ("one or more teachers") but it is a
+divergence from PRD §5 as written, not an accident.
 
 ## 5. Coordinators (`coordinators`) — 2 rows, one per subject
 
-| subject_code | teacher |
-|---|---|
-| `10` | 2 rina.barak |
-| `20` | 4 avi.cohen |
+| subject_code | teacher | coordinates courses |
+|---|---|---|
+| `10` מתמטיקה | 3 rina.barak | 11 אלגברה, 12 חדו"א |
+| `20` מדעי המחשב | 6 michal.sharon | 21 Java, 22 Databases |
 
-> **rina.barak is a TEACHER row + this coordinator row** — not a COORDINATOR role.
-> She teaches Algebra (11) *and* coordinates Mathematics (10), so she approves
-> yossi.mizrahi's Calculus exam while authoring her own. That is the intended demo:
-> the approver is a peer, not an admin.
+`rina.barak` teaches Calculus (12) *and* coordinates Mathematics (10), so she approves
+`dana.cohen`'s Algebra and Calculus exams. That is the intended demo shape: **the approver is
+a peer teacher, not an administrator** (S-1).
+
+`michal.sharon` teaches Databases (22) and coordinates Computer Science (20), so she approves
+the Java exams written by `avi.mizrahi` and `tamar.shani`.
 
 ## 6. Enrollments (`enrollments`) — each student in 2–3 courses
 
-| student | courses |
-|---|---|
-| 7 noa.friedman | 11, 21 |
-| 8 itay.regev | 11, 12, 21 |
-| 9 shira.dahan | 11, 22 |
-| 10 omer.katz | 11, 21, 22 |
-| 11 maya.ben-david | 11, 12 |
-| 12 adam.peretz | 11, 21 |
-| 13 yael.azulay | 11, 12, 22 |
-| 14 daniel.shapira | 11, 21 |
-| 15 lior.gabay | 12, 21, 22 |
-| 16 tal.harari | 12, 22 |
-| 17 roni.malka | 21, 22 |
-| 18 eitan.solomon | 12, 21, 22 |
+| student | courses | |
+|---|---|---|
+| 7 noa.friedman | 11, 21 | |
+| 8 itay.regev | 11, 12, 21 | |
+| 9 shira.dahan | 11, 22 | |
+| 10 omer.katz | 11, 21, 22 | |
+| 11 maya.levi | 11, 21, 22 | ★ exactly as `DEMO_ACCOUNTS.md` |
+| 12 noam.peretz | 12, 21 | ★ exactly as `DEMO_ACCOUNTS.md` |
+| 13 yael.azulay | 11, 12, 22 | |
+| 14 daniel.shapira | 11, 21 | |
+| 15 lior.gabay | 11, 12 | |
+| 16 tal.harari | 12, 22 | |
+| 17 roni.malka | 21, 22 | |
+| 18 eitan.solomon | 12, 21, 22 | |
 
 Per-course totals: **11 → 8 students · 12 → 6 · 21 → 8 · 22 → 7.**
 Algebra's 8 is deliberate: it is the fully-graded execution, and 8 grades spread across
 5 deciles is what makes the F9.3 histogram look like a real class rather than a stub.
-
 ---
 
 ## 7. Question bank (40 questions)
@@ -223,12 +246,16 @@ sum to **100** (service rule, §5). `status` lives on the *version*, not the exa
 
 | # | display_id6 | course | name | author | versions and status |
 |---|---|---|---|---|---|
-| 1 | `101101` | 11 | מבחן אמצע — אלגברה | 2 rina.barak | v1 **REJECTED**, v2 **APPROVED** |
-| 2 | `101102` | 11 | בוחן — אי-שוויונות | 2 rina.barak | v1 **DRAFT** |
-| 3 | `101201` | 12 | מבחן אמצע — חדו"א | 3 yossi.mizrahi | v1 **PENDING** (awaiting rina.barak) |
-| 4 | `202101` | 21 | Java Fundamentals Exam | 4 avi.cohen | v1 **APPROVED** |
-| 5 | `202102` | 21 | Collections Quiz | 6 tamar.levi | v1 **REJECTED** |
-| 6 | `202201` | 22 | Databases Final | 5 michal.sharon | v1 **APPROVED** |
+| 1 | `101101` | 11 | מבחן אמצע — אלגברה | 2 dana.cohen | v1 **REJECTED**, v2 **APPROVED** |
+| 2 | `101102` | 11 | בוחן — אי-שוויונות | 2 dana.cohen | v1 **DRAFT** |
+| 3 | `101201` | 12 | מבחן אמצע — חדו"א | 2 dana.cohen | v1 **PENDING** (awaiting 3 rina.barak) |
+| 4 | `202101` | 21 | Java Fundamentals Exam | 4 avi.mizrahi | v1 **APPROVED** |
+| 5 | `202102` | 21 | Collections Quiz | 5 tamar.shani | v1 **REJECTED** |
+| 6 | `202201` | 22 | Databases Final | 6 michal.sharon | v1 **APPROVED** |
+
+Every author teaches the course they wrote for (S-5). `dana.cohen` writes all three
+Mathematics exams because she is the only teacher on Algebra and one of two on Calculus —
+which keeps `rina.barak` free to be the *approver* on both, never her own.
 
 ### 8.1 Composition
 
@@ -250,7 +277,7 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 |---|---|---|
 | 1 | קראו כל שאלה עד הסוף. מותר השימוש במחשבון פשוט בלבד. | מחוון: שאלה 7 — לקבל גם פתרון גרפי מנומק. |
 | 2 | בוחן קצר. משך: 30 דקות. | טיוטה — טרם נבדק מול המחוון. |
-| 3 | יש לנמק כל שלב. תשובה ללא נימוק לא תזכה בניקוד מלא. | להזכיר לרכזת: השאלות 12006 ו-12007 חדשות השנה. |
+| 3 | יש לנמק כל שלב. תשובה ללא נימוק לא תזכה בניקוד מלא. | להזכיר לרינה: השאלות 12006 ו-12007 חדשות השנה. |
 | 4 | Answer all questions. No IDE or documentation allowed. | Q21010 is the give-away question — keep it first. |
 | 5 | Short quiz on the Collections framework. | Draft — needs a fourth question before resubmitting. |
 | 6 | Closed book. Write SQL keywords in uppercase. | Q22007 historically has the lowest success rate — expect a low mean. |
@@ -259,8 +286,8 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 | exam | version | rejected by | reason |
 |---|---|---|---|
-| 1 | v1 | 2 rina.barak (coordinator of 10) | חמש שאלות בלבד ל-60 דקות, והציון לכל שאלה גבוה מדי. נדרש פיזור רחב יותר. |
-| 5 | v1 | 4 avi.cohen (coordinator of 20) | Three questions is too few for a graded quiz, and all three are from one topic. Add a fourth from Exceptions. |
+| 1 | v1 | 3 rina.barak (coordinator of subject 10) | חמש שאלות בלבד ל-60 דקות, והציון לכל שאלה גבוה מדי. נדרש פיזור רחב יותר. |
+| 5 | v1 | 6 michal.sharon (coordinator of subject 20) | Three questions is too few for a graded quiz, and all three are from one topic. Add a fourth from Exceptions. |
 
 > Exam 1 is the versioning showpiece: **v1 was rejected with a reason, v2 fixed exactly
 > what the reason named** (5 questions → 7, 20 points each → 15/10), and v2 is what got
@@ -288,7 +315,8 @@ releases, separate codes, windows, participants and statistics.
 
 ### 9.1 Execution 1 — participation (S-21) and grades
 
-8 Algebra students sat it. `extra_minutes = 0`.
+All 8 students enrolled in Algebra (11) sat it, so the roster and the attempt list match
+exactly. `extra_minutes = 0`.
 
 | student | attempt status | solving time (S-19) | auto | final | note |
 |---|---|---|---|---|---|
@@ -296,13 +324,15 @@ releases, separate codes, windows, participants and statistics.
 | 8 itay.regev | SUBMITTED | 68 min | 78 | 78 | |
 | 9 shira.dahan | SUBMITTED | 61 min | 85 | 85 | |
 | 10 omer.katz | **TIMED_OUT** | 75 min | 64 | 64 | Auto-submitted at expiry — the S-19 "did not make it in time" row |
-| 11 maya.ben-david | SUBMITTED | 70 min | 71 | 71 | |
-| 12 adam.peretz | SUBMITTED | 45 min | 96 | 96 | |
+| 11 maya.levi | SUBMITTED | 70 min | 71 | 71 | |
 | 13 yael.azulay | SUBMITTED | 73 min | 51 | **55** | **Manual override**, see below |
 | 14 daniel.shapira | SUBMITTED | 58 min | 83 | 83 | |
+| 15 lior.gabay | SUBMITTED | 45 min | 96 | 96 | |
 
 **Manual override (T-8.3 / S-23 — a change requires an explanation):**
-- yael.azulay, 51 → 55, by rina.barak.
+- yael.azulay, 51 → 55, by **2 dana.cohen** — the teacher who wrote and released the exam.
+  The coordinator approves *exams*, the teacher approves *grades* (T-8.2 / T-8.3); here they
+  are deliberately different people.
 - Reason: `בשאלה 11011 נכתב פתרון נכון עם טעות סימן בשורה האחרונה — ניתן ניקוד חלקי.`
 - Teacher comment to the student (S-22): `שיפור ניכר באי-שוויונות. כדאי לחזור על תחום ההגדרה.`
 
@@ -391,13 +421,13 @@ Text is abridged here for readability; the loader stores the full paragraph.
 | # | bot | student | asked | question | answer sketch |
 |---|---|---|---|---|---|
 | 1 | 1 | 7 noa.friedman | T−12d | איך פותרים משוואה עם שברים? | מכפילים את שני האגפים במכנה המשותף כדי להיפטר מהשברים, ואז פותרים כרגיל. |
-| 2 | 1 | 11 maya.ben-david | T−10d | מה זו דיסקרימיננטה? | הביטוי b²-4ac. הסימן שלו קובע כמה שורשים ממשיים יש לפרבולה. |
+| 2 | 1 | 11 maya.levi | T−10d | מה זו דיסקרימיננטה? | הביטוי b²-4ac. הסימן שלו קובע כמה שורשים ממשיים יש לפרבולה. |
 | 3 | 1 | 7 noa.friedman | T−9d | מתי לפרבולה אין שורשים? | כאשר הדיסקרימיננטה שלילית — הפרבולה כולה מעל ציר x או כולה מתחתיו. |
 | 4 | 2 | 16 tal.harari | T−8d | למה הגבול של sin(x)/x באפס שווה 1? | זהו גבול מיוחד שמוכיחים גיאומטרית בעזרת מעגל היחידה וכלל הסנדוויץ. |
 | 5 | 3 | 10 omer.katz | T−6d | When should I use a LinkedList instead of an ArrayList? | Only when you insert or remove at the ends far more often than you read by index. |
 | 6 | 3 | 17 roni.malka | T−5d | What is the difference between an interface and an abstract class? | An interface declares a contract and a class may implement many; an abstract class can hold state and a class may extend only one. |
 | 7 | 3 | 10 omer.katz | T−4d | Why did my for-each loop throw ConcurrentModificationException? | The list was structurally modified during iteration. Use an Iterator and call its remove method, or use removeIf. |
-| 8 | 3 | 15 lior.gabay | T−2d | What does the JVM do when recursion goes too deep? | Each call takes a stack frame; when the thread stack is exhausted the JVM throws StackOverflowError. |
+| 8 | 3 | 12 noam.peretz | T−2d | What does the JVM do when recursion goes too deep? | Each call takes a stack frame; when the thread stack is exhausted the JVM throws StackOverflowError. |
 
 Sessions cluster on bots 1 and 3, and both `omer.katz` and `noa.friedman` asked twice.
 That is deliberate: T-14.3 / S-34 shows the teacher an **anonymised** aggregate ("8
@@ -415,17 +445,23 @@ Enough that the notification centre is populated at login rather than empty (NFR
 
 | # | recipient | type | title | read |
 |---|---|---|---|---|
-| 1 | 2 rina.barak | EXAM_REJECTED | מבחן הוחזר לתיקון — גרסה 1 של "מבחן אמצע — אלגברה" | read |
-| 2 | 3 yossi.mizrahi | EXAM_PENDING | המבחן נשלח לאישור רכזת המקצוע | unread |
-| 3 | 2 rina.barak | APPROVAL_REQUEST | מבחן ממתין לאישורך במקצוע מתמטיקה | unread |
-| 4 | 6 tamar.levi | EXAM_REJECTED | Collections Quiz was returned for revision | unread |
+| 1 | 2 dana.cohen | EXAM_REJECTED | מבחן הוחזר לתיקון — גרסה 1 של "מבחן אמצע — אלגברה" | read |
+| 2 | 2 dana.cohen | EXAM_PENDING | המבחן נשלח לאישור רכזת המקצוע | unread |
+| 3 | 3 rina.barak | APPROVAL_REQUEST | מבחן ממתין לאישורך במקצוע מתמטיקה | unread |
+| 4 | 5 tamar.shani | EXAM_REJECTED | Collections Quiz was returned for revision | unread |
 | 5 | 7 noa.friedman | GRADE_PUBLISHED | הציון שלך במבחן אמצע — אלגברה זמין לצפייה | read |
 | 6 | 13 yael.azulay | GRADE_PUBLISHED | הציון שלך זמין לצפייה, כולל הערת מורה | unread |
-| 7 | 4 avi.cohen | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
-| 8 | 1 dana.almog | EXECUTION_CLOSED | בחינה הסתיימה — 8 נבחנים, ממוצע 78 | unread |
+| 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
+| 8 | 1 principal.avia | EXECUTION_CLOSED | בחינה הסתיימה — 8 נבחנים, ממוצע 78 | unread |
 
 Notification 8 exists so the principal's first screen is not empty at login: S-7 makes
 her read-only, so she can never generate her own activity.
+
+Every recipient is the person the event actually concerns: rejections and pending-approval
+notices go to the **author** (`dana.cohen`, `tamar.shani`), the approval request goes to the
+**subject coordinator** (`rina.barak`), and grade publications go to the **students who sat
+the exam**. A notification addressed to someone with no stake in the event is the kind of
+thing that only shows up when a reviewer opens the screen at the defense.
 
 ---
 
@@ -434,7 +470,7 @@ her read-only, so she can never generate her own activity.
 | # | question | who | what I am building on |
 |---|---|---|---|
 | 1 | **`docs/DEMO_ACCOUNTS.md` does not exist** — not on `main`, not on any branch, not in any commit. It is E0.11 (lead, unticked). Omar's note says the seed "mirrors its five usernames", so one of us is looking at an unpushed file. | Naji | §3 above is the source of truth until that file lands. Whichever document is written second matches the first — I do not mind which, but it needs saying. |
-| 2 | Which five accounts are the demo five? | Naji | Best guess: `dana.almog`, `rina.barak`, `avi.cohen`, `noa.friedman`, `omer.katz` — one per role, plus a coordinator and the student who timed out. Confirm before DEMO_ACCOUNTS.md is written. |
+| 2 | Which five accounts are the demo five? | Naji | Best guess: `principal.avia`, `rina.barak`, `avi.mizrahi`, `noa.friedman`, `omer.katz` — one per role, plus a coordinator and the student who timed out. Confirm before DEMO_ACCOUNTS.md is written. |
 | 3 | Is `rina.barak` seeded as TEACHER plus a `coordinators` row? | Omar → Naji | **Yes, confirmed against the schema** — `role ENUM('STUDENT','TEACHER','PRINCIPAL')` has no COORDINATOR value and `coordinators` has its PK on `subject_code` alone. Omar's reading is right; §5 is built on it. No answer needed. |
 | 4 | Population or sample standard deviation in the stored stats? | me (E14) → Naji | Population, divisor `n`. Recorded in §9.1 so the seeded stats and E14's recomputation cannot drift by a point and look like a bug. |
 | 5 | Illustration images — real assets or NULL to start? | Omar | 10 questions are marked `img` but I have supplied no bytes. `image MEDIUMBLOB NULL` accepts NULL, so the loader can start with NULL; I will add real assets under `docs/seed/img/` in a follow-up. Flagged so nobody blocks on it. |
