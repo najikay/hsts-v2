@@ -1,12 +1,12 @@
 package client.features.bank;
 
-import client.core.AbstractScreenUI;
+import client.core.NavParams;
+import client.ui.screen.AbstractScreen;
 import client.ui.components.Logo;
 import common.dto.bank.Question;
 import common.protocol.Message;
 import common.protocol.Verb;
 import javafx.fxml.FXML;
-import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Alert;
@@ -18,8 +18,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletionException;
@@ -29,8 +27,14 @@ import java.util.concurrent.CompletionException;
  *
  * <p>Master-detail: a styled {@link ListView} of questions on the left, an editor
  * card on the right. This class is the FXML controller (set via
- * {@code loader.setController(this)} so the {@link AbstractScreenUI} Template
+ * {@code loader.setController(this)} so the {@link AbstractScreen} Template
  * Method and the Singleton/Adapter wiring stay intact).
+
+ * <p>Kept alive through E4 so the app stays runnable end-to-end (connect →
+ * questions) while E6 rewrites the real bank screens. It is the one screen still
+ * on the legacy {@code css/app.css}, which it loads onto its own root rather
+ * than onto the Scene, so the prototype's styling cannot leak into the design
+ * system.
  *
  * <p>Interaction model:
  * <ul>
@@ -49,9 +53,12 @@ import java.util.concurrent.CompletionException;
  * result is applied inside {@code onFxThread()} — the single documented hop back
  * onto the JavaFX Application Thread.
  */
-public class QuestionsView extends AbstractScreenUI {
+public class QuestionsView extends AbstractScreen {
 
     private static final String FXML_PATH = "/fxml/QuestionsView.fxml";
+
+    /** Prototype stylesheet, scoped to this screen's root only. */
+    private static final String LEGACY_STYLESHEET = "/css/app.css";
 
     @FXML private ListView<Question> listView;
     @FXML private TextArea questionField;
@@ -72,14 +79,13 @@ public class QuestionsView extends AbstractScreenUI {
     private String originalAnswer = "";
 
     @Override
-    public Parent render() {
-        FXMLLoader loader = new FXMLLoader(getClass().getResource(FXML_PATH));
-        loader.setController(this);
-        try {
-            return loader.load();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to load " + FXML_PATH, e);
+    protected Parent build() {
+        Parent root = loadFxml(FXML_PATH);
+        java.net.URL legacyCss = getClass().getResource(LEGACY_STYLESHEET);
+        if (legacyCss != null) {
+            root.getStylesheets().add(legacyCss.toExternalForm());
         }
+        return root;
     }
 
     /** Wired automatically by FXMLLoader after {@code @FXML} fields are injected. */
@@ -105,7 +111,7 @@ public class QuestionsView extends AbstractScreenUI {
     }
 
     @Override
-    protected void onShown() {
+    public void onShow(NavParams params) {
         requestAllQuestions();
     }
 

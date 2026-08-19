@@ -1,62 +1,107 @@
 package client.core;
 
-import client.core.ClientConfig.Settings;
 import client.events.ClientEventBus;
-import client.events.PushEventBridge;
+import client.features.bank.QuestionsView;
 import client.features.connect.ConnectView;
-import client.net.HSTSClient;
-import client.net.RequestDispatcher;
+import client.features.settings.SettingsView;
+import client.net.IClientConnection;
+import client.ui.gallery.GalleryScreen;
+import client.ui.screen.ScreenFactory;
+import client.ui.theme.ThemeManager;
+import client.ui.theme.ThemeState;
 import javafx.application.Application;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * JavaFX application entry point (Presentation tier).
+ * JavaFX application entry point (Presentation tier, E4.1).
  *
- * <p>Bootstraps the client: wires the {@link ScreenManager} singleton to the
- * primary stage, creates the OCSF-backed {@link HSTSClient} adapter using
- * {@link ClientConfig}, then shows the {@link ConnectView}. The connect screen
- * opens the socket asynchronously and, on success, asks the
- * {@link ScreenManager} to swap to {@link client.features.bank.QuestionsView}.
+ * <p>Bootstraps the client in one readable sequence: parse switches → build the
+ * theme → wire the {@link ScreenManager} → declare the route table → show the
+ * first screen. Nothing here decides anything; every rule it applies belongs to
+ * a collaborator that is unit-tested on its own ({@link AppArgs},
+ * {@link ThemeState}, {@link Navigator}, {@link ScreenCache}).
  *
- * <p>NOTE: Because this class extends {@link Application}, it must NOT be the
- * client JAR's Main-Class. The manifest Main-Class is {@link ClientLauncher},
- * which calls {@link #main(String[])} here, to bypass JavaFX module restrictions.
+ * <p>Note the network stack is <b>not</b> created here any more. The user picks
+ * the endpoint on the connect screen (F1.5), so
+ * {@code client.features.connect.ConnectWiring} builds the client and dispatcher
+ * at the moment Connect is pressed — and rebuilds them if the user tries a
+ * different address.
+ *
+ * <p>Because this class extends {@link Application} it must not be the JAR's
+ * {@code Main-Class}; {@link ClientLauncher} is.
  */
 public class ClientApp extends Application {
 
-    private HSTSClient client;
+    private static final Logger log = LoggerFactory.getLogger(ClientApp.class);
 
     @Override
     public void start(Stage primaryStage) {
+        boot(primaryStage, resolveArgs());
+    }
+
+    /**
+     * Reads the switches from the launch parameters, falling back to system
+     * properties.
+     *
+     * <p>{@code getParameters()} returns {@code null} for an {@code Application}
+     * that was constructed rather than {@code launch}ed — which is exactly how
+     * the UI smoke test boots it — so the fallback is what makes the app
+     * testable without a real launch.
+     */
+    AppArgs resolveArgs() {
+        Parameters parameters = getParameters();
+        return parameters == null
+                ? AppArgs.parse(new String[0])
+                : AppArgs.parse(parameters.getRaw().toArray(new String[0]));
+    }
+
+    /** The bootstrap sequence, with the switches already resolved. */
+    void boot(Stage primaryStage, AppArgs args) {
+        ClientEventBus eventBus = ClientEventBus.getInstance();
+
+        // Theme first: the gallery runs on a throwaway store so a developer
+        // playing with palettes there never rewrites their real preferences.
+        ThemeState themeState = args.gallery()
+                ? ThemeState.ephemeral(eventBus)
+                : ThemeState.userHome(eventBus);
+        ThemeManager themeManager = new ThemeManager(themeState);
+
         ScreenManager manager = ScreenManager.getInstance();
-        manager.init(primaryStage);
+        manager.init(primaryStage, eventBus, themeManager);
 
-        Settings settings = ClientConfig.load();
-        System.out.println("[ClientApp] Connecting to " + settings.host() + ":" + settings.port());
+        if (args.gallery()) {
+            log.info("Booting the design-system gallery (--gallery)");
+            manager.showStandalone(new GalleryScreen(themeState));
+            return;
+        }
 
-        // Create the network adapter (Adapter Pattern); ConnectView opens it.
-        client = new HSTSClient(settings.host(), settings.port());
-        manager.setClient(client);
+        registerRoutes(manager);
+        manager.navigator().navigate(Routes.CONNECT.id());
+    }
 
-        // Protocol v2 plumbing: every inbound message goes to the dispatcher,
-        // which completes the matching request future or — for a PUSH — hands it
-        // to the event bus (which posts it on the FX thread).
-        RequestDispatcher dispatcher = new RequestDispatcher(client);
-        dispatcher.setPushListener(new PushEventBridge(ClientEventBus.getInstance()));
-        client.setServerMessageHandler(dispatcher::dispatchIncoming);
-        client.setConnectionLostHandler(dispatcher::failAllPending);
-        manager.setDispatcher(dispatcher);
+    /**
+     * Declares the route table and how to build each screen. E5 onwards adds one
+     * line per new screen here — nothing else in the framework changes.
+     */
+    static void registerRoutes(ScreenManager manager) {
+        Routes.registerAll(manager.navigator());
 
-        manager.setScreen(new ConnectView());
+        ScreenFactory screens = manager.screens();
+        screens.register(Routes.CONNECT.id(), ConnectView::new);
+        screens.register(Routes.QUESTIONS.id(), QuestionsView::new);
+        screens.register(Routes.SETTINGS.id(), SettingsView::new);
     }
 
     @Override
     public void stop() {
-        // Cleanly close the socket when the window is closed.
+        IClientConnection client = ScreenManager.getInstance().getClient();
         if (client != null && client.isConnectionOpen()) {
             try {
                 client.disconnect();
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                log.debug("Ignoring error while closing the connection: {}", e.getMessage());
             }
         }
     }

@@ -1,38 +1,67 @@
 package client.core;
 
+import client.events.ClientEventBus;
 import client.net.IClientConnection;
 import client.net.RequestDispatcher;
+import client.ui.anim.Animations;
+import client.ui.anim.Motion;
 import client.ui.components.Logo;
+import client.ui.components.ToastStack;
+import client.ui.screen.AbstractScreen;
+import client.ui.screen.ScreenFactory;
+import client.ui.shell.AppShell;
+import client.ui.theme.ThemeManager;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 
 /**
- * Centralized navigation controller (Singleton Pattern) — the single source of
- * truth for routing between screens (Presentation tier).
+ * Owns the primary {@link Stage} and turns navigation events into scene changes
+ * (Presentation tier, E4.2, ARCHITECTURE §6).
  *
- * <p>Owns the primary {@link Stage} and the shared {@link IClientConnection} so
- * any screen can reach the network adapter without holding its own copy. New
- * screens inherit from {@link AbstractScreenUI} and are shown via
- * {@link #setScreen(AbstractScreenUI)}.
+ * <p>Deliberately thin. Everything with a rule in it has been moved out:
+ * <ul>
+ *   <li><b>where we are and where we can go back to</b> → {@link Navigator};</li>
+ *   <li><b>which screen object serves a route</b> → {@link ScreenFactory}
+ *       (over {@link ScreenCache});</li>
+ *   <li><b>when a screen is on the bus</b> → {@link ScreenLifecycle};</li>
+ *   <li><b>what anything looks like</b> → {@link ThemeManager}.</li>
+ * </ul>
+ * What is left here is the part that genuinely needs a {@code Stage}: swap the
+ * root node, put shell-hosted screens inside the shell and full-bleed ones
+ * (Connect, Login, exam takeovers) directly on the scene, and play the entrance
+ * transition.
+ *
+ * <p>Still a Singleton so any screen can reach shared collaborators without
+ * threading them through constructors — the accessors are what
+ * {@code AbstractScreen} exposes to subclasses.
  */
 public final class ScreenManager {
 
-    /** Shared stylesheet applied to every screen's Scene. */
-    private static final String STYLESHEET = "/css/app.css";
+    private static final Logger log = LoggerFactory.getLogger(ScreenManager.class);
 
     private static ScreenManager instance;
 
+    private final Navigator navigator = new Navigator();
+    private final ScreenFactory screens = new ScreenFactory();
+
     private Stage primaryStage;
+    private Scene scene;
+    private ClientEventBus eventBus;
+    private ScreenLifecycle lifecycle;
+    private ThemeManager themeManager;
+    private AppShell shell;
     private IClientConnection client;
     private RequestDispatcher dispatcher;
 
     private ScreenManager() {
     }
 
-    /** @return the lazily-created singleton instance. */
+    /** @return the lazily-created singleton. */
     public static synchronized ScreenManager getInstance() {
         if (instance == null) {
             instance = new ScreenManager();
@@ -40,15 +69,56 @@ public final class ScreenManager {
         return instance;
     }
 
-    /** Wires the JavaFX primary stage (called once from ClientApp). */
-    public void init(Stage primaryStage) {
-        this.primaryStage = primaryStage;
-        this.primaryStage.setTitle("HSTS — High School Test System");
+    /**
+     * Discards the singleton. Test-only seam: the manager holds a Stage and a
+     * navigator, and one test's state must not leak into the next.
+     */
+    static synchronized void resetForTests() {
+        instance = null;
+    }
+
+    /**
+     * Wires the primary stage and the collaborators, and subscribes to the
+     * navigator. Called once from {@code ClientApp}.
+     */
+    public void init(Stage primaryStage, ClientEventBus eventBus, ThemeManager themeManager) {
+        this.primaryStage = Objects.requireNonNull(primaryStage, "primaryStage");
+        this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.themeManager = Objects.requireNonNull(themeManager, "themeManager");
+        this.lifecycle = new ScreenLifecycle(eventBus);
+
+        primaryStage.setTitle("HSTS — High School Test System");
+        primaryStage.setMinWidth(1024);
+        primaryStage.setMinHeight(680);
         try {
             primaryStage.getIcons().add(Logo.snapshotImage(128));
-        } catch (RuntimeException ignored) {
-            // A missing window icon is non-fatal; never block startup over branding.
+        } catch (RuntimeException e) {
+            // A missing window icon is cosmetic; never block startup over branding.
+            log.debug("Could not render the window icon: {}", e.getMessage());
         }
+        navigator.addListener(this::onNavigated);
+    }
+
+    // ---------------------------------------------------------- collaborators
+
+    /** @return the route registry / back-stack. */
+    public Navigator navigator() {
+        return navigator;
+    }
+
+    /** @return the screen builder + cache. */
+    public ScreenFactory screens() {
+        return screens;
+    }
+
+    /** @return the app-wide event bus. */
+    public ClientEventBus eventBus() {
+        return eventBus;
+    }
+
+    /** @return the theme applier. */
+    public ThemeManager themeManager() {
+        return themeManager;
     }
 
     public Stage getPrimaryStage() {
@@ -63,46 +133,97 @@ public final class ScreenManager {
         return client;
     }
 
-    /** Wires the shared request/response correlator (called once from ClientApp). */
     public void setDispatcher(RequestDispatcher dispatcher) {
         this.dispatcher = dispatcher;
     }
 
-    /** @return the shared dispatcher every screen sends its requests through. */
     public RequestDispatcher getDispatcher() {
         return dispatcher;
     }
 
+    /** Installs the app shell; shell-hosted routes render inside it from then on. */
+    public void setShell(AppShell shell) {
+        this.shell = shell;
+    }
+
+    /** @return the app shell, or {@code null} before login. */
+    public AppShell shell() {
+        return shell;
+    }
+
+    /** @return the shell's toast overlay, or {@code null} before the shell exists. */
+    public ToastStack toasts() {
+        return shell == null ? null : shell.toasts();
+    }
+
+    // -------------------------------------------------------------- rendering
+
     /**
-     * Renders the given screen and shows it on the primary stage. Uses the
-     * screen's template {@code load()} so each screen's post-render hook fires.
-     * Applies the shared stylesheet and resizes/recenters the window to fit the
-     * new screen, so each navigation looks deliberate.
+     * Reacts to a navigation: fetch (or build) the screen, run its lifecycle,
+     * and put its node where the route says it belongs.
      */
-    public void setScreen(AbstractScreenUI screen) {
-        Parent root = screen.load();
-        Scene current = primaryStage.getScene();
-        if (current == null) {
-            Scene scene = new Scene(root);
-            applyStylesheet(scene);
+    private void onNavigated(NavigationEvent event) {
+        NavEntry target = event.to();
+        AbstractScreen screen = screens.get(target.routeId());
+
+        // Build BEFORE the lifecycle runs: onShow populates the very nodes
+        // build() creates, so a first visit would otherwise hand a screen its
+        // parameters while all its fields are still null.
+        Parent view = screen.view();
+        lifecycle.show(screen, target.params());
+
+        if (target.route().requiresShell() && shell != null) {
+            mountShell();
+            shell.setContent(view);
+        } else {
+            setRoot(view);
+            Animations.fadeIn(view, Motion.BASE_MS);
+        }
+        primaryStage.setTitle("HSTS — " + target.route().title());
+        log.debug("navigated {} → {}", event.previous().map(NavEntry::routeId).orElse("(none)"),
+                target.routeId());
+    }
+
+    private void mountShell() {
+        if (scene == null || scene.getRoot() != shell) {
+            setRoot(shell);
+        }
+    }
+
+    /**
+     * Installs a root node, creating the {@link Scene} on first use and asking
+     * the {@link ThemeManager} to style it. Reusing one Scene across navigations
+     * (rather than building a new one per screen) is what keeps the stylesheets,
+     * the window size and the user's manual resize intact between screens.
+     */
+    private void setRoot(Parent root) {
+        if (scene == null) {
+            scene = new Scene(root, 1280, 800);
+            themeManager.attach(scene);
             primaryStage.setScene(scene);
         } else {
-            current.setRoot(root);
-            applyStylesheet(current);
+            scene.setRoot(root);
+            themeManager.applyDarkClass(root);
         }
         if (!primaryStage.isShowing()) {
             primaryStage.show();
         }
-        primaryStage.sizeToScene();
-        primaryStage.centerOnScreen();
     }
 
-    private void applyStylesheet(Scene scene) {
-        String css = Objects.requireNonNull(
-                getClass().getResource(STYLESHEET), "Missing stylesheet: " + STYLESHEET)
-                .toExternalForm();
-        if (!scene.getStylesheets().contains(css)) {
-            scene.getStylesheets().add(css);
-        }
+    /**
+     * Shows a screen that is not part of the route table — the {@code --gallery}
+     * dev screen, and anything a future tool needs. Bypasses the navigator on
+     * purpose: it has no route, so it must not land on the back-stack.
+     */
+    public void showStandalone(AbstractScreen screen) {
+        Objects.requireNonNull(screen, "screen");
+        Parent view = screen.view();
+        lifecycle.show(screen, NavParams.empty());
+        setRoot(view);
+    }
+
+    /** @return the live scene, or {@code null} before the first screen is shown. */
+    public Scene scene() {
+        return scene;
     }
 }
