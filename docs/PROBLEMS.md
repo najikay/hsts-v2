@@ -22,4 +22,10 @@ Strong candidates to watch for (from v1's failures — if we hit them again, doc
 
 ---
 
-*(entries start here)*
+## P-1 — Non-ASCII (Hebrew) Windows username breaks the forked test JVM    (2026-08-19, Naji + lead)
+**Problem.** `mvnw clean verify` on Windows died before running a single test: `FileNotFoundException: C:\Users\????\...\jacoco.exec` and "The forked VM terminated without properly saying goodbye".
+**Investigation.** The username נאגי appears in the repo path. Surefire launches the test JVM via `cmd.exe`, and the JaCoCo `-javaagent` options string gets decoded with the Windows ANSI code page — the Hebrew characters become `????`, so the agent cannot create its output file and the fork crashes at startup. WSL builds and Linux CI were unaffected (UTF-8 paths native there), which is why it only surfaced on the first full Windows test run.
+**Solution.** Team rule: clones live on an ASCII-only path (`C:\dev\hsts-v2`). Moving the folder fixes it completely; no build config change needed (and no fragile encoding flags to maintain).
+**Evidence.** Failing run 2026-08-19 13:25 (jvmRun1 dumpstream); green `clean verify` after the move.
+
+*(more entries follow)*

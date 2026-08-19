@@ -5,6 +5,8 @@
 You own the data layer: Flyway migrations, JPA entities, repositories, and the seed dataset. This is the foundation of your whole "authoring pipeline" story (E6 bank → E7 builder → E8 approval → E9 release all sit on it).
 
 ## 0. Setup (do once, before anything)
+
+**⚠ Clone location rule:** clone to an ASCII-only path — e.g. `C:\dev\hsts-v2` — no Hebrew characters or spaces. A non-ASCII path crashes the forked test JVM on Windows (docs/PROBLEMS.md P-1).
 1. Install **JDK 21** (Temurin) and **MySQL 8** locally. `java -version` must say 21.
 2. Clone `https://github.com/najikay/hsts-v2.git`, run `./mvnw clean verify` → must end BUILD SUCCESS. If not, stop and report in the group before touching anything.
 3. Read, in order: `docs/PLAN.md` (short), `docs/ARCHITECTURE.md` §5 (your spec — the schema), `docs/PRD.md` §5 (seed dataset) + §1 (C-2, C-7, C-8 decisions), `docs/TODO.md` E2, `docs/TEAM_SPLIT.md` §3–4 (contracts + Definition of Done).

@@ -3,6 +3,8 @@
 **Owner:** Member B · **Reviewer:** Naji · **Branch:** `feat/b-week1` · Your coding epics (E12–E15 grading/results/reports) start once exam attempts exist (~M4); this week's work makes that start fast and is genuinely on the critical path.
 
 ## 0. Setup (same as everyone)
+
+**⚠ Clone location rule:** clone to an ASCII-only path — e.g. `C:\dev\hsts-v2` — no Hebrew characters or spaces. A non-ASCII path crashes the forked test JVM on Windows (docs/PROBLEMS.md P-1).
 1. Install **JDK 21** (Temurin) + **MySQL 8**. `java -version` → 21.
 2. Clone `https://github.com/najikay/hsts-v2.git`, `./mvnw clean verify` → BUILD SUCCESS (report in group if not).
 3. Read: `docs/PLAN.md`, `docs/PRD.md` (all of it — you are the acceptance-test owner, you need the full picture), `docs/TODO.md` E12–E15 + E22, `docs/TEAM_SPLIT.md`.
