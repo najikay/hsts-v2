@@ -80,7 +80,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F8.2** [T-8.2] Teacher reviews per-student results, approves grades (bulk approve + per-student), may add comments to the student (S-22).
 - **F8.3** [T-8.3, S-23] Manual grade change **requires** a justification; original auto grade + change + reason are all stored (audit trail).
 - **F8.4** [S-24, C-3] Only after approval does the student see: grade + her checked form with wrong answers marked + teacher comments. Push notification "Your grade for X is available".
-- **F8.5** [S-25/26] On grading completion, statistics per execution are computed and stored: average, median, **standard deviation (POPULATION σ, divisor n — the execution's participants ARE the whole population, and the seed's frozen values use it)**, min/max, pass rate, decile distribution 0–100. Never visible to students.
+- **F8.5** [S-25/26] On grading completion, statistics per execution are computed and stored: average, median, **standard deviation (POPULATION σ, divisor n — the execution's participants ARE the whole population, and the seed's frozen values use it)**, min/max, pass rate, decile distribution 0–100. Never visible to students. **Pass rate is defined as: final score ≥ 55 counts as a pass (the standard Israeli passing grade); the denominator is every attempt with a final score, including forced-submit zeros** (decided 2026-08-19 with the E12.4 review — E14/E15 render this value and must not redefine the threshold).
 
 ### F9 — Results, data & reports
 - **F9.1** [T-9] Student: list of her exams with grades; opening one shows the checked form (F8.4); copy obtainable (S-36 — export/print to PDF-style view). She can never access others' grades (server-enforced).
