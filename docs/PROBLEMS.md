@@ -40,4 +40,10 @@ Strong candidates to watch for (from v1's failures — if we hit them again, doc
 **Solution.** While locked, every attempt is refused with the same throttle message BEFORE any lookup or verification (no oracle, no free BCrypt work, still truthful for the real owner). The throttle map self-purges stale entries past a 10,000-entry threshold, keeping live locks. Both behaviors pinned by tests, including "unknown usernames throttle identically" and the spray-bounded test.
 **Evidence.** AuthServiceTest throttle nest (8 tests) + LoginIntegrationTest, all green; the lesson recorded: specs get security-reviewed like code, because implementations faithfully reproduce spec bugs.
 
+## P-4 — Two invisible build-environment traps: stale IDE terminal env, poisoned MAVEN_OPTS    (2026-08-19, found by Member B)
+**Symptom.** `mvnw clean verify` fails on a machine that has a perfectly good Temurin 21 install, with errors that point nowhere near the real cause.
+**Investigation.** Two independent causes, neither guessable from the error text: (1) IntelliJ's built-in terminal inherits the environment from when the IDE process started, so JAVA_HOME/PATH changes made after launch are silently absent in every "new" terminal tab; (2) a user-level MAVEN_OPTS carrying JDK 24+ only JVM flags stops a JDK 21 JVM from booting at all, before Maven prints anything useful.
+**Solution.** Team rules: after changing JAVA_HOME/PATH, restart the IDE (a new tab is not a new environment); check MAVEN_OPTS (`$env:MAVEN_OPTS` in PowerShell) when a build dies before Maven prints, and clear flags targeting a newer JDK. Recorded because both will bite again on any fresh machine, including the defense laptops.
+**Evidence.** Member B's local `mvnw clean verify` green on Temurin 21 after both fixes.
+
 *(more entries follow)*

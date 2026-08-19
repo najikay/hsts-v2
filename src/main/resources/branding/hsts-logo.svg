@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  HSTS brand mark — graduation cap on the app's indigo gradient tile.
-  Cap glyph: Lucide "graduation-cap" (ISC licensed, free for commercial use).
+  HSTS brand mark: an "A+" grade glyph on the app's indigo gradient tile
+  (logo-directions review, 2026-08-19). Own geometry, no third-party asset.
   Mirrors the in-app vector logo in client.ui.components.Logo.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
@@ -11,12 +11,11 @@
       <stop offset="1" stop-color="#5c7cfa"/>
     </linearGradient>
   </defs>
-  <rect width="96" height="96" rx="40" fill="url(#hstsGrad)"/>
-  <g transform="translate(19.2 19.2) scale(2.4)"
-     fill="none" stroke="#ffffff" stroke-width="2.1"
+  <rect width="96" height="96" rx="20" fill="url(#hstsGrad)"/>
+  <g transform="translate(18.25 18.25) scale(2.48)"
+     fill="none" stroke="#ffffff"
      stroke-linecap="round" stroke-linejoin="round">
-    <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/>
-    <path d="M22 10v6"/>
-    <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>
+    <path d="M5 19 10.5 5.5 16 19M6.9 14.2H14.1" stroke-width="2.6"/>
+    <path d="M19.2 6.2V10.8M16.9 8.5H21.5" stroke-width="2.2"/>
   </g>
 </svg>

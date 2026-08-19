@@ -15,26 +15,32 @@ import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.transform.Scale;
 
 /**
- * The HSTS brand mark (Presentation tier) — a graduation cap on the app's indigo
- * gradient tile, built as pure JavaFX vector geometry so it stays razor-sharp at
- * any size and ships no image assets.
+ * The HSTS brand mark (Presentation tier) — an "A+" grade glyph on the app's
+ * indigo gradient tile, built as pure JavaFX vector geometry so it stays
+ * razor-sharp at any size and ships no image assets.
  *
- * <p>The cap glyph is the open-source <a href="https://lucide.dev">Lucide</a>
- * {@code graduation-cap} icon (ISC licensed, free for commercial use), drawn as a
- * white stroke. The same geometry backs {@code resources/branding/hsts-logo.svg}.
+ * <p>Chosen from the logo-directions review (2026-08-19): the grade everyone
+ * wants, saying "tests" and "excellence" in one glyph. Own geometry, drawn as
+ * white round-capped strokes in a 24×24 view box. The same geometry backs
+ * {@code resources/branding/hsts-logo.svg}. The tile stays indigo across all
+ * five accent palettes by design.
  */
 public final class Logo {
 
-    // Lucide "graduation-cap" path data (24×24 view box), rendered as strokes.
-    private static final String CAP_BOARD =
-            "M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z";
-    private static final String CAP_TASSEL = "M22 10v6";
-    private static final String CAP_BASE = "M6 12.5V16a6 3 0 0 0 12 0v-3.5";
+    // "A+" path data (24×24 view box), rendered as round-capped strokes.
+    private static final String GRADE_A = "M5 19 10.5 5.5 16 19";
+    private static final String GRADE_A_BAR = "M6.9 14.2H14.1";
+    private static final String PLUS_V = "M19.2 6.2V10.8";
+    private static final String PLUS_H = "M16.9 8.5H21.5";
+
+    // Stroke widths in glyph units; the plus is lighter so the A reads first.
+    private static final double A_STROKE = 2.6;
+    private static final double PLUS_STROKE = 2.2;
 
     private Logo() {
     }
 
-    /** Builds a fixed-size logo node (gradient tile + graduation cap). */
+    /** Builds a fixed-size logo node (gradient tile + A+ glyph). */
     public static StackPane create(double size) {
         Rectangle tile = new Rectangle(size, size);
         tile.setArcWidth(size * 0.42);
@@ -43,15 +49,15 @@ public final class Logo {
                 new Stop(0, Color.web("#4263eb")),
                 new Stop(1, Color.web("#5c7cfa"))));
 
-        double scale = size * 0.60 / 24.0;
-        double stroke = (size * 0.052) / scale;   // ≈5% of the tile, after scaling
-        Group cap = new Group(
-                strokePath(CAP_BOARD, stroke),
-                strokePath(CAP_TASSEL, stroke),
-                strokePath(CAP_BASE, stroke));
-        cap.getTransforms().add(new Scale(scale, scale));
+        double scale = size * 0.62 / 24.0;
+        Group glyph = new Group(
+                strokePath(GRADE_A, A_STROKE),
+                strokePath(GRADE_A_BAR, A_STROKE),
+                strokePath(PLUS_V, PLUS_STROKE),
+                strokePath(PLUS_H, PLUS_STROKE));
+        glyph.getTransforms().add(new Scale(scale, scale));
 
-        StackPane pane = new StackPane(tile, cap);
+        StackPane pane = new StackPane(tile, glyph);
         pane.setMinSize(size, size);
         pane.setPrefSize(size, size);
         pane.setMaxSize(size, size);

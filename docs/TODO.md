@@ -226,6 +226,7 @@ Client:
 - [ ] E13.7 Session tests + acceptance pass vs T-9 ⚑
 
 ## E14 — Teacher results & statistics [B]
+*Ownership note (2026-08-19): hardening items H14.* and H15.* in ACCEPTANCE_TESTS.md moved out of B's scope with the sprint re-plan; whoever executes E14/E15 picks them up. H14.4 (population-σ divisor test) and H15.2 (CANCELLED excluded from reports) are defense-critical.*
 
 - [ ] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
 - [ ] E14.2 Results screen: exam → execution picker → student table (sortable) + stat cards (avg · median · std · min/max · pass rate · participants)
