@@ -380,3 +380,86 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 - Several cases deliberately test **server-side** enforcement by replaying a request rather than
   clicking (2.3, 9.4, 11.4, 6.7). Those are the ones that answer "could a student cheat?", which
   is where v1 lost marks. Do not downgrade them to UI checks.
+
+---
+
+# Hardening — edge cases for E12–E15 (Member B)
+
+**Deliverable 3.** PRD §6's Grading and Reports lines expanded into concrete test ideas, and the
+gaps that pass exposed. This is my E12–E15 test plan: each item becomes a test when its epic
+lands, so the tests are written with the feature rather than backfilled in E21.
+
+Ids are `H<epic>.<n>` so they never collide with the scenario cases above. These are **not**
+counted in the 115 — the outline table is what we submit; this is how we get it green.
+
+**Source** column: `§6` = verbatim from the PRD §6 catalog · `gap` = not in the catalog, added
+here. Every `gap` row is a claim that PRD §6 under-covers my epics; see the note at the end.
+
+## E12 — Grading
+
+| # | Source | Given / When / Then |
+|---|---|---|
+| H12.1 | §6 | **Given** an approved grade, **when** the teacher edits the score without entering a justification, **then** the save is refused server-side — not merely disabled in the UI (S-23). |
+| H12.2 | §6 | **Given** a set of grades already approved, **when** the teacher approves them again, **then** the operation is idempotent: no duplicate audit rows, no second notification to the student. |
+| H12.3 | §6 | **Given** `maya.levi` signed in, **when** she requests a grade id belonging to `omer.katz` by replaying the request, **then** the server answers with an authorization error and no grade data (F9.1). |
+| H12.4 | gap | **Given** an attempt that timed out with **zero** answers saved, **when** auto-check runs, **then** the score is 0 — not null, not an error, and the attempt still appears in the results table. |
+| H12.5 | gap | **Given** an attempt with some questions unanswered, **when** auto-check runs, **then** unanswered questions score 0 and the total equals the sum of the answered ones (F6.9's "unanswered score 0" promise must be true server-side, not just stated in the dialog). |
+| H12.6 | gap | **Given** exam 101101 v2 pins question 11005 at **version 1**, **when** auto-check grades an attempt, **then** it compares against version 1's correct answer — never the latest version. A question edited after release must not change past grades (C-2). |
+| H12.7 | gap | **Given** an attempt still `IN_PROGRESS`, **when** the teacher tries to approve its grade, **then** it is refused: nothing is gradeable before it is submitted or timed out. |
+| H12.8 | gap | **Given** `avi.mizrahi` did not write exam 101101, **when** he tries to approve grades for execution 4821, **then** the server refuses — grade approval belongs to the exam's author (T-8.2 read with S-35). |
+| H12.9 | gap | **Given** a manual override from 51 to 55, **when** the stored record is inspected, **then** the original auto score, the new score, the reason and the actor are all present — an override that loses the original is an audit failure (F8.3). |
+| H12.10 | gap | **Given** two teachers of the same course open the same student's grade, **when** both save a change, **then** the second is rejected with a conflict rather than silently overwriting (F10.3, F10.4 names grading explicitly). |
+
+## E13 — Student results
+
+| # | Source | Given / When / Then |
+|---|---|---|
+| H13.1 | gap | **Given** execution 7390 is auto-checked but **not approved**, **when** `maya.levi` opens My Grades, **then** the exam is absent or shown explicitly as not-yet-published — never a visible score (C-3, S-24). |
+| H13.2 | gap | **Given** a student who has sat no exams, **when** she opens My Grades, **then** an empty state explains rather than showing a blank panel. |
+| H13.3 | gap | **Given** `omer.katz`'s TIMED_OUT attempt, **when** he opens the result, **then** the checked form renders normally and his solving time is shown — a timed-out attempt is a result, not an error state (S-19). |
+| H13.4 | gap | **Given** the checked form is open, **when** its payload is inspected, **then** it contains correct answers **only for the questions in this student's own attempt** — the review DTO is not a route to the whole bank's answer key. |
+| H13.5 | gap | **Given** a grade is approved while the student has My Grades open, **when** approval completes, **then** the row appears live with no refresh (NFR-18, F8.4). |
+
+## E14 — Teacher results & statistics
+
+| # | Source | Given / When / Then |
+|---|---|---|
+| H14.1 | §6 | **Given** execution 5164 with no participants, **when** the teacher opens its results, **then** statistics read N/A and the histogram shows an insufficient-data state — no divide-by-zero, no empty chart frame. |
+| H14.2 | §6 | **Given** an execution with exactly one participant, **when** statistics are computed, **then** median equals the average, σ is 0, and the histogram renders one bucket without collapsing. |
+| H14.3 | gap | **Given** an execution where every student scored the same, **when** the histogram renders, **then** one full-height bucket with σ = 0 and the mean/median/±1σ markers coincident — the marker overlay must not misdraw when they stack. |
+| H14.4 | gap | **Given** the seeded execution 4821, **when** E14 recomputes statistics, **then** they equal the stored ones exactly: mean 78.0, median 80.5, σ 13.08. **σ uses the population divisor `n`.** A sample divisor gives 13.98 and would read as a bug. |
+| H14.5 | gap | **Given** `dana.cohen` wrote exam 101101 and another teacher ran an execution of it, **when** she opens Results, **then** that execution appears — she sees every execution of exams she wrote, not only her own (S-35). |
+| H14.6 | gap | **Given** the results table for 4821, **when** it is read, **then** it holds exactly 8 rows and they match the seeded Algebra roster — a participant count that disagrees with the attempt rows means the derived counts (F7.3) drifted. |
+| H14.7 | gap | **Given** the histogram in count mode, **when** toggled to percentage, **then** the buckets sum to 100% and no bar changes relative height. |
+
+## E15 — Principal views & report engine
+
+| # | Source | Given / When / Then |
+|---|---|---|
+| H15.1 | gap | **Given** `principal.avia` signed in, **when** any mutating verb is replayed with her session, **then** the server refuses — the role has zero mutating verbs authorized, not merely hidden buttons (F9.3, S-7). |
+| H15.2 | gap | **Given** a CANCELLED execution, **when** any report runs, **then** it is excluded from the corpus. ARCHITECTURE §5 says CANCELLED executions are excluded from statistics; a zero-participant row would skew every average (F5.5). |
+| H15.3 | gap | **Given** stored statistics exist for 4821, **when** a report displays its average, **then** the figure comes from the **stored** stats (S-25), not a fresh computation — two code paths producing 78.0 and 77.9 is the failure this prevents. |
+| H15.4 | gap | **Given** the same-student comparison, **when** the student sat exams in different courses, **then** the report groups correctly and does not silently average across incomparable exams. |
+| H15.5 | gap | **Given** a teacher with exactly one execution, **when** the same-teacher comparison runs, **then** it renders a single-series result rather than an error or a blank comparison. |
+| H15.6 | gap | **Given** the report engine, **when** a new dimension is added, **then** it requires one new Strategy class and a menu entry and nothing else — verified by actually adding a throwaway one, not by assertion (S-37, NFR-19, and the T-19 defense question). |
+
+## Note for the reviewer — PRD §6 under-covers E12–E15
+
+PRD §6 gives my four epics **five** lines: three under Grading, two under Reports. There is no
+Results line at all, so student results (E13) and teacher results (E14) have no catalog entries —
+the only E13-adjacent item, "student polls another student's grade id", sits under Grading.
+
+By comparison the catalog gives Bot nine items and Discovery five. That asymmetry is not
+proportional to risk: E12–E15 own grade correctness, and a wrong grade that looks plausible is
+harder to notice at a defense than a bot that fails visibly.
+
+The 23 `gap` rows above are my proposed coverage. Three are worth promoting into PRD §6 itself
+rather than living only here, because they constrain other people's code:
+
+- **H12.6** — grading must use the question **version pinned in the exam**, never the latest.
+  This constrains E6 and E7, not just E12.
+- **H14.4** — the σ divisor. Binds the seed, E14 and E15 to the same choice.
+- **H15.2** — CANCELLED executions excluded from the report corpus. Constrains E9's release
+  handling as much as E15's engine.
+
+Happy to raise those as a PRD edit in a follow-up PR if you agree they belong there.

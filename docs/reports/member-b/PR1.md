@@ -1,8 +1,8 @@
-# Week-1 PR 1 — acceptance-test table + seed content
+# Week-1 PR 1 — acceptance tests, seed content, E12–E15 hardening plan
 
 **Branch:** `feat/b-week1` · **Author:** Member B · **Reviewer:** Naji · **Date:** 2026-08-19
 
-Brief deliverables 1 and 2.
+All three brief deliverables.
 
 **`docs/ACCEPTANCE_TESTS.md`** (D1, feeds E22.1) — the 21 scenarios of the course test outline,
 expanded to **115 numbered cases**, columns `# · Steps · Expected result · Actual · Status ·
@@ -16,8 +16,13 @@ memberships and enrollments, 40 questions, 6 exams in mixed states, 4 executions
 statistics, 4 bots with 8 sources and 8 recorded sessions, 8 notifications. Every table maps 1:1
 to a schema table, so transcription is the only judgement left to the loader.
 
-The two documents check each other: because the test cases cite seed ids, a later change to the
-roster breaks cases loudly instead of quietly making them vague.
+**Hardening section** (D3, appended to ACCEPTANCE_TESTS.md) — PRD §6's edge cases for my epics
+expanded into **28 given/when/then items** across E12–E15, ids `H<epic>.<n>`, kept out of the 115
+so the submission table stays exactly the outline. This is my E12–E15 test plan: each item becomes
+a test when its epic lands, rather than being backfilled in E21.
+
+The documents check each other: because the test cases cite seed ids, a later change to the roster
+breaks cases loudly instead of quietly making them vague.
 
 Rebased onto `main` after E5, E4 and E2 PR1 merged; the roster below mirrors
 `docs/DEMO_ACCOUNTS.md`, which landed while this was being written.
@@ -46,6 +51,8 @@ satisfies the constraints it claims to — checked by script against the file, n
 | ACCEPTANCE_TESTS: all 21 outline scenarios present as sections | ✅ |
 | ACCEPTANCE_TESTS: per-scenario case counts match the summary table | ✅ 115 total |
 | ACCEPTANCE_TESTS: every row has the full column set and a status marker | ✅ |
+| Hardening: 28 items, ids unique, none colliding with scenario cases | ✅ |
+| Hardening: source tagged §6 vs gap on every row | ✅ 5 §6, 23 gap |
 | `./mvnw clean verify` | **not run** — see finding 3 |
 
 Four errors were caught by that pass rather than by review, and are listed because they are
@@ -64,16 +71,12 @@ they are relational. The cross-checks that caught them are now part of the valid
 
 ## Deviations from the contract, with reasons
 
-**1. Deliverable 3 is not in this PR.** The PRD §6 edge-case pass for Grading / Results /
-Reports is the next commit on this branch; the brief says to PR without waiting for all three.
-D1 and D2 are both complete here.
-
-**2. No illustration bytes supplied.** 10 questions are marked as illustrated; I supplied no
+**1. No illustration bytes supplied.** 10 questions are marked as illustrated; I supplied no
 image data. `image MEDIUMBLOB NULL` accepts NULL, so the loader is unblocked today. Real assets
 follow under `docs/seed/img/`. Flagged rather than silently deferred, because "10 illustrations"
 reads as done in PRD §5 and it is not.
 
-**3. The teacher/course shape diverges from PRD §5, forced by `DEMO_ACCOUNTS.md`.**
+**2. The teacher/course shape diverges from PRD §5, forced by `DEMO_ACCOUNTS.md`.**
 PRD §5 says "one per course + one co-teacher on Java". `DEMO_ACCOUNTS.md` puts `dana.cohen` on
 **both** Algebra and Calculus and `rina.barak` on Calculus, so Calculus is co-taught too and one
 teacher covers two courses. I mirrored `DEMO_ACCOUNTS.md`, since it states that the seed mirrors
@@ -130,32 +133,46 @@ covers coordinator self-approval and raised it as a blocking decision. F4.3 cove
 and allows it. Corrected above, and narrowed to the part that is genuinely open (the logging
 owner). Recording it because the wrong version was on this branch for one commit.
 
-**1. Three parts of the seed look like defects and must not be "fixed".** Each is annotated at
+**1. PRD §6 under-covers E12–E15, and I would like three items promoted into it.**
+The catalog gives my four epics five lines — three Grading, two Reports, and no Results line at
+all. Bot gets nine items, Discovery five. That split is not proportional to risk: a wrong grade
+that looks plausible is harder to catch at a defense than a bot that fails visibly. I added 23
+gap items to cover it. Three of them constrain **other people's** code and so belong in §6 rather
+than only in my plan:
+- **H12.6** — grading must use the question version **pinned in the exam**, never the latest.
+  Constrains E6/E7, not just E12.
+- **H14.4** — the σ divisor. Binds the seed, E14 and E15 to one choice.
+- **H15.2** — CANCELLED executions excluded from the report corpus. Constrains E9 as much as E15.
+
+Happy to raise those as a PRD edit in a follow-up if you agree.
+
+**2. Three parts of the seed look like defects and must not be "fixed".** Each is annotated at
 the point where someone would be tempted to correct it: **Recursion has 2 questions and no HARD
 one** (the F3.3 infeasibility fixture — every other topic has enough to succeed), **bot 4 is
 inactive** (call e), and **exam 1 v1 is rejected** (call f).
 
-**2. The Algebra grade spread is load-bearing.** Eight grades across five populated deciles is
+**3. The Algebra grade spread is load-bearing.** Eight grades across five populated deciles is
 what makes the F9.3 histogram read as a real class. A uniform spread looks fabricated; a single
 spike looks broken. If anyone trims Algebra's enrollment below 8, the histogram demo degrades
 with it — and the frozen `stats` block stops matching the grades.
 
-**3. I cannot run `./mvnw clean verify`.** This machine has JDK 12 and 26 only, and the enforcer
+**4. I cannot run `./mvnw clean verify`.** This machine has JDK 12 and 26 only, and the enforcer
 correctly requires `[21,22)`. Installing Temurin 21 is my brief §0 step 1 and I have not done it.
 Not load-bearing for *this* PR — docs-only, nothing under `src/`, so CI is sufficient — but it
 blocks me from verifying anything before E12, and I am fixing it before my next PR.
 
-**4. `exam_version_questions` for the Algebra Midterm must reference question 11005 version 1,**
+**5. `exam_version_questions` for the Algebra Midterm must reference question 11005 version 1,**
 not the latest. That row is also what exercises the `question_id` + `UNIQUE(exam_version_id,
 question_id)` guard and the round-2 composite FK: 11005 v1 and v2 must never both land in one
 exam version.
 
 ## Definition of Done
 
-- [x] Behavior matches the PRD ids named in the task (PRD §5, NFR-17) — deviations listed above, none silent
-- [x] Content validated against its stated constraints by script, including relational cross-checks
-- [ ] Unit tests — n/a, no code in this PR
-- [x] Edge cases: the three deliberate fixtures are documented where they would otherwise be "corrected"
+- [x] Behavior matches the PRD ids named in the task — brief D1 (E22.1), D2 (PRD §5 / NFR-17), D3 (PRD §6); deviations listed above, none silent
+- [x] Content validated by script, including relational cross-checks and table-structure checks
+- [x] All 21 outline scenarios covered; every case traceable to an F-id or S-id
+- [ ] Unit tests — n/a, no code in this PR; the `H*` items are the test plan for E12–E15
+- [x] Edge cases: PRD §6 lines for my epics expanded, and the gaps that pass exposed are listed
 - [ ] Design-system components / screen review — n/a, no UI in this PR
 - [x] Seed data updated — this PR *is* the seed data
 - [x] Open questions recorded with the assumption each one runs on
@@ -163,9 +180,7 @@ exam version.
 
 ## Next
 
-- **D3 — edge-case ownership pass**: PRD §6 Grading / Results / Reports lines expanded into
-  given/when/then test ideas, appended to ACCEPTANCE_TESTS.md under a "Hardening" section. That
-  becomes my E12–E15 test plan. Next commit on this branch.
 - Fill Actual / Status / Bugs found as each epic lands — the table is written to be filled in
   during development, not reconstructed at submission.
+- Turn each `H*` item into a real test as its epic lands (E12 first, ~M4).
 - Temurin 21 installed so `./mvnw clean verify` is available before E12.
