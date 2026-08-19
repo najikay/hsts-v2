@@ -1,0 +1,23 @@
+/* =====================================================================
+   HSTS accent palette — Rose   (E4.8)
+
+   This file defines THREE looked-up colours and nothing else. Every
+   accent-coloured pixel in the app — buttons, active rail items, chips,
+   focus rings, links, progress, avatars — resolves through them, so
+   switching palette is a one-stylesheet swap on the live Scene with no
+   node rebuilt and no component aware it happened.
+
+   Mirrors client.ui.theme.AccentPalette#ROSE. Keep the two in step.
+   ===================================================================== */
+
+.root {
+    -hsts-accent:      #be123c;
+    -hsts-accent-soft: #fff1f2;
+    -hsts-on-accent:   #ffffff;
+}
+
+.root.dark {
+    -hsts-accent:      #fb7185;
+    -hsts-accent-soft: #4c1626;
+    -hsts-on-accent:   #0d1117;
+}

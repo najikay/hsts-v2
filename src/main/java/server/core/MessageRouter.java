@@ -61,12 +61,12 @@ public class MessageRouter {
     }
 
     /**
-     * Registers a handler reachable without a session — {@code LOGIN}, and (for
-     * now) the legacy question-bank verbs.
+     * Registers a handler reachable without a session.
      *
-     * <p>TODO(E5): once login exists, {@code GET_ALL_QUESTIONS} /
-     * {@code UPDATE_QUESTION} move to {@link #register} and only {@code LOGIN}
-     * stays open.
+     * <p>Since E5 the only such verb is {@code LOGIN} — it is by definition how a
+     * connection stops being anonymous. Every other verb, the legacy question-bank
+     * pair included, goes through {@link #register} and is refused with
+     * {@code UNAUTHORIZED} until a session exists.
      */
     public MessageRouter registerOpen(Verb verb, Handler handler) {
         return register(verb, handler, true);

@@ -1,0 +1,23 @@
+/* =====================================================================
+   HSTS accent palette — Slate   (E4.8)
+
+   This file defines THREE looked-up colours and nothing else. Every
+   accent-coloured pixel in the app — buttons, active rail items, chips,
+   focus rings, links, progress, avatars — resolves through them, so
+   switching palette is a one-stylesheet swap on the live Scene with no
+   node rebuilt and no component aware it happened.
+
+   Mirrors client.ui.theme.AccentPalette#SLATE. Keep the two in step.
+   ===================================================================== */
+
+.root {
+    -hsts-accent:      #475569;
+    -hsts-accent-soft: #f1f5f9;
+    -hsts-on-accent:   #ffffff;
+}
+
+.root.dark {
+    -hsts-accent:      #94a3b8;
+    -hsts-accent-soft: #26313f;
+    -hsts-on-accent:   #0d1117;
+}

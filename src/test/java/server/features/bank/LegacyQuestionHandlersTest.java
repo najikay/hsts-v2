@@ -45,6 +45,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class LegacyQuestionHandlersTest {
 
+    private static final long TEACHER_ID = 1001L;
+
     @Mock
     private QuestionDAO questionDAO;
 
@@ -53,19 +55,35 @@ class LegacyQuestionHandlersTest {
 
     private MessageRouter router;
 
+    private SessionManager sessions;
+
     @BeforeEach
     void setUp() {
-        router = new MessageRouter(new SessionManager());
+        sessions = new SessionManager();
+        router = new MessageRouter(sessions);
         new LegacyQuestionHandlers(questionDAO).registerOn(router);
+        // Since E5 both verbs require a session; the flows below are about the
+        // handlers, so the socket under test carries one.
+        sessions.attach(TEACHER_ID, common.dto.auth.Role.TEACHER, connection);
     }
 
     @Test
-    @DisplayName("both legacy verbs are registered and stay open until login exists (TODO E5)")
-    void bothVerbsAreRegisteredAsOpen() {
+    @DisplayName("both legacy verbs now require an authenticated session (E5)")
+    void bothVerbsRequireASession() {
         assertThat(router.isRegistered(Verb.GET_ALL_QUESTIONS)).isTrue();
         assertThat(router.isRegistered(Verb.UPDATE_QUESTION)).isTrue();
-        assertThat(router.isOpen(Verb.GET_ALL_QUESTIONS)).isTrue();
-        assertThat(router.isOpen(Verb.UPDATE_QUESTION)).isTrue();
+        assertThat(router.isOpen(Verb.GET_ALL_QUESTIONS)).isFalse();
+        assertThat(router.isOpen(Verb.UPDATE_QUESTION)).isFalse();
+    }
+
+    @Test
+    @DisplayName("without a session the router refuses them with UNAUTHORIZED")
+    void anonymousCallersAreRefused() {
+        Message response = router.route(Message.request(Verb.GET_ALL_QUESTIONS, null),
+                CallerContext.anonymous(null));
+
+        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.UNAUTHORIZED);
+        verify(questionDAO, never()).getAll();
     }
 
     @Test

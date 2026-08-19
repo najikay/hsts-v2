@@ -5,6 +5,9 @@ import ocsf.server.ConnectionToClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.db.QuestionDAO;
+import server.features.auth.AuthService;
+import server.features.auth.InMemoryUserDirectory;
+import server.features.auth.UserDirectory;
 import server.features.bank.LegacyQuestionHandlers;
 import server.realtime.PushGateway;
 
@@ -27,7 +30,7 @@ public class HSTSServer extends AbstractServer {
     private final MessageRouter router;
     private final PushGateway pushGateway;
 
-    /** Production wiring: session map + router + the legacy bank handlers. */
+    /** Production wiring: session map + router + the auth and legacy bank handlers. */
     public HSTSServer(int port) {
         this(port, new SessionManager());
     }
@@ -44,8 +47,16 @@ public class HSTSServer extends AbstractServer {
         this.pushGateway = new PushGateway(sessions);
     }
 
+    /**
+     * The production handler set: authentication first (it is what makes every
+     * other verb reachable), then the feature handlers.
+     *
+     * <p>The {@link InMemoryUserDirectory} here is the one line E2 PR3 replaces
+     * with the repository-backed adapter — see {@link UserDirectory}.
+     */
     private static MessageRouter defaultRouter(SessionManager sessions) {
         MessageRouter router = new MessageRouter(sessions);
+        new AuthService(new InMemoryUserDirectory(), sessions).registerOn(router);
         new LegacyQuestionHandlers(new QuestionDAO()).registerOn(router);
         return router;
     }

@@ -34,15 +34,19 @@ public class LegacyQuestionHandlers {
     }
 
     /**
-     * Registers both verbs as open (no session required).
+     * Registers both verbs as <b>authenticated</b> (E5: login exists now, so
+     * nothing but {@code LOGIN} is reachable from an anonymous connection).
      *
-     * <p>TODO(E5): the prototype has no login yet, so these stay reachable
-     * without authentication. Once {@code LOGIN} lands they become
-     * {@code register(...)} + a {@code requireTeachesCourse} guard.
+     * <p>They stay role-agnostic for one more epic: the course-scoped guard these
+     * really want — {@code Authorization.requireTeachesCourse} — needs the course
+     * repositories from E2, and the legacy {@link common.dto.bank.Question} has no
+     * course on it to guard with. The client only offers the screen to teachers
+     * and coordinators; E6 replaces both verbs with the versioned bank verbs and
+     * their real guards.
      */
     public void registerOn(MessageRouter router) {
-        router.registerOpen(Verb.GET_ALL_QUESTIONS, this::getAllQuestions);
-        router.registerOpen(Verb.UPDATE_QUESTION, this::updateQuestion);
+        router.register(Verb.GET_ALL_QUESTIONS, this::getAllQuestions);
+        router.register(Verb.UPDATE_QUESTION, this::updateQuestion);
     }
 
     /** {@code GET_ALL_QUESTIONS} → OK with the full list. */

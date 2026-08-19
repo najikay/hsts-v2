@@ -1,0 +1,23 @@
+/* =====================================================================
+   HSTS accent palette — Emerald   (E4.8)
+
+   This file defines THREE looked-up colours and nothing else. Every
+   accent-coloured pixel in the app — buttons, active rail items, chips,
+   focus rings, links, progress, avatars — resolves through them, so
+   switching palette is a one-stylesheet swap on the live Scene with no
+   node rebuilt and no component aware it happened.
+
+   Mirrors client.ui.theme.AccentPalette#EMERALD. Keep the two in step.
+   ===================================================================== */
+
+.root {
+    -hsts-accent:      #047857;
+    -hsts-accent-soft: #ecfdf5;
+    -hsts-on-accent:   #ffffff;
+}
+
+.root.dark {
+    -hsts-accent:      #34d399;
+    -hsts-accent-soft: #0b3d2e;
+    -hsts-on-accent:   #0d1117;
+}

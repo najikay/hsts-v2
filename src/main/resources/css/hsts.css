@@ -1,0 +1,906 @@
+/* =====================================================================
+   HSTS design system — token layer + component classes  (E4.8, PRD §4.1)
+
+   Loaded on top of AtlantaFX Primer Light / Primer Dark. Two jobs:
+
+   1. TOKENS. Declare the HSTS palette as looked-up colours (-hsts-*) AND
+      remap AtlantaFX's own tokens (-color-*) onto them, so stock controls
+      (TextField, ComboBox, TableView, ScrollBar …) are already on-palette
+      without a single per-control override.
+   2. COMPONENTS. The reusable classes the component library attaches;
+      each component's Java side builds nodes and adds a style class, it
+      never sets colours in code — that is what makes the live theme
+      switch work without touching any component.
+
+   Dark mode is the `.dark` style class on the scene root, toggled by
+   ThemeManager. Accent tokens live in the separate accent-*.css files.
+   ===================================================================== */
+
+/* =====================================================================
+   1. TOKENS — light (default)
+   ===================================================================== */
+
+.root {
+    -hsts-bg:        #f3f5f9;
+    -hsts-surface:   #ffffff;
+    -hsts-raised:    #ffffff;
+    -hsts-border:    #d6dce5;
+    -hsts-text:      #1f2328;
+    -hsts-muted:     #59636e;
+    -hsts-faint:     #8b95a1;
+
+    -hsts-ok:          #1a7f37;
+    -hsts-ok-soft:     #dafbe1;
+    -hsts-warn:        #9a6700;
+    -hsts-warn-soft:   #fff8c5;
+    -hsts-danger:      #cf222e;
+    -hsts-danger-soft: #ffebe9;
+
+    /* Overlay scrim behind modals and the progress overlay. */
+    -hsts-scrim: rgba(31, 35, 40, 0.42);
+    /* Hairline used for skeleton blocks and shimmer highlights. */
+    -hsts-skeleton:      #e6eaf0;
+    -hsts-skeleton-lift: #f2f5f9;
+
+    /*
+       Geometry note (PRD §4.1: 4px grid, 8px controls, 10–12px cards, 999 chips).
+       Radii are written as literals below, not as tokens: JavaFX looked-up
+       values (-name) resolve for COLOURS only, so a `-hsts-radius-card: 12px`
+       token parses as a plain number and every rule using it dies with
+       "Double cannot be cast to Size" at style time. Caught by the E4.24 smoke
+       test. The four values in use are 6px, 8px, 12px and 999px.
+    */
+
+    -fx-font-family: "Segoe UI", "SF Pro Text", system-ui, "System", sans-serif;
+    -fx-font-size: 14px;
+    -fx-background-color: -hsts-bg;
+
+    /* --- Remap AtlantaFX so stock controls follow the HSTS palette --- */
+    -color-bg-default:     -hsts-surface;
+    -color-bg-overlay:     -hsts-raised;
+    -color-bg-subtle:      -hsts-bg;
+    -color-bg-inset:       -hsts-bg;
+    -color-fg-default:     -hsts-text;
+    -color-fg-muted:       -hsts-muted;
+    -color-fg-subtle:      -hsts-faint;
+    -color-fg-emphasis:    -hsts-on-accent;
+    -color-border-default: -hsts-border;
+    -color-border-muted:   -hsts-border;
+    -color-border-subtle:  -hsts-border;
+    -color-shadow-default: -hsts-border;
+
+    -color-accent-fg:       -hsts-accent;
+    -color-accent-emphasis: -hsts-accent;
+    -color-accent-muted:    -hsts-accent;
+    -color-accent-subtle:   -hsts-accent-soft;
+
+    -color-success-fg:       -hsts-ok;
+    -color-success-emphasis: -hsts-ok;
+    -color-success-subtle:   -hsts-ok-soft;
+    -color-warning-fg:       -hsts-warn;
+    -color-warning-emphasis: -hsts-warn;
+    -color-warning-subtle:   -hsts-warn-soft;
+    -color-danger-fg:        -hsts-danger;
+    -color-danger-emphasis:  -hsts-danger;
+    -color-danger-subtle:    -hsts-danger-soft;
+}
+
+/* =====================================================================
+   1b. TOKENS — dark. Only the values change; every component below is
+       written once against the token names and needs no dark variant.
+   ===================================================================== */
+
+.root.dark {
+    -hsts-bg:        #0d1117;
+    -hsts-surface:   #161b22;
+    -hsts-raised:    #1c2129;
+    -hsts-border:    #30363d;
+    -hsts-text:      #e6edf2;
+    -hsts-muted:     #8b949e;
+    -hsts-faint:     #6e7681;
+
+    -hsts-ok:          #3fb950;
+    -hsts-ok-soft:     #12261e;
+    -hsts-warn:        #d29922;
+    -hsts-warn-soft:   #2a2213;
+    -hsts-danger:      #f85149;
+    -hsts-danger-soft: #2d1418;
+
+    -hsts-scrim: rgba(1, 4, 9, 0.62);
+    -hsts-skeleton:      #21262d;
+    -hsts-skeleton-lift: #2b323b;
+}
+
+/* =====================================================================
+   2. TYPOGRAPHY HELPERS
+   ===================================================================== */
+
+.h1     { -fx-font-size: 24px; -fx-font-weight: bold;   -fx-text-fill: -hsts-text; }
+.h2     { -fx-font-size: 19px; -fx-font-weight: bold;   -fx-text-fill: -hsts-text; }
+.h3     { -fx-font-size: 16px; -fx-font-weight: bold;   -fx-text-fill: -hsts-text; }
+.body   { -fx-font-size: 14px;                          -fx-text-fill: -hsts-text; }
+.small  { -fx-font-size: 12px;                          -fx-text-fill: -hsts-text; }
+.muted  { -fx-text-fill: -hsts-muted; }
+.faint  { -fx-text-fill: -hsts-faint; }
+.strong { -fx-font-weight: bold; }
+.mono   { -fx-font-family: "Consolas", "SF Mono", "Menlo", monospace; }
+.accent-text { -fx-text-fill: -hsts-accent; }
+.danger-text { -fx-text-fill: -hsts-danger; }
+.ok-text     { -fx-text-fill: -hsts-ok; }
+.warn-text   { -fx-text-fill: -hsts-warn; }
+
+/* Page background helper for full-bleed screens (Connect, Login, gallery). */
+.hsts-page {
+    -fx-background-color: -hsts-bg;
+}
+
+/* =====================================================================
+   3. SURFACES — cards, panels, separators
+   ===================================================================== */
+
+.hsts-card {
+    -fx-background-color: -hsts-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-padding: 20px;
+}
+
+.hsts-card.compact { -fx-padding: 12px; }
+.hsts-card.flush   { -fx-padding: 0; }
+
+/* Elevated variant: dialogs, popovers, the toast stack. */
+.hsts-card.raised {
+    -fx-background-color: -hsts-raised;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.16), 24, 0.10, 0, 8);
+}
+.root.dark .hsts-card.raised {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.55), 24, 0.14, 0, 8);
+}
+
+.hsts-divider {
+    -fx-background-color: -hsts-border;
+    -fx-pref-height: 1px;
+    -fx-min-height: 1px;
+    -fx-max-height: 1px;
+}
+.hsts-divider.vertical {
+    -fx-pref-width: 1px;  -fx-min-width: 1px;  -fx-max-width: 1px;
+    -fx-pref-height: -1;  -fx-min-height: -1;  -fx-max-height: -1;
+}
+
+/* =====================================================================
+   4. BUTTONS  (E4.11–E4.20: style classes, never subclasses)
+   ===================================================================== */
+
+.button {
+    -fx-background-radius: 8px;
+    -fx-border-radius: 8px;
+    -fx-padding: 8px 16px;
+    -fx-cursor: hand;
+    -fx-font-size: 14px;
+}
+
+/* primary — the one committing action per view */
+.button.primary {
+    -fx-background-color: -hsts-accent;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-border-color: transparent;
+    -fx-font-weight: bold;
+}
+.button.primary:hover   { -fx-opacity: 0.92; }
+.button.primary:pressed { -fx-opacity: 0.84; }
+
+/* secondary — neutral filled, for the common non-committing action */
+.button.secondary {
+    -fx-background-color: -hsts-bg;
+    -fx-text-fill: -hsts-text;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+}
+.button.secondary:hover   { -fx-background-color: -hsts-accent-soft; -fx-text-fill: -hsts-accent; }
+.button.secondary:pressed { -fx-opacity: 0.88; }
+
+/* outline — tertiary, sits on cards without competing with primary */
+.button.outline {
+    -fx-background-color: transparent;
+    -fx-text-fill: -hsts-accent;
+    -fx-border-color: -hsts-accent;
+    -fx-border-width: 1px;
+}
+.button.outline:hover   { -fx-background-color: -hsts-accent-soft; }
+.button.outline:pressed { -fx-opacity: 0.86; }
+
+/* danger — destructive; also the confirm button of a destructive WarnConfirm */
+.button.danger {
+    -fx-background-color: -hsts-danger;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: transparent;
+    -fx-font-weight: bold;
+}
+.button.danger:hover   { -fx-opacity: 0.92; }
+.button.danger:pressed { -fx-opacity: 0.84; }
+
+/* warn — the confirm button of a cautionary WarnConfirm (F6.9, F5.5) */
+.button.warn {
+    -fx-background-color: -hsts-warn;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: transparent;
+    -fx-font-weight: bold;
+}
+.button.warn:hover   { -fx-opacity: 0.92; }
+.button.warn:pressed { -fx-opacity: 0.84; }
+
+/* ghost — icon-only / toolbar buttons (navbar bell, rail collapse) */
+.button.ghost {
+    -fx-background-color: transparent;
+    -fx-text-fill: -hsts-muted;
+    -fx-border-color: transparent;
+    -fx-padding: 6px 10px;
+}
+.button.ghost:hover   { -fx-background-color: -hsts-accent-soft; -fx-text-fill: -hsts-accent; }
+.button.ghost:pressed { -fx-opacity: 0.86; }
+
+/* link — inline textual action */
+.button.link {
+    -fx-background-color: transparent;
+    -fx-text-fill: -hsts-accent;
+    -fx-border-color: transparent;
+    -fx-padding: 2px 4px;
+    -fx-underline: false;
+}
+.button.link:hover { -fx-underline: true; }
+
+/*
+   A Button's -fx-text-fill styles its OWN text, not a Label sitting inside its
+   graphic — so a button built with an icon + Label (Buttons.withIcon, the
+   connect screen's spinner + caption) would render its caption in the default
+   ink on top of an accent fill. These rules carry each variant's ink down into
+   the graphic. Caught by visual review of the connect screen.
+*/
+.button.primary .label   { -fx-text-fill: -hsts-on-accent; -fx-font-weight: bold; }
+.button.danger .label,
+.button.warn .label      { -fx-text-fill: #ffffff; -fx-font-weight: bold; }
+.button.secondary .label { -fx-text-fill: -hsts-text; }
+.button.outline .label,
+.button.link .label      { -fx-text-fill: -hsts-accent; }
+.button.ghost .label     { -fx-text-fill: -hsts-muted; }
+.button.secondary:hover .label,
+.button.ghost:hover .label { -fx-text-fill: -hsts-accent; }
+
+/* One disabled treatment for every variant: dimmed, never coloured-but-dead. */
+.button:disabled {
+    -fx-opacity: 0.45;
+    -fx-cursor: default;
+}
+
+.button.small { -fx-padding: 4px 10px; -fx-font-size: 12px; }
+.button.large { -fx-padding: 11px 22px; -fx-font-size: 15px; }
+.button.block { -fx-max-width: Infinity; }
+
+/* =====================================================================
+   5. STATUS CHIPS + ROLE BADGES  (E4.15)
+   ===================================================================== */
+
+.hsts-chip {
+    -fx-background-radius: 999px;
+    -fx-border-radius: 999px;
+    -fx-padding: 3px 10px;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-background-color: -hsts-bg;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+}
+.hsts-chip .label { -fx-font-size: 12px; -fx-font-weight: bold; }
+
+.hsts-chip.neutral        { -fx-background-color: -hsts-bg;          -fx-border-color: -hsts-border; }
+.hsts-chip.neutral .label { -fx-text-fill: -hsts-muted; }
+.hsts-chip.info           { -fx-background-color: -hsts-accent-soft; -fx-border-color: transparent; }
+.hsts-chip.info .label    { -fx-text-fill: -hsts-accent; }
+.hsts-chip.ok             { -fx-background-color: -hsts-ok-soft;     -fx-border-color: transparent; }
+.hsts-chip.ok .label      { -fx-text-fill: -hsts-ok; }
+.hsts-chip.warn           { -fx-background-color: -hsts-warn-soft;   -fx-border-color: transparent; }
+.hsts-chip.warn .label    { -fx-text-fill: -hsts-warn; }
+.hsts-chip.danger         { -fx-background-color: -hsts-danger-soft; -fx-border-color: transparent; }
+.hsts-chip.danger .label  { -fx-text-fill: -hsts-danger; }
+
+/* LIVE: solid, high-contrast, with a pulsing dot — it must read across a room. */
+.hsts-chip.live           { -fx-background-color: -hsts-ok;          -fx-border-color: transparent; }
+.hsts-chip.live .label    { -fx-text-fill: #ffffff; }
+.hsts-chip .chip-dot      { -fx-fill: -hsts-ok; }
+.hsts-chip.live .chip-dot { -fx-fill: #ffffff; }
+
+.hsts-chip.large { -fx-padding: 5px 14px; -fx-font-size: 13px; }
+.hsts-chip.large .label { -fx-font-size: 13px; }
+
+/* Role badge — same pill geometry, role-fixed colours so a role reads
+   identically on every screen it appears on. */
+.role-badge {
+    -fx-background-radius: 999px;
+    -fx-padding: 2px 8px;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-border-color: transparent;
+}
+.role-badge .label { -fx-font-size: 11px; -fx-font-weight: bold; }
+.role-badge.student            { -fx-background-color: -hsts-accent-soft; }
+.role-badge.student .label     { -fx-text-fill: -hsts-accent; }
+.role-badge.teacher            { -fx-background-color: -hsts-ok-soft; }
+.role-badge.teacher .label     { -fx-text-fill: -hsts-ok; }
+.role-badge.coordinator        { -fx-background-color: -hsts-warn-soft; }
+.role-badge.coordinator .label { -fx-text-fill: -hsts-warn; }
+.role-badge.principal          { -fx-background-color: -hsts-danger-soft; }
+.role-badge.principal .label   { -fx-text-fill: -hsts-danger; }
+
+/* =====================================================================
+   6. FORM FIELDS + INLINE VALIDATION  (E4.12)
+   ===================================================================== */
+
+.text-input {
+    -fx-background-color: -hsts-surface;
+    -fx-text-fill: -hsts-text;
+    -fx-prompt-text-fill: -hsts-faint;
+    -fx-background-radius: 8px;
+    -fx-border-radius: 8px;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+    -fx-padding: 8px 12px;
+}
+.text-input:focused {
+    -fx-border-color: -hsts-accent;
+    -fx-border-width: 1.5px;
+}
+
+.hsts-field { -fx-spacing: 6px; }
+
+.hsts-field .field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-muted;
+}
+.hsts-field .field-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: -hsts-faint;
+}
+
+/* Error state, exactly per the mockup: 1.5px danger border + icon + message. */
+.hsts-field.invalid .text-input,
+.text-input.invalid {
+    -fx-border-color: -hsts-danger;
+    -fx-border-width: 1.5px;
+}
+.hsts-field.invalid .field-label { -fx-text-fill: -hsts-danger; }
+
+.hsts-field .field-message {
+    -fx-font-size: 12px;
+    -fx-text-fill: -hsts-danger;
+}
+.hsts-field .field-message .field-message-icon { -fx-fill: -hsts-danger; }
+
+.hsts-field.valid .text-input   { -fx-border-color: -hsts-ok; }
+.hsts-field.valid .field-message { -fx-text-fill: -hsts-ok; }
+.hsts-field.valid .field-message .field-message-icon { -fx-fill: -hsts-ok; }
+
+.hsts-field.required .field-label .required-star { -fx-fill: -hsts-danger; }
+
+/* =====================================================================
+   7. TOASTS  (E4.14)
+   ===================================================================== */
+
+.hsts-toast-stack {
+    /* NO background here — not even `transparent`. A Region with any background
+       fill (transparent included) is pickable geometry in JavaFX, and this layer
+       spans the whole scene: a fill would swallow every click and scroll wheel
+       event in the app (found by manual test, guarded by GalleryInteractionTest). */
+    -fx-padding: 16px;
+    -fx-spacing: 8px;
+}
+
+.hsts-toast {
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 12px;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-border-color: -hsts-border;
+    -fx-padding: 12px 16px;
+    -fx-spacing: 10px;
+    -fx-min-width: 280px;
+    -fx-max-width: 380px;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.18), 20, 0.10, 0, 6);
+}
+.root.dark .hsts-toast {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.6), 20, 0.14, 0, 6);
+}
+
+/* A 4px colour rail on the leading edge carries the variant — the surface
+   itself stays neutral so long messages remain readable. */
+.hsts-toast .toast-rail { -fx-min-width: 4px; -fx-pref-width: 4px; -fx-background-radius: 2px; }
+.hsts-toast .toast-title   { -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-toast .toast-message { -fx-font-size: 13px; -fx-text-fill: -hsts-muted; }
+
+.hsts-toast.success .toast-rail { -fx-background-color: -hsts-ok; }
+.hsts-toast.success .toast-icon { -fx-fill: -hsts-ok; }
+.hsts-toast.error   .toast-rail { -fx-background-color: -hsts-danger; }
+.hsts-toast.error   .toast-icon { -fx-fill: -hsts-danger; }
+.hsts-toast.info    .toast-rail { -fx-background-color: -hsts-accent; }
+.hsts-toast.info    .toast-icon { -fx-fill: -hsts-accent; }
+.hsts-toast.warn    .toast-rail { -fx-background-color: -hsts-warn; }
+.hsts-toast.warn    .toast-icon { -fx-fill: -hsts-warn; }
+
+/* =====================================================================
+   8. DIALOGS / MODAL HOST  (E4.13, E4.19)
+   ===================================================================== */
+
+.hsts-scrim { -fx-background-color: -hsts-scrim; }
+
+.hsts-dialog {
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 12px;
+    -fx-border-radius: 12px;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+    -fx-padding: 24px;
+    -fx-spacing: 16px;
+    -fx-min-width: 420px;
+    -fx-max-width: 520px;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.28), 40, 0.12, 0, 14);
+}
+.hsts-dialog .dialog-title       { -fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-dialog .dialog-explanation { -fx-font-size: 14px; -fx-text-fill: -hsts-muted; -fx-wrap-text: true; }
+.hsts-dialog .dialog-buttons     { -fx-spacing: 8px; }
+
+/* The icon disc: soft tint background, emphasis glyph — one shape, four tones. */
+.hsts-dialog .dialog-icon-disc        { -fx-background-radius: 999px; -fx-min-width: 44px; -fx-min-height: 44px;
+                                        -fx-max-width: 44px; -fx-max-height: 44px; -fx-alignment: center; }
+.hsts-dialog.warn   .dialog-icon-disc { -fx-background-color: -hsts-warn-soft; }
+.hsts-dialog.warn   .dialog-icon      { -fx-fill: -hsts-warn; }
+.hsts-dialog.danger .dialog-icon-disc { -fx-background-color: -hsts-danger-soft; }
+.hsts-dialog.danger .dialog-icon      { -fx-fill: -hsts-danger; }
+.hsts-dialog.info   .dialog-icon-disc { -fx-background-color: -hsts-accent-soft; }
+.hsts-dialog.info   .dialog-icon      { -fx-fill: -hsts-accent; }
+.hsts-dialog.ok     .dialog-icon-disc { -fx-background-color: -hsts-ok-soft; }
+.hsts-dialog.ok     .dialog-icon      { -fx-fill: -hsts-ok; }
+
+/* =====================================================================
+   9. PROGRESS OVERLAY + SKELETONS  (E4.16)
+   ===================================================================== */
+
+.hsts-progress-overlay {
+    -fx-background-color: -hsts-scrim;
+    -fx-alignment: center;
+}
+.hsts-progress-overlay .progress-card {
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 12px;
+    -fx-padding: 24px 32px;
+    -fx-spacing: 14px;
+    -fx-alignment: center;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.26), 32, 0.10, 0, 10);
+}
+.hsts-progress-overlay .progress-message { -fx-text-fill: -hsts-text; -fx-font-size: 14px; }
+
+.progress-indicator { -fx-progress-color: -hsts-accent; }
+.progress-bar > .bar { -fx-background-color: -hsts-accent; -fx-background-radius: 999px; }
+.progress-bar > .track { -fx-background-color: -hsts-skeleton; -fx-background-radius: 999px; }
+
+/* Skeleton blocks. The shimmer sweep is animated in Java (Animations.shimmer)
+   because JavaFX CSS has no keyframes; the gradient below is its rest state. */
+.hsts-skeleton {
+    -fx-background-color: -hsts-skeleton;
+    -fx-background-radius: 6px;
+    -fx-min-height: 12px;
+}
+.hsts-skeleton.text  { -fx-min-height: 12px; -fx-pref-height: 12px; }
+.hsts-skeleton.title { -fx-min-height: 18px; -fx-pref-height: 18px; }
+.hsts-skeleton.block { -fx-min-height: 64px; -fx-pref-height: 64px; -fx-background-radius: 10px; }
+.hsts-skeleton.circle { -fx-background-radius: 999px; }
+
+/* =====================================================================
+   10. EMPTY STATE  (E4.17)
+   ===================================================================== */
+
+.hsts-empty-state {
+    -fx-alignment: center;
+    -fx-spacing: 10px;
+    -fx-padding: 40px 24px;
+}
+.hsts-empty-state .empty-illustration {
+    -fx-background-color: -hsts-accent-soft;
+    -fx-background-radius: 999px;
+    -fx-min-width: 72px;  -fx-min-height: 72px;
+    -fx-max-width: 72px;  -fx-max-height: 72px;
+    -fx-alignment: center;
+}
+.hsts-empty-state .empty-icon  { -fx-fill: -hsts-accent; }
+.hsts-empty-state .empty-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-empty-state .empty-hint  { -fx-font-size: 13px; -fx-text-fill: -hsts-muted; -fx-wrap-text: true;
+                                 -fx-text-alignment: center; }
+
+/* =====================================================================
+   11. COUNTDOWN TIMER  (E4.18)
+   ===================================================================== */
+
+.hsts-countdown {
+    -fx-background-radius: 999px;
+    -fx-border-radius: 999px;
+    -fx-padding: 6px 14px;
+    -fx-spacing: 8px;
+    -fx-alignment: center-left;
+    -fx-background-color: -hsts-bg;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+}
+.hsts-countdown .countdown-value {
+    -fx-font-family: "Consolas", "SF Mono", "Menlo", monospace;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-text;
+}
+.hsts-countdown .countdown-label { -fx-font-size: 11px; -fx-text-fill: -hsts-muted; }
+.hsts-countdown .countdown-icon  { -fx-fill: -hsts-muted; }
+
+.hsts-countdown.normal .countdown-value { -fx-text-fill: -hsts-text; }
+
+.hsts-countdown.amber {
+    -fx-background-color: -hsts-warn-soft;
+    -fx-border-color: -hsts-warn;
+}
+.hsts-countdown.amber .countdown-value,
+.hsts-countdown.amber .countdown-label { -fx-text-fill: -hsts-warn; }
+.hsts-countdown.amber .countdown-icon  { -fx-fill: -hsts-warn; }
+
+.hsts-countdown.red {
+    -fx-background-color: -hsts-danger-soft;
+    -fx-border-color: -hsts-danger;
+}
+.hsts-countdown.red .countdown-value,
+.hsts-countdown.red .countdown-label { -fx-text-fill: -hsts-danger; }
+.hsts-countdown.red .countdown-icon  { -fx-fill: -hsts-danger; }
+
+.hsts-countdown.expired {
+    -fx-background-color: -hsts-danger;
+    -fx-border-color: transparent;
+}
+.hsts-countdown.expired .countdown-value,
+.hsts-countdown.expired .countdown-label { -fx-text-fill: #ffffff; }
+
+/* Flash applied for ~200ms when a teacher grants an extension (F7.1). */
+.hsts-countdown.extended {
+    -fx-background-color: -hsts-ok-soft;
+    -fx-border-color: -hsts-ok;
+}
+.hsts-countdown.extended .countdown-value { -fx-text-fill: -hsts-ok; }
+
+.countdown-gain {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-ok;
+}
+
+/* =====================================================================
+   12. DATA TABLE  (E4.11)
+   ===================================================================== */
+
+.hsts-table,
+.hsts-table .table-view {
+    -fx-background-color: -hsts-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+}
+.hsts-table .column-header-background {
+    -fx-background-color: -hsts-bg;
+    -fx-background-radius: 11px 11px 0 0;
+}
+.hsts-table .column-header,
+.hsts-table .filler { -fx-background-color: transparent; -fx-border-color: transparent -hsts-border -hsts-border transparent; }
+.hsts-table .column-header .label {
+    -fx-text-fill: -hsts-muted;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+}
+.hsts-table .table-row-cell {
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: transparent transparent -hsts-border transparent;
+    -fx-table-cell-border-color: transparent;
+}
+.hsts-table .table-row-cell:odd     { -fx-background-color: -hsts-surface; }
+.hsts-table .table-row-cell:hover   { -fx-background-color: -hsts-accent-soft; }
+.hsts-table .table-row-cell:selected { -fx-background-color: -hsts-accent-soft; }
+.hsts-table .table-row-cell:selected .table-cell { -fx-text-fill: -hsts-text; }
+.hsts-table .table-cell { -fx-text-fill: -hsts-text; -fx-padding: 9px 12px; -fx-border-color: transparent; }
+.hsts-table .table-row-cell:empty { -fx-background-color: transparent; -fx-border-color: transparent; }
+
+/* Toolbar strip above the table: title + search + actions. */
+.hsts-table-toolbar {
+    -fx-padding: 0 0 8px 0;
+    -fx-spacing: 8px;
+    -fx-alignment: center-left;
+}
+.hsts-table-toolbar .table-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-table-toolbar .table-count { -fx-font-size: 12px; -fx-text-fill: -hsts-faint; }
+
+/* =====================================================================
+   13. APP SHELL — navbar + side rail  (E4.10)
+   ===================================================================== */
+
+.hsts-navbar {
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: transparent transparent -hsts-border transparent;
+    -fx-border-width: 1px;
+    -fx-min-height: 56px;
+    -fx-pref-height: 56px;
+    -fx-max-height: 56px;
+    -fx-padding: 0 16px;
+    -fx-spacing: 12px;
+    -fx-alignment: center-left;
+}
+.hsts-navbar .brand-name { -fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+
+.hsts-breadcrumbs { -fx-spacing: 6px; -fx-alignment: center-left; }
+.hsts-breadcrumbs .crumb           { -fx-font-size: 13px; -fx-text-fill: -hsts-muted; }
+.hsts-breadcrumbs .crumb.current   { -fx-text-fill: -hsts-text; -fx-font-weight: bold; }
+.hsts-breadcrumbs .crumb-separator  { -fx-font-size: 13px; -fx-text-fill: -hsts-faint; }
+.hsts-breadcrumbs .crumb-link:hover { -fx-text-fill: -hsts-accent; -fx-underline: true; -fx-cursor: hand; }
+
+/* Bell + unread badge (F11.2). The badge is a pill so "12" and "9+" both fit. */
+.hsts-bell { -fx-padding: 6px; }
+.hsts-badge {
+    -fx-background-color: -hsts-danger;
+    -fx-background-radius: 999px;
+    -fx-padding: 1px 5px;
+    -fx-min-width: 16px;
+    -fx-alignment: center;
+}
+.hsts-badge .label { -fx-text-fill: #ffffff; -fx-font-size: 10px; -fx-font-weight: bold; }
+.hsts-badge.accent { -fx-background-color: -hsts-accent; }
+.hsts-badge.accent .label { -fx-text-fill: -hsts-on-accent; }
+.hsts-badge.dot { -fx-min-width: 8px; -fx-min-height: 8px; -fx-max-width: 8px; -fx-max-height: 8px; -fx-padding: 0; }
+
+/* Avatar chip: initials disc + name + role badge. */
+.hsts-avatar-chip {
+    -fx-background-radius: 999px;
+    -fx-padding: 4px 10px 4px 4px;
+    -fx-spacing: 8px;
+    -fx-alignment: center-left;
+    -fx-background-color: transparent;
+    -fx-cursor: hand;
+}
+.hsts-avatar-chip:hover { -fx-background-color: -hsts-accent-soft; }
+.hsts-avatar {
+    -fx-background-color: -hsts-accent;
+    -fx-background-radius: 999px;
+    -fx-min-width: 30px; -fx-min-height: 30px;
+    -fx-max-width: 30px; -fx-max-height: 30px;
+    -fx-alignment: center;
+}
+.hsts-avatar .label { -fx-text-fill: -hsts-on-accent; -fx-font-size: 12px; -fx-font-weight: bold; }
+.hsts-avatar-chip .avatar-name { -fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-avatar.large { -fx-min-width: 40px; -fx-min-height: 40px; -fx-max-width: 40px; -fx-max-height: 40px; }
+.hsts-avatar.large .label { -fx-font-size: 15px; }
+
+/* Side rail: 224px expanded, 64px collapsed (PRD §4.1 responsive rule). */
+.hsts-rail {
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: transparent -hsts-border transparent transparent;
+    -fx-border-width: 1px;
+    -fx-padding: 12px 8px;
+    -fx-spacing: 2px;
+    -fx-min-width: 224px;
+    -fx-pref-width: 224px;
+    -fx-max-width: 224px;
+}
+.hsts-rail.collapsed {
+    -fx-min-width: 64px;
+    -fx-pref-width: 64px;
+    -fx-max-width: 64px;
+}
+
+.hsts-rail .nav-item {
+    -fx-background-radius: 8px;
+    -fx-padding: 9px 12px;
+    -fx-spacing: 12px;
+    -fx-alignment: center-left;
+    -fx-cursor: hand;
+    -fx-background-color: transparent;
+}
+.hsts-rail.collapsed .nav-item { -fx-alignment: center; -fx-padding: 9px 0; }
+.hsts-rail .nav-item .nav-label { -fx-font-size: 13px; -fx-text-fill: -hsts-muted; }
+.hsts-rail .nav-item .nav-icon  { -fx-fill: -hsts-muted; }
+.hsts-rail .nav-item:hover      { -fx-background-color: -hsts-accent-soft; }
+.hsts-rail .nav-item:hover .nav-label { -fx-text-fill: -hsts-accent; }
+.hsts-rail .nav-item:hover .nav-icon  { -fx-fill: -hsts-accent; }
+
+/* Active item: accent-soft fill + accent text, per the dashboard mockups. */
+.hsts-rail .nav-item.active            { -fx-background-color: -hsts-accent-soft; }
+.hsts-rail .nav-item.active .nav-label { -fx-text-fill: -hsts-accent; -fx-font-weight: bold; }
+.hsts-rail .nav-item.active .nav-icon  { -fx-fill: -hsts-accent; }
+
+.hsts-rail .rail-section {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-faint;
+    -fx-padding: 12px 12px 4px 12px;
+}
+
+/* Page header inside the shell content area. */
+.hsts-page-header { -fx-spacing: 4px; -fx-padding: 20px 24px 12px 24px; }
+.hsts-page-header .page-title    { -fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-page-header .page-subtitle { -fx-font-size: 13px; -fx-text-fill: -hsts-muted; }
+.hsts-page-body { -fx-padding: 0 24px 24px 24px; }
+
+/* =====================================================================
+   14. RECONNECT BANNER  (E4.6)
+   ===================================================================== */
+
+.hsts-banner {
+    -fx-padding: 8px 16px;
+    -fx-spacing: 10px;
+    -fx-alignment: center-left;
+    -fx-background-color: -hsts-warn-soft;
+    -fx-border-color: transparent transparent -hsts-warn transparent;
+    -fx-border-width: 0 0 2px 0;
+}
+.hsts-banner .banner-text { -fx-text-fill: -hsts-warn; -fx-font-size: 13px; -fx-font-weight: bold; }
+.hsts-banner .banner-icon { -fx-fill: -hsts-warn; }
+
+.hsts-banner.danger { -fx-background-color: -hsts-danger-soft; -fx-border-color: transparent transparent -hsts-danger transparent; }
+.hsts-banner.danger .banner-text { -fx-text-fill: -hsts-danger; }
+.hsts-banner.danger .banner-icon { -fx-fill: -hsts-danger; }
+.hsts-banner.ok { -fx-background-color: -hsts-ok-soft; -fx-border-color: transparent transparent -hsts-ok transparent; }
+.hsts-banner.ok .banner-text { -fx-text-fill: -hsts-ok; }
+.hsts-banner.ok .banner-icon { -fx-fill: -hsts-ok; }
+
+/* =====================================================================
+   15. SETTINGS / SWATCHES  (E4.9)
+   ===================================================================== */
+
+.hsts-swatch-row { -fx-spacing: 10px; -fx-alignment: center-left; }
+
+.hsts-swatch {
+    -fx-background-radius: 999px;
+    -fx-border-radius: 999px;
+    -fx-min-width: 34px; -fx-min-height: 34px;
+    -fx-max-width: 34px; -fx-max-height: 34px;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 2px;
+    -fx-cursor: hand;
+    -fx-alignment: center;
+}
+.hsts-swatch:hover      { -fx-border-color: -hsts-muted; }
+.hsts-swatch.selected   { -fx-border-color: -hsts-text; -fx-border-width: 2.5px; }
+.hsts-swatch .swatch-check { -fx-fill: #ffffff; }
+
+/* Segmented mode toggle (Light / Dark / System). */
+.hsts-segmented {
+    -fx-background-color: -hsts-bg;
+    -fx-background-radius: 8px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 3px;
+    -fx-spacing: 2px;
+}
+.hsts-segmented .toggle-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6px;
+    -fx-text-fill: -hsts-muted;
+    -fx-padding: 5px 14px;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+}
+.hsts-segmented .toggle-button:hover { -fx-text-fill: -hsts-text; }
+.hsts-segmented .toggle-button:selected {
+    -fx-background-color: -hsts-surface;
+    -fx-text-fill: -hsts-text;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.12), 4, 0.0, 0, 1);
+}
+
+/* =====================================================================
+   16. SCROLLBARS + MISC — keep stock controls on-palette
+   ===================================================================== */
+
+.scroll-pane,
+.scroll-pane > .viewport { -fx-background-color: transparent; }
+.scroll-bar { -fx-background-color: transparent; }
+.scroll-bar .thumb {
+    -fx-background-color: -hsts-border;
+    -fx-background-radius: 999px;
+}
+.scroll-bar .thumb:hover { -fx-background-color: -hsts-faint; }
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button,
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow { -fx-background-color: transparent; -fx-padding: 0; -fx-shape: null; }
+
+.tooltip {
+    -fx-background-color: -hsts-raised;
+    -fx-text-fill: -hsts-text;
+    -fx-background-radius: 6px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 6px;
+    -fx-font-size: 12px;
+}
+
+.separator .line { -fx-border-color: -hsts-border transparent transparent transparent; }
+
+.hyperlink { -fx-text-fill: -hsts-accent; -fx-border-color: transparent; }
+.hyperlink:visited { -fx-text-fill: -hsts-accent; }
+
+.radio-button .radio, .check-box .box {
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: -hsts-border;
+}
+.radio-button:selected .radio .dot { -fx-background-color: -hsts-accent; }
+.check-box:selected .box { -fx-background-color: -hsts-accent; -fx-border-color: -hsts-accent; }
+.check-box:selected .box .mark { -fx-background-color: -hsts-on-accent; }
+
+/* =====================================================================
+   17. LOGIN BRAND PANEL  (E5.3 — the Login artboard's left half)
+
+   The panel is a full-bleed accent surface, so every piece of text on it
+   is -hsts-on-accent (white in light mode, near-black in dark) rather
+   than -hsts-text. Opacity, not a second colour token, carries the
+   hierarchy — that keeps the panel correct in all five palettes.
+   ===================================================================== */
+
+.hsts-brand-panel { -fx-background-color: -hsts-accent; }
+
+.hsts-brand-panel .brand-title {
+    -fx-font-size: 34px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-on-accent;
+}
+.hsts-brand-panel .brand-subtitle {
+    -fx-font-size: 15px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.86;
+}
+.hsts-brand-panel .brand-tagline {
+    -fx-font-size: 17px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.94;
+}
+.hsts-brand-panel .brand-bullet {
+    -fx-font-size: 14px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.90;
+}
+.hsts-brand-panel .brand-bullet-icon {
+    -fx-fill: -hsts-on-accent;
+    -fx-opacity: 0.90;
+}
+.hsts-brand-panel .brand-footnote {
+    -fx-font-size: 12px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.70;
+}
+
+/* =====================================================================
+   18. DASHBOARD STAT CARDS  (E5.6)
+
+   The em dash a stat shows before its feature exists is styled as a
+   value, not as an error: it is a real "nothing to count yet".
+   ===================================================================== */
+
+.hsts-stat-card { -fx-padding: 14px 16px; -fx-spacing: 2px; }
+.hsts-stat-card .stat-label { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+.hsts-stat-card .stat-value {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-text;
+}
+.hsts-stat-card .stat-hint { -fx-font-size: 11px; -fx-text-fill: -hsts-faint; }
+
+/* Rail items whose screen arrives in a later epic: visibly not clickable,
+   but still hover-sensitive so the tooltip can explain why (E5.4). */
+.hsts-rail .nav-item.disabled { -fx-opacity: 0.45; -fx-cursor: default; }
+.hsts-rail .nav-item.disabled:hover { -fx-background-color: transparent; }
+.hsts-rail .nav-item.disabled:hover .nav-label { -fx-text-fill: -hsts-muted; }
+.hsts-rail .nav-item.disabled:hover .nav-icon  { -fx-fill: -hsts-muted; }

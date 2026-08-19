@@ -5,12 +5,16 @@
 You own the data layer: Flyway migrations, JPA entities, repositories, and the seed dataset. This is the foundation of your whole "authoring pipeline" story (E6 bank → E7 builder → E8 approval → E9 release all sit on it).
 
 ## 0. Setup (do once, before anything)
+
+**⚠ Clone location rule:** clone to an ASCII-only path — e.g. `C:\dev\hsts-v2` — no Hebrew characters or spaces. A non-ASCII path crashes the forked test JVM on Windows (docs/PROBLEMS.md P-1).
 1. Install **JDK 21** (Temurin) and **MySQL 8** locally. `java -version` must say 21.
 2. Clone `https://github.com/najikay/hsts-v2.git`, run `./mvnw clean verify` → must end BUILD SUCCESS. If not, stop and report in the group before touching anything.
 3. Read, in order: `docs/PLAN.md` (short), `docs/ARCHITECTURE.md` §5 (your spec — the schema), `docs/PRD.md` §5 (seed dataset) + §1 (C-2, C-7, C-8 decisions), `docs/TODO.md` E2, `docs/TEAM_SPLIT.md` §3–4 (contracts + Definition of Done).
 
 ## 1. Rules of engagement
-- Work only in: `server/db/**`, `src/main/resources/db/migration/**`, and your test packages. Do **not** modify `common/protocol`, `client/**`, `docs/**`, or the pom's plugin config (adding your dependencies' test fixtures is fine — ask first in the group).
+- Work only in: `server/db/**`, `src/main/resources/db/migration/**`, and your test packages. Do **not** modify `common/protocol`, `client/**`, or the pom's plugin config (adding your dependencies' test fixtures is fine — ask first in the group).
+- `docs/**` clarification (asked and answered): the *planning docs' content* (PRD/ARCHITECTURE/PLAN/DECISIONS) is the lead's; **you are expected to** tick your TODO.md boxes, add `docs/DEMO_ACCOUNTS.md`, and add your PR reports under `docs/reports/member-a/` (see `docs/reports/README.md`).
+- Answered decisions from PR1 (2026-08-19): E2 code **stays in `server/db/**`** — the JaCoCo exclusion is now narrowed to the two legacy files only, so your code counts toward the gate. Legacy `QuestionDAO`/`DatabaseConfig` **co-exist until E6** — confirmed, don't touch. MySQL suite gating: your `MySqlAvailability` probe is accepted; in PR2 make it **fail (not skip) when env `HSTS_REQUIRE_MYSQL=true`** — CI now sets it, so CI can never silently skip the suite. JDK guard: enforcer rule pinning JDK 21 is in the pom (lead).
 - The **schema in ARCHITECTURE §5 is the contract** — deviations require a message to Naji *before* coding, not a surprise in the PR.
 - Every PR: green CI, coverage not lowered, DoD checklist from TEAM_SPLIT §4 pasted and ticked.
 - Branch from latest `main`, small PRs, no direct pushes to `main` (it's protected anyway).

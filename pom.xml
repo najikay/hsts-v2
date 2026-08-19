@@ -46,6 +46,8 @@
         <mockito.version>5.14.2</mockito.version>
         <assertj.version>3.26.3</assertj.version>
         <h2.version>2.3.232</h2.version>
+        <testfx.version>4.0.18</testfx.version>
+        <monocle.version>21.0.2</monocle.version>
 
         <!-- ===== Plugin versions ===== -->
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
@@ -191,7 +193,29 @@
             <version>${h2.version}</version>
             <scope>test</scope>
         </dependency>
-        <!-- TestFX + Monocle deliberately NOT added yet — arrives with E4.24 (UI smoke). -->
+        <!--
+            UI smoke tests (E4.24). TestFX drives a real JavaFX toolkit; Monocle
+            is the headless software renderer that lets it run on a CI box with
+            no display. Both are test-scope only and never reach either Fat JAR.
+        -->
+        <dependency>
+            <groupId>org.testfx</groupId>
+            <artifactId>testfx-core</artifactId>
+            <version>${testfx.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testfx</groupId>
+            <artifactId>testfx-junit5</artifactId>
+            <version>${testfx.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testfx</groupId>
+            <artifactId>openjfx-monocle</artifactId>
+            <version>${monocle.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -204,6 +228,29 @@
                 <configuration>
                     <release>${maven.compiler.release}</release>
                 </configuration>
+            </plugin>
+
+            <!-- Guard: this project builds only on JDK 21 (newer JDKs break Mockito/ByteBuddy) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>enforce-jdk-21</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,22)</version>
+                                    <message>HSTS builds with JDK 21 (Temurin). Newer JDKs break Mockito/ByteBuddy — install Temurin 21 and set JAVA_HOME.</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Unit tests -->
@@ -226,10 +273,43 @@
                     <excludes>
                         <!-- vendored, never modified -->
                         <exclude>ocsf/**</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>client/features/**</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>client/ui/**</exclude>
+<!-- E5 feature screens: ONLY the thin FX view classes are excluded, listed one by
+                             one. Every feature LOGIC class IS measured and tested —
+                             connect/ConnectWiring, login/LoginSession, login/ShellBoot,
+                             home/HomeGreeting, home/StudentHomeSession. Note the classes are
+                             listed individually rather than as client/features/*/…View*: a
+                             single '*' in JaCoCo crosses path separators, so one wildcard here
+                             would silently un-instrument whole logic subpackages. -->
+                        <exclude>client/features/connect/ConnectView*</exclude>
+                        <exclude>client/features/login/LoginView*</exclude>
+                        <exclude>client/features/bank/QuestionsView*</exclude>
+                        <exclude>client/features/settings/SettingsView*</exclude>
+                        <exclude>client/features/home/DashboardPage*</exclude>
+                        <exclude>client/features/home/TeacherHomeView*</exclude>
+                        <exclude>client/features/home/CoordinatorHomeView*</exclude>
+                        <exclude>client/features/home/StudentHomeView*</exclude>
+                        <exclude>client/features/home/PrincipalHomeView*</exclude>
+<!-- E4 design system: only thin FX view classes are excluded; all UI *logic*
+                             (theme/, anim/Motion, components/logic/, shell state) IS measured -->
+                        <exclude>client/ui/components/Buttons*</exclude>
+                        <exclude>client/ui/components/CountdownTimer*</exclude>
+                        <exclude>client/ui/components/DataTable*</exclude>
+                        <exclude>client/ui/components/EmptyState*</exclude>
+                        <exclude>client/ui/components/FormField*</exclude>
+                        <exclude>client/ui/components/Icons*</exclude>
+                        <exclude>client/ui/components/ProgressOverlay*</exclude>
+                        <exclude>client/ui/components/ReconnectBanner*</exclude>
+                        <exclude>client/ui/components/RoleBadge*</exclude>
+                        <exclude>client/ui/components/Skeletons*</exclude>
+                        <exclude>client/ui/components/StatusChip*</exclude>
+                        <exclude>client/ui/components/ToastStack*</exclude>
+                        <exclude>client/ui/components/WarnConfirm*</exclude>
+                        <exclude>client/ui/gallery/**</exclude>
+                        <exclude>client/ui/screen/**</exclude>
+                        <exclude>client/ui/shell/AppShell*</exclude>
+                        <exclude>client/ui/theme/ThemeManager*</exclude>
+                        <exclude>client/ui/theme/ThemeControls*</exclude>
+                        <exclude>client/ui/anim/Animations*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>client/core/ClientApp*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
@@ -246,8 +326,10 @@
                         <exclude>server/core/ServerMain*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>server/core/HSTSServer*</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>server/db/**</exclude>
+                        <!-- legacy prototype pair only — retired in E6; all other server/db/** code
+                             (E2 entities, repositories, DbBootstrap, allocators) IS measured -->
+                        <exclude>server/db/QuestionDAO*</exclude>
+                        <exclude>server/db/DatabaseConfig*</exclude>
                     </excludes>
                 </configuration>
                 <executions>
