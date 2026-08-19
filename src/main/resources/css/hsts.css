@@ -390,7 +390,10 @@
    ===================================================================== */
 
 .hsts-toast-stack {
-    -fx-background-color: transparent;
+    /* NO background here — not even `transparent`. A Region with any background
+       fill (transparent included) is pickable geometry in JavaFX, and this layer
+       spans the whole scene: a fill would swallow every click and scroll wheel
+       event in the app (found by manual test, guarded by GalleryInteractionTest). */
     -fx-padding: 16px;
     -fx-spacing: 8px;
 }

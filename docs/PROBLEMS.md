@@ -28,4 +28,10 @@ Strong candidates to watch for (from v1's failures — if we hit them again, doc
 **Solution.** Team rule: clones live on an ASCII-only path (`C:\dev\hsts-v2`). Moving the folder fixes it completely; no build config change needed (and no fragile encoding flags to maintain).
 **Evidence.** Failing run 2026-08-19 13:25 (jvmRun1 dumpstream); green `clean verify` after the move.
 
+## P-2 — Invisible toast layer swallowed every mouse click and scroll    (2026-08-19, found by Naji's manual gallery test)
+**Problem.** In the E4 gallery (and, via the shared AppShell plumbing, the whole future app) no mouse interaction worked — clicks dead, wheel scroll dead, only keyboard navigation alive. The user could only ever see the top of the gallery.
+**Investigation.** A TestFX probe reproduced it headless; a scene-level event filter showed every MOUSE_PRESSED landing on the full-scene `ToastStack` overlay. The code correctly called `setPickOnBounds(false)`, but the stylesheet gave the layer `-fx-background-color: transparent` — and in JavaFX picking, a Region with **any** background fill (transparent included) is pickable geometry; only a *null* background is truly click-through. 729 unit tests and rendered screenshots could not see it: the bug exists only in real input dispatch.
+**Solution.** Removed the background declaration from `.hsts-toast-stack` (with an explanatory comment) and added `GalleryInteractionTest` — a permanent TestFX regression test that robot-clicks a palette swatch (asserting the accent stylesheet actually changes) and delivers a wheel event through the scene graph (asserting the viewport moves). Policy takeaway adopted: UI smoke tests must include at least one *real input* assertion, not only "nodes exist" checks.
+**Evidence.** Failing probe run → target-chain log naming ToastStack → green `GalleryInteractionTest` + full `verify` after the one-line CSS fix.
+
 *(more entries follow)*
