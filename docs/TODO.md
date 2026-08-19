@@ -208,7 +208,7 @@ Client:
 - [ ] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade
 - [ ] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3)
 - [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22)
-- [ ] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑
+- [ ] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` done and tested against the seeded execution 4821 fixture (population σ). Not ticked: **pass rate** has no threshold defined in the PRD, and **→ stored** needs E2 entities + the frozen contract*
 - [ ] E12.5 Grading queue screen: executions awaiting grading, per-execution student table (auto scores, status)
 - [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve
 - [ ] E12.7 Bulk approve with summary confirm
