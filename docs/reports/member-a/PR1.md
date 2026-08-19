@@ -151,11 +151,22 @@ I left them alone.
 | 5 | **Two exactly-redundant unique pairs.** `uq_questions_course_serial` vs `uq_questions_display_id` forbid the same thing, since `display_id5 = course ‖ LPAD(serial3,3)`; same for the `exams` pair. One paid-for index per write. | Style, and both are in §5's shape. |
 | 6 | **Nullability drift is half-resolved.** Amendment 5 settled `raw`/`extracted_text`, but `exam_versions.student_text` and `teacher_text` are still nullable with no marker in §5, while `rejected_reason NULL` is marked explicitly. | Two of the four items on that round-1 question are still open in the contract. |
 
-### Two things that must reach other people before they write code
+### Things that must reach other people before they write code
 
+- **A question for you, found while checking the E5 merge:** `common/dto/auth/Role` has **four**
+  values and `DEMO_ACCOUNTS.md` lists `rina.barak` as `COORDINATOR`, but `users.role` in V1 is the
+  **three**-value ENUM §5 specifies. I read §5's model as deliberate and right — coordinator is
+  *derived*, a `TEACHER` who has a row in `coordinators`, which is what S-1's one-per-subject rule
+  needs and what lets a teacher coordinate one subject while teaching another. But the bridge between
+  the stored role and the wire role is written down nowhere, and I have to implement it twice: in the
+  E2.9 entity mapping and again in the E2.15 seed. **Confirm that reading** and I will make the
+  login projection compute `COORDINATOR` from the `coordinators` table rather than store it. If you
+  meant a fourth ENUM value instead, that is a `V8` and better decided now than after merge.
 - **Member B, before `SEED_CONTENT.md`:** `national_id` is now UNIQUE **and** NOT NULL, so all 18
   seeded users — including the five teachers and the principal, who have no national id anywhere in
   the PRD — need a distinct non-empty value. A blank or shared placeholder fails on the second row.
+  `DEMO_ACCOUNTS.md` also commits PR 3's seed to mirroring its five usernames, so those need national
+  ids too — and `rina.barak` needs a `coordinators` row rather than a role value, per the question above.
 - **Whoever writes the seed loader (E2.15) and the E2.13 wipe/reseed base class:** `TRUNCATE` is now
   impossible anywhere in the graph, so a re-runnable wipe must `DELETE` in exact reverse-dependency
   order. The tempting shortcut is `SET FOREIGN_KEY_CHECKS=0` — fine around the deletes, but it
@@ -195,7 +206,7 @@ which is the only reason I am raising something this small.
 - [x] Migrations run clean on empty MySQL AND on top of the previous version
 - [x] No secrets, no dummy-credential changes in resources
 - [x] TODO.md boxes ticked (E2.1–E2.8), and your E5 ticks preserved through the merge
-- [ ] CI green — after push
+- [x] CI green — run 32281050046: 918 tests, 0 failures, **0 skipped**; `FlywayCleanRunTest` ran all 19 on CI's MySQL 8.4, so the amendments are proven on Linux 8.4 as well as local Windows 8.0
 
 ## Still yours
 
