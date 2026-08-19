@@ -1,13 +1,23 @@
-# Week-1 PR 1 — seed content (E2.15 input)
+# Week-1 PR 1 — acceptance-test table + seed content
 
 **Branch:** `feat/b-week1` · **Author:** Member B · **Reviewer:** Naji · **Date:** 2026-08-19
 
-`docs/seed/SEED_CONTENT.md` — the demo dataset per PRD §5, written as content for Member A's
-loader (E2.15), not as a loader. 12 sections: 2 subjects, 4 courses, 18 users, memberships and
-enrollments, 40 questions, 6 exams in mixed states, 4 executions, grades + frozen statistics,
-4 bots with 8 sources and 8 recorded sessions, 8 notifications.
+Brief deliverables 1 and 2.
 
-Every table maps 1:1 to a schema table, so transcription is the only judgement left to the loader.
+**`docs/ACCEPTANCE_TESTS.md`** (D1, feeds E22.1) — the 21 scenarios of the course test outline,
+expanded to **115 numbered cases**, columns `# · Steps · Expected result · Actual · Status ·
+Bugs found`. Steps and Expected are filled from the PRD now; Actual, Status and Bugs stay empty
+until each feature exists. Every case names **real seed rows and real accounts**, so a tester
+loads the seed, signs in as the named user and follows the steps without inventing anything.
+
+**`docs/seed/SEED_CONTENT.md`** (D2, feeds E2.15) — the demo dataset per PRD §5, written as
+content for Member A's loader, not as a loader. 12 sections: 2 subjects, 4 courses, 18 users,
+memberships and enrollments, 40 questions, 6 exams in mixed states, 4 executions, grades + frozen
+statistics, 4 bots with 8 sources and 8 recorded sessions, 8 notifications. Every table maps 1:1
+to a schema table, so transcription is the only judgement left to the loader.
+
+The two documents check each other: because the test cases cite seed ids, a later change to the
+roster breaks cases loudly instead of quietly making them vague.
 
 Rebased onto `main` after E5, E4 and E2 PR1 merged; the roster below mirrors
 `docs/DEMO_ACCOUNTS.md`, which landed while this was being written.
@@ -33,6 +43,9 @@ satisfies the constraints it claims to — checked by script against the file, n
 | Recursion = 2 questions, no HARD (F3.3 fixture) | ✅ |
 | Illustrations = 10 (PRD §5) | ✅ |
 | Frozen stats match the seeded grades (mean 78.0, median 80.5, σ 13.08) | ✅ |
+| ACCEPTANCE_TESTS: all 21 outline scenarios present as sections | ✅ |
+| ACCEPTANCE_TESTS: per-scenario case counts match the summary table | ✅ 115 total |
+| ACCEPTANCE_TESTS: every row has the full column set and a status marker | ✅ |
 | `./mvnw clean verify` | **not run** — see finding 3 |
 
 Four errors were caught by that pass rather than by review, and are listed because they are
@@ -51,11 +64,9 @@ they are relational. The cross-checks that caught them are now part of the valid
 
 ## Deviations from the contract, with reasons
 
-**1. This is Deliverable 2; the brief says PR after Deliverable 1.**
-`docs/ACCEPTANCE_TESTS.md` (D1) is not written yet. I shipped the seed first because Member A
-is blocked on it for the E2.15 loader and E2 is the epic in flight, whereas D1 blocks nobody
-until M8. Say the word and I will hold this until D1 is ready — but the loader would then be
-waiting on a document with no downstream dependency.
+**1. Deliverable 3 is not in this PR.** The PRD §6 edge-case pass for Grading / Results /
+Reports is the next commit on this branch; the brief says to PR without waiting for all three.
+D1 and D2 are both complete here.
 
 **2. No illustration bytes supplied.** 10 questions are marked as illustrated; I supplied no
 image data. `image MEDIUMBLOB NULL` accepts NULL, so the loader is unblocked today. Real assets
@@ -86,24 +97,21 @@ written. Either PRD §5 gets reworded or `DEMO_ACCOUNTS.md` does; they cannot bo
 
 ## Open questions
 
-**1. Can a subject coordinator approve her own exam?** ⚠ **New — needs a decision, not a
-preference.**
-Nothing in the PRD, the test outline or the spec says. It matters because the seed contains one
-unavoidable case: `michal.sharon` is the only Databases teacher *and* the coordinator of subject
-20, so exam 6 (Databases Final) is authored and approved by the same person. Five of the six
-exams avoid it by construction — `dana.cohen` writes the Mathematics exams and `rina.barak`
-approves them; `avi.mizrahi` and `tamar.shani` write the Java exams and `michal.sharon` approves
-those. The sixth cannot be avoided without a sixth teacher.
+**1. Population or sample standard deviation** — call (b) above. Changes code I am about to
+write, so it is the one I most need answered.
 
-*Assumption I ran on:* it is allowed, and exam 6 is seeded APPROVED by its own author.
-*If the answer is no,* the rule needs an owner (E8 validator) and the seed needs a second
-Databases teacher — one line in §4, and PRD §5's "5 teachers" becomes 6. Cheap now, not cheap
-after E8 is built.
-
-**2. Population or sample standard deviation** — call (b) above. Changes code I am about to write.
-
-**3. Illustration assets** — deviation 2. Does Member A want NULL now and a follow-up PR, or
+**2. Illustration assets** — deviation 2. Does Member A want NULL now and a follow-up PR, or
 should the loader wait for real bytes?
+
+**3. Is coordinator self-approval actually logged?** Narrow follow-up, not a decision.
+PRD **F4.3** already settles the policy: *"A coordinator does not approve her own exams? — Not
+required by spec; allowed, but logged."* So the seed is fine as it stands and needs no change.
+The open part is only whether the **logging** half has an owner — F4.3 names no epic for it, and
+"allowed but logged" with no log line is a silent failure rather than a visible one. The seed
+happens to contain the exact fixture: `michal.sharon` is the only Databases teacher *and*
+coordinator of subject 20, so exam **202201** is authored and approved by her. Acceptance case
+**4.6** tests it. The other five exams avoid self-approval by construction, so 4.6 is the only
+place this path is exercised.
 
 ### Resolved since the first draft — recorded, no action needed
 
@@ -116,6 +124,11 @@ should the loader wait for real bytes?
   had put this to you; it needs none of your time.
 
 ## Findings that affect others
+
+**0. I got F4.3 wrong in the first draft of this report.** I wrote that nothing in the PRD
+covers coordinator self-approval and raised it as a blocking decision. F4.3 covers it explicitly
+and allows it. Corrected above, and narrowed to the part that is genuinely open (the logging
+owner). Recording it because the wrong version was on this branch for one commit.
 
 **1. Three parts of the seed look like defects and must not be "fixed".** Each is annotated at
 the point where someone would be tempted to correct it: **Recursion has 2 questions and no HARD
@@ -150,9 +163,9 @@ exam version.
 
 ## Next
 
-- **D1 — `docs/ACCEPTANCE_TESTS.md`**: one row per test-outline scenario 1–21, columns
-  `# · Scenario · Steps · Expected · Actual · Status · Bugs found`. Steps and Expected filled
-  from the PRD now; Actual and Status stay empty until testing.
 - **D3 — edge-case ownership pass**: PRD §6 Grading / Results / Reports lines expanded into
-  given/when/then test ideas, appended to ACCEPTANCE_TESTS.md as the E12–E15 test plan.
+  given/when/then test ideas, appended to ACCEPTANCE_TESTS.md under a "Hardening" section. That
+  becomes my E12–E15 test plan. Next commit on this branch.
+- Fill Actual / Status / Bugs found as each epic lands — the table is written to be filled in
+  during development, not reconstructed at submission.
 - Temurin 21 installed so `./mvnw clean verify` is available before E12.
