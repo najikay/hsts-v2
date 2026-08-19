@@ -38,14 +38,14 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 ## E2 — Database, persistence & seed [A] (schema reviewed by L)
 
-- [ ] E2.1 Flyway bootstrap on server start; migration naming convention; test that migrations run clean on empty DB
-- [ ] E2.2 V1 core: subjects, courses, users, course_teachers, enrollments, coordinators
-- [ ] E2.3 V2 bank: questions, question_versions (correct_answer 1..4, topic, difficulty, image)
-- [ ] E2.4 V3 exams: exams, exam_versions, exam_version_questions
-- [ ] E2.5 V4 executions: exam_executions (+stats columns), exam_attempts, attempt_answers
-- [ ] E2.6 V5 grading: grades (audit fields)
-- [ ] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript), bot_messages (normalized analytics copy, dual-written)
-- [ ] E2.8 V7 notifications
+- [x] E2.1 Flyway bootstrap on server start; migration naming convention; test that migrations run clean on empty DB — *`DbBootstrap` + clean-run test done; the one-line call in `ServerMain` is outside A's scope and awaits [L]*
+- [x] E2.2 V1 core: subjects, courses, users, course_teachers, enrollments, coordinators
+- [x] E2.3 V2 bank: questions, question_versions (correct_answer 1..4, topic, difficulty, image)
+- [x] E2.4 V3 exams: exams, exam_versions, exam_version_questions
+- [x] E2.5 V4 executions: exam_executions (+stats columns), exam_attempts, attempt_answers
+- [x] E2.6 V5 grading: grades (audit fields)
+- [x] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript), bot_messages (normalized analytics copy, dual-written)
+- [x] E2.8 V7 notifications
 - [ ] E2.9 JPA entities for all tables (+`@Version` on editables), enums, converters (JSON transcript ↔ objects)
 - [ ] E2.10 HibernateUtil (Singleton SessionFactory from HikariCP) + `Transactions` helper (`inTx(fn)`) with tests
 - [ ] E2.11 Repositories: UserRepo, CourseRepo, QuestionRepo, ExamRepo, ExecutionRepo, AttemptRepo, GradeRepo, BotRepo, NotificationRepo — query-per-need, projections for wire DTOs

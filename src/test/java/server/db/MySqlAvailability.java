@@ -1,0 +1,103 @@
+package server.db;
+
+import server.core.ServerConfig;
+import server.core.ServerConfig.Credentials;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+/**
+ * The single gate for MySQL-backed tests.
+ *
+ * <p>Tests that need a real MySQL are annotated
+ * {@code @EnabledIf("server.db.MySqlAvailability#isReachable")}: they run wherever a
+ * server answers and skip cleanly everywhere else. CI needs no configuration — the
+ * workflow already starts MySQL 8.4 with {@code root/root}, which is exactly what the
+ * bundled {@code server.properties} falls back to.
+ *
+ * <p>Locally, credentials come from the gitignored {@code server.properties} at the
+ * repository root via {@link ServerConfig}, so a developer configures their MySQL login
+ * in one place rather than once per test. Every value can be overridden by environment
+ * variable for a machine that runs MySQL somewhere unusual.
+ *
+ * <p><b>This class is the one place to change</b> if the team later adds the Failsafe
+ * plugin and moves the MySQL suite to {@code *IT} classes — the gating decision lives
+ * here and nowhere else.
+ */
+final class MySqlAvailability {
+
+    /**
+     * Schema the migration tests create and drop. Deliberately not {@code hsts_db} and
+     * not any name a developer is likely to already own — these tests DROP it.
+     */
+    static final String TEST_SCHEMA = env("HSTS_TEST_SCHEMA", "hsts_e2_migration_test");
+
+    private static final String HOST = env("HSTS_DB_HOST", DbBootstrap.DEFAULT_HOST);
+    private static final int PORT = Integer.parseInt(env("HSTS_DB_PORT", String.valueOf(DbBootstrap.DEFAULT_PORT)));
+
+    /** Probing must not hang a build on an unreachable host. */
+    private static final int PROBE_TIMEOUT_SECONDS = 3;
+
+    private static Boolean cachedReachable;
+
+    private MySqlAvailability() {
+        // static helper — no instances
+    }
+
+    /** JDBC URL with no schema selected — used to create and drop the test schema. */
+    static String serverUrl() {
+        return DbBootstrap.jdbcUrl(HOST, PORT, "");
+    }
+
+    /** JDBC URL pointing at the throwaway test schema. */
+    static String schemaUrl() {
+        return DbBootstrap.jdbcUrl(HOST, PORT, TEST_SCHEMA);
+    }
+
+    static String user() {
+        return env("HSTS_DB_USER", credentials().user());
+    }
+
+    static String password() {
+        return env("HSTS_DB_PASSWORD", credentials().password());
+    }
+
+    /** Opens a connection with no schema selected. Caller closes it. */
+    static Connection openServerConnection() throws SQLException {
+        return DriverManager.getConnection(serverUrl(), user(), password());
+    }
+
+    /**
+     * Whether a MySQL server answered on the configured host. Referenced by name from
+     * {@code @EnabledIf}, and cached so a suite of tests probes at most once.
+     *
+     * @return {@code true} when the tests can run against a live server
+     */
+    static boolean isReachable() {
+        if (cachedReachable == null) {
+            cachedReachable = probe();
+        }
+        return cachedReachable;
+    }
+
+    private static boolean probe() {
+        DriverManager.setLoginTimeout(PROBE_TIMEOUT_SECONDS);
+        try (Connection ignored = openServerConnection()) {
+            return true;
+        } catch (SQLException e) {
+            System.out.println("[MySqlAvailability] MySQL not reachable at " + HOST + ":" + PORT
+                    + " — MySQL-backed tests will be skipped (" + e.getMessage() + ")");
+            return false;
+        }
+    }
+
+    private static Credentials credentials() {
+        return ServerConfig.load();
+    }
+
+    private static String env(String name, String fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+}
