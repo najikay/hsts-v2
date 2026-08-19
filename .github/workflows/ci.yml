@@ -41,6 +41,10 @@ jobs:
 
       - name: Build & verify (tests + coverage gate)
         # chmod guard: repo lives on Windows filesystems where the exec bit can get lost
+        # HSTS_REQUIRE_MYSQL: locally the MySQL suite auto-skips when no server is reachable;
+        # in CI that would be a silent false-green, so here it must FAIL instead of skip.
+        env:
+          HSTS_REQUIRE_MYSQL: "true"
         run: |
           chmod +x mvnw
           ./mvnw -B clean verify

@@ -206,6 +206,29 @@
                 </configuration>
             </plugin>
 
+            <!-- Guard: this project builds only on JDK 21 (newer JDKs break Mockito/ByteBuddy) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>enforce-jdk-21</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,22)</version>
+                                    <message>HSTS builds with JDK 21 (Temurin). Newer JDKs break Mockito/ByteBuddy — install Temurin 21 and set JAVA_HOME.</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Unit tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -246,8 +269,10 @@
                         <exclude>server/core/ServerMain*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>server/core/HSTSServer*</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>server/db/**</exclude>
+                        <!-- legacy prototype pair only — retired in E6; all other server/db/** code
+                             (E2 entities, repositories, DbBootstrap, allocators) IS measured -->
+                        <exclude>server/db/QuestionDAO*</exclude>
+                        <exclude>server/db/DatabaseConfig*</exclude>
                     </excludes>
                 </configuration>
                 <executions>

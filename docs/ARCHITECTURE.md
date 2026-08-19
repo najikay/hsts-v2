@@ -88,24 +88,31 @@ class Message implements Serializable {
 ```
 subjects(code2 PK, name)                          -- seeded, read-only (S-3)
 courses(code2 PK, subject_code FK, name)          -- seeded, read-only
-users(id PK, username UQ, password_hash, full_name, role ENUM, national_id)
+users(id PK, username UQ, password_hash, full_name, role ENUM, national_id UQ)
+   -- national_id unique: S-18 starts an attempt by it; two students sharing one is ambiguous
 course_teachers(course, teacher)  |  enrollments(course, student)
 coordinators(subject_code, teacher)               -- coordinator per subject (S-1)
 
 questions(id PK, course, serial3, display_id5 UQ) -- identity row
 question_versions(id PK, question_id FK, version_no, text, a1..a4,
-                  correct_answer TINYINT (1..4), topic, difficulty ENUM, image BLOB NULL,
+                  correct_answer TINYINT (1..4), topic, difficulty ENUM, image MEDIUMBLOB NULL,
                   created_by, created_at)         -- immutable versions (C-2)
+   -- questions carries deleted_at DATETIME NULL (F2.5 soft delete; hard delete never happens)
 
 exams(id PK, course, serial2, display_id6 UQ, author FK)
 exam_versions(id PK, exam_id FK, version_no, name, duration_min,
               student_text, teacher_text, status ENUM(DRAFT,PENDING,APPROVED,REJECTED),
               rejected_reason NULL, created_at)
-exam_version_questions(exam_version_id, question_version_id, points, ord)
-   -- sum(points)=100 enforced in service + CHECK-style assertion in tests
+exam_version_questions(exam_version_id, question_id, question_version_id, points, ord,
+                       UNIQUE(exam_version_id, question_id))
+   -- question_id denormalized so the DB itself forbids the same question appearing twice
+   -- via different versions (PRD §6); sum(points)=100 enforced in service + tests
 
 exam_executions(id PK, exam_version_id FK, code CHAR4, open_at, close_at,
-                extra_minutes INT DEFAULT 0, status ENUM(SCHEDULED,LIVE,CLOSED),
+                extra_minutes INT DEFAULT 0, status ENUM(SCHEDULED,LIVE,CLOSED,CANCELLED),
+                -- CANCELLED = F5.5 cancel-before-open; excluded from statistics/reports.
+                -- code uniqueness among non-CLOSED executions is a SERVICE rule (no partial
+                -- indexes in MySQL) enforced in E9 + tested,
                 created_by, stats: avg, median, stddev, min, max, deciles,
                 participation {started, finished, timed_out} JSON NULL)   -- S-2, S-21, S-25
    -- participation counts are DERIVED from exam_attempts (COUNT by status) while live —
@@ -120,8 +127,10 @@ grades(id PK, attempt_id UQ FK, auto_score, final_score, status ENUM(AUTO,APPROV
        override_reason NULL, teacher_comment NULL, approved_by, approved_at)
 
 bots(id PK, course UQ, name, active BOOL)                          -- one per course (S-30)
-bot_sources(id PK, bot_id FK, type ENUM(PDF,DOCX,TEXT), title, raw BLOB,
-            extracted_text MEDIUMTEXT, added_by, updated_at, version INT)
+bot_sources(id PK, bot_id FK, type ENUM(PDF,DOCX,TEXT), title, raw MEDIUMBLOB NOT NULL,
+            extracted_text MEDIUMTEXT NOT NULL, added_by, updated_at, version INT)
+   -- NOT NULL by design: a source row only exists after successful extraction (F12.2) —
+   -- a silently-empty source that contributes nothing to the prompt cannot exist
 bot_sessions(id PK, bot_id FK, student_id FK, started_at, updated_at,
              transcript JSON)                                       -- [{role,q/a,ts}] (S-33)
 bot_messages(id PK, bot_id FK, session_id FK, student_id FK, question, answer,
@@ -133,7 +142,9 @@ notifications(id PK, user_id FK, type, title, body, ref_type, ref_id,
               created_at, read_at NULL)
 ```
 
-All tables utf8mb4; entities carry `@Version` where editable. Correct answers live only in `question_versions` — the take-exam DTO mapper cannot even see `correct_answer` (separate projection), making the v1 "student sees answers" leak structurally impossible.
+**Schema conventions (locked in E2 PR1 review):** optimistic-locking column is `lock_version INT NOT NULL DEFAULT 0` (never confused with domain `version_no`) on questions, exams, **exam_versions** (its `status` is mutable — approve/reject race lands there), exam_executions, bot_sources, grades. Deletion policy: RESTRICT everywhere history must survive — attempts/grades from executions, and **bot_sessions/bot_messages from bots** (deleting a bot must not wipe the analytics corpus; bots are toggled, not deleted). All DATETIME values are **UTC**; clients render local. `stats`/`participation` are two JSON columns. H2 tests validate *mappings* (Hibernate schema-gen); only the MySQL suite validates the real Flyway schema.
+
+All tables utf8mb4; entities carry `@Version` (column `lock_version`) where editable. Correct answers live only in `question_versions` — the take-exam DTO mapper cannot even see `correct_answer` (separate projection), making the v1 "student sees answers" leak structurally impossible.
 
 ## 6. Client internals
 
