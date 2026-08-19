@@ -41,13 +41,8 @@ Maven + `maven-shade-plugin` (two deployable Fat JARs — server and client).
 **Prerequisites:** Java 17+, MySQL, Maven.
 
 ```bash
-# 1. Create + seed the database (one-time)
-mysql -u root -p < src/main/resources/schema.sql
-mysql -u root -p < src/main/resources/seed.sql
-
-'''powershell
-Get-Content src/main/resources/schema.sql | mysql -u root -p
-Get-Content src/main/resources/seed.sql | mysql -u root -p
+# 1. Create an empty database (one-time; the server runs Flyway migrations on start)
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS hsts_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 
 # 2. Build both Fat JARs + copy deployment properties into target/
 mvn clean package
@@ -209,7 +204,7 @@ HSTS/
     └── resources/
         ├── client.properties     # bundled default for the client JAR
         ├── server.properties     # bundled default for the server JAR
-        ├── schema.sql, seed.sql  # database setup
+        ├── db/migration/        # Flyway-versioned schema (V1..V7)
         ├── fxml/                 # ConnectView.fxml, QuestionsView.fxml
         ├── css/app.css           # shared theme
         └── branding/             # hsts-logo.svg

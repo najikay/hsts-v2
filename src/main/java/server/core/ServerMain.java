@@ -1,5 +1,7 @@
 package server.core;
 
+import server.db.DbBootstrap;
+
 import java.io.IOException;
 
 /**
@@ -25,6 +27,10 @@ public class ServerMain {
 
         HSTSServer server = new HSTSServer(port);
         try {
+            // E2.1: the schema is Flyway-managed — migrate BEFORE accepting clients.
+            // A pre-E2 hsts_db (legacy prototype `Questions` table) must be dropped
+            // and recreated empty once; see docs/PROBLEMS.md / E2 PR1 findings.
+            DbBootstrap.migrate();
             server.listen();
             System.out.println("==================================================");
             System.out.println(" HSTS Fat Server is UP on port " + port);
