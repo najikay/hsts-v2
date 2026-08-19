@@ -38,14 +38,14 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 ## E2 — Database, persistence & seed [A] (schema reviewed by L)
 
-- [ ] E2.1 Flyway bootstrap on server start; migration naming convention; test that migrations run clean on empty DB
-- [ ] E2.2 V1 core: subjects, courses, users, course_teachers, enrollments, coordinators
-- [ ] E2.3 V2 bank: questions, question_versions (correct_answer 1..4, topic, difficulty, image)
-- [ ] E2.4 V3 exams: exams, exam_versions, exam_version_questions
-- [ ] E2.5 V4 executions: exam_executions (+stats columns), exam_attempts, attempt_answers
-- [ ] E2.6 V5 grading: grades (audit fields)
-- [ ] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript), bot_messages (normalized analytics copy, dual-written)
-- [ ] E2.8 V7 notifications
+- [x] E2.1 Flyway bootstrap on server start; migration naming convention; test that migrations run clean on empty DB — *`DbBootstrap` + clean-run test done; the one-line call in `ServerMain` is outside A's scope and awaits [L]*
+- [x] E2.2 V1 core: subjects, courses, users, course_teachers, enrollments, coordinators
+- [x] E2.3 V2 bank: questions, question_versions (correct_answer 1..4, topic, difficulty, image)
+- [x] E2.4 V3 exams: exams, exam_versions, exam_version_questions
+- [x] E2.5 V4 executions: exam_executions (+stats columns), exam_attempts, attempt_answers
+- [x] E2.6 V5 grading: grades (audit fields)
+- [x] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript), bot_messages (normalized analytics copy, dual-written)
+- [x] E2.8 V7 notifications
 - [ ] E2.9 JPA entities for all tables (+`@Version` on editables), enums, converters (JSON transcript ↔ objects)
 - [ ] E2.10 HibernateUtil (Singleton SessionFactory from HikariCP) + `Transactions` helper (`inTx(fn)`) with tests
 - [ ] E2.11 Repositories: UserRepo, CourseRepo, QuestionRepo, ExamRepo, ExecutionRepo, AttemptRepo, GradeRepo, BotRepo, NotificationRepo — query-per-need, projections for wire DTOs
@@ -97,14 +97,14 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 ## E5 — Auth & login [L]
 
-- [ ] E5.1 AuthService: BCrypt verify, failed-attempt throttle (5 → 30s), generic errors; unit tests incl. timing
-- [ ] E5.2 LOGIN/LOGOUT verbs + router integration; LoginResult carries role, courses, display name
-- [ ] E5.3 Login screen: brand panel + form, inline errors, loading state, Enter submits, caps-lock hint
-- [ ] E5.4 Role-based shell boot: menu items and home per role (T-1) — 4 role variants
-- [ ] E5.5 Duplicate-login rejection UX (clear message) + integration test with two clients ⚑
-- [ ] E5.6 Student/Teacher/Coordinator/Principal home dashboards with live cards (wired up as features land)
-- [ ] E5.7 Logout flow: confirm → server logout → clean state → login screen
-- [ ] E5.8 Integration: LoginIntegrationTest (success, wrong pass, throttle, duplicate, disconnect frees session)
+- [x] E5.1 AuthService: BCrypt verify, failed-attempt throttle (5 → 30s), generic errors; unit tests incl. timing
+- [x] E5.2 LOGIN/LOGOUT verbs + router integration; LoginResult carries role, courses, display name
+- [x] E5.3 Login screen: brand panel + form, inline errors, loading state, Enter submits, caps-lock hint
+- [x] E5.4 Role-based shell boot: menu items and home per role (T-1) — 4 role variants
+- [x] E5.5 Duplicate-login rejection UX (clear message) + integration test with two clients ⚑
+- [x] E5.6 Student/Teacher/Coordinator/Principal home dashboards with live cards (wired up as features land)
+- [x] E5.7 Logout flow: confirm → server logout → clean state → login screen
+- [x] E5.8 Integration: LoginIntegrationTest (success, wrong pass, throttle, duplicate, disconnect frees session)
 
 ## E6 — Question bank [A]
 

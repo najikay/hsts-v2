@@ -1,0 +1,23 @@
+/* =====================================================================
+   HSTS accent palette — Amber   (E4.8)
+
+   This file defines THREE looked-up colours and nothing else. Every
+   accent-coloured pixel in the app — buttons, active rail items, chips,
+   focus rings, links, progress, avatars — resolves through them, so
+   switching palette is a one-stylesheet swap on the live Scene with no
+   node rebuilt and no component aware it happened.
+
+   Mirrors client.ui.theme.AccentPalette#AMBER. Keep the two in step.
+   ===================================================================== */
+
+.root {
+    -hsts-accent:      #b45309;
+    -hsts-accent-soft: #fffbeb;
+    -hsts-on-accent:   #ffffff;
+}
+
+.root.dark {
+    -hsts-accent:      #fbbf24;
+    -hsts-accent-soft: #4a3313;
+    -hsts-on-accent:   #0d1117;
+}

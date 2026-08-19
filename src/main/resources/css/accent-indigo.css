@@ -1,0 +1,23 @@
+/* =====================================================================
+   HSTS accent palette — Indigo — the default palette   (E4.8)
+
+   This file defines THREE looked-up colours and nothing else. Every
+   accent-coloured pixel in the app — buttons, active rail items, chips,
+   focus rings, links, progress, avatars — resolves through them, so
+   switching palette is a one-stylesheet swap on the live Scene with no
+   node rebuilt and no component aware it happened.
+
+   Mirrors client.ui.theme.AccentPalette#INDIGO. Keep the two in step.
+   ===================================================================== */
+
+.root {
+    -hsts-accent:      #4f46e5;
+    -hsts-accent-soft: #eef2ff;
+    -hsts-on-accent:   #ffffff;
+}
+
+.root.dark {
+    -hsts-accent:      #818cf8;
+    -hsts-accent-soft: #2b2a5e;
+    -hsts-on-accent:   #0d1117;
+}

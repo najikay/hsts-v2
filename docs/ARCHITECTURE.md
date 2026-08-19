@@ -97,11 +97,12 @@ questions(id PK, course, serial3, display_id5 UQ) -- identity row
 question_versions(id PK, question_id FK, version_no, text, a1..a4,
                   correct_answer TINYINT (1..4), topic, difficulty ENUM, image MEDIUMBLOB NULL,
                   created_by, created_at)         -- immutable versions (C-2)
-   -- questions carries deleted_at DATETIME NULL (F2.5 soft delete; hard delete never happens)
+   -- questions carries deleted_at DATETIME(3) NULL (F2.5 soft delete; hard delete never happens
+   --  — enforced: question_versions->questions is RESTRICT, so no question is ever physically removable)
 
 exams(id PK, course, serial2, display_id6 UQ, author FK)
 exam_versions(id PK, exam_id FK, version_no, name, duration_min,
-              student_text, teacher_text, status ENUM(DRAFT,PENDING,APPROVED,REJECTED),
+              student_text NULL, teacher_text NULL,  -- optional per T-3, deliberately nullable status ENUM(DRAFT,PENDING,APPROVED,REJECTED),
               rejected_reason NULL, created_at)
 exam_version_questions(exam_version_id, question_id, question_version_id, points, ord,
                        UNIQUE(exam_version_id, question_id))
@@ -143,6 +144,8 @@ notifications(id PK, user_id FK, type, title, body, ref_type, ref_id,
 ```
 
 **Schema conventions (locked in E2 PR1 review):** optimistic-locking column is `lock_version INT NOT NULL DEFAULT 0` (never confused with domain `version_no`) on questions, exams, **exam_versions** (its `status` is mutable — approve/reject race lands there), exam_executions, bot_sources, grades. Deletion policy: RESTRICT everywhere history must survive — attempts/grades from executions, and **bot_sessions/bot_messages from bots** (deleting a bot must not wipe the analytics corpus; bots are toggled, not deleted). All DATETIME values are **UTC**; clients render local. `stats`/`participation` are two JSON columns. H2 tests validate *mappings* (Hibernate schema-gen); only the MySQL suite validates the real Flyway schema.
+
+**Round-2 schema decisions (E2 PR1 final):** the denormalized `exam_version_questions.question_id` is policed by a **composite FK** `(question_version_id, question_id) → question_versions(id, question_id)` — the copy cannot disagree with its source. `raw`/`extracted_text` carry `CHECK(LENGTH > 0)` backstops; for `type='TEXT'` sources the service stores the pasted text as `raw` too (it IS the original — duplication is negligible for pasted text). `bot_messages→bot_sessions` is RESTRICT as well (nothing in the product deletes a session). `uq_exam_version_questions_ord` stays: E7 composition updates are **full-replace within one transaction** (delete rows + reinsert), so no reorder dance is ever needed. **Attempt finalization is a status-guarded atomic UPDATE** (`... SET status='SUBMITTED' WHERE id=? AND status='IN_PROGRESS'`) — the submit-vs-expiry race is resolved by compare-and-set on the state machine, not by a lock_version on attempts. **Stored role has 3 values** (`STUDENT,TEACHER,PRINCIPAL`); the wire `Role.COORDINATOR` is **derived at login**: stored TEACHER + a `coordinators` row → wire COORDINATOR (coordinator-ness is per-subject state, never stored as a role — it cannot drift). Allocators use `MAX(serial)+1`, never COUNT+1 (soft-deleted questions keep their serial); adding a soft-deleted question to a new exam version is a service-rule rejection (E7 validator). Seed/test wipes DELETE in reverse-dependency order; if `FOREIGN_KEY_CHECKS=0` is used around deletes it MUST be re-enabled before inserts (or the composite FK is inert for seeded data). Requires **MySQL ≥ 8.0.16** (older versions silently ignore CHECK constraints).
 
 All tables utf8mb4; entities carry `@Version` (column `lock_version`) where editable. Correct answers live only in `question_versions` — the take-exam DTO mapper cannot even see `correct_answer` (separate projection), making the v1 "student sees answers" leak structurally impossible.
 
