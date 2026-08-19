@@ -5,6 +5,8 @@ import server.core.ServerConfig.Credentials;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 /**
@@ -111,6 +113,37 @@ final class MySqlAvailability {
                     + " to allow skipping on a machine without one.");
         }
         return reachable;
+    }
+
+    /**
+     * Whether the application schema {@code hsts_db} itself exists.
+     *
+     * <p>Separate from {@link #isReachable()}, which only asks whether a server answered.
+     * The one test that exercises the production boot path needs the real schema to be
+     * there, and it legitimately will not be on a machine that has just dropped it — which
+     * the E2 PR 1 findings tell developers to do once, and which happens again whenever
+     * someone starts from a clean MySQL. Failing that test would punish following the
+     * instructions; skipping it is correct. CI provisions {@code hsts_db} in the workflow,
+     * so the coverage is not lost where it matters.
+     *
+     * @return {@code true} when a server answered and the schema exists
+     */
+    static boolean defaultSchemaExists() {
+        if (!isReachable()) {
+            return false;
+        }
+        try (Connection connection = openServerConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?")) {
+            statement.setString(1, DbBootstrap.DEFAULT_DATABASE);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
+        } catch (SQLException e) {
+            System.out.println("[MySqlAvailability] could not check for schema "
+                    + DbBootstrap.DEFAULT_DATABASE + " — treating as absent (" + e.getMessage() + ")");
+            return false;
+        }
     }
 
     private static boolean probe() {
