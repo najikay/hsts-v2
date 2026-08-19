@@ -53,7 +53,7 @@ satisfies the constraints it claims to — checked by script against the file, n
 | ACCEPTANCE_TESTS: every row has the full column set and a status marker | ✅ |
 | Hardening: 28 items, ids unique, none colliding with scenario cases | ✅ |
 | Hardening: source tagged §6 vs gap on every row | ✅ 5 §6, 23 gap |
-| `./mvnw clean verify` | **not run** — see finding 3 |
+| `./mvnw clean verify` | ✅ BUILD SUCCESS — 85 classes, coverage gate met (Temurin 21 now installed) |
 
 Four errors were caught by that pass rather than by review, and are listed because they are
 the class of error that survives proof-reading and resurfaces at the defense:
@@ -83,6 +83,9 @@ teacher covers two courses. I mirrored `DEMO_ACCOUNTS.md`, since it states that 
 it. The result is defensible on S-1 ("one or more teachers") and is arguably richer — it demos a
 teacher with two courses *and* two co-taught courses — but it is a divergence from PRD §5 as
 written. Either PRD §5 gets reworded or `DEMO_ACCOUNTS.md` does; they cannot both be literal.
+>
+> **Resolved in review:** `DEMO_ACCOUNTS.md` is authoritative and PRD §5 is reworded to match
+> (`dana.cohen` on both courses). The seed needs no change.
 
 ## Judgement calls — please confirm
 
@@ -100,13 +103,18 @@ written. Either PRD §5 gets reworded or `DEMO_ACCOUNTS.md` does; they cannot bo
 
 ## Open questions
 
-**1. Population or sample standard deviation** — call (b) above. Changes code I am about to
-write, so it is the one I most need answered.
+**1. Population or sample standard deviation** — ✅ **answered: population (divisor `n`).**
+The seed's σ 13.08 stands. Rationale given: an execution's participants *are* the population,
+nothing is being estimated. A sample-σ recomputation reading 13.98 is officially a bug, and
+**H14.4** is its test. I own producing these numbers in **E12.4**.
 
 **2. Illustration assets** — deviation 2. Does Member A want NULL now and a follow-up PR, or
 should the loader wait for real bytes?
 
-**3. Is coordinator self-approval actually logged?** Narrow follow-up, not a decision.
+**3. Is coordinator self-approval actually logged?** ✅ **answered: E8's `ApprovalService` logs
+it**, and acceptance case **4.6** is its test. Also confirmed: the dual-hat coordinator gets no
+special treatment or demo time — the coordinator rail is simply teacher + Approvals (case 1.3
+updated to say so). Original write-up kept below for the record.
 PRD **F4.3** already settles the policy: *"A coordinator does not approve her own exams? — Not
 required by spec; allowed, but logged."* So the seed is fine as it stands and needs no change.
 The open part is only whether the **logging** half has an owner — F4.3 names no epic for it, and
@@ -144,7 +152,10 @@ than only in my plan:
 - **H14.4** — the σ divisor. Binds the seed, E14 and E15 to one choice.
 - **H15.2** — CANCELLED executions excluded from the report corpus. Constrains E9 as much as E15.
 
-Happy to raise those as a PRD edit in a follow-up if you agree.
+**Accepted in review** — all three go into PRD §6, and the edit is Naji's rather than mine.
+**Not yet on `main`:** as of `14bc23f`, §6's Grading and Reports lines are unchanged and F8.5
+still names no divisor. Raising it because E12.4 is three days out and needs the σ decision to be
+findable in a file, not only in a review thread.
 
 **2. Three parts of the seed look like defects and must not be "fixed".** Each is annotated at
 the point where someone would be tempted to correct it: **Recursion has 2 questions and no HARD
@@ -156,15 +167,29 @@ what makes the F9.3 histogram read as a real class. A uniform spread looks fabri
 spike looks broken. If anyone trims Algebra's enrollment below 8, the histogram demo degrades
 with it — and the frozen `stats` block stops matching the grades.
 
-**4. I cannot run `./mvnw clean verify`.** This machine has JDK 12 and 26 only, and the enforcer
-correctly requires `[21,22)`. Installing Temurin 21 is my brief §0 step 1 and I have not done it.
-Not load-bearing for *this* PR — docs-only, nothing under `src/`, so CI is sufficient — but it
-blocks me from verifying anything before E12, and I am fixing it before my next PR.
+**4. ~~I cannot run `./mvnw clean verify`~~ — fixed.** Temurin 21 installed, `JAVA_HOME` set,
+`./mvnw clean verify` → BUILD SUCCESS locally. Two traps worth recording for whoever hits them:
+IntelliJ's embedded terminal keeps the environment from when the IDE launched, so a new *tab* is
+not a new environment (the IDE must restart); and a user-level `MAVEN_OPTS` carrying JDK 24+ flags
+(`--sun-misc-unsafe-memory-access=allow` and friends) makes JDK 21 refuse to start the JVM at all.
+Neither is obvious from the error message. Candidate for `PROBLEMS.md` if others hit it.
 
 **5. `exam_version_questions` for the Algebra Midterm must reference question 11005 version 1,**
 not the latest. That row is also what exercises the `question_id` + `UNIQUE(exam_version_id,
 question_id)` guard and the round-2 composite FK: 11005 v1 and v2 must never both land in one
 exam version.
+
+## Scope change accepted (PR #2 review)
+
+E14 (StatChart component) and E15 (report engine) move off my plate; I keep grading, student
+results, screen wiring and executing the acceptance document. Submission is **2026-08-28**, with
+E12/E13 starting when take-exam lands (~Aug 22–23).
+
+Consequence for this PR: **13 of the 28 hardening items (H14.\*, H15.\*) are no longer mine.**
+They are kept in the document with an ownership banner rather than deleted, because two of them
+carry team-wide decisions — H14.4 (σ divisor) and H15.2 (CANCELLED excluded from reports). They
+need a real owner. I still produce the numbers H14.4 verifies: E12.4 computes and stores the
+statistics, E14 only renders them.
 
 ## Definition of Done
 

@@ -74,7 +74,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 |---|---|---|---|---|---|
 | 1.1 | Launch the client. On the connect screen, accept the pre-filled address (or enter host/port). Connect. Sign in as `dana.cohen` / `demo123`. | Connect screen appears **before** login, pre-filled from defaults. Login succeeds. | | ⬜ | |
 | 1.2 | Observe the shell after 1.1. | Teacher shell: navigation rail with Dashboard, Question Bank, Exams, Results, Study Bot, Settings. **No** Approvals item. Dashboard greets by name. | | ⬜ | |
-| 1.3 | Sign out. Sign in as `rina.barak`, then `maya.levi`, then `principal.avia`. | Each gets a different, role-appropriate menu: `rina.barak` = teacher rail **plus Approvals**; `maya.levi` = Dashboard / Take Exam / My Grades / Study Bot / Settings; `principal.avia` = Dashboard / Data / Reports / Settings with nothing mutating. | | ⬜ | |
+| 1.3 | Sign out. Sign in as `rina.barak`, then `maya.levi`, then `principal.avia`. | Each gets a different, role-appropriate menu: `rina.barak` = teacher rail **plus Approvals** — nothing more; the dual-hat coordinator is a teacher with one extra rail item, not a distinct shell; `maya.levi` = Dashboard / Take Exam / My Grades / Study Bot / Settings; `principal.avia` = Dashboard / Data / Reports / Settings with nothing mutating. | | ⬜ | |
 | 1.4 | Sign in as `maya.levi` with password `wrong`. Repeat 5 times, then try the correct password. | Each failure shows one generic message that does **not** reveal whether the username exists. After 5 failures the 6th attempt is refused for 30s even with the right password. | | ⬜ | |
 
 ---
@@ -125,7 +125,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 | 4.3 | Reject it with no reason entered. | Refused — a reason is **required** (T-4.2). | | ⬜ | |
 | 4.4 | Reject with a reason. Sign back in as `dana.cohen`. | Reason is stored, visible on the exam, and delivered to `dana.cohen` as a notification (T-4.2, F4.2). | | ⬜ | |
 | 4.5 | As `rina.barak`, approve a resubmitted version. | That **version** becomes APPROVED; the author is notified. Earlier versions keep their own status. | | ⬜ | |
-| 4.6 | As `michal.sharon` (coordinator of subject 20 **and** the only Databases teacher), approve her own exam **202201**. Then inspect the server log. | Allowed — PRD F4.3 decides this explicitly: not required by spec, permitted, **but logged**. Verify the log entry actually exists; "allowed but logged" with no log line is a silent failure. | | ⬜ | |
+| 4.6 | As `michal.sharon` (coordinator of subject 20 **and** the only Databases teacher), approve her own exam **202201**. Then inspect the server log. | Allowed — PRD F4.3: not required by spec, permitted, **but logged**. The logging owner is **E8's `ApprovalService`** (confirmed in the PR #2 review). Verify the log entry actually exists; "allowed but logged" with no log line is a silent failure. | | ⬜ | |
 
 ---
 
@@ -386,8 +386,17 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 # Hardening — edge cases for E12–E15 (Member B)
 
 **Deliverable 3.** PRD §6's Grading and Reports lines expanded into concrete test ideas, and the
-gaps that pass exposed. This is my E12–E15 test plan: each item becomes a test when its epic
-lands, so the tests are written with the feature rather than backfilled in E21.
+gaps that pass exposed. Each item becomes a test when its epic lands, so tests are written with
+the feature rather than backfilled in E21.
+
+> **Ownership changed after this was written (PR #2 review, 2026-08-19).** E14 (StatChart) and
+> E15 (report engine) moved off Member B. **H12.\* and H13.\* stay with Member B**; **H14.\* and
+> H15.\* now belong to whoever owns E14/E15** and are kept here only so they are not lost in the
+> handover. Two of them carry decisions the whole team is bound by — **H14.4** (σ divisor) and
+> **H15.2** (CANCELLED excluded from reports) — so they need a real owner, not just a home.
+>
+> Member B still produces the numbers H14.4 checks: **E12.4** computes and stores the statistics;
+> E14 only displays them.
 
 Ids are `H<epic>.<n>` so they never collide with the scenario cases above. These are **not**
 counted in the 115 — the outline table is what we submit; this is how we get it green.
@@ -453,8 +462,8 @@ By comparison the catalog gives Bot nine items and Discovery five. That asymmetr
 proportional to risk: E12–E15 own grade correctness, and a wrong grade that looks plausible is
 harder to notice at a defense than a bot that fails visibly.
 
-The 23 `gap` rows above are my proposed coverage. Three are worth promoting into PRD §6 itself
-rather than living only here, because they constrain other people's code:
+The 23 `gap` rows above are my proposed coverage. Three constrain other people's code, and the
+PR #2 review **accepted all three for PRD §6**:
 
 - **H12.6** — grading must use the question **version pinned in the exam**, never the latest.
   This constrains E6 and E7, not just E12.
@@ -462,4 +471,8 @@ rather than living only here, because they constrain other people's code:
 - **H15.2** — CANCELLED executions excluded from the report corpus. Constrains E9's release
   handling as much as E15's engine.
 
-Happy to raise those as a PRD edit in a follow-up PR if you agree they belong there.
+**Status:** accepted in review; the PRD edit is Naji's, not mine. As of commit `14bc23f` the
+wording is not yet on `main` — `PRD.md` §6's Grading and Reports lines are unchanged and F8.5
+still says "standard deviation" with no divisor named. Until that lands, these three constraints
+live only here and in the review thread. Flagged, not blocking: **E12.4** needs the σ divisor
+decision to be findable by whoever writes it, and that is me.
