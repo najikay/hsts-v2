@@ -10,6 +10,7 @@ import client.ui.components.Logo;
 import client.ui.components.ReconnectBanner;
 import client.ui.components.RoleBadge;
 import client.ui.components.ToastStack;
+import client.ui.components.WarnConfirm;
 import common.dto.auth.Role;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -61,6 +62,7 @@ public final class AppShell extends BorderPane {
     private final Label bellBadgeText = new Label();
     private final HBox avatarChip = new HBox();
     private final Button railToggle = Buttons.icon(Icons.MENU, "Collapse menu");
+    private final Button logoutButton = Buttons.icon(Icons.LOGOUT, "Sign out");
 
     /**
      * @param navigator routes rail clicks; the shell listens to it for the active
@@ -131,7 +133,45 @@ public final class AppShell extends BorderPane {
         name.getStyleClass().add("avatar-name");
 
         avatarChip.getChildren().setAll(avatar, name, new RoleBadge(role));
+        // setUser may run after setOnLogout (or again on a re-login); the sign-out
+        // affordance must survive the rebuild.
+        if (logoutButton.getOnAction() != null) {
+            avatarChip.getChildren().add(logoutButton);
+        }
         avatarChip.setAccessibleText(fullName + ", " + RoleBadge.displayName(role));
+    }
+
+    /**
+     * Wires the sign-out affordance next to the avatar (F1.4, E5.7).
+     *
+     * <p>The confirmation lives here rather than in the caller because it is
+     * presentation: {@link WarnConfirm} needs the owner window, and the sequence
+     * that actually ends the session ({@code LOGOUT} → evict screens → clear
+     * shell → Login) is the caller's business and is testable without a toolkit.
+     *
+     * @param action run only when the user confirms
+     */
+    public void setOnLogout(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        logoutButton.setOnAction(e -> {
+            boolean confirmed = WarnConfirm.show(getScene() == null ? null : getScene().getWindow(),
+                    WarnConfirm.spec("Sign out?")
+                            .explanation("You will be returned to the sign-in screen. "
+                                    + "Anything you have not saved is lost.")
+                            .confirmText("Sign out")
+                            .cancelText("Stay signed in"));
+            if (confirmed) {
+                action.run();
+            }
+        });
+        if (!avatarChip.getChildren().contains(logoutButton)) {
+            avatarChip.getChildren().add(logoutButton);
+        }
+    }
+
+    /** @return the sign-out button, for tests and keyboard shortcut wiring. */
+    public Button logoutButton() {
+        return logoutButton;
     }
 
     /** Swaps the content area, with the house entrance transition. */
@@ -246,6 +286,9 @@ public final class AppShell extends BorderPane {
         if (state.isActive(item)) {
             row.getStyleClass().add("active");
         }
+        if (!item.enabled()) {
+            row.getStyleClass().add("disabled");
+        }
         row.getChildren().add(Icons.of(item.icon(), Icons.SIZE_DEFAULT, "nav-icon"));
 
         if (!collapsed) {
@@ -256,12 +299,18 @@ public final class AppShell extends BorderPane {
         if (item.hasBadge()) {
             row.getChildren().add(badge(item, collapsed));
         }
-        // Collapsed items lose their label, so the tooltip is the only affordance.
-        if (collapsed) {
-            Tooltip.install(row, new Tooltip(item.label()));
+        // Collapsed items lose their label, and a disabled item owes the user a
+        // reason ("Arrives with E9"); both are the same affordance.
+        if (collapsed || !item.enabled()) {
+            Tooltip.install(row, new Tooltip(item.tooltipText()));
         }
-        row.setOnMouseClicked(e -> navigator.navigate(item.routeId()));
-        row.setAccessibleText(item.label());
+        // Not setDisable(): a disabled Node swallows hover, and the tooltip
+        // explaining WHY it is unavailable is the whole point of showing it.
+        if (item.enabled()) {
+            row.setOnMouseClicked(e -> navigator.navigate(item.routeId()));
+        }
+        row.setAccessibleText(item.enabled() ? item.label()
+                : item.label() + ", unavailable: " + item.tooltipText());
         return row;
     }
 

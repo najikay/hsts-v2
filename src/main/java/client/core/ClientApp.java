@@ -1,9 +1,8 @@
 package client.core;
 
 import client.events.ClientEventBus;
-import client.features.bank.QuestionsView;
 import client.features.connect.ConnectView;
-import client.features.settings.SettingsView;
+import client.features.login.LoginView;
 import client.net.IClientConnection;
 import client.ui.gallery.GalleryScreen;
 import client.ui.screen.ScreenFactory;
@@ -82,16 +81,19 @@ public class ClientApp extends Application {
     }
 
     /**
-     * Declares the route table and how to build each screen. E5 onwards adds one
-     * line per new screen here — nothing else in the framework changes.
+     * Declares the routes that exist <b>before</b> anyone signs in.
+     *
+     * <p>Everything else is registered once the role is known, by
+     * {@link SessionRoutes} — a student's client never learns that a teacher's
+     * routes exist. Adding a pre-login screen is one line here; adding a
+     * signed-in screen is one line there.
      */
     static void registerRoutes(ScreenManager manager) {
-        Routes.registerAll(manager.navigator());
+        Routes.registerPreLogin(manager.navigator());
 
         ScreenFactory screens = manager.screens();
         screens.register(Routes.CONNECT.id(), ConnectView::new);
-        screens.register(Routes.QUESTIONS.id(), QuestionsView::new);
-        screens.register(Routes.SETTINGS.id(), SettingsView::new);
+        screens.register(Routes.LOGIN.id(), LoginView::new);
     }
 
     @Override

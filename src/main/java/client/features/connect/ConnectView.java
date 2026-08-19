@@ -167,7 +167,9 @@ public final class ConnectView extends AbstractScreen {
         hideError();
 
         ScreenManager manager = ScreenManager.getInstance();
-        manager.setClient(ConnectWiring.newClient(endpoint, manager));
+        ConnectWiring.Wiring wiring = ConnectWiring.forEndpoint(endpoint, manager.eventBus());
+        manager.setClient(wiring.client());
+        manager.setDispatcher(wiring.dispatcher());
 
         Thread worker = new Thread(() -> {
             try {
@@ -185,7 +187,9 @@ public final class ConnectView extends AbstractScreen {
         // Only a connection that actually opened is worth pre-filling next time.
         prefs.remember(endpoint);
         setConnecting(false);
-        navigator().replace(Routes.QUESTIONS.id());
+        // Connect → Login, never back: replace() so the connect screen does not
+        // sit behind a session on the back-stack (F1.5 → F1.1).
+        navigator().replace(Routes.LOGIN.id());
     }
 
     private void onFailed(ServerEndpoint endpoint, Throwable failure) {

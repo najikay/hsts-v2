@@ -11,6 +11,7 @@ import client.ui.screen.AbstractScreen;
 import client.ui.screen.ScreenFactory;
 import client.ui.shell.AppShell;
 import client.ui.theme.ThemeManager;
+import common.dto.auth.LoginResult;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
@@ -57,6 +58,7 @@ public final class ScreenManager {
     private AppShell shell;
     private IClientConnection client;
     private RequestDispatcher dispatcher;
+    private LoginResult signedInUser;
 
     private ScreenManager() {
     }
@@ -141,9 +143,42 @@ public final class ScreenManager {
         return dispatcher;
     }
 
+    /**
+     * Records who is signed in (E5.4). The dashboards read the display name and
+     * the course list from here rather than being handed them as navigation
+     * parameters, because every screen from E6 on needs them and threading the
+     * same object through every route would be noise.
+     *
+     * <p>It is deliberately a plain field on the manager and not a second
+     * singleton: {@link #clearShell()} and this are cleared together on logout,
+     * which is exactly the property that matters.
+     */
+    public void setSignedInUser(LoginResult user) {
+        this.signedInUser = user;
+    }
+
+    /** @return the signed-in user, or {@code null} before login / after logout. */
+    public LoginResult signedInUser() {
+        return signedInUser;
+    }
+
     /** Installs the app shell; shell-hosted routes render inside it from then on. */
     public void setShell(AppShell shell) {
         this.shell = shell;
+    }
+
+    /**
+     * Removes the app shell (logout, E5.7).
+     *
+     * <p>Dropping the reference is what makes the next navigation render
+     * full-bleed again, and — with {@code ScreenFactory.evictAll()} — what
+     * guarantees the previous user's rail, avatar and toasts cannot reappear
+     * behind the login screen. The scene root is not touched here: the navigation
+     * to Login that follows replaces it anyway, and clearing it first would flash
+     * an empty window.
+     */
+    public void clearShell() {
+        this.shell = null;
     }
 
     /** @return the app shell, or {@code null} before login. */

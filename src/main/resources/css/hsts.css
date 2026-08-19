@@ -840,3 +840,67 @@
 .radio-button:selected .radio .dot { -fx-background-color: -hsts-accent; }
 .check-box:selected .box { -fx-background-color: -hsts-accent; -fx-border-color: -hsts-accent; }
 .check-box:selected .box .mark { -fx-background-color: -hsts-on-accent; }
+
+/* =====================================================================
+   17. LOGIN BRAND PANEL  (E5.3 — the Login artboard's left half)
+
+   The panel is a full-bleed accent surface, so every piece of text on it
+   is -hsts-on-accent (white in light mode, near-black in dark) rather
+   than -hsts-text. Opacity, not a second colour token, carries the
+   hierarchy — that keeps the panel correct in all five palettes.
+   ===================================================================== */
+
+.hsts-brand-panel { -fx-background-color: -hsts-accent; }
+
+.hsts-brand-panel .brand-title {
+    -fx-font-size: 34px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-on-accent;
+}
+.hsts-brand-panel .brand-subtitle {
+    -fx-font-size: 15px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.86;
+}
+.hsts-brand-panel .brand-tagline {
+    -fx-font-size: 17px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.94;
+}
+.hsts-brand-panel .brand-bullet {
+    -fx-font-size: 14px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.90;
+}
+.hsts-brand-panel .brand-bullet-icon {
+    -fx-fill: -hsts-on-accent;
+    -fx-opacity: 0.90;
+}
+.hsts-brand-panel .brand-footnote {
+    -fx-font-size: 12px;
+    -fx-text-fill: -hsts-on-accent;
+    -fx-opacity: 0.70;
+}
+
+/* =====================================================================
+   18. DASHBOARD STAT CARDS  (E5.6)
+
+   The em dash a stat shows before its feature exists is styled as a
+   value, not as an error: it is a real "nothing to count yet".
+   ===================================================================== */
+
+.hsts-stat-card { -fx-padding: 14px 16px; -fx-spacing: 2px; }
+.hsts-stat-card .stat-label { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+.hsts-stat-card .stat-value {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-text;
+}
+.hsts-stat-card .stat-hint { -fx-font-size: 11px; -fx-text-fill: -hsts-faint; }
+
+/* Rail items whose screen arrives in a later epic: visibly not clickable,
+   but still hover-sensitive so the tooltip can explain why (E5.4). */
+.hsts-rail .nav-item.disabled { -fx-opacity: 0.45; -fx-cursor: default; }
+.hsts-rail .nav-item.disabled:hover { -fx-background-color: transparent; }
+.hsts-rail .nav-item.disabled:hover .nav-label { -fx-text-fill: -hsts-muted; }
+.hsts-rail .nav-item.disabled:hover .nav-icon  { -fx-fill: -hsts-muted; }

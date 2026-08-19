@@ -86,6 +86,12 @@ class ProtocolLoopbackTest {
         client.setServerMessageHandler(dispatcher::dispatchIncoming);
         client.setConnectionLostHandler(dispatcher::failAllPending);
         client.connect();
+
+        // Since E5 the question verbs require a session (they moved from
+        // registerOpen to register), so this socket gets one before the flows
+        // below run. Authentication itself is covered by LoginIntegrationTest;
+        // here the point is still the protocol round trip.
+        sessions.attach(STUDENT_ID, Role.STUDENT, awaitServerSideConnection());
     }
 
     @AfterEach

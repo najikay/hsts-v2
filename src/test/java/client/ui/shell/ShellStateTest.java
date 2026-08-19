@@ -68,6 +68,34 @@ class ShellStateTest {
         }
 
         @Test
+        void anItemIsEnabledUnlessItSaysOtherwise() {
+            NavItem soon = NavItem.disabled("exams", "Exams", Icons.EXAMS, "Arrives with E7");
+
+            assertThat(HOME.enabled()).isTrue();
+            assertThat(HOME.tooltip()).isEmpty();
+            assertThat(soon.enabled()).isFalse();
+            assertThat(soon.tooltip()).isEqualTo("Arrives with E7");
+        }
+
+        @Test
+        void aDisabledItemKeepsItsReasonThroughEveryCopy() {
+            NavItem soon = NavItem.disabled("exams", "Exams", Icons.EXAMS, "Arrives with E7");
+
+            assertThat(soon.withBadge(2).enabled()).isFalse();
+            assertThat(soon.withBadge(2).tooltip()).isEqualTo("Arrives with E7");
+            assertThat(soon.withDot().tooltip()).isEqualTo("Arrives with E7");
+        }
+
+        @Test
+        void tooltipFallsBackToTheLabelSoACollapsedRailIsStillReadable() {
+            assertThat(HOME.tooltipText()).isEqualTo("Dashboard");
+            assertThat(HOME.withTooltip("Your day at a glance").tooltipText())
+                    .isEqualTo("Your day at a glance");
+            assertThat(HOME.withTooltip(null).tooltipText()).isEqualTo("Dashboard");
+            assertThat(HOME.withTooltip("Anything").enabled()).isTrue();
+        }
+
+        @Test
         void rejectsUnusableItems() {
             assertThatIllegalArgumentException().isThrownBy(() -> NavItem.of("  ", "L", "i"));
             assertThatIllegalArgumentException().isThrownBy(() -> NavItem.of("r", "  ", "i"));

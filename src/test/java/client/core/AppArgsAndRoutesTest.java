@@ -169,10 +169,13 @@ class AppArgsAndRoutesTest {
     class Table {
 
         @Test
-        void declaresTheE4Routes() {
+        void declaresEveryRouteThisBuildHas() {
+            // E5 added Login and the four role dashboards; per-role registration
+            // and the role→home mapping are covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
-                    .containsExactly("connect", "settings", "questions");
+                    .containsExactly("connect", "login", "home.teacher", "home.coordinator",
+                            "home.student", "home.principal", "settings", "questions");
         }
 
         @Test

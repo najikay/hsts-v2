@@ -273,9 +273,22 @@
                     <excludes>
                         <!-- vendored, never modified -->
                         <exclude>ocsf/**</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>client/features/**</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
+<!-- E5 feature screens: ONLY the thin FX view classes are excluded, listed one by
+                             one. Every feature LOGIC class IS measured and tested —
+                             connect/ConnectWiring, login/LoginSession, login/ShellBoot,
+                             home/HomeGreeting, home/StudentHomeSession. Note the classes are
+                             listed individually rather than as client/features/*/…View*: a
+                             single '*' in JaCoCo crosses path separators, so one wildcard here
+                             would silently un-instrument whole logic subpackages. -->
+                        <exclude>client/features/connect/ConnectView*</exclude>
+                        <exclude>client/features/login/LoginView*</exclude>
+                        <exclude>client/features/bank/QuestionsView*</exclude>
+                        <exclude>client/features/settings/SettingsView*</exclude>
+                        <exclude>client/features/home/DashboardPage*</exclude>
+                        <exclude>client/features/home/TeacherHomeView*</exclude>
+                        <exclude>client/features/home/CoordinatorHomeView*</exclude>
+                        <exclude>client/features/home/StudentHomeView*</exclude>
+                        <exclude>client/features/home/PrincipalHomeView*</exclude>
 <!-- E4 design system: only thin FX view classes are excluded; all UI *logic*
                              (theme/, anim/Motion, components/logic/, shell state) IS measured -->
                         <exclude>client/ui/components/Buttons*</exclude>

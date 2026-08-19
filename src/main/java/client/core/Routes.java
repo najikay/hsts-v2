@@ -1,6 +1,9 @@
 package client.core;
 
+import common.dto.auth.Role;
+
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The client's route table (Presentation tier, E4.2).
@@ -10,34 +13,82 @@ import java.util.List;
  * string literal, so a renamed route is a compile error instead of a runtime
  * "No route registered for id".
  *
- * <p>E4 ships the routes the design system itself needs; E5 onwards adds one
- * constant per screen from the PRD §4.2 inventory and registers a builder with
- * {@code ScreenFactory}. Nothing else has to change — that is the point of
- * keeping the table separate from the navigator.
+ * <p>The table splits in two at sign-in, which is the shape of the app's flow
+ * (F1.5 → F1.1 → F1.2):
+ * <ul>
+ *   <li>{@link #preLogin()} — Connect and Login. Registered at boot, full-bleed,
+ *       no shell exists yet.</li>
+ *   <li>everything else — registered once the role is known
+ *       ({@code client.features.home.SessionRoutes}), rendered inside the app
+ *       shell. A role only ever gets routes it has a screen for, so a student
+ *       cannot navigate to a teacher route even by accident.</li>
+ * </ul>
  */
 public final class Routes {
 
     /** Host/port entry, before any session exists (F1.5). Full-bleed, no shell. */
     public static final Route CONNECT = Route.standalone("connect", "Connect to server");
 
-    /** Theme mode + accent palette (E4.9). Rendered inside the shell when one exists. */
-    public static final Route SETTINGS = Route.standalone("settings", "Settings");
+    /** Username/password entry (F1.1). Full-bleed: the shell only exists after it. */
+    public static final Route LOGIN = Route.standalone("login", "Sign in");
+
+    /** Teacher dashboard (T-1). */
+    public static final Route HOME_TEACHER = Route.shell("home.teacher", "Teacher dashboard", "Dashboard");
+
+    /** Coordinator dashboard — a teacher's home plus the approval queue (T-1). */
+    public static final Route HOME_COORDINATOR =
+            Route.shell("home.coordinator", "Coordinator dashboard", "Dashboard");
+
+    /** Student dashboard (T-1). */
+    public static final Route HOME_STUDENT = Route.shell("home.student", "Student dashboard", "Dashboard");
+
+    /** Principal dashboard — read-only, school-wide (T-1, S-7). */
+    public static final Route HOME_PRINCIPAL =
+            Route.shell("home.principal", "Principal dashboard", "Dashboard");
+
+    /** Theme mode + accent palette (E4.9). Rendered inside the shell. */
+    public static final Route SETTINGS = Route.shell("settings", "Settings");
 
     /**
      * The E0 prototype question list, kept reachable so the app stays runnable
-     * end-to-end (connect → questions) while E6 rewrites the real bank screens.
+     * end-to-end while E6 rewrites the real bank screens. Teaching roles only.
      */
-    public static final Route QUESTIONS = Route.standalone("questions", "Question bank");
+    public static final Route QUESTIONS = Route.shell("questions", "Question bank");
 
     private Routes() {
     }
 
-    /** @return every route E4 defines, for bulk registration at startup. */
-    public static List<Route> all() {
-        return List.of(CONNECT, SETTINGS, QUESTIONS);
+    /**
+     * @param role the signed-in role
+     * @return the dashboard that role lands on after login (T-1)
+     */
+    public static Route home(Role role) {
+        Objects.requireNonNull(role, "role");
+        return switch (role) {
+            case TEACHER -> HOME_TEACHER;
+            case COORDINATOR -> HOME_COORDINATOR;
+            case STUDENT -> HOME_STUDENT;
+            case PRINCIPAL -> HOME_PRINCIPAL;
+        };
     }
 
-    /** Registers all E4 routes on a navigator. */
+    /** @return the routes reachable before a session exists. */
+    public static List<Route> preLogin() {
+        return List.of(CONNECT, LOGIN);
+    }
+
+    /** @return every route this build defines, for bulk registration and id checks. */
+    public static List<Route> all() {
+        return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
+                HOME_PRINCIPAL, SETTINGS, QUESTIONS);
+    }
+
+    /** Registers Connect and Login — everything the client needs at startup. */
+    public static void registerPreLogin(Navigator navigator) {
+        preLogin().forEach(navigator::register);
+    }
+
+    /** Registers every route on a navigator (tests, and any future single-shot boot). */
     public static void registerAll(Navigator navigator) {
         all().forEach(navigator::register);
     }

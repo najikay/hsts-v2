@@ -4,8 +4,18 @@ import client.core.AppArgs;
 import client.core.ClientApp;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.features.login.ShellBoot;
+import client.net.FakeClientConnection;
+import client.net.RequestDispatcher;
+import common.dto.auth.CourseRef;
+import common.dto.auth.LoginResult;
+import common.dto.auth.Role;
+import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,6 +24,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.testfx.framework.junit5.ApplicationTest;
 import org.testfx.util.WaitForAsyncUtils;
+
+import java.io.IOException;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -105,6 +118,106 @@ class UiSmokeTest extends ApplicationTest {
         assertThat(lookupOne(scene, ".hsts-chip")).isNotNull();
         assertThat(lookupOne(scene, ".hsts-countdown")).isNotNull();
         assertThat(lookupOne(scene, ".hsts-rail")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("the login screen renders once a connection exists (E5.3)")
+    void loginScreenRenders() {
+        Stage stage = launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+
+        interact(() -> {
+            attachFakeConnection(manager);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(stage.getTitle()).contains(Routes.LOGIN.title());
+        Scene scene = ScreenManager.getInstance().scene();
+        // The artboard: brand panel, two fields, a primary button and the
+        // connection chip that keeps "wrong password" apart from "no server".
+        assertThat(lookupOne(scene, ".hsts-brand-panel")).isNotNull();
+        assertThat(scene.getRoot().lookupAll(".hsts-field")).hasSize(2);
+        assertThat(lookupOne(scene, ".button.primary")).isNotNull();
+        assertThat(lookupOne(scene, ".hsts-chip")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("signing in installs the role's shell; signing out tears it down (E5.4/E5.7)")
+    void shellBootsAndTearsDown() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+        LoginResult dana = new LoginResult(1001, "dana.cohen", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")));
+
+        interact(() -> {
+            FakeClientConnection connection = attachFakeConnection(manager);
+            connection.replyOk(Verb.LOGIN, dana);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // Drive the real form, not ShellBoot directly: the point of this test is
+        // that connect → login → dashboard holds end to end.
+        signIn(manager.scene(), "dana.cohen", "demo123");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Scene scene = manager.scene();
+        assertThat(manager.shell()).isNotNull();
+        assertThat(manager.signedInUser()).isEqualTo(dana);
+        assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.HOME_TEACHER.id());
+        assertThat(lookupOne(scene, ".hsts-rail")).isNotNull();
+        // The dashboard rendered, and the not-yet-built rail items are visibly muted.
+        assertThat(lookupOne(scene, ".hsts-stat-card")).isNotNull();
+        assertThat(scene.getRoot().lookupAll(".nav-item.disabled")).isNotEmpty();
+
+        interact(() -> ShellBoot.logout(manager));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.shell()).isNull();
+        assertThat(manager.signedInUser()).isNull();
+        assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.LOGIN.id());
+        assertThat(manager.screens().builtCount())
+                .as("only the freshly rebuilt login screen survives a logout")
+                .isEqualTo(1);
+        assertThat(lookupOne(manager.scene(), ".hsts-brand-panel")).isNotNull();
+    }
+
+    /**
+     * Gives the manager a connected {@code FakeClientConnection} + dispatcher —
+     * everything the login screen and the logout verb need, without a server.
+     */
+    private FakeClientConnection attachFakeConnection(ScreenManager manager) {
+        FakeClientConnection connection = new FakeClientConnection("demo-server", 5555);
+        try {
+            connection.connect();
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+        connection.replyOk(Verb.LOGOUT, null);
+        RequestDispatcher dispatcher = new RequestDispatcher(connection);
+        connection.setServerMessageHandler(dispatcher::dispatchIncoming);
+        manager.setClient(connection);
+        manager.setDispatcher(dispatcher);
+        return connection;
+    }
+
+    /** Fills the login form and presses its primary button, as a user would. */
+    private void signIn(Scene scene, String username, String password) {
+        PasswordField passwordField = (PasswordField) scene.getRoot().lookup(".password-field");
+        TextField usernameField = scene.getRoot().lookupAll(".text-input").stream()
+                .filter(node -> node instanceof TextField && !(node instanceof PasswordField))
+                .map(TextField.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no username field on the login screen"));
+        Button signIn = (Button) scene.getRoot().lookup(".button.primary");
+
+        interact(() -> {
+            usernameField.setText(username);
+            passwordField.setText(password);
+        });
+        assertThat(signIn.isDisabled()).as("the button enables once both fields are filled").isFalse();
+        interact(signIn::fire);
     }
 
     /** Starts {@link ClientApp} on the FX thread with the given switches. */
