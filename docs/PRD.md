@@ -49,7 +49,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 ### F4 — Exam approval
 - **F4.1** [T-4.1] Coordinator sees a pending-approval queue for her subject; opens a **full read-only preview of the exam exactly as a student will see it** (this was a v1 failure) + metadata + teacher-only notes.
 - **F4.2** [T-4.2] Reject requires a reason; reason is stored and pushed to the authoring teacher as a notification + visible on the exam. Approve → status APPROVED for that version, teacher notified.
-- **F4.3** [X] A coordinator does not approve her own exams? — Not required by spec; allowed, but logged. (Keep simple; note in defense.)
+- **F4.3** [X] A coordinator MAY approve her own exams — allowed, but the approval log records self-approval (owner: E8, ApprovalService logs it; acceptance case 4.6). Dual-hat coordinator gets no special UX or demo time (non-goal, lead decision 2026-08-19): the coordinator rail is simply the teacher rail + Approvals.
 
 ### F5 — Release ("out of the drawer")
 - **F5.1** [T-5.1, S-14] Only an APPROVED exam **version** can be released. Same exam releasable many times (S-2).
@@ -80,7 +80,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F8.2** [T-8.2] Teacher reviews per-student results, approves grades (bulk approve + per-student), may add comments to the student (S-22).
 - **F8.3** [T-8.3, S-23] Manual grade change **requires** a justification; original auto grade + change + reason are all stored (audit trail).
 - **F8.4** [S-24, C-3] Only after approval does the student see: grade + her checked form with wrong answers marked + teacher comments. Push notification "Your grade for X is available".
-- **F8.5** [S-25/26] On grading completion, statistics per execution are computed and stored: average, median, **standard deviation**, min/max, pass rate, decile distribution 0–100. Never visible to students.
+- **F8.5** [S-25/26] On grading completion, statistics per execution are computed and stored: average, median, **standard deviation (POPULATION σ, divisor n — the execution's participants ARE the whole population, and the seed's frozen values use it)**, min/max, pass rate, decile distribution 0–100. Never visible to students.
 
 ### F9 — Results, data & reports
 - **F9.1** [T-9] Student: list of her exams with grades; opening one shows the checked form (F8.4); copy obtainable (S-36 — export/print to PDF-style view). She can never access others' grades (server-enforced).
@@ -153,6 +153,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **Component library (reused everywhere, built once):** app shell (top navbar + collapsible side rail), page header with breadcrumbs, data table (sort/filter/empty-state), search field, form field w/ inline validation, primary/secondary/danger buttons, status chips, modal + WarnConfirm dialog (warning icon, explanation, explicit confirm — for legal-but-unusual actions: submitting with unanswered questions, closing a live exam early, deleting), toast stack, notification bell + panel, skeleton loaders, progress overlay, empty-state with illustration, avatar + role badge, countdown timer widget, **StatChart** — our custom-styled histogram/statistics component (score buckets, mean/median/±σ overlays, tooltips, count/% toggle, theme-aware, animated) used by teacher results and reports.
 - **Animations (subtle, fast, consistent):** screen transitions (fade/slide 150–200ms), list item entrance stagger, button hover/press scale, toast slide-in, bell badge pop, timer pulse when low, skeleton shimmer. Utility class `Animations` wraps JavaFX transitions; AnimateFX allowed for entrances. Rule: nothing longer than 250ms, everything interruptible.
 - **Illustrations:** curated unDraw set (free, recolorable to accent) exported as PNG @2x for: login, empty states, course cards, bot mascot, success screens. No Lottie (no mature JavaFX runtime) — native animation + illustrations achieve the effect reliably.
+- **UI copy rules:** no em dashes anywhere in user-visible text (labels, hints, errors, titles) because they read unnatural in an app. Use a period, a comma, or a middle dot separator ("HSTS · Settings") instead. Sentence case, plain language, and every error message says what the user can do next.
 - **Responsive:** layouts verified at 1280×720, 1600×900, 1920×1080; side rail collapses to icons below 1400px width.
 
 ### 4.2 Screen inventory (all FXML + controller + session class)
@@ -164,7 +165,7 @@ Home dashboards are role-specific with live cards (upcoming executions, pending 
 
 ## 5. Seed dataset (NFR-17) — "well-filled, not overstuffed"
 - 2 subjects (Mathematics=10, Computer Science=20), 4 courses (Algebra 11, Calculus 12, Java Programming 21, Databases 22).
-- Users: 1 principal, 5 teachers (one per course + one co-teacher on Java; 2 of them coordinators), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
+- Users: 1 principal, 5 teachers (dana.cohen teaches Algebra 11 AND Calculus 12; Calculus and Java each also have a co-teacher; 2 teachers are coordinators — mirrors docs/DEMO_ACCOUNTS.md exactly, which is authoritative for the roster), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
 - ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions. **One deliberately thin topic** (e.g. "Recursion" in Java: 2 questions, no Hard ones) so the auto-generation infeasibility report (F3.3) can be demoed live without touching the DB.
 - 6 exams in mixed states (draft / pending / rejected-with-reason / approved), 4 executions (one closed & fully graded with stats, one closed awaiting grading, one scheduled for "today" for the live demo, one live).
 - Grades + stats for the closed execution (a realistic distribution so the histogram looks good), 2 bot sources per course with real content, ~8 recorded bot sessions, seeded notifications.
@@ -181,8 +182,8 @@ Every item must have a **server answer** (correct behavior, enforced) and a **UI
 **Approval:** reject without reason → blocked · exam edited (new version) while pending → old version's request invalidated & coordinator sees notice.
 **Release/take:** release unapproved version → impossible (not listed) · open ≥ close → validation · student enters wrong code / before open / after close → distinct messages · wrong ID → rejected · double attempt → "already submitted" · client killed mid-exam → reconnect resumes with server time · time expires with client offline → server force-submits anyway · answer arriving after expiry → rejected server-side · two students answering simultaneously → isolated attempts.
 **Extension:** extend by 0/negative → validation · extension lands while a student has 10s left → timer grows live · extension after close → blocked.
-**Grading:** grade change without justification → blocked · approve twice → idempotent · student polls another student's grade id → authorization error.
-**Reports:** empty execution (no participants) → stats N/A, UI empty-state · single-student execution → median==avg handled.
+**Grading:** grade change without justification → blocked · approve twice → idempotent · student polls another student's grade id → authorization error · **auto-grading always checks against the exam's PINNED question version, never the latest** (constrains E6/E7 too) · **σ is population (divisor n) everywhere** — a sample-σ recomputation reading ~1 point high is a bug.
+**Reports:** empty execution (no participants) → stats N/A, UI empty-state · single-student execution → median==avg handled · **CANCELLED executions are excluded from the report corpus** (constrains E9).
 **Bot:** student not enrolled → blocked · bot inactive → message · student mid-exam opens same course's bot → lockout message with unlock time · student mid-exam opens another course's bot → integrity notice, on proceed teacher notified + monitor row flagged (verify notification actually arrives live) · DeepSeek down → Anthropic silently takes over (logged) · both down → S-32 message · source PDF unparsable → upload error · prompt injection in a source document → bot declines to obey it · student asks "what's on tomorrow's exam" → bot has no exam data, by construction.
 **Server:** DB down at start → console error state, not a crash · client flood of malformed messages → rejected + logged, connection survives · restart server → clients show reconnect banner and recover.
 **Discovery:** broadcast-blocked network (client isolation) → fast "nothing found" + manual entry works · spoofed reply with wrong fingerprint vs pinned → prominent warning, connect requires explicit confirm · fingerprint changed after server reinstall → same warning path (legit case, explained in dialog) · malformed/flood discovery packets → ignored + logged, responder survives · discovery toggled off on console → clients fall back to manual cleanly.

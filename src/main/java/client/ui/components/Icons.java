@@ -91,7 +91,7 @@ public final class Icons {
             icon.setIconSize(size);
             node = icon;
         } catch (RuntimeException e) {
-            log.warn("Unknown icon literal '{}' — rendering a blank placeholder", literal);
+            log.warn("Unknown icon literal '{}' - rendering a blank placeholder", literal);
             node = placeholder(size);
         }
         if (styleClass != null) {

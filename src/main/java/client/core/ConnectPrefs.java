@@ -120,7 +120,7 @@ public final class ConnectPrefs {
             return Optional.of("Address cannot contain spaces");
         }
         if (host.contains(":")) {
-            return Optional.of("Enter the address only — the port goes in the next field");
+            return Optional.of("Enter the address only. The port goes in the next field");
         }
         return Optional.empty();
     }
@@ -170,7 +170,7 @@ public final class ConnectPrefs {
             return ServerEndpoint.LOCALHOST;
         }
         if (!isValid(configured.host(), Integer.toString(configured.port()))) {
-            log.warn("client.properties endpoint {}:{} is unusable — falling back to {}",
+            log.warn("client.properties endpoint {}:{} is unusable, falling back to {}",
                     configured.host(), configured.port(), ServerEndpoint.LOCALHOST.display());
             return ServerEndpoint.LOCALHOST;
         }

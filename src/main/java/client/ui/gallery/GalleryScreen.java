@@ -171,7 +171,7 @@ public final class GalleryScreen extends AbstractScreen {
 
         return new VBox(12,
                 caption("Exam version (F3.6)"), exam,
-                caption("Execution (F5.4) — LIVE pulses"), execution,
+                caption("Execution (F5.4) · LIVE pulses"), execution,
                 caption("Attempt (F6)"), attempt,
                 caption("Grade (F8)"), grade,
                 caption("Difficulty, and an unknown server state"), difficulty);
@@ -213,7 +213,7 @@ public final class GalleryScreen extends AbstractScreen {
         invalid.textField().setText("99999");
         invalid.apply(ValidationState.invalid("Port must be between 1 and 65535"));
         FormField required = FormField.text("Execution code", "4 characters").required();
-        required.hint("Your teacher reads this out — it is never shown in the app.");
+        required.hint("Your teacher reads this out. It is never shown in the app.");
 
         HBox row = new HBox(16, pristine, valid, invalid, required);
         row.setAlignment(Pos.TOP_LEFT);
@@ -279,9 +279,9 @@ public final class GalleryScreen extends AbstractScreen {
         table.column("Status", DemoRow::status);
         table.column("Updated", DemoRow::updated);
         table.setItems(List.of(
-                new DemoRow("4821", "Algebra — midterm", "LIVE", "2 minutes ago"),
-                new DemoRow("7C3A", "Calculus — quiz 3", "SCHEDULED", "yesterday"),
-                new DemoRow("1190", "Java — final", "CLOSED", "3 days ago")));
+                new DemoRow("4821", "Algebra · midterm", "LIVE", "2 minutes ago"),
+                new DemoRow("7C3A", "Calculus · quiz 3", "SCHEDULED", "yesterday"),
+                new DemoRow("1190", "Java · final", "CLOSED", "3 days ago")));
         table.setPrefHeight(240);
 
         DataTable<DemoRow> loading = new DataTable<>();
@@ -382,7 +382,7 @@ public final class GalleryScreen extends AbstractScreen {
         Button warn = Buttons.warn("WarnConfirm (warn)");
         warn.setOnAction(e -> WarnConfirm.show(warn.getScene().getWindow(),
                 WarnConfirm.spec("Submit with 3 unanswered questions?")
-                        .explanation("Unanswered questions score 0. You have 12:04 left — you can keep working.")
+                        .explanation("Unanswered questions score 0. You have 12:04 left, so you can keep working.")
                         .confirmText("Submit anyway")
                         .cancelText("Keep working")
                         .warn()));
@@ -433,13 +433,13 @@ public final class GalleryScreen extends AbstractScreen {
 
     private Node typographySection() {
         VBox text = new VBox(6,
-                styledLabel("Heading 1 — page titles", "h1"),
-                styledLabel("Heading 2 — card titles", "h2"),
-                styledLabel("Heading 3 — section titles", "h3"),
-                styledLabel("Body — the default reading size", "body"),
-                styledLabel("Muted — secondary metadata", "muted"),
-                styledLabel("Faint — timestamps and hints", "faint"),
-                styledLabel("Mono — codes and IDs: 4821 · #21014", "mono"));
+                styledLabel("Heading 1 · page titles", "h1"),
+                styledLabel("Heading 2 · card titles", "h2"),
+                styledLabel("Heading 3 · section titles", "h3"),
+                styledLabel("Body · the default reading size", "body"),
+                styledLabel("Muted · secondary metadata", "muted"),
+                styledLabel("Faint · timestamps and hints", "faint"),
+                styledLabel("Mono · codes and IDs: 4821 · #21014", "mono"));
 
         VBox card = new VBox(8, styledLabel("Card", "h3"),
                 styledLabel("Default surface with a 1px border and 12px radius.", "muted"));

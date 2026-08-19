@@ -39,7 +39,7 @@ public final class ServerConfig {
     }
 
     /**
-     * Resolution core, with both sources injected — visible for testing so the
+     * Resolution core, with both sources injected - visible for testing so the
      * external-file / classpath / defaults branches can each be exercised.
      *
      * @param external          candidate external file (may be {@code null} or absent)
@@ -52,7 +52,7 @@ public final class ServerConfig {
             loadFromFile(props, external);
             System.out.println("[ServerConfig] Loaded " + CONFIG_FILE + " from " + external.toAbsolutePath());
         } else if (!loadFromClasspath(props, classpathResource)) {
-            System.out.println("[ServerConfig] No " + CONFIG_FILE + " found — using default credentials");
+            System.out.println("[ServerConfig] No " + CONFIG_FILE + " found - using default credentials");
         }
 
         String user = props.getProperty(KEY_USER, DEFAULT_USER).trim();

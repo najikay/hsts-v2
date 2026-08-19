@@ -55,7 +55,7 @@ public class AuthService {
     public static final String GENERIC_FAILURE = "Incorrect username or password.";
 
     /** Shown when the account is locked and the credentials were right (F1.1). */
-    public static final String THROTTLED_FAILURE = "Too many attempts — try again shortly.";
+    public static final String THROTTLED_FAILURE = "Too many attempts. Try again shortly.";
 
     /** Exact F1.3 wording for a second concurrent session. */
     public static final String ALREADY_SIGNED_IN = "This account is already signed in elsewhere.";
@@ -143,7 +143,7 @@ public class AuthService {
         // the throttle would confirm the very guess it exists to slow down. The
         // sentence is still truthful for the account's real owner.
         if (throttle.isLocked(name)) {
-            log.warn("Refused login for '{}' — locked out for another {}", name,
+            log.warn("Refused login for '{}', locked out for another {}", name,
                     throttle.remainingLockout(name).orElse(java.time.Duration.ZERO));
             return Outcome.failure(ErrorCode.UNAUTHORIZED, THROTTLED_FAILURE);
         }
@@ -161,7 +161,7 @@ public class AuthService {
 
         UserRecord user = found.orElseThrow();
         if (!sessions.attach(user.id(), user.role(), connection)) {
-            log.warn("Refused login for '{}' — already signed in elsewhere (T-16)", name);
+            log.warn("Refused login for '{}', already signed in elsewhere (T-16)", name);
             return Outcome.failure(ErrorCode.CONFLICT, ALREADY_SIGNED_IN);
         }
 

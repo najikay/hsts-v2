@@ -166,7 +166,7 @@ class ConnectPrefsTest {
         @Test
         void explainsThatThePortBelongsInItsOwnField() {
             assertThat(ConnectPrefs.validateHost("192.168.1.42:5555"))
-                    .contains("Enter the address only — the port goes in the next field");
+                    .contains("Enter the address only. The port goes in the next field");
         }
     }
 

@@ -66,7 +66,7 @@ public final class StudentHomeView extends AbstractScreen {
                                 "From your enrolments",
                                 Integer.toString(DashboardPage.currentCourses().size()))),
                 DashboardPage.coursesCard("Your courses",
-                        "You are enrolled in these — each one has a study bot.",
+                        "You are enrolled in these. Each course has a study bot.",
                         DashboardPage.currentCourses(),
                         "You are not enrolled in any course yet."),
                 DashboardPage.card("Recent grades",

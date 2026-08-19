@@ -45,7 +45,7 @@ public final class ThemeControls {
 
         ToggleGroup toggles = new ToggleGroup();
         for (ThemeMode mode : ThemeMode.values()) {
-            ToggleButton button = new ToggleButton(mode.displayName());
+            ToggleButton button = new ToggleButton(segmentText(mode, state));
             button.setToggleGroup(toggles);
             button.setUserData(mode);
             button.setSelected(state.mode() == mode);
@@ -62,9 +62,22 @@ public final class ThemeControls {
             for (Node node : group.getChildren()) {
                 ToggleButton button = (ToggleButton) node;
                 button.setSelected(button.getUserData() == event.mode());
+                button.setText(segmentText((ThemeMode) button.getUserData(), state));
             }
         });
         return group;
+    }
+
+    /**
+     * The System segment says what it currently resolves to: on a machine whose
+     * OS is in light mode, "System" and "Light" look identical on screen, and
+     * without the caption that reads as a broken control rather than a correct one.
+     */
+    private static String segmentText(ThemeMode mode, ThemeState state) {
+        if (mode != ThemeMode.SYSTEM) {
+            return mode.displayName();
+        }
+        return "System (" + (state.systemIsDark() ? "Dark" : "Light") + ")";
     }
 
     /**

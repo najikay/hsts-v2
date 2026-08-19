@@ -39,7 +39,7 @@ public final class PrincipalHomeView extends AbstractScreen {
                 DashboardPage.card("What you can see",
                         "School-wide, read-only access (S-7).",
                         new EmptyState(Icons.BANK, "Browsing arrives with E15",
-                                "Question bank, exams and results — all of them read-only. "
+                                "Question bank, exams and results, all of them read-only. "
                                         + "No screen in this role can change data.")));
     }
 

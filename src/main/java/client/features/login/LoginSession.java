@@ -59,7 +59,7 @@ public final class LoginSession {
 
     /** Shown when the request never reached the server (socket dropped, timeout). */
     public static final String OFFLINE_ERROR =
-            "Could not reach the server — check your connection and try again.";
+            "Could not reach the server. Check your connection and try again.";
 
     /** Shown when the server answered something this client cannot use. */
     public static final String UNEXPECTED_ERROR = "Sign-in failed. Please try again.";

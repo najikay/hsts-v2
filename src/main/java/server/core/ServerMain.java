@@ -27,7 +27,7 @@ public class ServerMain {
 
         HSTSServer server = new HSTSServer(port);
         try {
-            // E2.1: the schema is Flyway-managed — migrate BEFORE accepting clients.
+            // E2.1: the schema is Flyway-managed - migrate BEFORE accepting clients.
             // A pre-E2 hsts_db (legacy prototype `Questions` table) must be dropped
             // and recreated empty once; see docs/PROBLEMS.md / E2 PR1 findings.
             DbBootstrap.migrate();
@@ -35,7 +35,7 @@ public class ServerMain {
             System.out.println("==================================================");
             System.out.println(" HSTS Fat Server is UP on port " + port);
             System.out.println(" Acting as the SECURE GATEKEEPER for all DB access.");
-            System.out.println(" Clients never touch MySQL directly — every request");
+            System.out.println(" Clients never touch MySQL directly - every request");
             System.out.println(" is routed and validated here.");
             System.out.println("==================================================");
         } catch (IOException e) {

@@ -39,7 +39,7 @@ public class MessageRouter {
     public static final String GENERIC_INTERNAL_MESSAGE =
             "Something went wrong on the server. Please try again.";
 
-    /** A unit of server work: pure in, pure out — no sockets, no OCSF. */
+    /** A unit of server work: pure in, pure out - no sockets, no OCSF. */
     @FunctionalInterface
     public interface Handler {
         Message handle(CallerContext caller, Message request) throws Exception;
@@ -63,7 +63,7 @@ public class MessageRouter {
     /**
      * Registers a handler reachable without a session.
      *
-     * <p>Since E5 the only such verb is {@code LOGIN} — it is by definition how a
+     * <p>Since E5 the only such verb is {@code LOGIN} - it is by definition how a
      * connection stops being anonymous. Every other verb, the legacy question-bank
      * pair included, goes through {@link #register} and is refused with
      * {@code UNAUTHORIZED} until a session exists.
@@ -143,7 +143,7 @@ public class MessageRouter {
         }
 
         if (!openVerbs.contains(verb) && !caller.isAuthenticated()) {
-            log.warn("Rejected {} — no authenticated session on the connection", verb);
+            log.warn("Rejected {} - no authenticated session on the connection", verb);
             return Message.error(request, ErrorCode.UNAUTHORIZED, "You must be signed in to do that.");
         }
 
@@ -166,7 +166,7 @@ public class MessageRouter {
         }
     }
 
-    /** Identity comes from the session bound to the socket — nothing else. */
+    /** Identity comes from the session bound to the socket - nothing else. */
     private CallerContext callerFor(ConnectionToClient connection) {
         return sessions.sessionOf(connection)
                 .map(session -> CallerContext.authenticated(connection, session.userId(), session.role()))

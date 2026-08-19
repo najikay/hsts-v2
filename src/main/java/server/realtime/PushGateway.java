@@ -48,7 +48,7 @@ public class PushGateway {
         warnIfNotAPushVerb(verb);
         Optional<ConnectionToClient> connection = sessions.connectionOf(userId);
         if (connection.isEmpty()) {
-            log.debug("Skipping {} for user {} — offline", verb, userId);
+            log.debug("Skipping {} for user {} - offline", verb, userId);
             return false;
         }
         return write(connection.get(), userId, Message.push(verb, payload));
@@ -97,7 +97,7 @@ public class PushGateway {
 
     private static void warnIfNotAPushVerb(Verb verb) {
         if (!verb.isPush()) {
-            log.warn("Pushing non-push verb {} — check the caller", verb);
+            log.warn("Pushing non-push verb {} - check the caller", verb);
         }
     }
 }

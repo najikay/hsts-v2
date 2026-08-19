@@ -32,7 +32,7 @@ public final class TeacherHomeView extends AbstractScreen {
                         DashboardPage.statCard("Live now", "Arrives with E9"),
                         DashboardPage.statCard("Awaiting grading", "Arrives with E12")),
                 DashboardPage.coursesCard("Your courses",
-                        "The courses you teach — questions and exams you author belong to these.",
+                        "The courses you teach. Questions and exams you author belong to these.",
                         DashboardPage.currentCourses(),
                         "No courses are assigned to you yet."),
                 DashboardPage.card("Recent activity",

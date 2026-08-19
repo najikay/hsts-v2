@@ -217,7 +217,7 @@ public final class CountdownLogic {
 
     private void requireStarted() {
         if (endsAt == null) {
-            throw new IllegalStateException("Countdown has no deadline — call syncTo/startFor first");
+            throw new IllegalStateException("Countdown has no deadline; call syncTo/startFor first");
         }
     }
 }

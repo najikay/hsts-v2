@@ -39,7 +39,7 @@ import java.util.List;
 public final class DashboardPage {
 
     /** The value shown by a stat whose feature has not landed. */
-    public static final String NO_VALUE = "—";
+    public static final String NO_VALUE = "–";
 
     private DashboardPage() {
     }

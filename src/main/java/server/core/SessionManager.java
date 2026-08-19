@@ -81,12 +81,12 @@ public class SessionManager {
                 if (existing == connection) {
                     return true;
                 }
-                log.warn("Rejected duplicate login for user {} — already attached to {}", userId, existing);
+                log.warn("Rejected duplicate login for user {} - already attached to {}", userId, existing);
                 return false;
             }
             Session onThisConnection = sessionByConnection.get(connection);
             if (onThisConnection != null) {
-                log.warn("Rejected attach of user {} — connection already bound to user {}",
+                log.warn("Rejected attach of user {} - connection already bound to user {}",
                         userId, onThisConnection.userId());
                 return false;
             }

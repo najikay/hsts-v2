@@ -55,7 +55,7 @@ public final class DbBootstrap {
     private static final int MIGRATION_POOL_SIZE = 2;
 
     private DbBootstrap() {
-        // utility class — no instances
+        // utility class - no instances
     }
 
     /**
@@ -111,7 +111,7 @@ public final class DbBootstrap {
     }
 
     /**
-     * Migrates whatever database the given source points at — the seam tests use to
+     * Migrates whatever database the given source points at - the seam tests use to
      * run against a throwaway schema instead of the real one.
      *
      * @param dataSource the database to migrate; not closed by this method
@@ -123,7 +123,7 @@ public final class DbBootstrap {
             // Flyway leaves targetSchemaVersion null when it had nothing to do.
             log.info("Database schema already up to date");
         } else {
-            log.info("Applied {} migration(s) — schema now at version {}",
+            log.info("Applied {} migration(s) - schema now at version {}",
                     result.migrationsExecuted, result.targetSchemaVersion);
         }
         return result;

@@ -89,7 +89,7 @@ public final class ScreenManager {
         this.themeManager = Objects.requireNonNull(themeManager, "themeManager");
         this.lifecycle = new ScreenLifecycle(eventBus);
 
-        primaryStage.setTitle("HSTS — High School Test System");
+        primaryStage.setTitle("HSTS · High School Test System");
         primaryStage.setMinWidth(1024);
         primaryStage.setMinHeight(680);
         try {
@@ -214,7 +214,7 @@ public final class ScreenManager {
             setRoot(view);
             Animations.fadeIn(view, Motion.BASE_MS);
         }
-        primaryStage.setTitle("HSTS — " + target.route().title());
+        primaryStage.setTitle("HSTS · " + target.route().title());
         log.debug("navigated {} → {}", event.previous().map(NavEntry::routeId).orElse("(none)"),
                 target.routeId());
     }

@@ -83,7 +83,7 @@ public final class FilePropertiesStore implements PropertiesStore {
                 Files.createDirectories(parent);
             }
             try (OutputStream out = Files.newOutputStream(file)) {
-                properties.store(out, "HSTS client preferences — managed by the app, safe to delete");
+                properties.store(out, "HSTS client preferences - managed by the app, safe to delete");
             }
         } catch (IOException e) {
             log.warn("Could not write preferences file {}: {}", file, e.getMessage());

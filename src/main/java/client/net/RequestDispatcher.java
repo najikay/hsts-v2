@@ -125,7 +125,7 @@ public class RequestDispatcher {
     private void timeOut(Verb verb, String requestId, Duration waited) {
         CompletableFuture<Message> future = pending.remove(requestId);
         if (future == null) {
-            return; // already answered — the common case
+            return; // already answered - the common case
         }
         log.warn("Timeout after {} ms waiting for {} (requestId={})", waited.toMillis(), verb, requestId);
         future.completeExceptionally(new RequestTimeoutException(verb, requestId, waited));
@@ -150,7 +150,7 @@ public class RequestDispatcher {
         CompletableFuture<Message> future = id == null ? null : pending.remove(id);
         if (future == null) {
             // A late answer to a timed-out request, a duplicate, or a response to
-            // something we never sent. All harmless — say so and move on.
+            // something we never sent. All harmless - say so and move on.
             log.warn("Dropping unmatched response {} (requestId={})", message.getVerb(), id);
             return;
         }
@@ -161,7 +161,7 @@ public class RequestDispatcher {
     private void deliverPush(Message push) {
         PushListener listener = this.pushListener;
         if (listener == null) {
-            log.warn("Dropping push {} — no listener registered", push.getVerb());
+            log.warn("Dropping push {} - no listener registered", push.getVerb());
             return;
         }
         try {
@@ -175,7 +175,7 @@ public class RequestDispatcher {
     // ===================== Lifecycle =====================================
 
     /**
-     * Fails every in-flight request — called when the socket drops so screens
+     * Fails every in-flight request - called when the socket drops so screens
      * get an error instead of a future that can never complete.
      *
      * @return how many pending requests were failed

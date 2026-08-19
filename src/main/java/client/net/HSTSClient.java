@@ -74,7 +74,7 @@ public class HSTSClient extends AbstractClient implements IClientConnection {
         }
         Consumer<Message> handler = this.serverMessageHandler;
         if (handler == null) {
-            log.warn("Dropping {} — no message handler registered yet", message.getVerb());
+            log.warn("Dropping {} - no message handler registered yet", message.getVerb());
             return;
         }
         handler.accept(message);

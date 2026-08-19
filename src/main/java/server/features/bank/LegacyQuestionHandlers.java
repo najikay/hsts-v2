@@ -64,12 +64,12 @@ public class LegacyQuestionHandlers {
         if (!(request.getPayload() instanceof Question question)) {
             log.warn("UPDATE_QUESTION with a {} payload", describe(request.getPayload()));
             return Message.error(request, ErrorCode.VALIDATION,
-                    "This update could not be read — please reopen the question and try again.");
+                    "This update could not be read. Please reopen the question and try again.");
         }
         if (!questionDAO.update(question)) {
             log.warn("UPDATE_QUESTION id={} matched no row", question.getId());
             return Message.error(request, ErrorCode.NOT_FOUND,
-                    "Question #" + question.getId() + " could not be updated — it may have been removed.");
+                    "Question #" + question.getId() + " could not be updated. It may have been removed.");
         }
         log.info("UPDATE_QUESTION id={} saved", question.getId());
         return Message.ok(request, new ArrayList<>(questionDAO.getAll()));

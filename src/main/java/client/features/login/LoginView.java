@@ -103,13 +103,13 @@ public final class LoginView extends AbstractScreen {
         full.getStyleClass().add("brand-subtitle");
 
         Label tagline = new Label(
-                "Build, approve, run and grade exams — with a study bot for every course.");
+                "Build, approve, run and grade exams, with a study bot for every course.");
         tagline.getStyleClass().add("brand-tagline");
         tagline.setWrapText(true);
         tagline.setMaxWidth(420);
 
         VBox bullets = new VBox(12,
-                bullet("One question bank, versioned — nothing is ever lost."),
+                bullet("One question bank, versioned. Nothing is ever lost."),
                 bullet("Timed executions the server owns, so a closed exam stays closed."),
                 bullet("Grades released only after the teacher approves them."));
 

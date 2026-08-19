@@ -197,7 +197,7 @@ public final class ConnectView extends AbstractScreen {
         Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                 ? failure.getCause() : failure;
         String detail = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        showError("Could not reach " + endpoint.display() + " — " + detail
+        showError("Could not reach " + endpoint.display() + ": " + detail
                 + ". Check the server is running and the address is right.");
         hostField.apply(ValidationState.invalid("Could not reach this address"));
     }

@@ -108,6 +108,15 @@ public final class ThemeState {
         return effectiveMode() == ThemeMode.DARK;
     }
 
+    /**
+     * What the OS said at the last probe, regardless of the selected mode — the
+     * settings screen uses it to caption the System option, so "System" and an
+     * identical-looking explicit mode never read as a bug.
+     */
+    public boolean systemIsDark() {
+        return systemIsDark;
+    }
+
     /** @return the accent emphasis colour currently in force. */
     public String accentColor() {
         return palette.accent(isDark());

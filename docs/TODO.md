@@ -152,7 +152,7 @@ Client:
 
 ## E8 — Approval workflow [A]
 
-- [ ] E8.1 ApprovalService: pending queue per coordinator's subject; approve/reject(reason required); state transitions guarded
+- [ ] E8.1 ApprovalService: pending queue per coordinator's subject; approve/reject(reason required); state transitions guarded; self-approval allowed but logged (F4.3, acceptance case 4.6)
 - [ ] E8.2 Invalidate pending request if a newer version is submitted; coordinator notified
 - [ ] E8.3 Approval queue screen (coordinator): list + badges, open preview
 - [ ] E8.4 **Exam preview screen: renders the exam exactly with the student form component (reuse E10 form, read-only) + teacher-only notes side panel** — fixes v1 "coordinator couldn't see the exam" ⚑
