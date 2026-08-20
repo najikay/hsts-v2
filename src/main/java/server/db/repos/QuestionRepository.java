@@ -5,6 +5,7 @@ import server.db.entities.Question;
 import server.db.entities.QuestionVersion;
 import server.db.projections.TakeExamQuestion;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -86,6 +87,40 @@ public final class QuestionRepository {
                 .setParameter("questionId", questionId)
                 .setParameter("versionNo", versionNo)
                 .uniqueResultOptional();
+    }
+
+    /**
+     * The question versions behind an attempt, <b>answer key included</b>, for scoring it.
+     *
+     * <p>The {@code ForGrading} suffix is the third sanctioned audience in
+     * {@code CorrectnessLeakGuardTest}: scoring an attempt is by definition comparing what the
+     * student chose against what is right, so this read carries the key and says so in its name.
+     * Nothing student-facing may call it — the key is consumed by {@code AutoGrader} and never
+     * returned; what reaches a student is either a score or, through {@code CHECKED_FORM_GET},
+     * their own marked paper under that verb's three conditions.
+     *
+     * <p>Takes the ids the exam version pinned rather than a question id, so a caller cannot
+     * accidentally grade against a newer version than the one sat (PRD §6).
+     *
+     * <p>Consumer: E12.1's auto-grading, via {@code server.features.grading.GradingReads}.
+     *
+     * @param session            the current session
+     * @param questionVersionIds the pinned version ids; an empty collection returns an empty list
+     * @return the matching versions, in no guaranteed order — the caller pairs them by id
+     */
+    public List<QuestionVersion> findVersionsForGrading(Session session,
+                                                        Collection<Long> questionVersionIds) {
+        if (questionVersionIds == null || questionVersionIds.isEmpty()) {
+            // An `in ()` with no values is a syntax error on some engines and a full scan on
+            // others; neither is what an empty exam should do.
+            return List.of();
+        }
+        return session.createQuery("""
+                        from QuestionVersion
+                        where id in (:ids)
+                        """, QuestionVersion.class)
+                .setParameter("ids", questionVersionIds)
+                .getResultList();
     }
 
     /**

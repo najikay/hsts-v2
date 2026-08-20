@@ -3,6 +3,7 @@ package server.db.repos;
 import org.hibernate.Session;
 import server.db.entities.Exam;
 import server.db.entities.ExamVersion;
+import server.db.entities.ExamVersionQuestion;
 import server.db.entities.ExamVersionStatus;
 
 import java.util.List;
@@ -56,6 +57,34 @@ public final class ExamRepository {
      * @param examId  the exam's internal id
      * @return pending versions, oldest first
      */
+    /**
+     * The questions an exam version pinned, in presentation order.
+     *
+     * <p>Returns the rows of {@code exam_version_questions} — the versions recorded when the exam
+     * was built, never the latest version of each question. That distinction is the whole point:
+     * grading an attempt against a question edited after release would silently rewrite past
+     * grades (PRD §6, C-2).
+     *
+     * <p>Carries points and question-version ids only, no answer key, so it needs no sanctioned
+     * suffix; the key comes separately from
+     * {@code QuestionRepository#findVersionsForGrading}.
+     *
+     * <p>Consumer: E12.1's auto-grading.
+     *
+     * @param session       the current session
+     * @param examVersionId the exam version
+     * @return the pinned questions ordered by {@code ordinal}
+     */
+    public List<ExamVersionQuestion> findPinnedQuestions(Session session, long examVersionId) {
+        return session.createQuery("""
+                        from ExamVersionQuestion
+                        where id.examVersionId = :examVersionId
+                        order by ordinal
+                        """, ExamVersionQuestion.class)
+                .setParameter("examVersionId", examVersionId)
+                .getResultList();
+    }
+
     public List<ExamVersion> findPendingVersions(Session session, long examId) {
         return session.createQuery("""
                         from ExamVersion

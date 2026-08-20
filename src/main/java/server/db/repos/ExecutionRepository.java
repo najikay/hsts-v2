@@ -28,6 +28,20 @@ public final class ExecutionRepository {
      * @param code    the 4-character code as typed
      * @return matching executions, newest first
      */
+    /**
+     * One execution by its id.
+     *
+     * <p>Consumer: E12.1's auto-grading, which needs the exam version an attempt was sat on —
+     * the pinned one, never the exam's latest (PRD §6).
+     *
+     * @param session     the current session
+     * @param executionId the execution
+     * @return the execution, or empty when no such row exists
+     */
+    public Optional<ExamExecution> findById(Session session, long executionId) {
+        return Optional.ofNullable(session.find(ExamExecution.class, executionId));
+    }
+
     public List<ExamExecution> findByCode(Session session, String code) {
         if (code == null || code.isBlank()) {
             return List.of();
