@@ -41,7 +41,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 
 | # | Scenario | Cases | Status |
 |---|---|---|---|
-| 1 | Login (כניסה למערכת) | 4 | ⬜ |
+| 1 | Login (כניסה למערכת) | 4 | ⚠ 2 partial, 2 blocked — B-1 |
 | 2 | Question bank editing (עריכת מאגר שאלות) | 8 | ⬜ |
 | 3 | Exam building (בניית מבחנים) | 9 | ⬜ |
 | 4 | Exam approval (אישור מבחן) | 6 | ⬜ |
@@ -72,10 +72,10 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 
 | # | Steps | Expected result | Actual | Status | Bugs found |
 |---|---|---|---|---|---|
-| 1.1 | Launch the client. On the connect screen, accept the pre-filled address (or enter host/port). Connect. Sign in as `dana.cohen` / `demo123`. | Connect screen appears **before** login, pre-filled from defaults. Login succeeds. | | ⬜ | |
-| 1.2 | Observe the shell after 1.1. | Teacher shell: navigation rail with Dashboard, Question Bank, Exams, Results, Study Bot, Settings. **No** Approvals item. Dashboard greets by name. | | ⬜ | |
-| 1.3 | Sign out. Sign in as `rina.barak`, then `maya.levi`, then `principal.avia`. | Each gets a different, role-appropriate menu: `rina.barak` = teacher rail **plus Approvals** — nothing more; the dual-hat coordinator is a teacher with one extra rail item, not a distinct shell; `maya.levi` = Dashboard / Take Exam / My Grades / Study Bot / Settings; `principal.avia` = Dashboard / Data / Reports / Settings with nothing mutating. | | ⬜ | |
-| 1.4 | Sign in as `maya.levi` with password `wrong`. Repeat 5 times, then try the correct password. | Each failure shows one generic message that does **not** reveal whether the username exists. After 5 failures the 6th attempt is refused for 30s even with the right password. | | ⬜ | |
+| 1.1 | Launch the client. On the connect screen, accept the pre-filled address (or enter host/port). Connect. Sign in as `dana.cohen` / `demo123`. | Connect screen appears **before** login, pre-filled from defaults. Login succeeds. | Connect half **passed**: the client connected and reached the server — `LOGIN handled` appears three times in the server log, so the connect screen, the address and the OCSF session all worked. Sign-in half **blocked**: the server authenticates against the `users` table (`RepositoryUserDirectory`) and the database has no users until the E2.15 seed loader lands. | ⚠ | B-1 |
+| 1.2 | Observe the shell after 1.1. | Teacher shell: navigation rail with Dashboard, Question Bank, Exams, Results, Study Bot, Settings. **No** Approvals item. Dashboard greets by name. | Not reached — depends on 1.1's sign-in. | ⛔ | |
+| 1.3 | Sign out. Sign in as `rina.barak`, then `maya.levi`, then `principal.avia`. | Each gets a different, role-appropriate menu: `rina.barak` = teacher rail **plus Approvals** — nothing more; the dual-hat coordinator is a teacher with one extra rail item, not a distinct shell; `maya.levi` = Dashboard / Take Exam / My Grades / Study Bot / Settings; `principal.avia` = Dashboard / Data / Reports / Settings with nothing mutating. | Not reached — depends on 1.1's sign-in. | ⛔ | |
+| 1.4 | Sign in as `maya.levi` with password `wrong`. Repeat 5 times, then try the correct password. | Each failure shows one generic message that does **not** reveal whether the username exists. After 5 failures the 6th attempt is refused for 30s even with the right password. | Partially evidenced: three failed attempts on `dana.cohen` produced one generic "incorrect username or password" each — indistinguishable from the no-such-user case, which is F1.1's requirement. The throttle itself was not driven to 5. Full run blocked with 1.1. | ⚠ | |
 
 ---
 
@@ -369,6 +369,23 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 | 21.6 | Resize the window to three sizes; view a Hebrew question and an English question side by side. | Layout holds at all three sizes. Hebrew renders correctly RTL, English LTR, in the same screens (X-I18N). | | ⬜ | |
 
 ---
+
+---
+
+## Bugs found
+
+Assignment 3 §1 asks for the bugs found **and which test case exposed them**, so every entry
+names its case. Ids are `B-n` and are what the `Bugs found` column cites.
+
+| # | Found by | Severity | Status | What |
+|---|---|---|---|---|
+| B-1 | case 1.1 | Low (docs) | Open | `docs/DEMO_ACCOUNTS.md` presents its five accounts as working credentials — "Sign in with the username and password below" — with nothing saying they only exist once the E2.15 seed loader has run. The server authenticates against the `users` table (`RepositoryUserDirectory`); `InMemoryUserDirectory` became test-only when E2 PR2b landed. On a freshly migrated database every one of those logins fails with F1.1's deliberately generic message, so there is no way to tell "seed not loaded" from "wrong password". Costs a teammate five minutes and a demo rehearsal considerably more. **Fix:** one line in DEMO_ACCOUNTS.md noting the seed dependency. Not a code defect — the server is behaving as specified. |
+
+### Not bugs, recorded so they are not re-investigated
+
+- **Scenario 1's blocked cases are blocked, not failing.** The server is correct; the database is
+  empty because E2.15 has not merged. They become runnable the moment the seed loads, and nothing
+  about them needs re-designing first.
 
 ## Notes for the submission document
 
