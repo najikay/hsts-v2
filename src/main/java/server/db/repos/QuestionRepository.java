@@ -3,6 +3,7 @@ package server.db.repos;
 import org.hibernate.Session;
 import server.db.entities.Question;
 import server.db.entities.QuestionVersion;
+import server.db.projections.BotBankQuestion;
 import server.db.projections.QuestionOutline;
 import server.db.projections.TakeExamQuestion;
 
@@ -131,6 +132,57 @@ public final class QuestionRepository {
                 .setParameter("examVersionId", examVersionId)
                 .setParameter("questionVersionId", questionVersionId)
                 .getSingleResult() > 0;
+    }
+
+    /**
+     * The course's bank questions, as the <b>study bot</b> may see them (E16.6 ⚑ —
+     * S-28, F12.8).
+     *
+     * <p>A third audience for this table, and the third rule. The take-exam read
+     * hides the key from a student sitting a paper; the authoring reads hand it to
+     * the teacher who wrote it; this one hands the bot a question and its four
+     * options and <b>no key at all</b> — {@code correct_answer} is not in the SELECT
+     * list, so on this path it never leaves the database.
+     *
+     * <p>That is the lead's ruling for this feature, and the reasoning is recorded
+     * on {@link BotBankQuestion}: S-28 allows the bank as study material, the
+     * specification asks for "the questions", and a study bot that recites answer
+     * keys for material that may be on next week's paper defeats the point of
+     * having one. It is also why this method carries none of the sanctioned
+     * correctness suffixes — there is no answer key here to declare an audience
+     * for, and {@code CorrectnessLeakGuardTest} verifies that rather than assuming
+     * it.
+     *
+     * <p>Latest version per question, soft-deleted questions excluded: a question a
+     * teacher withdrew from the bank should not still be taught by the bot. Ordered
+     * by display id so the material a prompt is built from is deterministic.
+     *
+     * <p>Consumer: E16's {@code ContextBuilder}, through {@code JpaBotStore}.
+     *
+     * @param session    the current session
+     * @param courseCode the 2-character course code
+     * @param limit      the most questions to read; the context builder scores them
+     *                   in memory, so this bounds the work rather than the relevance
+     * @return the questions with their four options, without any correctness data
+     */
+    public List<BotBankQuestion> findBankForBot(Session session, String courseCode, int limit) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return List.of();
+        }
+        return session.createQuery("""
+                        select new server.db.projections.BotBankQuestion(
+                            q.displayId, qv.text, qv.a1, qv.a2, qv.a3, qv.a4)
+                        from Question q, QuestionVersion qv
+                        where q.courseCode = :courseCode
+                          and q.deletedAt is null
+                          and qv.questionId = q.id
+                          and qv.versionNo = (
+                              select max(v.versionNo) from QuestionVersion v where v.questionId = q.id)
+                        order by q.displayId
+                        """, BotBankQuestion.class)
+                .setParameter("courseCode", courseCode)
+                .setMaxResults(Math.max(1, limit))
+                .getResultList();
     }
 
     /**

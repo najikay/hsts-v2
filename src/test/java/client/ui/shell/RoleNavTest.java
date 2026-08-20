@@ -97,14 +97,32 @@ class RoleNavTest {
         }
 
         @Test
-        @DisplayName("the teaching roles also get the (legacy) question bank")
+        @DisplayName("the teaching roles also get the (legacy) question bank and the study bot")
         void questionBankIsLiveForTeachers() {
             assertThat(enabledLabels(Role.TEACHER))
-                    .containsExactly("Dashboard", "Question Bank", "Settings");
+                    .containsExactly("Dashboard", "Question Bank", "Study Bot", "Settings");
             assertThat(enabledLabels(Role.COORDINATOR))
-                    .containsExactly("Dashboard", "Question Bank", "Settings");
-            assertThat(enabledLabels(Role.STUDENT)).containsExactly("Dashboard", "Settings");
+                    .containsExactly("Dashboard", "Question Bank", "Study Bot", "Settings");
+            assertThat(enabledLabels(Role.STUDENT))
+                    .containsExactly("Dashboard", "Study Bot", "Settings");
             assertThat(enabledLabels(Role.PRINCIPAL)).containsExactly("Dashboard", "Settings");
+        }
+
+        @Test
+        @DisplayName("Study Bot points each role at its own half of the feature (E16)")
+        void studyBotRoutesPerRole() {
+            assertThat(routeOf(Role.TEACHER, "Study Bot")).isEqualTo(Routes.BOT_MANAGER.id());
+            assertThat(routeOf(Role.COORDINATOR, "Study Bot")).isEqualTo(Routes.BOT_MANAGER.id());
+            assertThat(routeOf(Role.STUDENT, "Study Bot")).isEqualTo(Routes.BOT_CHAT.id());
+        }
+
+        /** @return the route id behind one label on a role's rail. */
+        private String routeOf(Role role, String label) {
+            return RoleNav.itemsFor(role).stream()
+                    .filter(item -> item.label().equals(label))
+                    .map(NavItem::routeId)
+                    .findFirst()
+                    .orElseThrow();
         }
 
         @ParameterizedTest

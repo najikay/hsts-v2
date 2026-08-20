@@ -36,7 +36,6 @@ public final class RoleNav {
     static final String ROUTE_MONITOR = "monitor";
     static final String ROUTE_GRADING = "grading";
     static final String ROUTE_RESULTS = "results";
-    static final String ROUTE_BOT = "bot";
     static final String ROUTE_TAKE_EXAM = "exam.take";
     static final String ROUTE_MY_GRADES = "grades";
     static final String ROUTE_DATA = "data";
@@ -79,7 +78,10 @@ public final class RoleNav {
         items.add(soon(ROUTE_MONITOR, "Live Monitor", Icons.MONITOR, 11));
         items.add(soon(ROUTE_GRADING, "Grading", Icons.GRADING, 12));
         items.add(soon(ROUTE_RESULTS, "Results", Icons.RESULTS, 14));
-        items.add(soon(ROUTE_BOT, "Study Bot", Icons.BOT, 16));
+        // Live since E16. A teacher's Study Bot is the manager screen; the
+        // analytics view is reached from inside it, because it is a view of one
+        // bot and a rail item that needed a course chosen first would be a dead end.
+        items.add(NavItem.of(Routes.BOT_MANAGER.id(), "Study Bot", Icons.BOT));
         items.add(settings());
         return List.copyOf(items);
     }
@@ -89,7 +91,9 @@ public final class RoleNav {
                 dashboard(Role.STUDENT),
                 soon(ROUTE_TAKE_EXAM, "Take Exam", Icons.EXAMS, 10),
                 soon(ROUTE_MY_GRADES, "My Grades", Icons.RESULTS, 13),
-                soon(ROUTE_BOT, "Study Bot", Icons.BOT, 16),
+                // Live since E16. A student's Study Bot is the chat; her history is
+                // one button away inside it.
+                NavItem.of(Routes.BOT_CHAT.id(), "Study Bot", Icons.BOT),
                 settings());
     }
 

@@ -236,6 +236,104 @@ public enum Verb {
      */
     CHECKED_FORM_GET,
 
+    // ===================== Study bot (E16) =================================
+    // The draft wire contract: docs/contracts/BOT_WIRE_CONTRACT.md. Payload types
+    // live in {@code common.dto.bot}; the handlers are
+    // {@code server.features.bot.BotService} (student) and
+    // {@code server.features.bot.BotAdminService} (teacher).
+    //
+    // The security boundary of this group is F12.8 ⚑ and it is structural rather
+    // than procedural: NO verb here can reach an exam definition, an execution
+    // code, an attempt or a grade, because the feature package that serves them
+    // has no compile-time dependency on any of that (proved by
+    // BotIsolationGuardTest). What the model sees is course source material plus
+    // course bank questions (S-28) — and the bank read carries the four answers
+    // WITHOUT marking which is correct, because a study bot that hands out answer
+    // keys to live-exam-adjacent material defeats its own point.
+    //
+    // Student verbs carry no user id, ever. Teacher verbs are
+    // requireRole(TEACHER, COORDINATOR) PLUS taught-course ownership resolved
+    // from the repositories, never from the payload.
+
+    /**
+     * Ask a course's bot a question (F12.5, C-4 ⚑).
+     * Request payload: {@code BotAskRequest}; response: {@code BotAnswer}.
+     *
+     * <p>Refused with {@code FORBIDDEN} when the caller is not enrolled (S-31),
+     * with {@code CONFLICT} when the bot is switched off (F12.4) or when she is
+     * sitting an exam of <em>that</em> course (C-4: the message names the exam and
+     * when the lock lifts), and with {@code VALIDATION} when she has exceeded the
+     * per-minute rate limit. A live attempt in <em>another</em> course does not
+     * refuse: the first ask answers {@code OK} carrying a
+     * {@code BotIntegrityNotice} instead of an answer, and the re-sent request with
+     * {@code integrityAcknowledged} proceeds and reports her to that exam's teacher
+     * (ADR-018).
+     */
+    BOT_ASK,
+
+    /**
+     * The calling student's own conversations with one course's bot (F12.10).
+     * Request payload: {@code BotCourseRequest}; response: {@code BotSessionsPage}.
+     * Scoped to the caller in the query itself, like {@link #NOTIFICATIONS_GET}.
+     */
+    BOT_SESSIONS_GET,
+
+    /**
+     * Reopen one of the caller's own conversations (F12.10, S-33).
+     * Request payload: {@code BotSessionRequest}; response: {@code BotConversation}.
+     * Somebody else's session id answers {@code NOT_FOUND}, indistinguishably from
+     * one that does not exist.
+     */
+    BOT_SESSION_GET,
+
+    /**
+     * The teacher's Bot Manager view of one taught course (F12.1/F12.3).
+     * Request payload: {@code BotCourseRequest}; response: {@code BotManagerPage},
+     * whose {@code bot} is {@code null} when the course has no bot yet — an empty
+     * state to draw, not an error.
+     */
+    BOT_MANAGER_GET,
+
+    /**
+     * Create the bot for a taught course (F12.1, S-30).
+     * Request payload: {@code BotCreateRequest}; response: {@code BotManagerPage}.
+     * Idempotent by design: one bot per course, so a second teacher sending this
+     * receives the existing bot and becomes a contributor to it rather than
+     * getting a conflict.
+     */
+    BOT_CREATE,
+
+    /**
+     * Switch a taught course's bot on or off (F12.4, S-31).
+     * Request payload: {@code BotActiveRequest}; response: {@code BotManagerPage}.
+     */
+    BOT_ACTIVE_SET,
+
+    /**
+     * Add one piece of material to a taught course's bot (F12.2/F12.3).
+     * Request payload: {@code SourceAddRequest}; response: {@code BotManagerPage}.
+     * The file is parsed server-side <b>before</b> the row is written, so a PDF
+     * that cannot be read answers {@code VALIDATION} with a sentence the uploader
+     * can act on rather than creating a source that contributes nothing.
+     * Co-teachers of the course get a {@code BOT_SOURCE_CHANGED} notification.
+     */
+    BOT_SOURCE_ADD,
+
+    /**
+     * Remove one source from a taught course's bot (F12.3).
+     * Request payload: {@code SourceRemoveRequest}; response: {@code BotManagerPage}.
+     * Requires the advisory edit lock on that source (E18.5), so two teachers
+     * cannot delete each other's work mid-edit.
+     */
+    BOT_SOURCE_REMOVE,
+
+    /**
+     * The anonymised usage aggregate for a taught course's bot (F12.11, S-34 ⚑).
+     * Request payload: {@code BotCourseRequest}; response: {@code BotAnalytics},
+     * which has no field capable of holding a student identity.
+     */
+    BOT_ANALYTICS_GET,
+
     // ===================== Server push channel =============================
     // Constants only for now — the producing services arrive with their epics.
 

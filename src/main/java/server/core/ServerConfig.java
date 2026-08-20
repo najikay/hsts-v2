@@ -39,6 +39,33 @@ public final class ServerConfig {
     }
 
     /**
+     * The whole of {@code server.properties}, resolved the same way as
+     * {@link #load()} (E16.1).
+     *
+     * <p>Added for the study bot, which reads {@code bot.*} settings out of the
+     * same file. It deliberately reuses this class's lookup order rather than
+     * opening the file itself: two places that both "find server.properties" is
+     * how a machine ends up with a database that reads one file and a bot that
+     * reads another.
+     *
+     * @return every property found; empty when there is no file anywhere
+     */
+    public static Properties loadProperties() {
+        return loadProperties(resolveExternalConfigPath(), "/" + CONFIG_FILE);
+    }
+
+    /** Resolution core for {@link #loadProperties()}; visible for testing. */
+    static Properties loadProperties(Path external, String classpathResource) {
+        Properties props = new Properties();
+        if (external != null && Files.isRegularFile(external)) {
+            loadFromFile(props, external);
+        } else {
+            loadFromClasspath(props, classpathResource);
+        }
+        return props;
+    }
+
+    /**
      * Resolution core, with both sources injected - visible for testing so the
      * external-file / classpath / defaults branches can each be exercised.
      *

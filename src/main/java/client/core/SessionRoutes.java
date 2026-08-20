@@ -1,6 +1,10 @@
 package client.core;
 
 import client.features.bank.QuestionsView;
+import client.features.bot.BotAnalyticsView;
+import client.features.bot.BotChatView;
+import client.features.bot.BotHistoryView;
+import client.features.bot.BotManagerView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exam.TakeExamView;
 import client.features.home.CoordinatorHomeView;
@@ -61,12 +65,21 @@ public final class SessionRoutes {
             // ownership on every request: this list decides what is offered, never
             // what is permitted.
             routes.add(Routes.MONITOR);
+            // The study bot's teacher half (E16). Analytics is reached from the
+            // manager rather than from the rail: it is a view of one bot, and a
+            // rail item that needed a course chosen first would be a dead end.
+            routes.add(Routes.BOT_MANAGER);
+            routes.add(Routes.BOT_ANALYTICS);
         }
         if (role == Role.STUDENT) {
             // Taking an exam is a student's, and only a student's (E10). A teacher who
             // reached this route would still be refused by the server, which is where
             // enrolment and identity are actually checked.
             routes.add(Routes.TAKE_EXAM);
+            // The study bot's student half (E16). History is reached from the chat,
+            // for the same reason analytics is reached from the manager.
+            routes.add(Routes.BOT_CHAT);
+            routes.add(Routes.BOT_HISTORY);
         }
         return List.copyOf(routes);
     }
@@ -113,6 +126,18 @@ public final class SessionRoutes {
         }
         if (Routes.MONITOR.id().equals(route.id())) {
             return ExecutionMonitorView::new;
+        }
+        if (Routes.BOT_CHAT.id().equals(route.id())) {
+            return BotChatView::new;
+        }
+        if (Routes.BOT_HISTORY.id().equals(route.id())) {
+            return BotHistoryView::new;
+        }
+        if (Routes.BOT_MANAGER.id().equals(route.id())) {
+            return BotManagerView::new;
+        }
+        if (Routes.BOT_ANALYTICS.id().equals(route.id())) {
+            return BotAnalyticsView::new;
         }
         return homeBuilder(role);
     }

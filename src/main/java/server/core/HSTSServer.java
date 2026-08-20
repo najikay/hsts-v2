@@ -1,5 +1,6 @@
 package server.core;
 
+import common.dto.lock.EntityRef;
 import common.dto.lock.LockTiming;
 import ocsf.server.AbstractServer;
 import ocsf.server.ConnectionToClient;
@@ -13,6 +14,15 @@ import server.features.auth.AuthService;
 import server.features.auth.UserDirectory;
 import server.features.auth.UserRecord;
 import server.features.bank.LegacyQuestionHandlers;
+import server.features.bot.AskRateLimiter;
+import server.features.bot.BotAdminService;
+import server.features.bot.BotConfig;
+import server.features.bot.BotService;
+import server.features.bot.BotStore;
+import server.features.bot.ContextBuilder;
+import server.features.bot.JpaBotStore;
+import server.features.bot.ProviderChain;
+import server.features.bot.SourceExtractor;
 import server.features.exam.AttemptFinalizedListener;
 import server.features.exam.AttemptService;
 import server.features.exam.ExamStore;
@@ -154,9 +164,51 @@ public class HSTSServer extends AbstractServer {
                 .registerOn(router);
         new LegacyQuestionHandlers(new QuestionDAO()).registerOn(router);
 
-        registerExamFeature(router, sessions, pushGateway, notifications, sessionFactory,
-                clock, examTimers);
+        AttemptService attempts = registerExamFeature(router, sessions, pushGateway, notifications,
+                sessionFactory, clock, examTimers);
+        registerBotFeature(router, notifications, locks, sessionFactory, clock, attempts);
         return router;
+    }
+
+    /**
+     * The study bot (E16 ⚑).
+     *
+     * <p>Assembled last, and the order is not arbitrary: it takes the attempt
+     * service as its {@code AttemptTracker} (C-4) and the lock service for its
+     * source editor (E18.5), so both have to exist first. It takes neither as an
+     * implementation — the bot codes against the two seams, which is what lets its
+     * whole rule set be unit-tested without a database, a socket or a live exam.
+     *
+     * <p>Two things happen here that are worth finding again later. The provider
+     * configuration is read once and its summary logged once (F12.8: a missing key
+     * is one clear line at boot, not a surprise at demo time), and the advisory
+     * lock is bridged into the admin service as a predicate rather than as a
+     * dependency, so a teacher cannot delete a source a colleague is holding.
+     *
+     * <p>If no provider is configured the feature still registers and still works:
+     * every question answers with the S-32 sentence, history and analytics behave
+     * normally, and the log says why. A server that refused to start over a missing
+     * bot key would be a worse failure than the one it was trying to prevent.
+     */
+    private static void registerBotFeature(MessageRouter router, NotificationService notifications,
+                                           EditLockService locks, SessionFactory sessionFactory,
+                                           Clock clock, AttemptService attempts) {
+        BotConfig config = BotConfig.load();
+        config.logSummary();
+
+        BotStore botStore = new JpaBotStore(sessionFactory);
+        ProviderChain chain = ProviderChain.of(config, clock);
+
+        new BotService(botStore, chain, new ContextBuilder(), attempts,
+                new AskRateLimiter(config.asksPerMinute(), clock), clock)
+                .registerOn(router);
+
+        BotAdminService.SourceLocks sourceLocks = (sourceId, userId) ->
+                locks.holderOf(new EntityRef(EntityRef.BOT_SOURCE, sourceId))
+                        .map(holder -> holder.is(userId))
+                        .orElse(true);
+        new BotAdminService(botStore, new SourceExtractor(), notifications, sourceLocks, clock)
+                .registerOn(router);
     }
 
     /**
@@ -186,7 +238,7 @@ public class HSTSServer extends AbstractServer {
      * periodic sweep is the backstop for a task that was lost to a long pause or a
      * saturated executor. Expiry is a compare-and-set, so both are free to overlap.
      */
-    private static void registerExamFeature(MessageRouter router, SessionManager sessions,
+    private static AttemptService registerExamFeature(MessageRouter router, SessionManager sessions,
                                             PushGateway pushGateway, NotificationService notifications,
                                             SessionFactory sessionFactory, Clock clock,
                                             ScheduledExecutorService examTimers) {
@@ -211,6 +263,10 @@ public class HSTSServer extends AbstractServer {
         examTimers.scheduleWithFixedDelay(attempts.timers()::sweep,
                 TimerService.SWEEP_INTERVAL.toMillis(), TimerService.SWEEP_INTERVAL.toMillis(),
                 TimeUnit.MILLISECONDS);
+        // Returned rather than kept: the study bot's C-4 seam IS this service
+        // (AttemptTracker), and handing it over here is the one wire between the
+        // two features.
+        return attempts;
     }
 
     /** A single daemon thread: it must never keep a shut-down JVM alive. */

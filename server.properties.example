@@ -1,5 +1,27 @@
-# Server settings — place this file next to hsts-server.jar.
-# Set db.user and db.password to match your local MySQL instance.
+# Server settings — place this file next to hsts-server.jar as server.properties.
+# server.properties itself is gitignored; this example is the shape, never the secrets.
 
+# ---- Database ----
+# Set db.user and db.password to match your local MySQL instance.
 db.user=root
 db.password=root
+
+# ---- Study bot providers (E16, F12.6/F12.8) ----
+# API keys live here or in the environment, NEVER in the client and never in git.
+# The environment wins over this file, so a demo machine or a CI runner can
+# supply a key without editing anything:
+#     HSTS_DEEPSEEK_KEY   overrides bot.deepseek.key
+#     HSTS_ANTHROPIC_KEY  overrides bot.anthropic.key
+#
+# A missing key is a supported state: that provider reports itself unconfigured
+# with one clear line at boot and the chain skips it. With neither key the server
+# still starts and every question answers with the "could not answer" message.
+bot.deepseek.key=
+bot.anthropic.key=
+
+# Optional. Defaults are shown; leave them out unless you need to change one.
+#bot.deepseek.url=https://api.deepseek.com
+#bot.deepseek.model=deepseek-chat
+#bot.anthropic.model=claude-opus-5
+#bot.timeout.seconds=20
+#bot.rate.per.minute=10

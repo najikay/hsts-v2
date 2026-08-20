@@ -47,8 +47,9 @@ src/main/java/
 │   ├── db/                  HibernateUtil, Flyway bootstrap, entities/ (JPA), repos/
 │   ├── features/<feature>/  XService (+ validators, helpers)
 │   ├── realtime/            NotificationService, EditLockService, TimerService, PushGateway
-│   ├── bot/                 BotService, BotProvider, DeepSeekProvider, AnthropicProvider,
-│   │                        SourceExtractor (pdf/docx/text), ContextBuilder, Guardrails
+│   │                        (E16 note: the bot landed in features/bot rather than a top-level
+│   │                        bot/ package — it is a feature like any other, and the layout rule
+│   │                        below is what keeps its isolation checkable)
 │   └── console/             server console UI + NetworkDetector
 └── ocsf/                    vendored, untouched, excluded from coverage
 ```
@@ -163,10 +164,16 @@ student msg ─► BotService.ask(course, student, sessionId, text)
    guards: enrolled? bot active? student not mid-exam? rate limit (per-student cooldown)
    context: ContextBuilder → system prompt (guardrails) + course source chunks
             (simple keyword/overlap scoring over extracted_text, top-k within token budget)
-            + relevant bank questions. NO exam data exists in this module's reach.
+            + relevant bank questions, WITHOUT correctness data (ADR-020).
+            NO exam data exists in this module's reach - BotIsolationGuardTest scans the
+            compiled feature package and fails on any reference to the exam or grading
+            repositories, entities or projections (F12.8).
    provider chain: DeepSeekProvider (java.net.http, OpenAI-compatible /chat/completions,
-                   timeout 30s, 1 retry) → AnthropicProvider (official anthropic-java SDK,
-                   model claude-opus-5, configurable) → NoAnswer (S-32 message)
+                   timeout 20s, exactly 1 retry on timeout/5xx) → AnthropicProvider (official
+                   anthropic-java SDK, model claude-opus-5, configurable) → NoAnswer (S-32).
+                   A provider that fails is benched for 60s (Clock-injected) and skipped;
+                   one structured log line per ask records which provider answered and how long
+                   it took.
    persist: append {q, a, provider, ts} to bot_sessions.transcript JSON
             + insert bot_messages row (same tx) — the analytics-facing copy
    respond: answer DTO (+ "degraded" flag logged, not shown)

@@ -87,11 +87,11 @@ class SessionRoutesTest {
     class PerRole {
 
         @Test
-        @DisplayName("a teacher gets home, settings, the question bank and the live monitor")
+        @DisplayName("a teacher gets home, settings, the bank, the monitor and the bot screens")
         void teacher() {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS,
-                            Routes.MONITOR);
+                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS);
         }
 
         @Test
@@ -99,15 +99,18 @@ class SessionRoutesTest {
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS,
-                            Routes.MONITOR);
+                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS);
         }
 
         @Test
-        @DisplayName("a student gets take-exam, and no authoring route at all")
+        @DisplayName("a student gets take-exam and her own bot screens, and no authoring route")
         void student() {
             assertThat(SessionRoutes.routesFor(Role.STUDENT))
-                    .containsExactly(Routes.HOME_STUDENT, Routes.SETTINGS, Routes.TAKE_EXAM)
-                    .doesNotContain(Routes.QUESTIONS, Routes.MONITOR);
+                    .containsExactly(Routes.HOME_STUDENT, Routes.SETTINGS, Routes.TAKE_EXAM,
+                            Routes.BOT_CHAT, Routes.BOT_HISTORY)
+                    .as("the teacher's half of the bot is not offered to her either (E16)")
+                    .doesNotContain(Routes.QUESTIONS, Routes.MONITOR,
+                            Routes.BOT_MANAGER, Routes.BOT_ANALYTICS);
         }
 
         @Test

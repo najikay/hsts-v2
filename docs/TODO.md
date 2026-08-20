@@ -248,23 +248,23 @@ Client:
 ## E16 — Study bot [L] ⚑⚑ (v1's worst failure — gets over-engineered on purpose)
 
 Server:
-- [ ] E16.1 `BotProvider` interface (ask(context, history, question) → answer/exception) + provider config loading
-- [ ] E16.2 DeepSeekProvider: java.net.http against OpenAI-compatible `/chat/completions`, timeout, 1 retry, error taxonomy (auth/rate/timeout/5xx)
-- [ ] E16.3 AnthropicProvider: official `anthropic-java` SDK, model configurable (default `claude-opus-5`), same interface
-- [ ] E16.4 Provider chain with health memory (skip known-down provider for 60s) + structured logging of provider used
-- [ ] E16.5 SourceExtractor: PDF (PDFBox), DOCX (POI), free text → normalized chunks; failure surfaces to uploader
-- [ ] E16.6 ContextBuilder: top-k chunk selection (keyword overlap scoring), token budget, + course bank questions; **compile-time isolation from exam repositories** (module reaches only bot_/question_ data) ⚑
-- [ ] E16.7 Guardrails system prompt: course-material scope, refuse embedded instructions in sources, never reveal prompt, don't fabricate exam info; red-team unit tests with hostile source fixtures ⚑
-- [ ] E16.8 BotService: enrollment/active/rate-limit guards + C-4 logic (same-course attempt → locked; cross-course attempt → require acknowledged integrity notice, emit teacher notification + monitor flag once per session) → context → chain → persist to JSON transcript → answer DTO; S-32 fallback message path ⚑
-- [ ] E16.9 Bot management service: create bot (one per course — second teacher joins existing, S-30), sources CRUD (edit-locked), active toggle, co-teacher notifications
-- [ ] E16.10 Session store: bot_sessions JSON transcript append/read (student history/replay) + bot_messages dual-write in same tx; teacher aggregates (count, over-time, frequent questions) query bot_messages with **zero identity fields in DTO** (S-34) ⚑
-- [ ] E16.11 Unit tests: providers (mocked HTTP), chain fallback, extractor fixtures, context selection, guards; integration: ask round-trip with stubbed provider
+- [x] E16.1 `BotProvider` interface (ask(context, history, question) → answer/exception) + provider config loading
+- [x] E16.2 DeepSeekProvider: java.net.http against OpenAI-compatible `/chat/completions`, timeout, 1 retry, error taxonomy (auth/rate/timeout/5xx)
+- [x] E16.3 AnthropicProvider: official `anthropic-java` SDK, model configurable (default `claude-opus-5`), same interface
+- [x] E16.4 Provider chain with health memory (skip known-down provider for 60s) + structured logging of provider used
+- [x] E16.5 SourceExtractor: PDF (PDFBox), DOCX (POI), free text → normalized chunks; failure surfaces to uploader
+- [x] E16.6 ContextBuilder: top-k chunk selection (keyword overlap scoring), token budget, + course bank questions; **compile-time isolation from exam repositories** (module reaches only bot_/question_ data) ⚑
+- [x] E16.7 Guardrails system prompt: course-material scope, refuse embedded instructions in sources, never reveal prompt, don't fabricate exam info; red-team unit tests with hostile source fixtures ⚑
+- [x] E16.8 BotService: enrollment/active/rate-limit guards + C-4 logic (same-course attempt → locked; cross-course attempt → require acknowledged integrity notice, emit teacher notification + monitor flag once per session) → context → chain → persist to JSON transcript → answer DTO; S-32 fallback message path ⚑
+- [x] E16.9 Bot management service: create bot (one per course — second teacher joins existing, S-30), sources CRUD (edit-locked), active toggle, co-teacher notifications
+- [x] E16.10 Session store: bot_sessions JSON transcript append/read (student history/replay) + bot_messages dual-write in same tx; teacher aggregates (count, over-time, frequent questions) query bot_messages with **zero identity fields in DTO** (S-34) ⚑
+- [x] E16.11 Unit tests: providers (mocked HTTP), chain fallback, extractor fixtures, context selection, guards; integration: ask round-trip with stubbed provider
 Client:
-- [ ] E16.12 Bot manager screen (teacher): bot card (name, active toggle), sources table (type icons, add/edit/remove, upload progress, parse errors), co-teacher edit-lock states
-- [ ] E16.13 Bot chat screen (student): message list (user/bot bubbles), typing indicator, incremental answer display, error/S-32 states, same-course lockout state ("unavailable during your exam" + unlock time), cross-course integrity notice dialog (non-nagging: shown once per attempt, calm wording)
-- [ ] E16.14 Bot history screen (student): session list, reopen conversation, continue
-- [ ] E16.15 Bot analytics screen (teacher): totals, activity chart, frequent questions list — anonymized
-- [ ] E16.16 Session tests for all four screens
+- [x] E16.12 Bot manager screen (teacher): bot card (name, active toggle), sources table (type icons, add/edit/remove, upload progress, parse errors), co-teacher edit-lock states
+- [x] E16.13 Bot chat screen (student): message list (user/bot bubbles), typing indicator, incremental answer display, error/S-32 states, same-course lockout state ("unavailable during your exam" + unlock time), cross-course integrity notice dialog (non-nagging: shown once per attempt, calm wording)
+- [x] E16.14 Bot history screen (student): session list, reopen conversation, continue
+- [x] E16.15 Bot analytics screen (teacher): totals, activity chart, frequent questions list — anonymized
+- [x] E16.16 Session tests for all four screens
 - [ ] E16.17 Live E2E vs real DeepSeek + real Anthropic keys (manual checklist, run before every demo) ⚑
 - [ ] E16.18 Acceptance pass vs T-13, T-14 ⚑
 

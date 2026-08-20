@@ -1120,3 +1120,87 @@
 /* The C-4 integrity flag: visible, not alarming. The server cannot know
    intent, and the copy and the colour both leave the judgement to the teacher. */
 .integrity-flag { -fx-font-size: 11px; -fx-padding: 3px 9px; }
+
+/* ---- The study bot (E16.12 - E16.15) ---- */
+
+.bot-chat, .bot-manager, .bot-history, .bot-analytics { -fx-background-color: -hsts-bg; }
+
+/* Chat bubbles. The student's are accented and right aligned, the bot's are a
+   plain surface on the left, so a glance at the shape tells you who spoke
+   without reading a word. */
+.chat-row { -fx-padding: 0; }
+
+.chat-bubble {
+    -fx-padding: 10px 14px;
+    -fx-background-radius: 14px;
+    -fx-border-radius: 14px;
+    -fx-line-spacing: 2px;
+}
+.chat-bubble.from-student {
+    -fx-background-color: -hsts-accent-soft;
+    -fx-text-fill: -hsts-text;
+}
+.chat-bubble.from-bot {
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+}
+/* Provisional until the server confirms it (E16.13). */
+.chat-bubble.pending { -fx-opacity: 0.6; }
+
+.typing-indicator { -fx-padding: 4px 20px 8px 20px; }
+.typing-dot { -fx-fill: -hsts-muted; }
+
+.bot-input { -fx-pref-height: 38px; }
+
+/* One banner for every "you cannot use this right now" sentence. Neutral by
+   default; the blocked state is warmer, because the C-4 lockout and a switched
+   off bot are both things to explain rather than alarms to raise. */
+.bot-banner {
+    -fx-padding: 10px 14px;
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 10px;
+    -fx-text-fill: -hsts-muted;
+}
+.bot-banner:blocked {
+    -fx-background-color: -hsts-warn-soft;
+    -fx-text-fill: -hsts-text;
+}
+
+.bot-status { -fx-text-fill: -hsts-muted; -fx-font-size: 12px; }
+
+/* Sources table (E16.12) and history rows (E16.14): the same row shape, so the
+   two screens read as one feature. */
+.source-row, .history-row, .frequent-row {
+    -fx-padding: 10px 14px;
+    -fx-background-color: -hsts-surface;
+    -fx-background-radius: 10px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 10px;
+    -fx-border-width: 1px;
+}
+.source-row:hover, .history-row:hover { -fx-border-color: -hsts-accent; }
+
+.source-title, .history-preview, .frequent-question { -fx-font-weight: bold; }
+.source-meta, .history-meta, .frequent-count, .chart-caption {
+    -fx-text-fill: -hsts-muted;
+    -fx-font-size: 12px;
+}
+
+/* Analytics (E16.15). The anonymity note is stated on the screen, not only in
+   the requirement, so the teacher knows what she is not looking at (S-34). */
+.anonymous-note {
+    -fx-padding: 8px 12px;
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 8px;
+    -fx-text-fill: -hsts-muted;
+    -fx-font-size: 12px;
+}
+.stat-value { -fx-font-size: 26px; -fx-font-weight: bold; }
+.stat-caption { -fx-text-fill: -hsts-muted; -fx-font-size: 12px; }
+.activity-bar {
+    -fx-background-color: -hsts-accent;
+    -fx-background-radius: 3px 3px 0 0;
+    -fx-opacity: 0.85;
+}
+.activity-bar:hover { -fx-opacity: 1; }

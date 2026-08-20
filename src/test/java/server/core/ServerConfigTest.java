@@ -149,6 +149,34 @@ class ServerConfigTest {
     }
 
     @Test
+    @DisplayName("the whole file is readable too, for the settings that are not credentials (E16.1)")
+    void loadsEveryProperty() throws IOException {
+        Path file = write("db.user=hsts_app\nbot.deepseek.key=sk-test\nbot.rate.per.minute=7\n");
+
+        Properties props = ServerConfig.loadProperties(file, MISSING_RESOURCE);
+
+        assertThat(props.getProperty("db.user")).isEqualTo("hsts_app");
+        assertThat(props.getProperty("bot.deepseek.key")).isEqualTo("sk-test");
+        assertThat(props.getProperty("bot.rate.per.minute")).isEqualTo("7");
+    }
+
+    @Test
+    @DisplayName("the whole-file read falls back to the classpath, then to nothing")
+    void loadsEveryPropertyFallsBack() {
+        // The bundled resource exists in this build, so it resolves; the third
+        // branch is the one that matters on a fresh machine with no file anywhere.
+        assertThat(ServerConfig.loadProperties(null, "/server.properties")).isNotNull();
+        assertThat(ServerConfig.loadProperties(tempDir.resolve("absent.properties"),
+                MISSING_RESOURCE)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the real lookup runs without a file argument")
+    void loadsEveryPropertyFromTheRealSources() {
+        assertThat(ServerConfig.loadProperties()).isNotNull();
+    }
+
+    @Test
     @DisplayName("Credentials is a value object (equality + hashCode)")
     void credentialsIsAValueObject() {
         Credentials a = new Credentials("root", "root");

@@ -2,12 +2,46 @@ package server.db.repos;
 
 import org.hibernate.Session;
 import server.db.entities.Bot;
+import server.db.entities.BotSession;
 import server.db.entities.BotSource;
+import server.db.projections.BotActivityCount;
+import server.db.projections.BotSourceInfo;
+import server.db.projections.BotSourceText;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-/** Reads over the bot tables (E2.11). */
+/**
+ * Reads over the bot tables (E2.11, extended in E16 under TEAM_SPLIT rule 5).
+ *
+ * <h2>Three shapes of source read, and why there are three</h2>
+ *
+ * <p>{@code bot_sources} carries a {@code MEDIUMBLOB} and a {@code MEDIUMTEXT} on
+ * every row, and {@code @Basic(fetch = LAZY)} does nothing without bytecode
+ * enhancement, which this build does not run. So the read has to choose its
+ * columns rather than its fetch plan:
+ *
+ * <ul>
+ *   <li>{@link #findSourceInfos} — no blob, no text, one length; the manager's
+ *       table;</li>
+ *   <li>{@link #findSourceTexts} — the text but not the bytes; the prompt context
+ *       builder;</li>
+ *   <li>{@link #findSources} — whole entities, bytes included; only for a caller
+ *       that genuinely needs the original file.</li>
+ * </ul>
+ *
+ * <h2>S-34 and the analytics reads ⚑</h2>
+ *
+ * <p>{@link #countMessages}, {@link #findActivity} and {@link #findRecentQuestions}
+ * feed the teacher's anonymised aggregate, and none of them selects
+ * {@code bot_messages.student_id} — not in the projection, not in a
+ * {@code group by}, not in a distinct count. The column exists (a student's own
+ * history is reassembled from it, and a C-4 alert names the right person to the
+ * right teacher), it simply never travels on this path. Anonymity is a property of
+ * the query, in the same way that {@code correct_answer} not being in the
+ * take-exam SELECT is a property of that one (E2.12).
+ */
 public final class BotRepository {
 
     /**
@@ -16,7 +50,7 @@ public final class BotRepository {
      * <p>{@code bots.course} is unique — one bot per course (S-30) — so this is at most one
      * row.
      *
-     * <p>Consumers: E14 bot chat; E14 bot manager; the E2.15 seed loader.
+     * <p>Consumers: E16 bot chat and bot manager; the E2.15 seed loader.
      *
      * @param session    the current session
      * @param courseCode the 2-character course code
@@ -47,6 +81,202 @@ public final class BotRepository {
         return session.createQuery(
                         "from BotSource where botId = :botId order by id", BotSource.class)
                 .setParameter("botId", botId)
+                .getResultList();
+    }
+
+    /**
+     * The sources table of the Bot Manager (E16.9, F12.3).
+     *
+     * <p>A constructor expression that names neither {@code raw} nor
+     * {@code extracted_text}: the megabytes stay in the database and the row carries
+     * the one number the screen wants from the text, computed by the engine. A ten
+     * source bot therefore costs a small result set rather than the whole library.
+     *
+     * <p>Consumer: E16's bot management service.
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @return its sources, oldest first
+     */
+    public List<BotSourceInfo> findSourceInfos(Session session, long botId) {
+        return session.createQuery("""
+                        select new server.db.projections.BotSourceInfo(
+                            s.id, s.botId, s.type, s.title, s.addedBy, s.updatedAt,
+                            s.version, length(s.extractedText))
+                        from BotSource s
+                        where s.botId = :botId
+                        order by s.id
+                        """, BotSourceInfo.class)
+                .setParameter("botId", botId)
+                .getResultList();
+    }
+
+    /**
+     * The material the prompt context builder scores (E16.6).
+     *
+     * <p>Text and title, never bytes. This is the read that decides what a model is
+     * allowed to see, so it is worth being explicit about what it cannot reach: it
+     * selects from {@code bot_sources} and joins to nothing, so no exam, execution
+     * or grade column is reachable from it even by a future edit that added one to
+     * the projection.
+     *
+     * <p>Consumer: E16's {@code ContextBuilder}, through {@code JpaBotStore}.
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @return its material, oldest first, so context selection is deterministic
+     */
+    public List<BotSourceText> findSourceTexts(Session session, long botId) {
+        return session.createQuery("""
+                        select new server.db.projections.BotSourceText(s.id, s.title, s.extractedText)
+                        from BotSource s
+                        where s.botId = :botId
+                        order by s.id
+                        """, BotSourceText.class)
+                .setParameter("botId", botId)
+                .getResultList();
+    }
+
+    /**
+     * One source, checked against the bot that is supposed to own it (E16.9).
+     *
+     * <p>The {@code botId} is part of the query rather than something the caller
+     * compares afterwards. A source id from another course's bot therefore returns
+     * empty — which the service turns into {@code NOT_FOUND} — instead of returning
+     * a row that a caller might forget to check.
+     *
+     * @param session  the current session
+     * @param botId    the bot the caller is authorised for
+     * @param sourceId the source
+     * @return the source, or empty when it does not exist or belongs elsewhere
+     */
+    public Optional<BotSource> findSourceOfBot(Session session, long botId, long sourceId) {
+        return session.createQuery("""
+                        from BotSource where id = :sourceId and botId = :botId
+                        """, BotSource.class)
+                .setParameter("sourceId", sourceId)
+                .setParameter("botId", botId)
+                .uniqueResultOptional();
+    }
+
+    /**
+     * One student's conversations with one bot, newest first (E16.10, F12.10).
+     *
+     * <p><b>Scoped in the query, not by the caller.</b> {@code student_id} is a
+     * parameter of the read, so there is no result set here that a filtering
+     * mistake could leak — the same silent scoping the notifications feature uses,
+     * and the reason a classmate's session id can only ever answer "not found".
+     *
+     * <p>Returns entities, transcripts and all. That is a considered choice: a
+     * student has a handful of conversations per course, the alternative is three
+     * queries to rebuild counts and previews that the transcript already contains,
+     * and the JSON column is the authoritative copy of her history (S-33).
+     *
+     * @param session   the current session
+     * @param botId     the bot
+     * @param studentId the caller
+     * @return her conversations, most recently used first
+     */
+    public List<BotSession> findSessionsOf(Session session, long botId, long studentId) {
+        return session.createQuery("""
+                        from BotSession
+                        where botId = :botId and studentId = :studentId
+                        order by updatedAt desc, id desc
+                        """, BotSession.class)
+                .setParameter("botId", botId)
+                .setParameter("studentId", studentId)
+                .getResultList();
+    }
+
+    /**
+     * One of the caller's own conversations (E16.10, F12.10).
+     *
+     * @param session   the current session
+     * @param sessionId the conversation
+     * @param studentId the caller; part of the query, so somebody else's id is empty
+     * @return the conversation, or empty when it is not hers or does not exist
+     */
+    public Optional<BotSession> findOwnSession(Session session, long sessionId, long studentId) {
+        return session.createQuery("""
+                        from BotSession where id = :sessionId and studentId = :studentId
+                        """, BotSession.class)
+                .setParameter("sessionId", sessionId)
+                .setParameter("studentId", studentId)
+                .uniqueResultOptional();
+    }
+
+    /**
+     * How many questions a bot has been asked (E16.10, S-34 ⚑).
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @return the total; zero for a bot nobody has used
+     */
+    public long countMessages(Session session, long botId) {
+        return session.createQuery(
+                        "select count(m) from BotMessage m where m.botId = :botId", Long.class)
+                .setParameter("botId", botId)
+                .getSingleResult();
+    }
+
+    /**
+     * Questions per day, for the teacher's activity chart (E16.10, S-34 ⚑).
+     *
+     * <p>Bucketed with {@code year()/month()/day()} because those three are the
+     * portable way to group a timestamp across both engines this project tests on;
+     * a {@code DATE_FORMAT} or a {@code date_trunc} would pin the query to one of
+     * them and quietly fail on the other engine's contract run.
+     *
+     * <p>No identifying column is selected or grouped on, which is what makes the
+     * aggregate anonymous at the level of the SQL rather than at the level of the
+     * mapper.
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @param since   the earliest instant to count from
+     * @return one row per day that had activity, oldest first
+     */
+    public List<BotActivityCount> findActivity(Session session, long botId, Instant since) {
+        return session.createQuery("""
+                        select new server.db.projections.BotActivityCount(
+                            year(m.askedAt), month(m.askedAt), day(m.askedAt), count(m))
+                        from BotMessage m
+                        where m.botId = :botId and m.askedAt >= :since
+                        group by year(m.askedAt), month(m.askedAt), day(m.askedAt)
+                        order by year(m.askedAt), month(m.askedAt), day(m.askedAt)
+                        """, BotActivityCount.class)
+                .setParameter("botId", botId)
+                .setParameter("since", since)
+                .getResultList();
+    }
+
+    /**
+     * The recent question texts a bot was asked (E16.10, S-34 ⚑).
+     *
+     * <p>Only the {@code question} column, and deliberately nothing else. The
+     * grouping into "frequent questions" happens in Java because the normalisation
+     * that makes two spellings of the same question one row is ours
+     * ({@code TextNormaliser.groupingKey}) and neither engine can express it — so
+     * the alternative would be a per-engine SQL fold that drifts from what the
+     * screen claims to be showing.
+     *
+     * <p>Bounded by {@code limit} so a busy course cannot turn one screen into a
+     * full-table scan; newest first, because a teacher looking at this screen is
+     * asking what students are struggling with <em>now</em>.
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @param limit   the most rows to read
+     * @return the question texts, newest first
+     */
+    public List<String> findRecentQuestions(Session session, long botId, int limit) {
+        return session.createQuery("""
+                        select m.question from BotMessage m
+                        where m.botId = :botId
+                        order by m.askedAt desc, m.id desc
+                        """, String.class)
+                .setParameter("botId", botId)
+                .setMaxResults(Math.max(1, limit))
                 .getResultList();
     }
 }

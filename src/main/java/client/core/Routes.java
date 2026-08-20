@@ -73,6 +73,29 @@ public final class Routes {
      */
     public static final Route MONITOR = Route.shell("monitor", "Execution monitor", "Monitor");
 
+    /**
+     * The student's chat with a course's study bot (E16, F12.5).
+     *
+     * <p>One route for one course at a time; which course arrives as a nav
+     * parameter, so a student in three courses uses one screen rather than three.
+     */
+    public static final Route BOT_CHAT = Route.shell("bot.chat", "Study bot", "Study bot");
+
+    /** The student's own past conversations (E16, F12.10). */
+    public static final Route BOT_HISTORY = Route.shell("bot.history", "Bot history", "History");
+
+    /**
+     * The teacher's Bot Manager (E16, F12.1/F12.3).
+     *
+     * <p>The id matches {@code NotificationCatalog.ROUTE_BOT_MANAGER}, so the
+     * "study bot sources changed" notification is clickable straight into it.
+     */
+    public static final Route BOT_MANAGER = Route.shell("bot.manager", "Bot manager", "Study bot");
+
+    /** The teacher's anonymised bot usage view (E16, F12.11, S-34). */
+    public static final Route BOT_ANALYTICS =
+            Route.shell("bot.analytics", "Bot activity", "Bot activity");
+
     private Routes() {
     }
 
@@ -98,7 +121,8 @@ public final class Routes {
     /** @return every route this build defines, for bulk registration and id checks. */
     public static List<Route> all() {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
-                HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR);
+                HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR,
+                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

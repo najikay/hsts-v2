@@ -314,6 +314,18 @@
                         <exclude>client/features/exam/ExamDoneView*</exclude>
                         <exclude>client/features/exam/AnswerGridView*</exclude>
                         <exclude>client/features/exam/ExecutionMonitorView*</exclude>
+<!-- E16 study bot: the four screens plus the three FX-only widgets they draw
+     with. Every decision these render is made in BotChatModel, the four session
+     classes and BotCopy, all of which are covered. Listed one by one, never a
+     wildcard, so a new class in this package is covered until somebody argues
+     otherwise in a diff. -->
+                        <exclude>client/features/bot/BotChatView*</exclude>
+                        <exclude>client/features/bot/BotManagerView*</exclude>
+                        <exclude>client/features/bot/BotHistoryView*</exclude>
+                        <exclude>client/features/bot/BotAnalyticsView*</exclude>
+                        <exclude>client/features/bot/ChatBubble*</exclude>
+                        <exclude>client/features/bot/TypingIndicator*</exclude>
+                        <exclude>client/features/bot/ActivityBars*</exclude>
 <!-- E4 design system: only thin FX view classes are excluded; all UI *logic*
                              (theme/, anim/Motion, components/logic/, shell state) IS measured -->
                         <exclude>client/ui/components/Buttons*</exclude>
