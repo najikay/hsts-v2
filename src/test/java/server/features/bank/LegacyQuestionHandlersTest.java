@@ -1,5 +1,6 @@
 package server.features.bank;
 
+import common.dto.auth.Role;
 import common.dto.bank.Question;
 import common.dto.bank.QuestionUpdate;
 import common.protocol.ErrorCode;
@@ -66,6 +67,36 @@ class LegacyQuestionHandlersTest {
         // Since E5 both verbs require a session; the flows below are about the
         // handlers, so the socket under test carries one.
         sessions.attach(TEACHER_ID, common.dto.auth.Role.TEACHER, connection);
+    }
+
+    @Test
+    @DisplayName("P-5: a student is refused both bank verbs, and the DAO is never touched")
+    void studentsAreRefusedBothVerbs() {
+        Message list = router.route(Message.request(Verb.GET_ALL_QUESTIONS, null),
+                CallerContext.authenticated(connection, 555L, Role.STUDENT));
+        Message write = router.route(Message.request(Verb.UPDATE_QUESTION, new Question(1, "q", "a")),
+                CallerContext.authenticated(connection, 555L, Role.STUDENT));
+
+        // The legacy list carries plaintext answers; before this gate any signed-in
+        // student could read and rewrite them (found by Member A's E2.12 red-team).
+        assertThat(list.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+        assertThat(write.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+        org.mockito.Mockito.verifyNoInteractions(questionDAO);
+    }
+
+    @Test
+    @DisplayName("the principal reads the bank but cannot write it (PRD F2: read-only role)")
+    void principalReadsButNeverWrites() {
+        when(questionDAO.getAll()).thenReturn(new ArrayList<>());
+
+        Message list = router.route(Message.request(Verb.GET_ALL_QUESTIONS, null),
+                CallerContext.authenticated(connection, 777L, Role.PRINCIPAL));
+        Message write = router.route(Message.request(Verb.UPDATE_QUESTION, new Question(1, "q", "a")),
+                CallerContext.authenticated(connection, 777L, Role.PRINCIPAL));
+
+        assertThat(list.getStatus()).isEqualTo(Status.OK);
+        assertThat(write.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+        verify(questionDAO, org.mockito.Mockito.never()).update(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -293,7 +324,11 @@ class LegacyQuestionHandlersTest {
         LegacyQuestionHandlers handlers = new LegacyQuestionHandlers(questionDAO);
         Message request = Message.request(Verb.GET_ALL_QUESTIONS, null);
 
-        Message response = handlers.getAllQuestions(CallerContext.anonymous(connection), request);
+        // A TEACHER context since P-5: the handler itself now refuses anonymous
+        // and student callers, so "callable without a socket" is proven with a
+        // caller the gate accepts.
+        Message response = handlers.getAllQuestions(
+                CallerContext.authenticated(connection, TEACHER_ID, Role.TEACHER), request);
 
         assertThat(response.isOk()).isTrue();
     }

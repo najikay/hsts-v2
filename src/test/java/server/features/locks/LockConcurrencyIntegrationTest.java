@@ -2,6 +2,7 @@ package server.features.locks;
 
 import common.dto.bank.Question;
 import common.dto.bank.QuestionUpdate;
+import common.dto.auth.Role;
 import common.dto.lock.EntityRef;
 import common.dto.lock.LockChange;
 import common.dto.lock.LockRequest;
@@ -207,7 +208,7 @@ class LockConcurrencyIntegrationTest {
                 Message.request(Verb.UPDATE_QUESTION,
                         new QuestionUpdate(new Question(42, "Dana's text", "Dana's answer"),
                                 "the text Dana loaded", "the answer Dana loaded")),
-                CallerContext.authenticated(danaClient, DANA, null));
+                CallerContext.authenticated(danaClient, DANA, Role.TEACHER));
 
         assertThat(response.isError()).isTrue();
         assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
@@ -228,7 +229,7 @@ class LockConcurrencyIntegrationTest {
         Message response = router.route(
                 Message.request(Verb.UPDATE_QUESTION,
                         new QuestionUpdate(new Question(42, "saved", "answer"), "before", "before")),
-                CallerContext.authenticated(danaClient, DANA, null));
+                CallerContext.authenticated(danaClient, DANA, Role.TEACHER));
 
         assertThat(response.isOk()).isTrue();
         assertThat(response.getPayload()).isInstanceOf(List.class);
@@ -240,7 +241,7 @@ class LockConcurrencyIntegrationTest {
         EntityRef other = EntityRef.question(43);
         acquire(DANA);
         router.route(Message.request(Verb.LOCK_ACQUIRE, new LockRequest(other)),
-                CallerContext.authenticated(rinaClient, RINA, null));
+                CallerContext.authenticated(rinaClient, RINA, Role.TEACHER));
         toDana.clear();
         toRina.clear();
 
@@ -254,6 +255,18 @@ class LockConcurrencyIntegrationTest {
 
     // ===================== Helpers =======================================
 
+    @Test
+    @DisplayName("P-5 follow-up: a student is refused every lock verb outright")
+    void studentsAreRefusedLockVerbs() {
+        Message answer = router.route(Message.request(Verb.LOCK_ACQUIRE, new LockRequest(QUESTION)),
+                CallerContext.authenticated(danaClient, 9999L, Role.STUDENT));
+
+        // Students never edit, so they never hold a lock - and without the gate a
+        // student could pin any entity read-only for its whole TTL, repeatedly.
+        assertThat(answer.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+        assertThat(locks.lockCount()).isZero();
+    }
+
     private LockResponse acquire(long userId) {
         return (LockResponse) send(Verb.LOCK_ACQUIRE, userId, connectionOf(userId)).getPayload();
     }
@@ -263,8 +276,10 @@ class LockConcurrencyIntegrationTest {
     }
 
     private Message send(Verb verb, long userId, ConnectionToClient connection) {
+        // TEACHER: since the P-5 fix the lock verbs are role-gated, and these
+        // tests are about concurrency between two people who may hold locks.
         return router.route(Message.request(verb, new LockRequest(QUESTION)),
-                CallerContext.authenticated(connection, userId, null));
+                CallerContext.authenticated(connection, userId, Role.TEACHER));
     }
 
     private ConnectionToClient connectionOf(long userId) {

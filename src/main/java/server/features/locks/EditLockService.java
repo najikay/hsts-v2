@@ -1,5 +1,6 @@
 package server.features.locks;
 
+import common.dto.auth.Role;
 import common.dto.lock.EntityRef;
 import common.dto.lock.LockChange;
 import common.dto.lock.LockHolder;
@@ -12,6 +13,7 @@ import common.protocol.Verb;
 import ocsf.server.ConnectionToClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.core.Authorization;
 import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.core.SessionManager;
@@ -326,6 +328,10 @@ public class EditLockService {
 
     /** Shared shape of all three verbs: same payload, same guard, different operation. */
     private Message handle(CallerContext caller, Message request, Operation operation) {
+        // Edit locks exist for people who edit. Students never hold one, and a
+        // student who could would be able to pin an entity read-only for its TTL
+        // over and over - a nuisance the role gate removes outright (P-5 follow-up).
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
         if (!(request.getPayload() instanceof LockRequest lock)) {
             log.warn("{} with a {} payload", request.getVerb(), describe(request.getPayload()));
             return Message.error(request, ErrorCode.VALIDATION, MALFORMED_REQUEST);

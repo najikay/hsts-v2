@@ -1,5 +1,6 @@
 package server.features.bank;
 
+import common.dto.auth.Role;
 import common.dto.bank.Question;
 import common.dto.bank.QuestionUpdate;
 import common.protocol.ErrorCode;
@@ -7,6 +8,7 @@ import common.protocol.Message;
 import common.protocol.Verb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.core.Authorization;
 import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.db.QuestionDAO;
@@ -44,23 +46,25 @@ public class LegacyQuestionHandlers {
     }
 
     /**
-     * Registers both verbs as <b>authenticated</b> (E5: login exists now, so
-     * nothing but {@code LOGIN} is reachable from an anonymous connection).
+     * Registers both verbs as <b>authenticated and role-gated</b>.
      *
-     * <p>They stay role-agnostic for one more epic: the course-scoped guard these
-     * really want — {@code Authorization.requireTeachesCourse} — needs the course
-     * repositories from E2, and the legacy {@link common.dto.bank.Question} has no
-     * course on it to guard with. The client only offers the screen to teachers
-     * and coordinators; E6 replaces both verbs with the versioned bank verbs and
-     * their real guards.
+     * <p>The gate is a blanket role check, not the course-scoped guard these
+     * really want — {@code Authorization.requireTeachesCourse} stays with E6,
+     * whose versioned verbs know their course. But "any signed-in student can
+     * read every answer and rewrite every question" (found by Member A's E2.12
+     * red-team, PROBLEMS.md P-5) needed no course data to fix: reading the bank
+     * is for staff, writing it is for teachers and coordinators. The client
+     * hiding the screen from students is not a control; this is.
      */
     public void registerOn(MessageRouter router) {
         router.register(Verb.GET_ALL_QUESTIONS, this::getAllQuestions);
         router.register(Verb.UPDATE_QUESTION, this::updateQuestion);
     }
 
-    /** {@code GET_ALL_QUESTIONS} → OK with the full list. */
+    /** {@code GET_ALL_QUESTIONS} → OK with the full list. Staff only: the legacy list carries answers. */
     Message getAllQuestions(CallerContext caller, Message request) {
+        // PRINCIPAL included: PRD F2 gives the principal the bank read-only.
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR, Role.PRINCIPAL);
         List<Question> all = questionDAO.getAll();
         log.debug("GET_ALL_QUESTIONS → {} question(s)", all.size());
         return Message.ok(request, new ArrayList<>(all));
@@ -82,6 +86,9 @@ public class LegacyQuestionHandlers {
      * </ul>
      */
     Message updateQuestion(CallerContext caller, Message request) {
+        // Writing the bank is authoring: teachers and coordinators only. The
+        // principal reads; students get FORBIDDEN before any payload is looked at.
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
         Object payload = request.getPayload();
         if (payload instanceof QuestionUpdate update) {
             return updateGuarded(request, update);

@@ -1,5 +1,6 @@
 package server.features.locks;
 
+import common.dto.auth.Role;
 import common.dto.lock.EntityRef;
 import common.dto.lock.LockChange;
 import common.dto.lock.LockHolder;
@@ -578,7 +579,7 @@ class EditLockServiceTest {
         void malformedPayload() {
             for (Verb verb : List.of(Verb.LOCK_ACQUIRE, Verb.LOCK_RENEW, Verb.LOCK_RELEASE)) {
                 Message response = router.route(Message.request(verb, "not a dto"),
-                        CallerContext.authenticated(danaSocket, DANA, null));
+                        CallerContext.authenticated(danaSocket, DANA, Role.TEACHER));
 
                 assertThat(response.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
                 assertThat(response.errorMessage()).isEqualTo(EditLockService.MALFORMED_REQUEST);
@@ -593,7 +594,7 @@ class EditLockServiceTest {
 
         private Message route(Verb verb, long callerId) {
             return router.route(Message.request(verb, new LockRequest(QUESTION)),
-                    CallerContext.authenticated(danaSocket, callerId, null));
+                    CallerContext.authenticated(danaSocket, callerId, Role.TEACHER));
         }
     }
 

@@ -91,7 +91,9 @@ class ProtocolLoopbackTest {
         // registerOpen to register), so this socket gets one before the flows
         // below run. Authentication itself is covered by LoginIntegrationTest;
         // here the point is still the protocol round trip.
-        sessions.attach(STUDENT_ID, Role.STUDENT, awaitServerSideConnection());
+        // TEACHER since the P-5 role gate: this suite is about the transport, and the
+        // bank verbs it exercises are now staff-only.
+        sessions.attach(STUDENT_ID, Role.TEACHER, awaitServerSideConnection());
     }
 
     @AfterEach
@@ -166,7 +168,7 @@ class ProtocolLoopbackTest {
     @DisplayName("a server push travels the socket and lands on the client event bus")
     void pushReachesTheClient() throws Exception {
         ConnectionToClient serverSide = awaitServerSideConnection();
-        assertThat(server.sessions().attach(STUDENT_ID, Role.STUDENT, serverSide)).isTrue();
+        assertThat(server.sessions().attach(STUDENT_ID, Role.TEACHER, serverSide)).isTrue();
 
         PushGateway gateway = server.pushGateway();
         assertThat(gateway.toUser(STUDENT_ID, Verb.PUSH_NOTIFICATION, "ציון פורסם")).isTrue();
@@ -181,7 +183,7 @@ class ProtocolLoopbackTest {
     @DisplayName("a dropped socket frees the session immediately (F1.3)")
     void disconnectFreesTheSession() throws Exception {
         ConnectionToClient serverSide = awaitServerSideConnection();
-        server.sessions().attach(STUDENT_ID, Role.STUDENT, serverSide);
+        server.sessions().attach(STUDENT_ID, Role.TEACHER, serverSide);
 
         client.disconnect();
 

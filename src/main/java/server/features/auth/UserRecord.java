@@ -24,7 +24,10 @@ import java.util.Objects;
  * @param passwordHash BCrypt hash — never plaintext, never reversible (F1.1, S-38)
  * @param displayName  full name for the avatar chip and the dashboard greeting
  * @param role         the single role driving the shell layout (T-1)
- * @param courses      courses taught (teacher/coordinator) or enrolled in (student);
+ * @param courses      every course the user belongs to: taught AND enrolled, as a
+ *                     union — a teacher enrolled in a colleague's course carries
+ *                     both, and the shell's nav shows both (settled in the E2 PR 2b
+ *                     review; RepositoryUserDirectory returns the union);
  *                     never {@code null}, defensively copied
  */
 public record UserRecord(long id,
