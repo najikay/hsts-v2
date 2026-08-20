@@ -329,8 +329,8 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                     .toList();
 
             assertThat(candidates)
-                    .as("notification %d to %s (%s): no loaded row matches title '%s'",
-                            expected.number(), expected.recipient(), expected.type(),
+                    .as("notification %s (%s to %s): no loaded row matches title '%s'",
+                            expected.seedId(), expected.type(), expected.recipient(),
                             expected.title())
                     .hasSize(1);
         }

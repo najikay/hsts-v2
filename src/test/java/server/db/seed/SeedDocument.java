@@ -198,9 +198,16 @@ public final class SeedDocument {
      */
     public record SelectionRow(String student, String question, boolean answered, int selected) { }
 
-    /** §11. */
-    public record NotificationRow(int number, String recipient, String type, String title,
-                                  boolean read) { }
+    /**
+     * §11.
+     *
+     * @param seedId the document's stable identifier for this row, added in the 2026-08-20
+     *               amendment. The database has no column for it, so it is not compared against
+     *               anything; it exists so a failure can name <em>which</em> notification
+     *               disagreed instead of quoting a Hebrew title back at the reader.
+     */
+    public record NotificationRow(String seedId, int number, String recipient, String type,
+                                  String title, boolean read) { }
 
     // -------------------------------------------------------------- sections
 
@@ -434,9 +441,13 @@ public final class SeedDocument {
 
     /** @return §11's notifications */
     public List<NotificationRow> notifications() {
-        return map(rows("## 11.", 5), cells -> new NotificationRow(
-                number(cells[0], "§11 number"), reference(cells[1]), plain(cells[2]),
-                plain(cells[3]), plain(cells[4]).equalsIgnoreCase("read")));
+        // Six columns since the 2026-08-20 amendment added seed_id in front. The width check
+        // caught the change rather than reading every field one place to the left, which is
+        // what "the markdown shape is part of the contract" is for.
+        return map(rows("## 11.", 6), cells -> new NotificationRow(
+                plain(cells[0]), number(cells[1], "§11 number"), reference(cells[2]),
+                plain(cells[3]), plain(cells[4]),
+                plain(cells[5]).equalsIgnoreCase("read")));
     }
 
     // --------------------------------------------------------------- helpers

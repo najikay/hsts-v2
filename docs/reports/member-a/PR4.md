@@ -1,7 +1,11 @@
 # E2 PR 4 — `SeedDocument`, the one reader, and the check PR 3a could not make
 
-**Test infrastructure only. No production code changed.** Approved as its own PR rather than
-folded into 3b, because 3b is blocked on content amendments and this is not.
+Approved as its own PR rather than folded into 3b, because 3b was blocked on content amendments
+and this was not.
+
+**It was meant to be test infrastructure only. It changes one line of production code, because
+the machinery caught a real disagreement the moment it ran against the amended document** — see
+§2.1. That line is the PR's best evidence, so it stays rather than being deferred.
 
 ## Verification
 
@@ -10,7 +14,7 @@ folded into 3b, because 3b is blocked on content amendments and this is not.
 | Build | `./mvnw clean verify` on JDK 21, `HSTS_REQUIRE_MYSQL=true` → **BUILD SUCCESS** |
 | Tests | **2379**, 0 failures, 0 errors, **0 skipped** (`main` at `5158cd5`: 2337) |
 | Coverage | **98.76%** bundle, **98.05%** `server.db.**` — identical to `main` |
-| Production code | none. `git diff --name-only origin/main...HEAD -- src/main/java` is empty |
+| Production code | **one line**: `NotificationsSection`, the mean in notification 8's title |
 | Both engines | the document-versus-database contract runs on H2 and real MySQL |
 
 Coverage is unchanged rather than merely close: adding no production code means there is
@@ -42,6 +46,40 @@ alone. The stored data still has four distinct options, still has an index in 1.
 | This PR's `SeedLoadedDbH2Test` | **FAILS**: `11003 option 2: document has 'k = 6', database has 'k = 3'` |
 
 That is the entire case for the PR, and it reproduces in one command. Reverted and re-verified.
+
+## 2.1 The first catch was real, not planted
+
+The planted attack above proves the machinery *can* fail. What happened next proves it *does*.
+
+Amjad's amendment (`415d2c1`) landed while this PR was being built. On the first run against the
+amended document, `SeedLoadedDbTest` failed:
+
+```
+notification N-EXEC-CLOSED-ALG (EXECUTION_CLOSED to principal.avia)
+  document: בחינה הסתיימה — 8 נבחנים, ממוצע 72.5
+  database: בחינה הסתיימה: 8 נבחנים, ממוצע 78
+```
+
+Notification 8 quotes the closed execution's mean. It said 78 until the auto-scores were made
+reachable and §9.1's frozen mean moved to 72.5. **The document and the loader both said 78**, so
+they agreed with each other, and every test in PR 3a passed. Amjad's amendment fixed the
+document; nothing would have fixed the loader, because nothing could see the disagreement.
+
+That one-line fix is in this PR. It was deferred to 3b on the grounds that the number was still
+unknown — that reason expired when the amendment supplied it.
+
+**A second, smaller catch in the same run.** §11 gained a `seed_id` column, so its table went
+from five columns to six. The width check refused it by name rather than reading every field one
+place to the left:
+
+```
+the first table in '## 11.' has 6 columns where 5 are expected.
+Its cells are read by position, so this is a contract change.
+```
+
+That is the "markdown shape is part of the contract" ruling doing exactly what it was written
+for, on its first real reformat. Every other section passed unchanged, which is also worth
+knowing: §9.2's 26 new rows and §9's new rules table changed no shape this depends on.
 
 ## 3. Design, and the three semantics that survive it
 
@@ -93,7 +131,14 @@ Two loader-data fixes that current rulings imply are **not** in this PR:
 
 1. **21003 v2's author.** D9's refinement puts second versions in a co-taught course on the
    co-teacher, so it should be `tamar.shani`; the loader uses `avi.mizrahi` for all of course 21.
-2. **Notification 8's mean.** It depends on the number Amjad writes, so doing it now is guessing.
+   **Still held**, and now for a concrete reason rather than a preference: the authorship rule is
+   not in the document yet. `415d2c1` added §9's NOT NULL rules, §9.2's content, §10's TEXT
+   ruling and §11's seed ids, but **§7 still states no rule about `question_versions.created_by`**
+   — I searched the whole file. So `SeedDocument` has nothing to derive expected authors from and
+   the assertion cannot be written. When the rule lands, the accessor, the assertion and the fix
+   go in together.
+2. ~~**Notification 8's mean.**~~ **No longer held** — the amendment supplied the number, the
+   check found the drift, and the fix is in this PR. See §2.1.
 
 I proposed holding them to keep this PR purely test infrastructure. The lead's reason is better
 and is the one recorded here: landing this machinery **first** turns the 21003 fix into the
