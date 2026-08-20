@@ -286,7 +286,7 @@ Nothing here blocks the merge. In rough order of how much it costs to leave:
 - [x] Migrations unchanged by this PR
 - [x] No secrets, no dummy-credential changes in resources
 - [x] TODO.md — E2.9–E2.14 ticked here
-- [ ] CI green — after push
+- [x] CI green — run 32317040495, 1m50s
 
 ## Next
 
