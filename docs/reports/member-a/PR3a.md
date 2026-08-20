@@ -13,10 +13,16 @@ in §6 below are answered.
 | | |
 |---|---|
 | Build | `./mvnw clean verify` on JDK 21, `HSTS_REQUIRE_MYSQL=true` → **BUILD SUCCESS** |
-| Tests | **1647**, 0 failures, 0 errors, **0 skipped** (`main` at `479f4ac`: 1632) |
-| Coverage, bundle | **98.73%** against `main`'s **98.80%**. Down **0.07**, explained in §7 |
-| Coverage, `server.db.**` | **97.95%**, up from 97.55% |
+| Merged with | `origin/main` at `cb9d14c`, so this includes `#8`, `#9`, `#10` and E10/E11 |
+| Tests | **2337**, 0 failures, 0 errors, **0 skipped** |
+| Coverage, bundle | **98.76%** against `main`'s **98.81%**. Down **0.05**, explained in §7 |
+| Coverage, `server.db.**` | **98.05%** |
 | Coverage, `server.db.seed` | 98.34% |
+
+`main`'s 98.81% is measured, not quoted from an earlier run: this PR adds no production code
+outside `server/db/seed` (`git diff --name-only origin/main...HEAD -- src/main/java` returns
+nothing else), so the bundle with that one package excluded is exactly what `main` scores under
+the same suite. That avoids comparing against a baseline three merges stale.
 | Both engines | every seed test runs on H2 **and** real MySQL; MySQL leaves show real timings |
 | Migrations | unchanged by this PR |
 | Staleness | `find src -name '*.java' -newer <log>` empty, so the numbers describe what is committed |
@@ -181,7 +187,41 @@ Nothing here blocks the merge.
 | ⚪ | The two stale prose lines in `SEED_CONTENT.md` | §6.1 |
 | ⚪ | Fail-fast guards left uncovered | §7 |
 
-## 10. Next
+## 10. §7 re-transcribed against the rebalanced answer key
+
+PR #10 (`ce818f7`) rebalanced §7's answer key from **{1:14, 2:18, 3:8, 4:0}** to
+**{1:11, 2:10, 3:10, 4:9}** by swapping option text between positions. It merged before this PR
+was pushed, which is the order I asked for, so §7 here is transcribed against the rebalanced
+document rather than needing a follow-up. **31 of the 40 questions changed.**
+
+Before the rebalance I had counted the key distribution in my own transcription independently
+and got {1:14, 2:18, 3:8, 4:0}, matching Amjad's stated "before" exactly. Two people deriving
+the same defect separately, from different directions, is the strongest confirmation available
+that option 4 was never correct anywhere in the bank.
+
+**How the re-transcription was verified, given §4.** Section 4 says plainly that my tests cannot
+catch a transcription error, because they are written from my own constants. Re-typing 40
+questions is precisely the operation that weakness applies to, so this time the check was
+mechanical rather than visual: a throwaway script extracted **all four options in order plus the
+correct index** from both the document and the Java, normalised the two documented differences
+(markdown formatting, the one sanctioned em-dash replacement), and diffed them. **Identical for
+all 40.** Separately, the document's stems, topics and difficulties are byte-identical before
+and after the rebalance, so the earlier field-by-field audit of those still holds.
+
+Worth recording: that script produced **three false positives before it produced a true
+negative** — it tripped on a `//` comment of mine containing a quoted string, on backticks
+appearing mid-string rather than only at the edges, and on the space preceding an em dash. Each
+looked exactly like a transcription error until read closely.
+
+**The durable fix, for PR 3b.** Amjad's validation is now a script that parses §7's key, §8.1's
+composition and §9.1.1's selections out of the document and recomputes every score, and you have
+asked for one committed parser with two consumers. Agreed, and the throwaway above is the
+argument for making it real: a parser that is not itself tested is a confident liar. PR 3b
+builds the assertion that **the loaded database matches the document**, on his parser if it is
+committable and as shared test infrastructure otherwise. PR 3b has to transcribe §9.1.1's
+per-question selections anyway, which is where hand-copying is most dangerous.
+
+## 11. Next
 
 **PR 3b** closes E2.15: seed §9 (executions, attempts, grades) and §10 (bot content), once the
 two red items are answered. Additive only.
