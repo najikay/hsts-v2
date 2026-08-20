@@ -1,38 +1,28 @@
 package server.db;
 
 import org.hibernate.SessionFactory;
-
-import java.util.List;
+import server.db.seed.WipeOrder;
 
 /**
  * Emptying a test database, in the one order that works (E2.13).
  *
- * <p>Lifted out of {@link RepositoryTestBase} when a second family of database tests needed
- * the same thing: {@code server.features.notify.JpaNotificationStoreContract} runs against
- * the shared MySQL schema too, and {@code notifications} has a foreign key to {@code users},
- * so it cannot simply delete its own table and hope whatever the previous test class left
- * behind is compatible. Two copies of {@link #WIPE_ORDER} would have drifted the first time a
- * migration added a table.
+ * <p>Two families of database tests need this: the repository suites through
+ * {@link RepositoryTestBase}, and {@code server.features.notify.JpaNotificationStoreContract},
+ * which runs against the same shared MySQL schema and cannot simply delete {@code
+ * notifications} and hope whatever the previous test class left behind is compatible.
  *
- * <h2>Never {@code FOREIGN_KEY_CHECKS = 0}</h2>
+ * <h2>The order lives in main code now</h2>
  *
- * <p>§5 permits switching foreign keys off around a wipe provided they are switched back on
- * before any insert, because the composite foreign key on {@code exam_version_questions} is
- * inert while they are off. Rather than guard that failure mode, this helper never creates
- * it: if the order below is ever wrong, a foreign key refuses the delete and the suite fails
- * loudly instead of silently loading data no constraint ever checked.
+ * <p>{@link WipeOrder} is the canonical list, and this class delegates to it. It moved there
+ * in E2 PR 3 for a reason this class cannot solve: the seed loader's {@code --reseed} path
+ * needs exactly the same order, and production code cannot import test code. Keeping a copy
+ * here would have made the loader and the tests two sources of truth for one fact, drifting
+ * the first time a migration adds a table.
+ *
+ * <p>This class stays rather than being deleted so its two callers keep a stable name, and so
+ * the test suite has somewhere to put wipe behaviour that is genuinely test-only.
  */
 public final class TestSchema {
-
-    /** Reverse dependency order: children before the rows they point at. */
-    public static final List<String> WIPE_ORDER = List.of(
-            "notifications",
-            "bot_messages", "bot_sessions", "bot_sources", "bots",
-            "grades", "attempt_answers", "exam_attempts", "exam_executions",
-            "exam_version_questions", "exam_versions", "exams",
-            "question_versions", "questions",
-            "coordinators", "enrollments", "course_teachers",
-            "users", "courses", "subjects");
 
     private TestSchema() {
         // static helper - no instances
@@ -44,7 +34,6 @@ public final class TestSchema {
      * @param factory the database to empty
      */
     public static void wipe(SessionFactory factory) {
-        Transactions.runInTx(factory, session -> WIPE_ORDER.forEach(
-                table -> session.createNativeMutationQuery("DELETE FROM " + table).executeUpdate()));
+        WipeOrder.wipe(factory);
     }
 }
