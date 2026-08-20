@@ -172,7 +172,7 @@ took 290 seconds against MySQL, once per class takes under 8.
 - [x] Both engines; coverage unchanged because no production code changed
 - [x] No secrets; nothing outside `src/test/java/server/db/**` and this report
 - [x] `docs/TODO.md` unchanged — this closes no task on its own, it unblocks E2.15's verification
-- [ ] CI green — ticked after the run
+- [x] CI green — run 32405056472, 2m55s
 
 ## 9. Next
 
