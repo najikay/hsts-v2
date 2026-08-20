@@ -203,7 +203,7 @@ than contort the sections to reach them, which is the ruling you already gave.
 - [x] Migrations unchanged by this PR
 - [x] No secrets; `demo123` is a documented demo credential hashed at load
 - [x] `docs/TODO.md` — **E2.15 ticked**; E2.16 left alone, it is yours
-- [ ] CI green — ticked after the run
+- [x] CI green — run 32426720866, 3m5s
 
 ## 9. Next
 
