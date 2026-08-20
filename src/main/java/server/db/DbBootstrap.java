@@ -48,8 +48,14 @@ public final class DbBootstrap {
      * TLS off for LAN dev, UTF-8 on the wire so Hebrew round-trips, and UTC so the
      * server-authoritative timestamps of ADR-010 are not reinterpreted per machine.
      */
+    // createDatabaseIfNotExist: the first boot on a clean machine (or after the
+    // PR-1 "drop and recreate hsts_db" instruction) must reach Flyway, not die in
+    // the pool with "Unknown database". The demo laptop double-clicks the jar;
+    // nobody is there to run CREATE DATABASE first. Tables carry their own
+    // explicit utf8mb4 charset, so the created database's default does not matter.
     static final String JDBC_PARAMS =
-            "useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8";
+            "useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8"
+                    + "&createDatabaseIfNotExist=true";
 
     /** Migrations need one connection; the pool exists only to satisfy Flyway's API. */
     private static final int MIGRATION_POOL_SIZE = 2;

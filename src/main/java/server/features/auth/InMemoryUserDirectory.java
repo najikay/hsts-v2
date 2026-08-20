@@ -14,8 +14,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The development {@link UserDirectory}: five fixture users, hashed at
- * construction (Logic tier, E5.1).
+ * The in-memory {@link UserDirectory}: five fixture users, hashed at construction
+ * — <b>a test fixture, no longer production wiring</b> (Logic tier, E5.1).
+ *
+ * <p>{@code HSTSServer.defaultRouter} now builds a
+ * {@code server.db.repos.RepositoryUserDirectory} over the real
+ * {@code users} table, exactly as {@link UserDirectory}'s javadoc predicted. This
+ * class stays because {@link AuthService}'s tests want it: BCrypt verification,
+ * the throttle, single-session enforcement and the four role shells all remain
+ * provable in milliseconds without a database or a seeded schema.
  *
  * <p>It exists so the whole authentication path — BCrypt verification, the
  * throttle, single-session enforcement, the four role shells — is demonstrable
@@ -29,8 +36,8 @@ import java.util.Optional;
  * few hundred milliseconds; production hashes come from the seed migration.
  *
  * <p>The shared password is a dev credential and is documented in
- * {@code docs/DEMO_ACCOUNTS.md}. Nothing here reaches a built server outside the
- * course demo: E2 PR3 replaces this class with the repository-backed adapter.
+ * {@code docs/DEMO_ACCOUNTS.md}. Nothing here reaches a running server any more:
+ * the production router constructs the repository-backed adapter instead.
  */
 public final class InMemoryUserDirectory implements UserDirectory {
 

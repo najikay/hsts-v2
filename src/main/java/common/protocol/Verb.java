@@ -69,6 +69,82 @@ public enum Verb {
     /** Give the lock back and stop watching the entity. */
     LOCK_RELEASE,
 
+    // ===================== Grading & results (E12/E13) =====================
+    // The frozen wire contract: docs/contracts/GRADING_WIRE_CONTRACT.md. Payload
+    // types live in {@code common.dto.grading}; the handlers are E12/E13.
+    //
+    // Two role families, and the difference is the whole security story here.
+    // Every teacher verb is {@code requireRole(TEACHER, COORDINATOR)} PLUS an
+    // ownership check resolved from the repositories — the caller must be the
+    // execution's executing teacher or the exam's author, never whoever the
+    // payload says (P-5: a CallerContext is always read). Every student verb is
+    // open to any authenticated caller and scoped to their own grades in the
+    // query itself ({@code WHERE student_id = :caller}), so someone else's grade
+    // id answers NOT_FOUND and reveals nothing.
+
+    /**
+     * The teacher's queue of closed executions waiting to be marked.
+     * Caller: teacher (or coordinator). Request payload: {@code null} — which
+     * executions those are is resolved from the session, not from a field.
+     * Response: {@code GradingQueue}.
+     */
+    GRADING_QUEUE_GET,
+
+    /**
+     * Every student's grade in one execution, with its header.
+     * Caller: teacher. Request payload: {@code ExecutionGradesRequest};
+     * response: {@code ExecutionGrades}.
+     */
+    GRADING_EXECUTION_GET,
+
+    /**
+     * One grade opened for review: the header plus the marked paper.
+     * Caller: teacher. Request payload: {@code GradeReviewRequest}; response:
+     * {@code GradeReview}, which carries the answer key and therefore never
+     * reaches a student (see {@link #CHECKED_FORM_GET}).
+     */
+    GRADE_REVIEW_GET,
+
+    /**
+     * Change a score, with a required justification (S-23).
+     * Caller: teacher. Request payload: {@code GradeOverrideRequest}; response:
+     * {@code GradeReview}, refreshed from the server's own read rather than an
+     * acknowledgement the client would have to patch a row with. Allowed only
+     * while the grade is {@code AUTO}: overriding an approved grade answers
+     * {@code CONFLICT}.
+     */
+    GRADE_OVERRIDE,
+
+    /**
+     * Approve one grade or a whole execution — one verb for both (E12.2/E12.7).
+     * Caller: teacher. Request payload: {@code ApproveRequest}; response:
+     * {@code ApproveResult}. Idempotent: re-approving counts in
+     * {@code alreadyApproved} and never errors. Completing an execution freezes
+     * its {@code ScoreStatistics} in the same transaction (E12.4), and each
+     * approval publishes to the student through {@link #PUSH_GRADE_PUBLISHED}
+     * and a durable {@code GRADE_PUBLISHED} notification (C-3, E13.6).
+     */
+    GRADES_APPROVE,
+
+    /**
+     * The calling student's own published results.
+     * Caller: any authenticated user, scoped to themselves. Request payload:
+     * {@code null}; response: {@code MyGrades} — approved rows only, and never
+     * the override justification.
+     */
+    MY_GRADES_GET,
+
+    /**
+     * The calling student's own marked paper, chosen answers against correct
+     * ones (E13.2).
+     * Caller: any authenticated user, scoped to themselves. Request payload:
+     * {@code CheckedFormRequest}; response: {@code CheckedForm}. The only verb
+     * that hands correctness to a student, and only when the grade is theirs,
+     * it is {@code APPROVED}, and the execution is closed; anything else is
+     * {@code NOT_FOUND}, indistinguishably.
+     */
+    CHECKED_FORM_GET,
+
     // ===================== Server push channel =============================
     // Constants only for now — the producing services arrive with their epics.
 

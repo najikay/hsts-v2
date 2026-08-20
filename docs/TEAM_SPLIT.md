@@ -2,6 +2,22 @@
 
 Principle: **the lead builds the platform and the highest-risk features; members own self-contained vertical slices behind frozen contracts.** Nobody blocks anybody: every feature can be built and tested against fakes before integration.
 
+**This is a leadership map, not an isolation map (course spec §11).** The system description
+requires that all members participate in every project component and forbids splitting work so
+that each member works alone on her part. "Ownership" below means *leads the implementation of* —
+every component still crosses all three members, structurally:
+
+- **Contracts are joint work.** Every frozen contract (protocol v2, the schema in ARCHITECTURE §5,
+  the grading wire contract) is negotiated in review rounds where the non-owners' questions and
+  amendments are recorded in the PR record and in DECISIONS.md — the schema carries A's design and
+  the lead's round-1/round-2 amendments; the seed carries B's design and both reviewers' decisions.
+- **Every PR is cross-reviewed** before merge (lead reviews all; members' red-team passes have
+  changed lead-owned code — P-5 is Member A's finding fixed in the lead's router layer).
+- **Acceptance testing crosses all boundaries**: B authors and executes the 115-case table against
+  A's and the lead's features; E21 hardening explicitly has each member attacking the others' code.
+- **Every member must be able to explain every component at the defense** — E22.4 (below) makes
+  the cross-walkthroughs a scheduled task, not a hope.
+
 ---
 
 ## 1. Ownership map

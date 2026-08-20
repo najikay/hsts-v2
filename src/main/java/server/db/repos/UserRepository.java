@@ -37,6 +37,25 @@ public final class UserRepository {
     }
 
     /**
+     * Finds a user by internal id.
+     *
+     * <p>{@code session.get} rather than a query: the id is the primary key, so this is a
+     * first-level cache hit inside a transaction that already touched the row, and one
+     * indexed lookup otherwise. It is a hot path — every edit-lock acquisition on a held
+     * entity resolves the holder's name through it (E18).
+     *
+     * <p>Consumer: {@code RepositoryUserDirectory.findById}, which is what puts a real name
+     * in the lock banner instead of {@code "Another user"}.
+     *
+     * @param session the current session
+     * @param userId  the user's internal id
+     * @return the user, or empty when there is no such id
+     */
+    public Optional<User> findById(Session session, long userId) {
+        return Optional.ofNullable(session.get(User.class, userId));
+    }
+
+    /**
      * The subjects this user coordinates.
      *
      * <p>Coordinator-ness is per-subject state, never a stored role (§5), so this is how a

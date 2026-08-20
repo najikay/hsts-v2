@@ -14,7 +14,6 @@ import server.db.entities.Subject;
 import server.db.entities.User;
 import server.db.entities.UserRole;
 
-import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -30,13 +29,10 @@ import java.util.function.Function;
  *
  * <h2>Wiping</h2>
  *
- * <p>{@link #WIPE_ORDER} deletes in reverse dependency order and <b>never disables
- * {@code FOREIGN_KEY_CHECKS}</b>. §5 permits switching them off around a wipe provided they
- * are switched back on before any insert, because the composite foreign key on
- * {@code exam_version_questions} is inert while they are off. Rather than guard that
- * failure mode, this base never creates it: if the order below is ever wrong, a foreign key
- * refuses the delete and the suite fails loudly instead of silently loading data no
- * constraint ever checked.
+ * <p>Delegated to {@link TestSchema#wipe}, which deletes in reverse dependency order and
+ * never disables {@code FOREIGN_KEY_CHECKS} — see that class for why. It lives there rather
+ * than here because the notification store contract needs the same wipe against the same
+ * shared MySQL schema without inheriting this fixture.
  *
  * <h2>The fixture</h2>
  *
@@ -51,16 +47,6 @@ import java.util.function.Function;
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class RepositoryTestBase {
-
-    /** Reverse dependency order: children before the rows they point at. */
-    private static final List<String> WIPE_ORDER = List.of(
-            "notifications",
-            "bot_messages", "bot_sessions", "bot_sources", "bots",
-            "grades", "attempt_answers", "exam_attempts", "exam_executions",
-            "exam_version_questions", "exam_versions", "exams",
-            "question_versions", "questions",
-            "coordinators", "enrollments", "course_teachers",
-            "users", "courses", "subjects");
 
     protected static final String SUBJECT_MATH = "10";
     protected static final String SUBJECT_CS = "20";
@@ -131,8 +117,7 @@ public abstract class RepositoryTestBase {
      * else here would notice until a repository test failed for an unrelated-looking reason.
      */
     protected final void wipe() {
-        runInTx(session -> WIPE_ORDER.forEach(
-                table -> session.createNativeMutationQuery("DELETE FROM " + table).executeUpdate()));
+        TestSchema.wipe(factory());
     }
 
     private void seed() {

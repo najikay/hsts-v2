@@ -43,6 +43,26 @@ class VerbTest {
     }
 
     @Test
+    @DisplayName("the seven frozen grading verbs exist, spelled exactly as the contract spells them")
+    void gradingVerbsExist() {
+        // docs/contracts/GRADING_WIRE_CONTRACT.md is frozen, and a verb is serialized by
+        // name, so a rename here is a protocol break between two shipped JARs. valueOf is
+        // the spelling check: referring to the constant would compile after a rename.
+        assertThat(Verb.values()).contains(
+                Verb.GRADING_QUEUE_GET, Verb.GRADING_EXECUTION_GET, Verb.GRADE_REVIEW_GET,
+                Verb.GRADE_OVERRIDE, Verb.GRADES_APPROVE,
+                Verb.MY_GRADES_GET, Verb.CHECKED_FORM_GET);
+
+        assertThat(Verb.valueOf("GRADING_QUEUE_GET")).isEqualTo(Verb.GRADING_QUEUE_GET);
+        assertThat(Verb.valueOf("GRADING_EXECUTION_GET")).isEqualTo(Verb.GRADING_EXECUTION_GET);
+        assertThat(Verb.valueOf("GRADE_REVIEW_GET")).isEqualTo(Verb.GRADE_REVIEW_GET);
+        assertThat(Verb.valueOf("GRADE_OVERRIDE")).isEqualTo(Verb.GRADE_OVERRIDE);
+        assertThat(Verb.valueOf("GRADES_APPROVE")).isEqualTo(Verb.GRADES_APPROVE);
+        assertThat(Verb.valueOf("MY_GRADES_GET")).isEqualTo(Verb.MY_GRADES_GET);
+        assertThat(Verb.valueOf("CHECKED_FORM_GET")).isEqualTo(Verb.CHECKED_FORM_GET);
+    }
+
+    @Test
     @DisplayName("exactly six push verbs are defined (adding one is a deliberate act)")
     void pushVerbCount() {
         assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(6);

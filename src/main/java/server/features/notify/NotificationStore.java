@@ -16,15 +16,19 @@ import java.util.List;
  * about how they are answered.
  *
  * <ul>
- *   <li><b>today:</b> {@link InMemoryNotificationStore} — a thread-safe map, used
- *       by the running server and by every test in this feature.</li>
- *   <li><b>next:</b> a {@code JpaNotificationStore} of about thirty lines, landing
- *       as soon as E2 PR 2a merges: each method becomes one
- *       {@code Transactions.inTx(...)} block over the {@code Notification} entity
- *       and the {@code notifications} table (V7). No line of
- *       {@link NotificationService}, and no test of it, changes — which is the
- *       point of writing the seam first.</li>
+ *   <li><b>production:</b> {@link JpaNotificationStore} — one
+ *       {@code Transactions.inTx(...)} block per method over the
+ *       {@code Notification} entity and the {@code notifications} table (V7).</li>
+ *   <li><b>tests:</b> {@link InMemoryNotificationStore} — a thread-safe map, kept
+ *       as a fixture so the service's rules stay unit-testable without a
+ *       database.</li>
  * </ul>
+ *
+ * <p>The swap happened exactly as the seam predicted: one line in
+ * {@code HSTSServer.defaultRouter}, and not a line of
+ * {@link NotificationService} nor a single test of it. Both implementations are
+ * held to the identical suite by {@code NotificationStoreContract}, so "the JPA
+ * one behaves like the map" is proved rather than assumed.
  *
  * <p>The signatures are deliberately scalar and DTO-shaped: no entity, no
  * {@code Session}, no {@code Optional<Notification>} leaks through, so the JPA

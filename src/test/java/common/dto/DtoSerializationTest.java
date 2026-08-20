@@ -5,6 +5,21 @@ import common.dto.auth.LoginRequest;
 import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
 import common.dto.bank.Question;
+import common.dto.grading.AnswerReviewRow;
+import common.dto.grading.ApproveRequest;
+import common.dto.grading.ApproveResult;
+import common.dto.grading.CheckedForm;
+import common.dto.grading.CheckedFormRequest;
+import common.dto.grading.ExecutionGrades;
+import common.dto.grading.ExecutionGradesRequest;
+import common.dto.grading.ExecutionGradingSummary;
+import common.dto.grading.GradeOverrideRequest;
+import common.dto.grading.GradeReview;
+import common.dto.grading.GradeReviewRequest;
+import common.dto.grading.GradeState;
+import common.dto.grading.GradingQueue;
+import common.dto.grading.MyGrades;
+import common.dto.grading.StudentGradeRow;
 import common.protocol.Message;
 import common.protocol.Verb;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +32,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,6 +49,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * and the "no password in a log line" rule.
  */
 class DtoSerializationTest {
+
+    /** When the grading fixtures were approved; UTC, as every instant on the wire is. */
+    private static final Instant APPROVED_AT = Instant.parse("2026-08-20T11:30:00Z");
 
     @Test
     @DisplayName("ErrorPayload round-trips, including Hebrew")
@@ -183,6 +202,166 @@ class DtoSerializationTest {
         Message restored = roundTrip(Message.ok(Message.request(Verb.LOGIN, null), result));
 
         assertThat(restored.getPayload()).isEqualTo(result);
+    }
+
+    // ===================== Grading & results (E12/E13) ====================
+    // The frozen contract (docs/contracts/GRADING_WIRE_CONTRACT.md) is a wire
+    // contract, so every one of its types has to survive the wire. These pin
+    // the round trip; GradingDtoTest pins the compact-constructor rules.
+
+    @Test
+    @DisplayName("GradeState survives a round-trip by name, both constants")
+    void gradeStateRoundTrips() throws Exception {
+        assertThat(roundTrip(GradeState.AUTO)).isEqualTo(GradeState.AUTO);
+        assertThat(roundTrip(GradeState.APPROVED)).isEqualTo(GradeState.APPROVED);
+    }
+
+    @Test
+    @DisplayName("StudentGradeRow round-trips every field, Hebrew and nulls included")
+    void studentGradeRowRoundTrips() throws Exception {
+        StudentGradeRow original = new StudentGradeRow(9L, 2001L, "מאיה לוי", 72, 80, 80,
+                GradeState.APPROVED, "Question 4 was ambiguous", "Well done", APPROVED_AT);
+
+        StudentGradeRow restored = roundTrip(original);
+
+        assertThat(restored).isEqualTo(original);
+        assertThat(restored.studentName()).isEqualTo("מאיה לוי");
+        assertThat(restored.finalScore()).isEqualTo(80);
+        assertThat(restored.effectiveScore()).isEqualTo(80);
+        assertThat(restored.approvedAt()).isEqualTo(APPROVED_AT);
+    }
+
+    @Test
+    @DisplayName("an un-overridden, unapproved row keeps all four of its nulls")
+    void studentGradeRowKeepsItsNulls() throws Exception {
+        StudentGradeRow restored = roundTrip(autoRow());
+
+        assertThat(restored.finalScore()).isNull();
+        assertThat(restored.overrideReason()).isNull();
+        assertThat(restored.teacherComment()).isNull();
+        assertThat(restored.approvedAt()).isNull();
+        assertThat(restored.state()).isEqualTo(GradeState.AUTO);
+    }
+
+    @Test
+    @DisplayName("the student wire carries no override justification, before and after the wire")
+    void myGradesNeverSerialisesAnOverrideReason() throws Exception {
+        // The contract's rule: overrideReason is teacher and audit material. MyGrades
+        // strips it, so a handler that assembled its rows from a teacher-side query
+        // still cannot leak the justification onto a student's socket.
+        StudentGradeRow teacherSide = new StudentGradeRow(9L, 2001L, "Maya Levi", 72, 80, 80,
+                GradeState.APPROVED, "Question 4 was ambiguous", "Well done", APPROVED_AT);
+
+        MyGrades restored = roundTrip(new MyGrades(List.of(teacherSide)));
+
+        assertThat(restored.grades()).hasSize(1);
+        StudentGradeRow row = restored.grades().get(0);
+        assertThat(row.overrideReason())
+                .as("MY_GRADES_GET never carries the justification")
+                .isNull();
+        assertThat(row.teacherComment())
+                .as("the comment is what the student is meant to read")
+                .isEqualTo("Well done");
+        assertThat(row.effectiveScore()).isEqualTo(80);
+        assertThat(row.gradeId()).isEqualTo(9L);
+    }
+
+    @Test
+    @DisplayName("AnswerReviewRow round-trips, unanswered questions included")
+    void answerReviewRowRoundTrips() throws Exception {
+        AnswerReviewRow answered = new AnswerReviewRow(1, "112001", "מהי בירת צרפת?",
+                "פריז", "לונדון", "רומא", "מדריד", 25, (byte) 1, (byte) 1, true, 25);
+        AnswerReviewRow blank = new AnswerReviewRow(2, "112002", "2 + 2 = ?",
+                "3", "4", "5", "6", 25, null, (byte) 2, false, 0);
+
+        assertThat(roundTrip(answered)).isEqualTo(answered);
+        AnswerReviewRow restoredBlank = roundTrip(blank);
+        assertThat(restoredBlank.chosen()).isNull();
+        assertThat(restoredBlank.isUnanswered()).isTrue();
+        assertThat(restoredBlank.pointsAwarded()).isZero();
+    }
+
+    @Test
+    @DisplayName("the queue DTOs round-trip with their summaries intact")
+    void queueDtosRoundTrip() throws Exception {
+        ExecutionGradingSummary summary = new ExecutionGradingSummary(4821L, "Midterm", "11",
+                "7391", APPROVED_AT, 28, 28, 3);
+
+        GradingQueue queue = roundTrip(new GradingQueue(List.of(summary)));
+        ExecutionGradesRequest request = roundTrip(new ExecutionGradesRequest(4821L));
+        ExecutionGrades grades = roundTrip(new ExecutionGrades(summary, List.of(autoRow())));
+
+        assertThat(queue.executions()).containsExactly(summary);
+        assertThat(request.executionId()).isEqualTo(4821L);
+        assertThat(grades.summary()).isEqualTo(summary);
+        assertThat(grades.rows()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("the review DTOs round-trip, answer key and all")
+    void reviewDtosRoundTrip() throws Exception {
+        AnswerReviewRow answer = new AnswerReviewRow(1, "112001", "q", "a", "b", "c", "d",
+                25, (byte) 0, (byte) 3, false, 0);
+
+        GradeReviewRequest request = roundTrip(new GradeReviewRequest(9L));
+        GradeReview review = roundTrip(new GradeReview(autoRow(), List.of(answer)));
+        GradeOverrideRequest override =
+                roundTrip(new GradeOverrideRequest(9L, 80, "Question 4 was ambiguous"));
+
+        assertThat(request.gradeId()).isEqualTo(9L);
+        assertThat(review.grade()).isEqualTo(autoRow());
+        assertThat(review.answers()).containsExactly(answer);
+        assertThat(override.newScore()).isEqualTo(80);
+        assertThat(override.justification()).isEqualTo("Question 4 was ambiguous");
+    }
+
+    @Test
+    @DisplayName("the approval DTOs round-trip, refusals included")
+    void approvalDtosRoundTrip() throws Exception {
+        ApproveRequest request = roundTrip(new ApproveRequest(List.of(9L, 10L, 11L)));
+        ApproveResult result = roundTrip(new ApproveResult(2, 1, List.of(11L)));
+
+        assertThat(request.gradeIds()).containsExactly(9L, 10L, 11L);
+        assertThat(result.approved()).isEqualTo(2);
+        assertThat(result.alreadyApproved()).isEqualTo(1);
+        assertThat(result.refused()).containsExactly(11L);
+        assertThat(result.isComplete()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the student DTOs round-trip, checked form included")
+    void studentGradingDtosRoundTrip() throws Exception {
+        AnswerReviewRow answer = new AnswerReviewRow(1, "112001", "q", "a", "b", "c", "d",
+                25, (byte) 2, (byte) 2, true, 25);
+        StudentGradeRow approved = new StudentGradeRow(9L, 2001L, "Maya Levi", 72, null, 72,
+                GradeState.APPROVED, null, null, APPROVED_AT);
+
+        CheckedFormRequest request = roundTrip(new CheckedFormRequest(9L));
+        CheckedForm form = roundTrip(new CheckedForm(approved, "Midterm", "11", List.of(answer)));
+        MyGrades mine = roundTrip(new MyGrades(List.of(approved)));
+
+        assertThat(request.gradeId()).isEqualTo(9L);
+        assertThat(form.examName()).isEqualTo("Midterm");
+        assertThat(form.courseCode()).isEqualTo("11");
+        assertThat(form.answers()).containsExactly(answer);
+        assertThat(mine.grades()).containsExactly(approved);
+    }
+
+    @Test
+    @DisplayName("a grading DTO inside a Message payload survives the same round-trip")
+    void gradingDtoInsideAnEnvelope() throws Exception {
+        MyGrades payload = new MyGrades(List.of(autoRow()));
+
+        Message restored = roundTrip(Message.ok(Message.request(Verb.MY_GRADES_GET, null), payload));
+
+        assertThat(restored.getPayload()).isEqualTo(payload);
+        assertThat(restored.getVerb()).isEqualTo(Verb.MY_GRADES_GET);
+    }
+
+    /** An unapproved, un-overridden grade: every optional field null. */
+    private static StudentGradeRow autoRow() {
+        return new StudentGradeRow(9L, 2001L, "Maya Levi", 72, null, 72,
+                GradeState.AUTO, null, null, null);
     }
 
     @Test

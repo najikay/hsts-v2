@@ -185,7 +185,32 @@ Keys from env / `server.properties` (`bot.deepseek.key`, `bot.anthropic.key`); `
 - Non-`Application` launcher classes so shaded JavaFX runs by double-click.
 - Build on Windows (JavaFX natives match the demo machines).
 
-## 10. Testing & CI
+## 10. Phase-2 readiness (course spec §10)
+
+The course spec requires phase 1 (LAN, non-web UI) to be designed so the phase-2 move (access
+from anywhere over the internet) is efficient and smooth. That readiness is not a promise, it is
+the location of four seams that already exist:
+
+- **Transport is one adapter.** The client talks through `IClientConnection`; OCSF is vendored
+  behind it. Phase 2 swaps the implementation (WebSocket/TLS gateway) without touching a screen,
+  a session class, or a handler — the protocol v2 envelope (verb + requestId + status + payload)
+  is transport-agnostic by construction.
+- **The server is the whole brain.** Every rule (auth, roles, timers, grading, locks, bot) runs
+  server-side; clients render state they are pushed or answer. A thinner phase-2 client (or a web
+  one) reuses the entire Logic tier unchanged — this is also why the fat-server architecture was
+  chosen in phase 1 (ADR-002).
+- **Security boundary is one place.** Identity comes from the socket-bound session
+  (`SessionManager`), never the payload, and every verb carries its role gate (P-5 rule). Adding
+  internet exposure means adding TLS and hardening at the transport edge, not re-auditing feature
+  code.
+- **Statelessness where it matters.** Client state is rebuildable from `LoginResult` + queries;
+  reconnection logic (E3) already treats the link as unreliable, which is the phase-2 network
+  assumption arriving early.
+
+What phase 2 would add: TLS on the transport, an internet-facing gateway/reverse proxy, and
+hardened rate limiting. None of it changes the tiers above the socket.
+
+## 11. Testing & CI
 
 | Level | Tooling | Target |
 |---|---|---|

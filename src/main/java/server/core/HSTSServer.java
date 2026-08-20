@@ -3,16 +3,18 @@ package server.core;
 import common.dto.lock.LockTiming;
 import ocsf.server.AbstractServer;
 import ocsf.server.ConnectionToClient;
+import org.hibernate.SessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.db.HibernateUtil;
 import server.db.QuestionDAO;
+import server.db.repos.RepositoryUserDirectory;
 import server.features.auth.AuthService;
-import server.features.auth.InMemoryUserDirectory;
 import server.features.auth.UserDirectory;
 import server.features.auth.UserRecord;
 import server.features.bank.LegacyQuestionHandlers;
 import server.features.locks.EditLockService;
-import server.features.notify.InMemoryNotificationStore;
+import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
 import server.features.notify.NotificationStore;
 import server.realtime.PushGateway;
@@ -50,7 +52,16 @@ public class HSTSServer extends AbstractServer {
     private final PushGateway pushGateway;
     private final ScheduledExecutorService lockSweeper;
 
-    /** Production wiring: session map + router + the auth, notify, lock and legacy handlers. */
+    /**
+     * Production wiring: session map + router + the auth, notify, lock and legacy
+     * handlers, all reading through the database.
+     *
+     * <p><b>Requires a migrated database.</b> Constructing this opens the Hibernate
+     * {@code SessionFactory} and its connection pool (see {@link #defaultRouter}), so
+     * {@code DbBootstrap.migrate()} must have completed first — {@link ServerMain} is
+     * where that ordering is enforced. Tests use the bring-your-own-router constructor
+     * below and touch no database at all.
+     */
     public HSTSServer(int port) {
         this(port, new SessionManager());
     }
@@ -63,7 +74,13 @@ public class HSTSServer extends AbstractServer {
         this.router = defaultRouter(sessions, pushGateway, lockSweeper);
     }
 
-    /** Test/console wiring: bring your own router (and its handlers). */
+    /**
+     * Test/console wiring: bring your own router (and its handlers).
+     *
+     * <p>This is the constructor every test uses, and deliberately: it builds no
+     * directory, no store and no session factory, so a unit test of the transport or the
+     * protocol never needs MySQL to be running.
+     */
     public HSTSServer(int port, SessionManager sessions, MessageRouter router) {
         super(port);
         this.sessions = Objects.requireNonNull(sessions, "sessions");
@@ -77,21 +94,35 @@ public class HSTSServer extends AbstractServer {
      * other verb reachable), then the cross-cutting realtime services, then the
      * feature handlers.
      *
-     * <p>Two seams E2 replaces here and nowhere else: the
-     * {@link InMemoryUserDirectory} (see {@link UserDirectory}) and the
-     * {@link InMemoryNotificationStore} (see {@link NotificationStore}).
+     * <p>Both E2 seams are closed here and nowhere else: the {@link UserDirectory}
+     * is a {@link RepositoryUserDirectory} over the {@code users} table, and the
+     * {@link NotificationStore} is a {@link JpaNotificationStore} over
+     * {@code notifications}. The in-memory implementations of both are still in
+     * the tree, now as test fixtures.
      *
-     * <p>Order matters in one place: {@code NotificationService} is built before
-     * {@code AuthService} because the sign-in answer carries the user's unread
-     * count (E17.5).
+     * <p><b>Ordering rule — read before moving anything.</b>
+     * {@link HibernateUtil#sessionFactory()} boots a HikariCP pool against
+     * {@code hsts_db} on first call, which happens right here, in this method,
+     * during {@code new HSTSServer(port)}. The database therefore has to exist
+     * and be migrated <em>before</em> this constructor runs:
+     * {@link ServerMain} calls {@code DbBootstrap.migrate()} first for exactly
+     * that reason, and reordering those two lines turns a clean first boot into a
+     * pool failing against a schema that is not there yet.
+     *
+     * <p>Order matters in one more place: {@code NotificationService} is built
+     * before {@code AuthService} because the sign-in answer carries the user's
+     * unread count (E17.5).
      */
     private static MessageRouter defaultRouter(SessionManager sessions, PushGateway pushGateway,
                                                ScheduledExecutorService sweeper) {
         MessageRouter router = new MessageRouter(sessions);
-        InMemoryUserDirectory directory = new InMemoryUserDirectory();
+        // One factory for both seams: the Singleton is what owns the pool, and asking
+        // for it twice would still be one pool but would read as if it were two.
+        SessionFactory sessionFactory = HibernateUtil.sessionFactory();
+        UserDirectory directory = new RepositoryUserDirectory(sessionFactory);
 
         NotificationService notifications =
-                new NotificationService(new InMemoryNotificationStore(), pushGateway);
+                new NotificationService(new JpaNotificationStore(sessionFactory), pushGateway);
         notifications.registerOn(router);
 
         EditLockService locks = new EditLockService(pushGateway,

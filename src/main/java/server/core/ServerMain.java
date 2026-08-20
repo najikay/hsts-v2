@@ -7,8 +7,22 @@ import java.io.IOException;
 /**
  * Entry point for the HSTS Fat Server (Logic tier).
  *
- * <p>Instantiates {@link HSTSServer} on the default port and begins listening.
- * Run this before launching the JavaFX client.
+ * <p>Migrates the database, instantiates {@link HSTSServer} on the default port and begins
+ * listening. Run this before launching the JavaFX client.
+ *
+ * <h2>The ordering rule</h2>
+ *
+ * <p><b>{@code DbBootstrap.migrate()} must complete before {@code new HSTSServer(port)}.</b>
+ * Constructing the server builds its production handler set, and that calls
+ * {@code HibernateUtil.sessionFactory()}, which boots a HikariCP pool against
+ * {@code hsts_db} on the spot. Do it the other way round and the pool opens against a
+ * database Flyway has not created or migrated yet: on a clean machine that is a startup
+ * failure, and on a half-migrated one it is worse, because the pool comes up and the first
+ * query fails somewhere that looks like a repository bug.
+ *
+ * <p>It used to be the other way round, harmlessly, because the pre-E2 wiring was entirely
+ * in memory and nothing in the constructor touched the database. That is no longer true, so
+ * the two lines below are ordered rather than merely adjacent.
  */
 public class ServerMain {
 
@@ -25,12 +39,15 @@ public class ServerMain {
             }
         }
 
+        // E2.1: the schema is Flyway-managed - migrate BEFORE anything opens a pool
+        // against it, which the HSTSServer constructor below does. See this class's
+        // javadoc for why the order is a rule and not a preference.
+        // A pre-E2 hsts_db (legacy prototype `Questions` table) must be dropped
+        // and recreated empty once; see docs/PROBLEMS.md / E2 PR1 findings.
+        DbBootstrap.migrate();
+
         HSTSServer server = new HSTSServer(port);
         try {
-            // E2.1: the schema is Flyway-managed - migrate BEFORE accepting clients.
-            // A pre-E2 hsts_db (legacy prototype `Questions` table) must be dropped
-            // and recreated empty once; see docs/PROBLEMS.md / E2 PR1 findings.
-            DbBootstrap.migrate();
             server.listen();
             System.out.println("==================================================");
             System.out.println(" HSTS Fat Server is UP on port " + port);

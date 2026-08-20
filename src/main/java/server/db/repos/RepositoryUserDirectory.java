@@ -61,13 +61,36 @@ public final class RepositoryUserDirectory implements UserDirectory {
     @Override
     public Optional<UserRecord> findByUsername(String username) {
         return Transactions.inTx(factory, session -> users.findByUsername(session, username)
-                .map(user -> new UserRecord(
-                        user.getId(),
-                        user.getUsername(),
-                        user.getPasswordHash(),
-                        user.getFullName(),
-                        wireRole(session, user),
-                        courseRefs(session, user))));
+                .map(user -> toRecord(session, user)));
+    }
+
+    /**
+     * The id lookup E18's lock banner needs.
+     *
+     * <p>{@code UserDirectory.findById} is a {@code default} method that answers empty, added
+     * by E17/E18 after this class was written. Inheriting it would compile, pass every login
+     * test, and then make every lock banner in the product read "Another user" — the failure
+     * is invisible to the feature that owns the method and only shows up on a second person's
+     * screen. So it is overridden here with a real query.
+     *
+     * <p>Same mapping as {@link #findByUsername}, deliberately: the derived wire role and the
+     * union of taught and enrolled courses are computed in one place, so a user resolved by id
+     * can never disagree with the same user resolved by name.
+     */
+    @Override
+    public Optional<UserRecord> findById(long userId) {
+        return Transactions.inTx(factory, session -> users.findById(session, userId)
+                .map(user -> toRecord(session, user)));
+    }
+
+    private UserRecord toRecord(Session session, User user) {
+        return new UserRecord(
+                user.getId(),
+                user.getUsername(),
+                user.getPasswordHash(),
+                user.getFullName(),
+                wireRole(session, user),
+                courseRefs(session, user));
     }
 
     private Role wireRole(Session session, User user) {

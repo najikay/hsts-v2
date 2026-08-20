@@ -123,6 +123,40 @@ abstract class UserDirectoryContract extends RepositoryTestBase {
     }
 
     @Test
+    @DisplayName("findById returns the display name the lock banner has to show (E18)")
+    void findByIdReturnsTheDisplayName() {
+        // UserDirectory.findById is a default method that answers empty. Inheriting it
+        // compiles and passes every login test, and then every E18 lock banner in the
+        // product reads "Another user" — so the override is what this pins.
+        UserRecord dana = directory().findById(danaId).orElseThrow();
+
+        assertThat(dana.displayName()).isEqualTo("דנה כהן");
+        assertThat(dana.id()).isEqualTo(danaId);
+        assertThat(dana.username()).isEqualTo("dana.cohen");
+    }
+
+    @Test
+    @DisplayName("an unknown id is empty rather than an error or a placeholder")
+    void findByIdOfAnUnknownUserIsEmpty() {
+        // A user id that no longer exists (a deleted account) must degrade to
+        // LockHolder.UNKNOWN_NAME one layer up, not fail a lock acquisition here.
+        assertThat(directory().findById(-1L)).isEmpty();
+        assertThat(directory().findById(Long.MAX_VALUE)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a user found by id maps exactly as the same user found by name")
+    void findByIdAgreesWithFindByUsername() {
+        // Both go through one mapper, so the derived COORDINATOR role and the union of
+        // taught and enrolled courses cannot depend on which way in the caller took.
+        UserRecord byName = directory().findByUsername("rina.barak").orElseThrow();
+        UserRecord byId = directory().findById(rinaId).orElseThrow();
+
+        assertThat(byId).isEqualTo(byName);
+        assertThat(byId.role()).isEqualTo(Role.COORDINATOR);
+    }
+
+    @Test
     @DisplayName("coordinated subjects are listed, not just counted")
     void coordinatedSubjectsAreReturned() {
         List<String> rinasSubjects = inTx(session -> users.findCoordinatedSubjects(session, rinaId));

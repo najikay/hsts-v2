@@ -46,6 +46,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>These two tests scan instead of naming, so a new leak fails the build the moment it is
  * written rather than when someone happens to review it.
+ *
+ * <h2>The review feature arrived, and it is sanctioned rather than exempted</h2>
+ *
+ * <p>The hypothetical above is now E13.2's checked form, specified in the frozen grading wire
+ * contract. It did not get a suppression: it got a second sanctioned suffix,
+ * {@code ForCheckedForm}, on the same terms as {@code ForAuthoring} — the name says which
+ * audience the read is for, and the three conditions that make that audience legitimate are
+ * enforced and tested elsewhere. See {@link #SANCTIONED_SUFFIXES}.
  */
 class CorrectnessLeakGuardTest {
 
@@ -54,8 +62,33 @@ class CorrectnessLeakGuardTest {
     private static final Path COMPILED_REPOSITORIES =
             Path.of("target", "classes", "server", "db", "repos");
 
-    /** The suffix that marks a read as teacher-only. */
-    private static final String AUTHORING = "ForAuthoring";
+    /**
+     * The suffixes that license a read to return an answer key.
+     *
+     * <h2>{@code ForAuthoring} — teacher-only reads (E2.12)</h2>
+     *
+     * <p>The original sanction: a teacher composing a question is looking at the answer key
+     * because that is what authoring is, and the suffix is what stops a student-facing caller
+     * reaching for one of those reads by mistake.
+     *
+     * <h2>{@code ForCheckedForm} — the student's own marked paper (E13.2)</h2>
+     *
+     * <p>Added when the E12/E13 wire contract was frozen. A student <b>is</b> entitled to see
+     * which answer was right, but only on their own paper and only after the marking is
+     * finished, so {@code CHECKED_FORM_GET} serves correctness under three conditions that all
+     * have to hold: the grade is the caller's, its state is {@code APPROVED}, and the execution
+     * is closed. The reads behind that verb carry an answer key and can therefore never be
+     * named {@code ForAuthoring} honestly, which would have left one legitimate feature with a
+     * choice between a lie and a suppression.
+     *
+     * <p><b>What licenses it is not this list.</b> A suffix is a naming convention, not a
+     * guard: it makes a leak deliberate rather than accidental. The actual enforcement is
+     * E13.1's authorization tests, which prove all three conditions on the handler and prove
+     * that failing any of them answers {@code NOT_FOUND} indistinguishably. If those tests ever
+     * go away, this suffix stops being licensed and should come back out of this list — the
+     * contract file (docs/contracts/GRADING_WIRE_CONTRACT.md) records that dependency.
+     */
+    private static final List<String> SANCTIONED_SUFFIXES = List.of("ForAuthoring", "ForCheckedForm");
 
     @Test
     @DisplayName("no projection anywhere in the package can hold an answer key")
@@ -79,8 +112,8 @@ class CorrectnessLeakGuardTest {
     }
 
     @Test
-    @DisplayName("any repository read that hands back an answer key is named ForAuthoring")
-    void correctnessBearingReadsAreNamedForAuthoring() {
+    @DisplayName("any repository read that hands back an answer key is named ForAuthoring or ForCheckedForm")
+    void correctnessBearingReadsAreNamedForTheirAudience() {
         List<Class<?>> repositories = classesIn(COMPILED_REPOSITORIES);
 
         assertThat(repositories).as("the scan must actually find the repositories").isNotEmpty();
@@ -92,16 +125,32 @@ class CorrectnessLeakGuardTest {
                     continue;
                 }
                 boolean leaks = returnedTypes(method).stream().anyMatch(CorrectnessNames::carriesCorrectness);
-                if (leaks && !method.getName().endsWith(AUTHORING)) {
+                if (leaks && !isSanctioned(method.getName())) {
                     offenders.add(repository.getSimpleName() + "." + method.getName());
                 }
             }
         }
 
         assertThat(offenders)
-                .as("a read returning a type that holds the correct answer must say so in its "
-                        + "name, so a student-facing caller cannot reach for it by accident")
+                .as("a read returning a type that holds the correct answer must name the one "
+                        + "audience it is for, so a caller serving anybody else cannot reach for "
+                        + "it by accident: %s", SANCTIONED_SUFFIXES)
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the suffix rule names exactly two audiences, and nothing that merely looks like one")
+    void onlyTwoSuffixesAreSanctioned() {
+        // Adding a third is a deliberate act with a licensing argument behind it, which is
+        // what SANCTIONED_SUFFIXES' javadoc records. A read that just mentions the words is
+        // not sanctioned: the suffix has to be the end of the name.
+        assertThat(isSanctioned("findVersionForAuthoring")).isTrue();
+        assertThat(isSanctioned("findAnswersForCheckedForm")).isTrue();
+
+        assertThat(isSanctioned("findForCheckedFormAndAlsoTheDashboard")).isFalse();
+        assertThat(isSanctioned("findForAuthoringPreview")).isFalse();
+        assertThat(isSanctioned("findForReview")).isFalse();
+        assertThat(isSanctioned("findForTakeExam")).isFalse();
     }
 
     @Test
@@ -139,6 +188,11 @@ class CorrectnessLeakGuardTest {
         assertThat(CorrectnessNames.suggestsCorrectness("answerIndex")).isTrue();
         assertThat(CorrectnessNames.suggestsCorrectness("solution")).isTrue();
         assertThat(CorrectnessNames.suggestsCorrectness("key")).isTrue();
+    }
+
+    /** @return whether this method name claims one of the two sanctioned audiences. */
+    private static boolean isSanctioned(String methodName) {
+        return SANCTIONED_SUFFIXES.stream().anyMatch(methodName::endsWith);
     }
 
     /** The return type plus anything it is generic over, so {@code List<X>} counts as X. */

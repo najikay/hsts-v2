@@ -13,8 +13,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * The {@link NotificationStore} the server runs on until E2's repositories land
- * (Logic tier, E17.1).
+ * The in-memory {@link NotificationStore} — <b>a test fixture, no longer
+ * production wiring</b> (Logic tier, E17.1).
+ *
+ * <p>It ran the server until E2's repositories landed;
+ * {@code HSTSServer.defaultRouter} now builds a {@link JpaNotificationStore}
+ * instead. The class stays because the tests want it: {@link NotificationService}
+ * and every rule it enforces remain unit-testable in milliseconds with no
+ * database, and this implementation is held to the same
+ * {@code NotificationStoreContract} the JPA one passes, so it is a genuine
+ * stand-in rather than a mock that agrees with whatever it is asked.
  *
  * <p>A map from user id to that user's rows, newest last, plus one shared id
  * sequence standing in for {@code AUTO_INCREMENT}. It is a real implementation,
@@ -32,9 +40,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * rather than mutated, so a list handed to a caller can never change underneath
  * it while the caller is serialising it onto a socket.
  *
- * <p>Deliberate non-goal: durability. Restarting the server empties it. That is
- * exactly the gap the JPA implementation closes, and the reason this class is
- * documented as temporary rather than as an option.
+ * <p>Deliberate non-goal: durability. Restarting the JVM empties it. That is
+ * exactly the gap {@link JpaNotificationStore} closes, and the reason this class
+ * is a fixture rather than a deployment option.
  */
 public final class InMemoryNotificationStore implements NotificationStore {
 

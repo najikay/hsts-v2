@@ -41,7 +41,10 @@ class DbBootstrapConfigTest {
     void connectionParametersCoverEncodingAndTimezone() {
         assertThat(DbBootstrap.JDBC_PARAMS)
                 .contains("characterEncoding=UTF-8")
-                .contains("serverTimezone=UTC");
+                .contains("serverTimezone=UTC")
+                // First boot on a clean machine must reach Flyway, not die in the
+                // pool with "Unknown database" (found by the dropped-DB smoke test).
+                .contains("createDatabaseIfNotExist=true");
     }
 
     @Test
