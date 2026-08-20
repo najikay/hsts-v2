@@ -40,6 +40,63 @@ public final class GradeRepository {
      * @param executionId the execution
      * @return grades awaiting approval, by attempt id
      */
+    /**
+     * A student's approved grades, newest first.
+     *
+     * <p><b>Scoped in the query, not by the caller.</b> The student id is a filter here rather
+     * than something a handler checks afterwards, so no code path loads someone else's rows and
+     * then remembers to drop them (E13.1 &#9873;). Only {@code APPROVED} rows are returned:
+     * auto-checking alone publishes nothing (C-3, S-24).
+     *
+     * <p>Carries no correctness data — {@code Grade} is scores and audit fields — so this read is
+     * outside {@code CorrectnessLeakGuardTest}'s remit by construction.
+     *
+     * <p>Consumer: E13.3's {@code MY_GRADES_GET}.
+     *
+     * @param session   the current session
+     * @param studentId the student, always the authenticated caller
+     * @return approved grades, most recently approved first
+     */
+    public List<Grade> findApprovedForStudent(Session session, long studentId) {
+        return session.createQuery("""
+                        select g from Grade g, ExamAttempt a
+                        where g.attemptId = a.id
+                          and a.studentId = :studentId
+                          and g.status = :status
+                        order by g.approvedAt desc, g.id desc
+                        """, Grade.class)
+                .setParameter("studentId", studentId)
+                .setParameter("status", GradeStatus.APPROVED)
+                .getResultList();
+    }
+
+    /**
+     * One grade, but only if it belongs to this student.
+     *
+     * <p>The ownership check <b>is</b> the query. A grade id belonging to someone else comes back
+     * empty and the handler answers {@code NOT_FOUND} — indistinguishable from an id that does
+     * not exist, so probing reveals nothing (contract, E13.1 &#9873;).
+     *
+     * <p>Consumer: E13.4's {@code CHECKED_FORM_GET}, which applies its own two further conditions
+     * (state approved, execution closed) on top of ownership.
+     *
+     * @param session   the current session
+     * @param gradeId   the requested grade
+     * @param studentId the student, always the authenticated caller
+     * @return the grade when it is this student's, otherwise empty
+     */
+    public Optional<Grade> findForStudent(Session session, long gradeId, long studentId) {
+        return session.createQuery("""
+                        select g from Grade g, ExamAttempt a
+                        where g.id = :gradeId
+                          and g.attemptId = a.id
+                          and a.studentId = :studentId
+                        """, Grade.class)
+                .setParameter("gradeId", gradeId)
+                .setParameter("studentId", studentId)
+                .uniqueResultOptional();
+    }
+
     public List<Grade> findAwaitingApproval(Session session, long executionId) {
         return session.createQuery("""
                         select g from Grade g, ExamAttempt a

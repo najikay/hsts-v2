@@ -4,13 +4,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import server.db.RepositoryTestBase;
 import server.db.entities.AttemptStatus;
+import server.db.entities.Difficulty;
 import server.db.entities.Exam;
 import server.db.entities.ExamAttempt;
 import server.db.entities.ExamExecution;
 import server.db.entities.ExamVersion;
+import server.db.entities.ExamVersionQuestion;
 import server.db.entities.ExamVersionStatus;
 import server.db.entities.ExecutionStatus;
 import server.db.entities.Grade;
+import server.db.entities.Question;
+import server.db.entities.QuestionVersion;
 import server.db.projections.ParticipationCounts;
 
 import java.time.Instant;
@@ -27,6 +31,8 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
     private final ExecutionRepository executions = new ExecutionRepository();
     private final AttemptRepository attempts = new AttemptRepository();
     private final GradeRepository grades = new GradeRepository();
+    private final ExamRepository exams = new ExamRepository();
+    private final QuestionRepository questions = new QuestionRepository();
 
     @Test
     @DisplayName("an execution is found by its code whatever case it is typed in")
@@ -165,6 +171,179 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
         List<Grade> queue = inTx(session -> grades.findAwaitingApproval(session, executionId));
 
         assertThat(queue).extracting(Grade::getAttemptId).containsExactly(mayasAttempt);
+    }
+
+    @Test
+    @DisplayName("an execution is found by its id, and a missing one is empty rather than an error")
+    void findsExecutionById() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+
+        Optional<ExamExecution> found = inTx(session -> executions.findById(session, executionId));
+        Optional<ExamExecution> missing = inTx(session -> executions.findById(session, 999_999L));
+
+        assertThat(found).isPresent();
+        assertThat(missing).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the pinned questions come back in presentation order with their points")
+    void pinnedQuestionsInOrder() {
+        long examVersionId = newExamVersion();
+        long first = persistQuestionVersion(1, (byte) 2);
+        long second = persistQuestionVersion(2, (byte) 3);
+        runInTx(session -> {
+            session.persist(new ExamVersionQuestion(examVersionId, second, questionIdOf(session, second), 40, 2));
+            session.persist(new ExamVersionQuestion(examVersionId, first, questionIdOf(session, first), 60, 1));
+        });
+
+        List<ExamVersionQuestion> pinned =
+                inTx(session -> exams.findPinnedQuestions(session, examVersionId));
+
+        // Insertion order was 2 then 1; the read must return ordinal order regardless.
+        assertThat(pinned).extracting(ExamVersionQuestion::getQuestionVersionId)
+                .containsExactly(first, second);
+        assertThat(pinned).extracting(ExamVersionQuestion::getPoints).containsExactly(60, 40);
+    }
+
+    @Test
+    @DisplayName("an exam version with no questions pins nothing rather than failing")
+    void pinnedQuestionsOfAnEmptyVersion() {
+        long examVersionId = newExamVersion();
+
+        List<ExamVersionQuestion> none = inTx(session -> exams.findPinnedQuestions(session, examVersionId));
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ForGrading returns the answer key for exactly the versions asked for")
+    void versionsForGradingCarryTheKey() {
+        long wanted = persistQuestionVersion(1, (byte) 3);
+        long other = persistQuestionVersion(2, (byte) 1);
+
+        List<QuestionVersion> loaded = inTx(session ->
+                questions.findVersionsForGrading(session, List.of(wanted)));
+
+        assertThat(loaded).hasSize(1);
+        assertThat(loaded.get(0).getId()).isEqualTo(wanted);
+        assertThat(loaded.get(0).getCorrectAnswer()).isEqualTo((byte) 3);
+        assertThat(loaded).extracting(QuestionVersion::getId).doesNotContain(other);
+    }
+
+    @Test
+    @DisplayName("asking ForGrading for nothing returns nothing, not everything")
+    void versionsForGradingWithNoIds() {
+        persistQuestionVersion(1, (byte) 1);
+
+        // An `in ()` with no values would be a syntax error or a full scan; neither is right.
+        List<QuestionVersion> none = inTx(session -> questions.findVersionsForGrading(session, List.of()));
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a student's grades are approved ones only — marking in progress publishes nothing")
+    void approvedForStudentExcludesUnapproved() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long approvedAttempt = persistAttempt(executionId, mayaId);
+        long pendingAttempt = persistAttempt(executionId, danaId);
+        runInTx(session -> {
+            session.persist(approvedGrade(approvedAttempt));
+            session.persist(new Grade(pendingAttempt, 91));
+        });
+
+        List<Grade> mine = inTx(session -> grades.findApprovedForStudent(session, mayaId));
+        List<Grade> theirs = inTx(session -> grades.findApprovedForStudent(session, danaId));
+
+        assertThat(mine).extracting(Grade::getAttemptId).containsExactly(approvedAttempt);
+        // danaId's only grade is still AUTO, so she sees nothing at all (C-3, S-24).
+        assertThat(theirs).isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚑ a student's grades never include another student's")
+    void approvedForStudentIsScopedToTheStudent() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long mayasAttempt = persistAttempt(executionId, mayaId);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        runInTx(session -> {
+            session.persist(approvedGrade(mayasAttempt));
+            session.persist(approvedGrade(danasAttempt));
+        });
+
+        List<Grade> mine = inTx(session -> grades.findApprovedForStudent(session, mayaId));
+
+        assertThat(mine).hasSize(1);
+        assertThat(mine.get(0).getAttemptId()).isEqualTo(mayasAttempt);
+    }
+
+    @Test
+    @DisplayName("a student who has been approved nothing gets an empty list, not an error")
+    void approvedForStudentEmptyWhenNothingApproved() {
+        List<Grade> none = inTx(session -> grades.findApprovedForStudent(session, mayaId));
+
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a student's own grade is found by id")
+    void findsOwnGradeById() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long attemptId = persistAttempt(executionId, mayaId);
+        long gradeId = inTx(session -> {
+            Grade grade = approvedGrade(attemptId);
+            session.persist(grade);
+            session.flush();
+            return grade.getId();
+        });
+
+        Optional<Grade> found = inTx(session -> grades.findForStudent(session, gradeId, mayaId));
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getAttemptId()).isEqualTo(attemptId);
+    }
+
+    @Test
+    @DisplayName("⚑ another student's grade id is empty, exactly like an id that does not exist")
+    void anotherStudentsGradeIsIndistinguishableFromMissing() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        long danasGradeId = inTx(session -> {
+            Grade grade = approvedGrade(danasAttempt);
+            session.persist(grade);
+            session.flush();
+            return grade.getId();
+        });
+
+        // maya asks for dana's grade, and for one that was never created.
+        Optional<Grade> somebodyElses =
+                inTx(session -> grades.findForStudent(session, danasGradeId, mayaId));
+        Optional<Grade> neverExisted =
+                inTx(session -> grades.findForStudent(session, 999_999L, mayaId));
+
+        // Identical answers: the query cannot be used to discover that a grade exists.
+        assertThat(somebodyElses).isEqualTo(neverExisted).isEmpty();
+    }
+
+    /** A question with one version, so grading fixtures have a real answer key to read. */
+    private long persistQuestionVersion(int serial, byte correctAnswer) {
+        return inTx(session -> {
+            Question question = new Question(COURSE_ALGEBRA, (short) serial,
+                    COURSE_ALGEBRA + String.format("%03d", serial));
+            session.persist(question);
+            session.flush();
+            QuestionVersion version = new QuestionVersion(question.getId(), 1, "שאלה",
+                    "א", "ב", "ג", "ד", correctAnswer, "משוואות", Difficulty.EASY, null,
+                    danaId, WHEN);
+            session.persist(version);
+            session.flush();
+            return version.getId();
+        });
+    }
+
+    private static long questionIdOf(org.hibernate.Session session, long questionVersionId) {
+        return session.createQuery(
+                        "select questionId from QuestionVersion where id = :id", Long.class)
+                .setParameter("id", questionVersionId)
+                .getSingleResult();
     }
 
     private long persistExecution(String code, ExecutionStatus status) {
