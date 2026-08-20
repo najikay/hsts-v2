@@ -48,10 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * test that writes, {@link #theLoadIsIdempotent()}, is safe by construction: it inserts
  * nothing, which is the property it exists to prove.
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-abstract class SeedDatasetContract {
-
-    private static final Instant ANCHOR = Instant.parse("2026-08-20T15:30:00Z");
+abstract class SeedDatasetContract extends SeedLoadedTestBase {
 
     /** Counts stated by SEED_CONTENT.md, section by section. */
     private static final Map<String, Long> EXPECTED_ROWS = Map.of(
@@ -70,44 +67,9 @@ abstract class SeedDatasetContract {
             "question_versions", 43L,
             "notifications", 8L);
 
-    private TestDatabase database;
-    private SeedSummary summary;
-
-    /** @return the engine this leaf binds to; see the two leaves for H2 and MySQL */
-    protected abstract TestDatabase openDatabase();
-
-    @BeforeAll
-    final void loadTheDatasetOnce() {
-        database = openDatabase();
-        WipeOrder.wipe(factory());
-        summary = loader().load(SeedMode.LOAD_IF_MISSING, Confirmation.refused());
-    }
-
-    @AfterAll
-    final void closeDatabaseOnce() {
-        if (database != null) {
-            database.close();
-        }
-    }
-
     private SeedLoader loader() {
-        return new SeedLoader(factory(), Clock.fixed(ANCHOR, ZoneOffset.UTC),
+        return new SeedLoader(factory(), java.time.Clock.fixed(ANCHOR, java.time.ZoneOffset.UTC),
                 SeedDataset.sections());
-    }
-
-    /** @return the factory for the database this test class is bound to */
-    protected final SessionFactory factory() {
-        return database.factory();
-    }
-
-    /** Runs work in a transaction on this test's database. */
-    protected final <T> T inTx(Function<Session, T> work) {
-        return Transactions.inTx(factory(), work);
-    }
-
-    /** Runs work in a transaction on this test's database, returning nothing. */
-    protected final void runInTx(Consumer<Session> work) {
-        Transactions.runInTx(factory(), work);
     }
 
     @Test
@@ -124,10 +86,10 @@ abstract class SeedDatasetContract {
     @Test
     @DisplayName("the summary reports what was actually inserted")
     void summaryAgreesWithTheDatabase() {
-        assertThat(summary.outcome()).isEqualTo(SeedOutcome.LOADED);
-        assertThat(summary.rowsByTable()).containsEntry("users", 18);
-        assertThat(summary.rowsByTable()).containsEntry("questions", 40);
-        assertThat(summary.totalRows()).isEqualTo(count("users") + count("subjects")
+        assertThat(summary().outcome()).isEqualTo(SeedOutcome.LOADED);
+        assertThat(summary().rowsByTable()).containsEntry("users", 18);
+        assertThat(summary().rowsByTable()).containsEntry("questions", 40);
+        assertThat(summary().totalRows()).isEqualTo(count("users") + count("subjects")
                 + count("courses") + count("course_teachers") + count("coordinators")
                 + count("enrollments") + count("questions") + count("question_versions")
                 + count("exams") + count("exam_versions") + count("exam_version_questions")

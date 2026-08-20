@@ -34,10 +34,13 @@ import java.util.List;
  * spread over recent days so the panel is not eight identical timestamps. Read state comes from
  * §11's own column.
  *
- * <p>Notification 8's title states the closed execution's mean as 78. That number comes from
- * seed §9.1's frozen statistics, which are themselves derived from the auto-scores. If those
- * scores change, this string has to change with them; it is listed in the report as a coupling
- * rather than left to be discovered.
+ * <p>Notification 8's title quotes the closed execution's mean, which couples this string to
+ * seed §9.1's frozen statistics. That coupling has already bitten once and is worth recording:
+ * the title said <b>78</b> until the seed's auto-scores were made reachable and §9.1's mean
+ * moved to <b>72.5</b>. Both the document and this list carried 78, so they agreed with each
+ * other and with nothing else, and no test could see it. It was caught the first time
+ * {@code SeedLoadedDbTest} compared this section against the amended §11, which is the whole
+ * argument for that test existing.
  */
 final class NotificationsSection implements SeedSection {
 
@@ -59,7 +62,7 @@ final class NotificationsSection implements SeedSection {
             new Note("avi.mizrahi", "GRADING_DUE",
                     "8 attempts awaiting your grade approval", false, 3),
             new Note("principal.avia", "EXECUTION_CLOSED",
-                    "בחינה הסתיימה: 8 נבחנים, ממוצע 78", false, 13));
+                    "בחינה הסתיימה: 8 נבחנים, ממוצע 72.5", false, 13));
 
     @Override
     public String name() {
