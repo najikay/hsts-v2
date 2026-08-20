@@ -52,6 +52,26 @@ final class FacultySection implements SeedSection {
             new Coordinates("10", "rina.barak"),
             new Coordinates("20", "michal.sharon"));
 
+    /**
+     * A course's teachers in §4's document order.
+     *
+     * <p>Exposed because §7's authorship rule is defined in terms of that order: "v1 is the
+     * course's <b>first-listed</b> teacher in §4" and "a second version in a co-taught course is
+     * the <b>co-teacher</b>". {@code course_teachers} has no ordering column and no reason to
+     * gain one, so the order lives here, in the section that transcribes §4, and
+     * {@link QuestionBankSection} reads it rather than keeping a second copy that could disagree
+     * after a roster change.
+     *
+     * @param course the two-character course code
+     * @return its teachers' usernames, first-listed first
+     */
+    static List<String> teachersOf(String course) {
+        return COURSE_TEACHERS.stream()
+                .filter(row -> row.course().equals(course))
+                .map(Teaches::username)
+                .toList();
+    }
+
     @Override
     public String name() {
         return "4-5 course teachers and coordinators";

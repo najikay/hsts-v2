@@ -102,6 +102,123 @@ final class SeedLookup {
                 .uniqueResultOptional();
     }
 
+    /**
+     * The exam version an exam's display id and version number name.
+     *
+     * @param displayId the six-digit exam id
+     * @param versionNo the version within that exam
+     * @return its database id
+     */
+    static long requireExamVersionId(Session session, String displayId, int versionNo) {
+        long examId = requireExamId(session, displayId);
+        return findExamVersionId(session, examId, versionNo)
+                .orElseThrow(() -> missing("exam version", displayId + " v" + versionNo));
+    }
+
+    /**
+     * Executions sharing a code.
+     *
+     * <p>A list rather than an {@code Optional} on purpose: code uniqueness holds only among
+     * <em>non-closed</em> executions, which is a service rule (E9, C-1) and not a database
+     * constraint, because closed executions keep their codes forever. Returning an Optional here
+     * would quietly assert a uniqueness the schema does not provide.
+     */
+    static java.util.List<Long> findExecutionByCode(Session session, String code) {
+        return session.createQuery(
+                        "select e.id from ExamExecution e where e.code = :code", Long.class)
+                .setParameter("code", code)
+                .getResultList();
+    }
+
+    /** @return the grade on an attempt, or empty. uq_grades_attempt makes it at most one. */
+    static Optional<Long> findGradeId(Session session, long attemptId) {
+        return session.createQuery(
+                        "select g.id from Grade g where g.attemptId = :attemptId", Long.class)
+                .setParameter("attemptId", attemptId)
+                .uniqueResultOptional();
+    }
+
+    /** @return the attempt a student made on an execution, or empty */
+    static Optional<Long> findAttemptId(Session session, long executionId, long studentId) {
+        return session.createQuery("""
+                        select a.id from ExamAttempt a
+                        where a.executionId = :executionId and a.studentId = :studentId
+                        """, Long.class)
+                .setParameter("executionId", executionId)
+                .setParameter("studentId", studentId)
+                .uniqueResultOptional();
+    }
+
+    /** @return the bot for a course; uq_bots_course makes it at most one (S-30). */
+    static Optional<Long> findBotByCourse(Session session, String course) {
+        return session.createQuery(
+                        "select b.id from Bot b where b.courseCode = :course", Long.class)
+                .setParameter("course", course)
+                .uniqueResultOptional();
+    }
+
+    /** @return a source on a bot with this title, or empty. Title is the natural key here. */
+    static Optional<Long> findBotSourceId(Session session, long botId, String title) {
+        return session.createQuery("""
+                        select s.id from BotSource s
+                        where s.botId = :botId and s.title = :title
+                        """, Long.class)
+                .setParameter("botId", botId)
+                .setParameter("title", title)
+                .uniqueResultOptional();
+    }
+
+    /**
+     * A recorded message, keyed on bot plus student plus the question text.
+     *
+     * <p>Sessions and messages have no display id, so this is the natural key available. It is
+     * a choice, flagged in the report: two identical questions from one student to one bot
+     * would collapse into one. Acceptable for a fixed eight-row fixture and wrong the moment
+     * the seed grows a repeat, which is the same trade §11 makes.
+     */
+    static Optional<Long> findBotMessageId(Session session, long botId, long studentId,
+                                           String question) {
+        return session.createQuery("""
+                        select m.id from BotMessage m
+                        where m.botId = :botId and m.studentId = :studentId
+                          and m.question = :question
+                        """, Long.class)
+                .setParameter("botId", botId)
+                .setParameter("studentId", studentId)
+                .setParameter("question", question)
+                .uniqueResultOptional();
+    }
+
+    /** @return when an execution's window opens */
+    static java.time.Instant executionOpensAt(Session session, long executionId) {
+        return session.createQuery(
+                        "select e.openAt from ExamExecution e where e.id = :id",
+                        java.time.Instant.class)
+                .setParameter("id", executionId)
+                .getSingleResult();
+    }
+
+    /** @return when an execution's window closes */
+    static java.time.Instant executionClosesAt(Session session, long executionId) {
+        return session.createQuery(
+                        "select e.closeAt from ExamExecution e where e.id = :id",
+                        java.time.Instant.class)
+                .setParameter("id", executionId)
+                .getSingleResult();
+    }
+
+    /**
+     * Fails the load when a seeded invariant does not hold.
+     *
+     * <p>Shared so every section reports the same way, and so a violated expectation stops the
+     * transaction rather than writing rows nobody checked.
+     */
+    static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new IllegalStateException("seed: " + message);
+        }
+    }
+
     static boolean subjectExists(Session session, String code) {
         return session.createQuery(
                         "select count(s) from Subject s where s.code = :code", Long.class)

@@ -20,12 +20,12 @@ import java.util.List;
  *       question 22001's stem is written {@code filters rows *before* grouping} and is stored
  *       as {@code filters rows before grouping}. That is the only emphasis in the bank, and it
  *       is recorded here rather than left as a silent judgement call.</li>
- *   <li><b>{@code created_by} is not in the document and is inferred.</b>
- *       {@code question_versions.created_by} is NOT NULL, and seed §7's tables have no author
- *       column. After the 2026-08-20 roster decision only <b>course 21</b> has two teachers, so
- *       29 of the 40 questions have exactly one possible author and are unambiguous. The 11
- *       Java questions use the course's <em>first-listed</em> teacher in §4,
- *       {@code avi.mizrahi}. That one is a coin flip and it is recorded as one.</li>
+ *   <li><b>{@code created_by} follows §7's stated rule and is no longer inferred.</b> It was a
+ *       flagged assumption in PR 3a, when the document had no author column and no rule; the
+ *       2026-08-20 amendment added the rule (D9), so this now transcribes rather than guesses.
+ *       v1 is the course's first-listed teacher in §4; a second version in a <b>co-taught</b>
+ *       course is the co-teacher. See {@link #authorOf}, which resolves it from
+ *       {@link FacultySection} so a roster change moves it automatically.</li>
  *   <li><b>{@code created_at} is not in the document and is derived.</b> Also NOT NULL. Set to
  *       {@link #V1_DAYS_BEFORE} days before the load anchor, and second versions to
  *       {@link #V2_DAYS_BEFORE}, so a version is always older than its successor and the whole
@@ -55,19 +55,6 @@ final class QuestionBankSection implements SeedSection {
 
     /** Second versions are later than their originals, and still before any execution. */
     static final int V2_DAYS_BEFORE = -20;
-
-    /**
-     * The author each course's questions are attributed to.
-     *
-     * <p>Only course 21 has two teachers since the 2026-08-20 roster change, so it is the only
-     * entry here that is a choice rather than the single possible answer; it takes the
-     * first listed in seed §4.
-     */
-    private static final List<String[]> COURSE_AUTHOR = List.of(
-            new String[] {"11", "dana.cohen"},
-            new String[] {"12", "dana.cohen"},
-            new String[] {"21", "avi.mizrahi"},
-            new String[] {"22", "michal.sharon"});
 
     private record Q(String displayId, String topic, Difficulty difficulty, String text,
                      String a1, String a2, String a3, String a4, int correct, boolean image) { }
@@ -271,7 +258,7 @@ final class QuestionBankSection implements SeedSection {
             session.persist(new QuestionVersion(row.getId(), 1, question.text(),
                     question.a1(), question.a2(), question.a3(), question.a4(),
                     (byte) question.correct(), question.topic(), question.difficulty(),
-                    null, authorOf(session, course), firstVersions));
+                    null, authorOf(session, course, 1), firstVersions));
             versions++;
         }
 
@@ -286,7 +273,7 @@ final class QuestionBankSection implements SeedSection {
             session.persist(new QuestionVersion(questionId, 2, second.text(),
                     second.a1(), second.a2(), second.a3(), second.a4(),
                     (byte) second.correct(), original.topic(), original.difficulty(),
-                    null, authorOf(session, course), secondVersions));
+                    null, authorOf(session, course, 2), secondVersions));
             versions++;
         }
 
@@ -302,12 +289,31 @@ final class QuestionBankSection implements SeedSection {
                         "second version names a question that is not in the bank: " + displayId));
     }
 
-    private static long authorOf(Session session, String course) {
-        String username = COURSE_AUTHOR.stream()
-                .filter(pair -> pair[0].equals(course))
-                .map(pair -> pair[1])
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("no seed author for course " + course));
+    /**
+     * §7's D9 authorship rule, resolved against §4's teacher order.
+     *
+     * <p>Version 1 is the course's first-listed teacher. A <b>second version in a co-taught
+     * course</b> is the co-teacher, which today resolves to exactly one row, {@code 21003} v2,
+     * because Java is the only co-taught course. Second versions elsewhere stay with the
+     * first-listed teacher, so {@code 11005} v2 and {@code 22004} v2 do not move.
+     *
+     * <p>Read from {@link FacultySection} rather than from a list here, because §7 states this
+     * as a rule precisely so it re-resolves when the roster changes. Two copies of the order
+     * would drift the next time a course gains or loses a co-teacher, and the drift would be
+     * invisible: every version would still have <em>an</em> author.
+     *
+     * <p>This clause was wrong until {@code SeedLoadedDbTest} compared the loaded rows against
+     * the rule: 21003 v2 was attributed to the first-listed teacher along with everything else.
+     */
+    private static long authorOf(Session session, String course, int versionNo) {
+        List<String> teachers = FacultySection.teachersOf(course);
+        if (teachers.isEmpty()) {
+            throw new IllegalStateException("no seed teacher for course " + course
+                    + ", so §7's authorship rule cannot resolve");
+        }
+        String username = versionNo > 1 && teachers.size() > 1
+                ? teachers.get(1)
+                : teachers.get(0);
         return SeedLookup.requireUserId(session, username);
     }
 }

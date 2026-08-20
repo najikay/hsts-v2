@@ -88,6 +88,10 @@ public final class SeedDocument {
     private static final Pattern VERSION_STATUS =
             Pattern.compile("v(\\d+)\\s*\\*\\*([A-Z_]+)\\*\\*");
 
+    /** {@code **Source 1** · bot 1 · TEXT · `title`}, §10.1's per-source heading line. */
+    private static final Pattern SOURCE_HEADER = Pattern.compile(
+            "^\\*\\*Source (\\d+)\\*\\*\\s*·\\s*bot (\\d+)\\s*·\\s*(\\w+)\\s*·\\s*(.+)$");
+
     /** A "3 rina.barak" style reference: the number is the document's, the name is the key. */
     private static final Pattern REFERENCE = Pattern.compile("^\\s*\\d+\\s+([A-Za-z0-9._]+)\\s*$");
 
@@ -185,9 +189,28 @@ public final class SeedDocument {
     /** §8.2's second table. */
     public record RejectionRow(int exam, int examVersion, String rejectedBy, String reason) { }
 
-    /** §9.1. */
+    /** §9's execution table. Windows are deliberately not parsed; see {@link #executions()}. */
+    public record ExecutionRow(int number, int exam, int examVersion, String code,
+                               String status) { }
+
+    /**
+     * §9.1 and §9.2.
+     *
+     * @param finalScore the final column, or {@code null} where §9.2 writes a dash because no
+     *                   grade has been approved yet. Absent and zero are different things.
+     */
     public record GradeRow(String student, String attemptStatus, int solvingMinutes,
-                           int auto, int finalScore) { }
+                           int auto, Integer finalScore) { }
+
+    /** §10's bot table. */
+    public record BotRow(int number, String course, String name, boolean active) { }
+
+    /** §10.1, which is prose blocks rather than a table. */
+    public record BotSourceRow(int number, int bot, String type, String title, String body) { }
+
+    /** §10.2, where one row is a session and its single message. */
+    public record BotSessionRow(int number, int bot, String student, int daysAgo,
+                                String provider, String question, String answer) { }
 
     /**
      * §9.1.1, one row per (student, question) cell.
@@ -384,32 +407,84 @@ public final class SeedDocument {
                 plain(cells[3])));
     }
 
-    /** @return §9.1's per-student grades for the closed execution */
-    public List<GradeRow> grades() {
-        return map(rows("### 9.1", 6), cells -> new GradeRow(
-                reference(cells[0]), bare(cells[1]),
-                number(plain(cells[2]).replace("min", ""), "§9.1 solving time"),
-                number(bare(cells[3]), "§9.1 auto score"),
-                number(bare(cells[4]), "§9.1 final score")));
+    /**
+     * §9's four executions.
+     *
+     * <p>The window column is deliberately <b>not</b> parsed. Windows are relative to load time,
+     * so an assertion on the resolved instants would have to re-derive them from the anchor,
+     * which is re-implementing {@link SeedTimes} in the test and proving only that two copies of
+     * one calculation agree. {@code SeedTimesTest} pins the resolution instead, and this pins
+     * what the document actually decides: which exam version, which code, which status.
+     *
+     * @return one row per execution, in document order
+     */
+    public List<ExecutionRow> executions() {
+        // §9 leads with the NOT NULL rules table, added in the 2026-08-20 amendment, so "the
+        // first table in §9" is no longer the executions. Picked by header shape instead, which
+        // is why that convention exists: a section gaining a table above yours must not silently
+        // change which one you read.
+        List<String[]> table = tables(section("## 9."), "## 9.").stream()
+                .filter(candidate -> headerNames(candidate.get(0), "code"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("SEED_CONTENT.md: no table in §9 "
+                        + "has a 'code' column, so the executions cannot be told from the rules "
+                        + "table above them."));
+        require(table.get(0).length == 6, "§9's execution table has " + table.get(0).length
+                + " columns where 6 are expected.");
+
+        return map(table.subList(1, table.size()), cells -> {
+            String[] examAndVersion = plain(cells[1]).split("/");
+            require(examAndVersion.length == 2, "§9's exam cell should read '1 / v2', not '"
+                    + cells[1] + "'");
+            return new ExecutionRow(
+                    number(cells[0], "§9 execution number"),
+                    number(examAndVersion[0], "§9 exam number"),
+                    number(examAndVersion[1].replace("v", ""), "§9 exam version"),
+                    plain(cells[2]),
+                    bare(cells[4]));
+        });
     }
 
     /**
-     * §9.1.1's selection grid, flattened to one row per cell.
+     * Per-student grades for one execution.
+     *
+     * @param execution 1 for §9.1's closed and approved set, 2 for §9.2's awaiting approval
+     * @return one row per student
+     */
+    public List<GradeRow> grades(int execution) {
+        String heading = execution == 1 ? "### 9.1" : "### 9.2";
+        // §9.1 carries a note column and §9.2 does not, which is why the widths differ and why
+        // the width check is worth having: reading one with the other's shape would silently
+        // take the wrong cell for every field after the third.
+        int columns = execution == 1 ? 6 : 5;
+
+        return map(rows(heading, columns), cells -> new GradeRow(
+                reference(cells[0]), bare(cells[1]),
+                number(plain(cells[2]).replace("min", ""), heading + " solving time"),
+                number(bare(cells[3]), heading + " auto score"),
+                // §9.2 writes a dash: no grade has been approved, so there is no final score.
+                isDash(cells[4]) ? null : number(bare(cells[4]), heading + " final score")));
+    }
+
+    /**
+     * A selection grid, flattened to one row per cell.
      *
      * <p>The header row names the questions, so a column's meaning comes from the document
      * rather than from a constant here. A dash yields {@code answered = false}.
      *
+     * @param execution 1 for §9.1.1, 2 for §9.2.1
      * @return one row per (student, question) cell
      */
-    public List<SelectionRow> selections() {
-        // 9.1.1 holds two tables: the answer key first, then the selection grid. Picked by
-        // shape rather than by position, so adding a third table above it cannot silently
-        // change which one is read.
-        List<String[]> table = tables(section("#### 9.1.1"), "#### 9.1.1").stream()
+    public List<SelectionRow> selections(int execution) {
+        String heading = execution == 1 ? "#### 9.1.1" : "#### 9.2.1";
+        // Each of these sections holds two tables: the answer key first, then the selection
+        // grid. Picked by shape rather than by position, so adding a third table above it
+        // cannot silently change which one is read.
+        List<String[]> table = tables(section(heading), heading).stream()
                 .filter(candidate -> questionColumns(candidate.get(0)).size() >= 3)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("SEED_CONTENT.md: no table in "
-                        + "§9.1.1 has a header naming five-digit questions. That header is what "
+                        + heading + " has a header naming five-digit questions. That header is what "
                         + "gives each column its meaning, so the grid cannot be read without it."));
 
         java.util.Map<Integer, String> questions = questionColumns(table.get(0));
@@ -424,19 +499,142 @@ public final class SeedDocument {
                 // about a student's attempt. Elsewhere empty legitimately means absent, which
                 // is why isDash is not used for this grid.
                 String text = bare(cell);
-                require(!text.isEmpty(), "§9.1.1 has a blank cell for " + student + " on "
+                require(!text.isEmpty(), heading + " has a blank cell for " + student + " on "
                         + column.getValue() + ". A missing selection must be written as a dash, "
                         + "which means no row in attempt_answers, or as a number.");
                 if (text.equals("—") || text.equals("-")) {
                     selections.add(new SelectionRow(student, column.getValue(), false, 0));
                 } else {
                     selections.add(new SelectionRow(student, column.getValue(), true,
-                            number(text, "§9.1.1 selection")));
+                            number(text, heading + " selection")));
                 }
             }
         }
-        require(!selections.isEmpty(), "§9.1.1 produced no selections");
+        require(!selections.isEmpty(), heading + " produced no selections");
         return List.copyOf(selections);
+    }
+
+    /**
+     * §10's four bots.
+     *
+     * <p>The {@code active} cell is not a bare yes or no: bot 4 reads
+     * {@code **no** — inactive, for the S-31 refusal demo}, because the reason matters as much
+     * as the value. Read from the first word, so the explanation can be reworded without
+     * silently flipping a flag.
+     *
+     * @return one row per bot, in document order
+     */
+    public List<BotRow> bots() {
+        return map(rows("## 10.", 4), cells -> {
+            String active = bare(cells[3]);
+            require(active.startsWith("yes") || active.startsWith("no"),
+                    "§10's active cell should start with yes or no, not '" + cells[3] + "'");
+            return new BotRow(number(cells[0], "§10 bot number"), code(cells[1]),
+                    plain(cells[2]), active.startsWith("yes"));
+        });
+    }
+
+    /**
+     * §10.1's eight sources, which are prose blocks rather than a table.
+     *
+     * <p>Each is a heading line, {@code **Source 1** · bot 1 · TEXT · `title`}, followed by the
+     * body as a block quote. Parsed rather than skipped because those eight paragraphs are the
+     * longest hand-transcribed text in the seed, roughly 3400 characters of Hebrew and English,
+     * and they are exactly where a silent slip would live.
+     *
+     * <p><b>The {@code type} returned here is the label, which the document itself contradicts.</b>
+     * §10's preamble rules that all eight seed as {@code TEXT}; five of the labels say PDF or
+     * DOCX. This reports what the label says, because that is what the document says, and the
+     * consumer applies the ruling. Resolving it here would hide the contradiction rather than
+     * let a test state it.
+     *
+     * @return one row per source, in document order
+     */
+    public List<BotSourceRow> botSources() {
+        List<String> lines = section("### 10.1");
+        List<BotSourceRow> sources = new ArrayList<>();
+
+        for (int i = 0; i < lines.size(); i++) {
+            Matcher header = SOURCE_HEADER.matcher(lines.get(i));
+            if (!header.matches()) {
+                continue;
+            }
+            String body = null;
+            for (int j = i + 1; j < lines.size() && j < i + 4; j++) {
+                if (lines.get(j).startsWith("> ")) {
+                    body = plain(lines.get(j).substring(2));
+                    break;
+                }
+            }
+            require(body != null && !body.isEmpty(), "§10.1 source " + header.group(1)
+                    + " has no body. Every source carries real text because raw and "
+                    + "extracted_text are both NOT NULL with a LENGTH > 0 check.");
+
+            sources.add(new BotSourceRow(Integer.parseInt(header.group(1)),
+                    Integer.parseInt(header.group(2)), header.group(3),
+                    plain(header.group(4)), body));
+        }
+
+        require(!sources.isEmpty(), "§10.1 produced no sources. The block format is "
+                + "'**Source 1** · bot 1 · TEXT · `title`' followed by a quoted body; if it "
+                + "changed, this parser changes in the same commit.");
+        return List.copyOf(sources);
+    }
+
+    /**
+     * §10.2's recorded sessions.
+     *
+     * <p>One row is a session <em>and</em> its single message: the table carries the question,
+     * the answer and the provider, which belong to {@code bot_messages}, alongside the student
+     * and bot that identify the session. ARCHITECTURE §5 requires the two to be dual-written, so
+     * reading them as one row matches how they are produced.
+     *
+     * @return one row per session, in document order
+     */
+    public List<BotSessionRow> botSessions() {
+        return map(rows("### 10.2", 7), cells -> new BotSessionRow(
+                number(cells[0], "§10.2 session number"),
+                number(cells[1], "§10.2 bot number"),
+                reference(cells[2]),
+                number(plain(cells[3]).replaceAll("[^0-9]", ""), "§10.2 days ago"),
+                plain(cells[4]), plain(cells[5]), plain(cells[6])));
+    }
+
+    /**
+     * The author §7's D9 rule gives a question version, derived rather than looked up.
+     *
+     * <p>§7 states it as a rule instead of a column, deliberately: "if Java ever stops being
+     * co-taught, or another course gains a co-teacher, this rule re-resolves on its own, which
+     * is why it is a rule and not 43 hand-written values." So this resolves it the same way,
+     * from §4's teacher table, and a roster change moves the expectation without anyone editing
+     * a list.
+     *
+     * <ul>
+     *   <li><b>v1</b> is the course's first-listed teacher in §4.</li>
+     *   <li><b>A second version in a co-taught course</b> is the co-teacher. Java is the only
+     *       co-taught course today, so this resolves to exactly one row, {@code 21003} v2.</li>
+     *   <li><b>A second version in a singly-taught course</b> stays with the first-listed
+     *       teacher, which is why {@code 11005} v2 and {@code 22004} v2 do not move.</li>
+     * </ul>
+     *
+     * @param displayId the five-digit question id, whose first two characters are the course
+     * @param versionNo the version within that question
+     * @return the username §7's rule attributes it to
+     */
+    public String expectedQuestionAuthor(String displayId, int versionNo) {
+        String course = displayId.substring(0, 2);
+        List<String> teachers = courseTeachers().stream()
+                .filter(row -> row.course().equals(course))
+                .map(TeachesRow::teacher)
+                .toList();
+
+        require(!teachers.isEmpty(), "§4 names no teacher for course " + course
+                + ", so §7's authorship rule cannot resolve for question " + displayId);
+
+        if (versionNo > 1 && teachers.size() > 1) {
+            return teachers.get(1);
+        }
+        return teachers.get(0);
     }
 
     /** @return §11's notifications */

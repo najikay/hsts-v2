@@ -89,11 +89,20 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         assertThat(summary().outcome()).isEqualTo(SeedOutcome.LOADED);
         assertThat(summary().rowsByTable()).containsEntry("users", 18);
         assertThat(summary().rowsByTable()).containsEntry("questions", 40);
-        assertThat(summary().totalRows()).isEqualTo(count("users") + count("subjects")
-                + count("courses") + count("course_teachers") + count("coordinators")
-                + count("enrollments") + count("questions") + count("question_versions")
-                + count("exams") + count("exam_versions") + count("exam_version_questions")
-                + count("notifications"));
+        // Summed over the tables the summary itself names, rather than a list written here.
+        // The hardcoded version went stale the moment §9 added four tables, and a total that
+        // silently stops covering part of the load is worse than no total at all.
+        long inDatabase = summary().rowsByTable().keySet().stream()
+                .mapToLong(this::count)
+                .sum();
+
+        assertThat(summary().totalRows()).isEqualTo(inDatabase);
+        assertThat(summary().rowsByTable().keySet())
+                .as("every table the loader writes must appear in the summary the console shows")
+                .contains("subjects", "courses", "users", "course_teachers", "coordinators",
+                        "enrollments", "questions", "question_versions", "exams", "exam_versions",
+                        "exam_version_questions", "exam_executions", "exam_attempts",
+                        "attempt_answers", "grades", "notifications");
     }
 
     @Test
