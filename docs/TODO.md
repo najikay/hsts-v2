@@ -206,7 +206,7 @@ Client:
 
 ## E12 — Grading [B]
 
-- [ ] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade — *AutoGrader done: scoring rules (F8.1/C-8), unanswered = 0, pinned-version mismatch rejected, points-total-100 guard; 16 tests. Not ticked: **persist AUTO grade** — GradingService done (gradeable-status rules, idempotent re-grade, override survives), but the GradingReads adapter is blocked on the correctness-suffix decision, see reports/member-b/PR5.md*
+- [ ] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade — *complete: AutoGrader (scoring rules) + GradingService (gradeability, idempotence) + RepositoryGradingReads (the reads, ForGrading sanctioned). 9 contract cases per engine. Not ticked only until it registers on AttemptFinalizedListener (E10/E11)*
 - [ ] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3)
 - [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22)
 - [ ] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` complete and tested against the seeded execution 4821 fixture: population σ, deciles, and pass rate (mark 55, all scored attempts in the denominator). Not ticked: **→ stored** still needs the frozen E12 contract and the service that writes `exam_executions.stats`*

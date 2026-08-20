@@ -50,7 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <h2>The review feature arrived, and it is sanctioned rather than exempted</h2>
  *
  * <p>The hypothetical above is now E13.2's checked form, specified in the frozen grading wire
- * contract. It did not get a suppression: it got a second sanctioned suffix,
+ * contract. It did not get a suppression: it got a sanctioned suffix of its own,
  * {@code ForCheckedForm}, on the same terms as {@code ForAuthoring} — the name says which
  * audience the read is for, and the three conditions that make that audience legitimate are
  * enforced and tested elsewhere. See {@link #SANCTIONED_SUFFIXES}.
@@ -87,8 +87,26 @@ class CorrectnessLeakGuardTest {
      * that failing any of them answers {@code NOT_FOUND} indistinguishably. If those tests ever
      * go away, this suffix stops being licensed and should come back out of this list — the
      * contract file (docs/contracts/GRADING_WIRE_CONTRACT.md) records that dependency.
+     *
+     * <h2>{@code ForGrading} — the server comparing a selection against the key (E12)</h2>
+     *
+     * <p>Added when E12.1's auto-grading landed. Scoring an attempt <b>is</b> comparing what the
+     * student chose against what is right, so a grading read carries an answer key by definition;
+     * so does {@code GRADE_REVIEW_GET}, which shows a teacher a marked paper. Neither is
+     * authoring — nobody is composing a question — and neither is the student's own checked form,
+     * which is a different audience under different conditions. Without a third name both would
+     * have faced the same lie-or-suppression choice {@code ForCheckedForm} was created to avoid.
+     *
+     * <p><b>Audience:</b> grading services and the teacher-facing review, never anything a
+     * student calls. <b>Licensed by:</b> the frozen contract's rule for teacher verbs —
+     * {@code requireRole(TEACHER, COORDINATOR)} plus ownership resolved from repositories, the
+     * caller being the execution's executing teacher or the exam's author. <b>Enforced by:</b>
+     * the E12 handler tests that prove those gates, and {@code AutoGraderTest}, which proves the
+     * key is used to score and never returned. On the same terms as the other two, if those tests
+     * go away this suffix stops being licensed and comes back out of this list.
      */
-    private static final List<String> SANCTIONED_SUFFIXES = List.of("ForAuthoring", "ForCheckedForm");
+    private static final List<String> SANCTIONED_SUFFIXES =
+            List.of("ForAuthoring", "ForCheckedForm", "ForGrading");
 
     @Test
     @DisplayName("no projection anywhere in the package can hold an answer key")
@@ -112,7 +130,7 @@ class CorrectnessLeakGuardTest {
     }
 
     @Test
-    @DisplayName("any repository read that hands back an answer key is named ForAuthoring or ForCheckedForm")
+    @DisplayName("any repository read that hands back an answer key names the audience it serves")
     void correctnessBearingReadsAreNamedForTheirAudience() {
         List<Class<?>> repositories = classesIn(COMPILED_REPOSITORIES);
 
@@ -139,22 +157,28 @@ class CorrectnessLeakGuardTest {
     }
 
     @Test
-    @DisplayName("the suffix rule names exactly two audiences, and nothing that merely looks like one")
-    void onlyTwoSuffixesAreSanctioned() {
-        // Adding a third is a deliberate act with a licensing argument behind it, which is
-        // what SANCTIONED_SUFFIXES' javadoc records. A read that just mentions the words is
+    @DisplayName("the sanctioned suffixes name three audiences, and nothing that merely looks like one")
+    void eachSanctionedSuffixNamesOneRealAudience() {
+        // Adding one is a deliberate act with a licensing argument behind it, which is what
+        // SANCTIONED_SUFFIXES' javadoc records — three so far: authoring (E2.12), the student's
+        // own checked form (E13.2) and grading (E12). A read that merely mentions the words is
         // not sanctioned: the suffix has to be the end of the name.
+        assertThat(SANCTIONED_SUFFIXES)
+                .containsExactly("ForAuthoring", "ForCheckedForm", "ForGrading");
+
         assertThat(isSanctioned("findVersionForAuthoring")).isTrue();
         assertThat(isSanctioned("findAnswersForCheckedForm")).isTrue();
+        assertThat(isSanctioned("findVersionsForGrading")).isTrue();
 
         assertThat(isSanctioned("findForCheckedFormAndAlsoTheDashboard")).isFalse();
         assertThat(isSanctioned("findForAuthoringPreview")).isFalse();
+        assertThat(isSanctioned("findForGradingQueueBanner")).isFalse();
         assertThat(isSanctioned("findForReview")).isFalse();
         assertThat(isSanctioned("findForTakeExam")).isFalse();
     }
 
     @Test
-    @DisplayName("that naming check can fail - the authoring reads really do trip it")
+    @DisplayName("that naming check can fail - the key-bearing reads really do trip it")
     void theNamingCheckHasTeeth() {
         // Without this, the test above would also pass if carriesCorrectness() stopped
         // recognising anything at all - which is exactly what a rename of
@@ -163,15 +187,23 @@ class CorrectnessLeakGuardTest {
         assertThat(CorrectnessNames.carriesCorrectness(TakeExamQuestion.class)).isFalse();
         assertThat(CorrectnessNames.carriesCorrectness(Question.class)).isFalse();
 
-        List<String> authoringReads = Arrays.stream(QuestionRepository.class.getDeclaredMethods())
+        List<String> keyBearingReads = Arrays.stream(QuestionRepository.class.getDeclaredMethods())
                 .filter(method -> returnedTypes(method).stream()
                         .anyMatch(CorrectnessNames::carriesCorrectness))
                 .map(Method::getName)
                 .toList();
 
-        assertThat(authoringReads)
-                .as("the two authoring reads are the ones this rule is about")
-                .containsExactlyInAnyOrder("findVersionForAuthoring", "findLatestVersionForAuthoring");
+        // This list is the inventory of every read that hands back an answer key, and it is
+        // spelled out rather than counted so that adding one is a visible edit here — the same
+        // deliberateness the suffix list itself is designed for. Two authoring reads (E2.12) and
+        // one grading read (E12.1).
+        assertThat(keyBearingReads)
+                .as("every key-bearing read is accounted for, and each names its audience")
+                .containsExactlyInAnyOrder(
+                        "findVersionForAuthoring",
+                        "findLatestVersionForAuthoring",
+                        "findVersionsForGrading");
+        assertThat(keyBearingReads).allMatch(CorrectnessLeakGuardTest::isSanctioned);
     }
 
     @Test
