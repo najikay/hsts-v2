@@ -1,11 +1,11 @@
 package client.features.home;
 
 import client.core.NavParams;
+import client.core.Routes;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.FormField;
 import client.ui.components.Icons;
-import client.ui.components.ToastStack;
 import client.ui.components.logic.ValidationState;
 import client.ui.screen.AbstractScreen;
 import javafx.geometry.Pos;
@@ -20,11 +20,11 @@ import java.time.LocalDateTime;
 /**
  * The student dashboard (Presentation tier, E5.6 — T-1).
  *
- * <p>The exam-code card is real: the field, the validation and the Enter button
- * behave exactly as they will in E10 (rules in {@link StudentHomeSession},
- * unit-tested). Only the last step is honest about itself — submitting a valid
- * code answers with an info toast naming the epic that will start the attempt,
- * rather than a spinner that goes nowhere.
+ * <p>The exam-code card is the shortcut into E10: the field, the validation and the Enter
+ * button behave exactly as the take-exam screen's own code step does (rules in
+ * {@link StudentHomeSession}, unit-tested), and a well-formed code navigates there with
+ * the code already filled in. Nothing is skipped by that: the screen still joins, still
+ * asks for an ID, and the clock still starts there (S-18).
  */
 public final class StudentHomeView extends AbstractScreen {
 
@@ -60,7 +60,7 @@ public final class StudentHomeView extends AbstractScreen {
                         "Enter the 4-character code your teacher gives you.",
                         entry),
                 DashboardPage.statGrid(
-                        DashboardPage.statCard("Exams taken", "Arrives with E10"),
+                        DashboardPage.statCard("Exams taken", "Shown once you have sat one"),
                         DashboardPage.statCard("Average grade", "Arrives with E13"),
                         DashboardPage.statCard("Courses",
                                 "From your enrolments",
@@ -84,15 +84,14 @@ public final class StudentHomeView extends AbstractScreen {
     }
 
     private void submitCode() {
-        String message = session.submit();
-        if (!session.canSubmit()) {
-            codeField.apply(ValidationState.invalid(message));
+        if (!session.submit()) {
+            codeField.apply(ValidationState.invalid(StudentHomeSession.INVALID_CODE));
             return;
         }
-        ToastStack toasts = toasts();
-        if (toasts != null) {
-            toasts.info("Not built yet", message);
-        }
+        // The code travels as a hint; the take-exam screen still joins, still asks for an
+        // ID and still starts the clock there (S-18). Nothing is skipped by arriving early.
+        navigator().navigate(Routes.TAKE_EXAM.id(),
+                NavParams.of(StudentHomeSession.CODE_PARAM, session.normalizedCode()));
     }
 
     /** Mirrors the session's state onto the field and the button. */

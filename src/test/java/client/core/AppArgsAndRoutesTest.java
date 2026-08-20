@@ -170,12 +170,24 @@ class AppArgsAndRoutesTest {
 
         @Test
         void declaresEveryRouteThisBuildHas() {
-            // E5 added Login and the four role dashboards; per-role registration
-            // and the role→home mapping are covered in SessionRoutesTest.
+            // E5 added Login and the four role dashboards; E10/E11 added take-exam and the
+            // live monitor. Per-role registration and the role→home mapping are covered in
+            // SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
-                            "home.student", "home.principal", "settings", "questions");
+                            "home.student", "home.principal", "settings", "questions",
+                            "attempt", "monitor");
+        }
+
+        @Test
+        @DisplayName("the two notification routes are spelled as NotificationCatalog spells them")
+        void notificationRoutesLineUp() {
+            // A NavRef the client does not know renders as a non-clickable row, silently.
+            // These two are the ones E10/E11 emit, so a rename on either side would quietly
+            // break the click-through rather than fail anything.
+            assertThat(Routes.TAKE_EXAM.id()).isEqualTo("attempt");
+            assertThat(Routes.MONITOR.id()).isEqualTo("monitor");
         }
 
         @Test

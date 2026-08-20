@@ -89,6 +89,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F9.4** [T-12, S-37] Report engine: avg/median/decile distribution compared across — executions of the same teacher / same course / same student. Built as one **parameterized report mechanism** (dimension = Strategy) so a new report type is a new strategy class + menu entry, nothing else — that's our answer to "minimal development for new reports".
 
 ### F10 — Concurrency & edit locks (cross-cutting)
+- **F10.0** [X] Lock visibility starts in the list, not the editor: any list of lockable entities (question bank first) badges rows currently being edited with the editor's name, live. Viewing a list never contends for a lock (watch-only); opening the entity is what acquires. Rationale: a teacher deciding WHICH question to edit deserves the signal before the click, not after.
 - **F10.1** [X] Generalized advisory **EditLock** service (server, in-memory + TTL heartbeat): entity type + id + holder. Acquired when an editor opens, renewed while open, released on close/logout/disconnect/timeout.
 - **F10.2** [X] Live UI: everyone viewing a locked entity sees "Being edited by <name>" and gets a read-only editor; lock release flips the UI live (push).
 - **F10.3** [X] Backend backstop: every entity carries a `version` column (optimistic locking). A stale write (lock expired, race) is rejected with a friendly conflict dialog offering "reload latest".
@@ -130,7 +131,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 |---|---|---|
 | NFR-15 | Client-server, separate machines, JARs, connect GUI | Demo rehearsed on two physical Windows machines |
 | NFR-16 | Many concurrent users; no double login | Load-tested with scripted clients; duplicate-login test in CI |
-| NFR-17 | Test data prepared in DB | Seed dataset (§5) via versioned SQL, loaded by one command/button |
+| NFR-17 | Test data prepared in DB | Seed dataset (§5) via a versioned **Java loader** over the JPA entities (schema stays Flyway SQL), loaded by one command/button. Decided 2026-08-20, superseding "versioned SQL": the seed must be optional per boot (F14.2), its execution windows are relative to load time (§5 "T−14d/T+0/live now" — no portable SQL date arithmetic), and passwords BCrypt-hash at insert. Default = load only if empty; explicit `--reseed` wipes (canonical reverse-dependency order, with confirm) and reloads so the relative windows are fresh |
 | NFR-18 | Efficient computing, **no user-initiated refresh** | All state changes push; lists paginate/lazy-load images; zero "refresh" buttons |
 | NFR-19 | Flexible, change-tolerant design | Feature packages, Strategy-based reports/validators, provider adapters — each defended with a "what if" story |
 | NFR-20 | Reuse + design patterns | DECISIONS.md + pattern table in PLAN; named in Javadoc |
@@ -165,7 +166,7 @@ Home dashboards are role-specific with live cards (upcoming executions, pending 
 
 ## 5. Seed dataset (NFR-17) — "well-filled, not overstuffed"
 - 2 subjects (Mathematics=10, Computer Science=20), 4 courses (Algebra 11, Calculus 12, Java Programming 21, Databases 22).
-- Users: 1 principal, 5 teachers (dana.cohen teaches Algebra 11 AND Calculus 12; Calculus and Java each also have a co-teacher; 2 teachers are coordinators — mirrors docs/DEMO_ACCOUNTS.md exactly, which is authoritative for the roster), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
+- Users: 1 principal, 5 teachers (dana.cohen teaches Algebra 11 AND Calculus 12, Calculus solo since 2026-08-20; Java has a co-teacher; rina.barak coordinates Mathematics while teaching nothing — the PURE coordinator login the defense demos — and michal.sharon is the dual-hat coordinator+teacher; mirrors docs/DEMO_ACCOUNTS.md exactly, which is authoritative for the roster), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
 - ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions. **One deliberately thin topic** (e.g. "Recursion" in Java: 2 questions, no Hard ones) so the auto-generation infeasibility report (F3.3) can be demoed live without touching the DB.
 - 6 exams in mixed states (draft / pending / rejected-with-reason / approved), 4 executions (one closed & fully graded with stats, one closed awaiting grading, one scheduled for "today" for the live demo, one live).
 - Grades + stats for the closed execution (a realistic distribution so the histogram looks good), 2 bot sources per course with real content, ~8 recorded bot sessions, seeded notifications.

@@ -46,6 +46,36 @@ public final class CourseRepository {
         return List.copyOf(merged);
     }
 
+    /**
+     * Whether this student may sit an exam of this course (S-15, F6.1).
+     *
+     * <p>A separate read rather than a scan of {@link #findForUser}, because that method
+     * deliberately unions teaching and enrolment and a teacher who happens to teach a
+     * course is emphatically not enrolled in it. The take-exam gate needs the narrow
+     * question, and asking the wide one and filtering afterwards is how the wrong answer
+     * eventually gets used.
+     *
+     * <p>Consumer: E10 join-by-code, which refuses a student who is not on the course with
+     * its own message rather than a generic "no".
+     *
+     * @param session    the current session
+     * @param studentId  the student
+     * @param courseCode the 2-character course code
+     * @return {@code true} when there is an enrolment row
+     */
+    public boolean isEnrolled(Session session, long studentId, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return false;
+        }
+        return session.createQuery("""
+                        select count(e) from Enrollment e
+                        where e.id.studentId = :studentId and e.id.courseCode = :courseCode
+                        """, Long.class)
+                .setParameter("studentId", studentId)
+                .setParameter("courseCode", courseCode)
+                .getSingleResult() > 0;
+    }
+
     private static List<CourseSummary> query(Session session, String hql, long userId) {
         return session.createQuery(hql, CourseSummary.class)
                 .setParameter("userId", userId)

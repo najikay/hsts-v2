@@ -970,3 +970,153 @@
 
 /* The panel's empty state is a compact version of the page-level one. */
 .hsts-notification-panel .hsts-empty-state { -fx-padding: 24px 16px; }
+
+/* ============================================================
+   Take exam · E10 (F6) and live monitor · E11 (F7)
+   ------------------------------------------------------------
+   Two rules shape everything below.
+
+   1. The paper is the page. During an exam the student has one
+      job, so the form gets the surface colour and every piece of
+      chrome that is not the question, the options, the clock or
+      the progress line is quiet.
+   2. Answered and blank are never distinguished by colour alone.
+      A chip carries a filled background AND bold weight when it
+      is answered; the blank state is an outline. A colour-blind
+      student reading the submit dialog has to be able to see
+      which three questions she skipped.
+   ============================================================ */
+
+.take-exam { -fx-background-color: -hsts-bg; }
+
+/* ---- Entry: the code and identity cards (E10.9) ---- */
+
+.exam-entry { -fx-background-color: -hsts-bg; }
+
+.exam-entry-card {
+    -fx-alignment: top-left;
+    -fx-spacing: 16px;
+    -fx-padding: 28px;
+}
+.exam-entry-icon { -fx-fill: -hsts-ok; }
+
+/* The summary between the two steps: what she is about to sit. */
+.exam-summary {
+    -fx-padding: 12px 14px;
+    -fx-background-color: -hsts-accent-soft;
+    -fx-background-radius: 8px;
+}
+
+/* ---- The form (E10.10/E10.11) ---- */
+
+.exam-header  { -fx-background-color: -hsts-surface; -fx-border-color: transparent transparent -hsts-border transparent; -fx-border-width: 0 0 1px 0; }
+.exam-footer  { -fx-background-color: -hsts-surface; -fx-border-color: -hsts-border transparent transparent transparent; -fx-border-width: 1px 0 0 0; }
+
+.exam-instructions { -fx-padding: 14px 16px; }
+
+.question-card    { -fx-padding: 20px 22px; -fx-spacing: 12px; }
+.question-text    { -fx-font-size: 16px; -fx-text-fill: -hsts-text; }
+.question-image   { -fx-background-radius: 8px; }
+.question-options { -fx-padding: 4px 0 0 0; }
+
+.question-option {
+    -fx-padding: 10px 12px;
+    -fx-background-radius: 8px;
+    -fx-background-color: -hsts-bg;
+    -fx-text-fill: -hsts-text;
+    -fx-cursor: hand;
+}
+.question-option:hover    { -fx-background-color: -hsts-accent-soft; }
+.question-option:selected { -fx-background-color: -hsts-accent-soft; }
+.question-option:disabled { -fx-opacity: 0.55; -fx-cursor: default; }
+
+/* The autosave indicator. "Not saved yet" is the only one that shouts,
+   because it is the only one a student has to do something about. */
+.save-indicator          { -fx-font-size: 12px; }
+.save-indicator.saved    { -fx-text-fill: -hsts-ok; }
+.save-indicator.saving   { -fx-text-fill: -hsts-muted; }
+.save-indicator.unsaved  { -fx-text-fill: -hsts-danger; -fx-font-weight: bold; }
+
+/* ---- Question navigator strip and answer grid (E10.10/E10.13) ---- */
+
+.question-strip { -fx-padding: 2px 0; }
+
+.nav-chip, .answer-cell {
+    -fx-min-width: 30px;
+    -fx-pref-width: 30px;
+    -fx-min-height: 28px;
+    -fx-padding: 0;
+    -fx-font-size: 12px;
+    -fx-background-radius: 7px;
+    -fx-border-radius: 7px;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+}
+
+/* Blank: outline only. Answered: filled and bold. Two signals, not one. */
+.nav-chip.blank, .answer-cell.blank {
+    -fx-background-color: transparent;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+    -fx-text-fill: -hsts-muted;
+}
+.nav-chip.answered, .answer-cell.answered {
+    -fx-background-color: -hsts-accent-soft;
+    -fx-border-color: transparent;
+    -fx-text-fill: -hsts-accent;
+    -fx-font-weight: bold;
+}
+.nav-chip.current {
+    -fx-border-color: -hsts-accent;
+    -fx-border-width: 2px;
+}
+.nav-chip:hover, .answer-cell:hover { -fx-background-color: -hsts-accent-soft; }
+
+/* The ending screens render the grid as labels rather than buttons: it is a
+   record of what was handed in, not a jump target, and a hand cursor over
+   something that does nothing is a small lie. */
+.label.answer-cell { -fx-cursor: default; -fx-alignment: center; }
+.label.answer-cell:hover { -fx-background-color: transparent; }
+.label.answer-cell.answered:hover { -fx-background-color: -hsts-accent-soft; }
+
+.answer-grid-cells { -fx-padding: 2px 0; }
+
+/* ---- The two endings (E10.13/E10.14) ---- */
+
+/* A takeover, not a panel: it covers the paper completely, and the scrim
+   is what makes "the exam is unreachable" visible rather than merely true. */
+.exam-done { -fx-background-color: -hsts-scrim; }
+
+.done-card  { -fx-alignment: center; -fx-spacing: 16px; }
+.done-title { -fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+
+.done-icon-disc {
+    -fx-min-width: 84px;  -fx-pref-width: 84px;
+    -fx-min-height: 84px; -fx-pref-height: 84px;
+    -fx-background-radius: 999px;
+}
+/* Celebratory versus locked: the same layout, two temperatures (F6.10). */
+.exam-done.submitted .done-icon-disc { -fx-background-color: -hsts-ok-soft; }
+.exam-done.submitted .done-icon-check { -fx-fill: -hsts-ok; }
+.exam-done.timed-out .done-icon-disc { -fx-background-color: -hsts-danger-soft; }
+.exam-done.timed-out .done-icon-timeout { -fx-fill: -hsts-danger; }
+
+/* ---- The live monitor (E11.2) ---- */
+
+.execution-monitor { -fx-background-color: -hsts-bg; }
+
+.monitor-counter { -fx-alignment: center-left; }
+
+.monitor-row {
+    -fx-padding: 10px 14px;
+    -fx-background-color: -hsts-surface;
+    -fx-background-radius: 10px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 10px;
+    -fx-border-width: 1px;
+}
+.monitor-row:hover { -fx-border-color: -hsts-accent; }
+
+/* The C-4 integrity flag: visible, not alarming. The server cannot know
+   intent, and the copy and the colour both leave the judgement to the teacher. */
+.integrity-flag { -fx-font-size: 11px; -fx-padding: 3px 9px; }

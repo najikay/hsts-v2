@@ -55,6 +55,24 @@ public final class Routes {
      */
     public static final Route QUESTIONS = Route.shell("questions", "Question bank");
 
+    /**
+     * Taking an exam: code, identity, paper, and the ending takeover (E10, F6).
+     *
+     * <p>One route for the whole flow, so "the exam is unreachable once it is
+     * over" (F6.4) is a property of one screen rather than a guard on three
+     * navigations. The id matches {@code NotificationCatalog.ROUTE_ATTEMPT}, so
+     * the "extra time added" notification is clickable straight into it.
+     */
+    public static final Route TAKE_EXAM = Route.shell("attempt", "Take exam");
+
+    /**
+     * The live execution monitor (E11, F7.2). Teaching roles only.
+     *
+     * <p>The id matches {@code NotificationCatalog.ROUTE_MONITOR}, which is where
+     * a C-4 integrity alert navigates.
+     */
+    public static final Route MONITOR = Route.shell("monitor", "Execution monitor", "Monitor");
+
     private Routes() {
     }
 
@@ -80,7 +98,7 @@ public final class Routes {
     /** @return every route this build defines, for bulk registration and id checks. */
     public static List<Route> all() {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
-                HOME_PRINCIPAL, SETTINGS, QUESTIONS);
+                HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */
