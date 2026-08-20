@@ -217,7 +217,7 @@ Client:
 
 ## E13 — Student results [B]
 
-- [ ] E13.1 ResultsService: student's own grades only (authorization test: requesting others fails) ⚑
+- [ ] E13.1 ResultsService: student's own grades only (authorization test: requesting others fails) ⚑ — *ResultsService + two scoped repository reads done; ownership is the SQL filter, not a check. 10 tests incl. the negative ones (someone elses id and a missing id are indistinguishable). Not ticked: the router handler is not wired yet*
 - [ ] E13.2 Checked-form DTO: questions, chosen vs correct, marks, comments — only for APPROVED grades
 - [ ] E13.3 My Grades screen: exam list with scores, status, date; empty-state — *MyGradesSession done: load/empty/error states, live refresh on GRADE_PUBLISHED, no refresh control; 14 tests against FakeClientConnection. Not ticked: the FXML screen itself*
 - [ ] E13.4 Checked form viewer: green/red marking, teacher comments, score breakdown
