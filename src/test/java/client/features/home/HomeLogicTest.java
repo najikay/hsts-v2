@@ -123,19 +123,23 @@ class HomeLogicTest {
         }
 
         @Test
-        @DisplayName("submitting a valid code says honestly that E10 will do the rest")
-        void submitIsHonest() {
+        @DisplayName("submitting a valid code opens the take-exam screen")
+        void submitOpensTheExam() {
             session.setCode("4B7Q");
 
-            assertThat(session.submit()).isEqualTo(StudentHomeSession.NOT_BUILT_YET);
+            assertThat(session.submit()).isTrue();
+            assertThat(session.normalizedCode())
+                    .as("the code travels upper-cased, as the server compares it (C-1)")
+                    .isEqualTo("4B7Q");
         }
 
         @Test
-        @DisplayName("submitting an invalid code answers the validation message, never silence")
+        @DisplayName("submitting an invalid code goes nowhere and the field says why")
         void submitInvalid() {
             session.setCode("nope!");
 
-            assertThat(session.submit()).isEqualTo(StudentHomeSession.INVALID_CODE);
+            assertThat(session.submit()).isFalse();
+            assertThat(session.validationError()).contains(StudentHomeSession.INVALID_CODE);
         }
 
         @Test

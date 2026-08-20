@@ -3,6 +3,7 @@ package server.db.repos;
 import org.hibernate.Session;
 import server.db.entities.Question;
 import server.db.entities.QuestionVersion;
+import server.db.projections.QuestionOutline;
 import server.db.projections.TakeExamQuestion;
 
 import java.util.Collection;
@@ -49,6 +50,87 @@ public final class QuestionRepository {
                         """, TakeExamQuestion.class)
                 .setParameter("examVersionId", examVersionId)
                 .getResultList();
+    }
+
+    /**
+     * The paper's shape without its content (E10.13/E10.14).
+     *
+     * <p>Positions, ids and points, for the answer-summary grid that the submit dialog, the
+     * Submitted screen, the Time Up takeover and the live monitor all render. Those four
+     * need a row of numbered chips, and building it from {@link #findForTakeExam} would
+     * fetch every illustration in the exam to draw them. The monitor pays that cost on
+     * every push, which is where it stops being merely wasteful.
+     *
+     * <p>Like its bigger sibling, this selects no correctness column.
+     *
+     * @param session       the current session
+     * @param examVersionId the exam version being sat
+     * @return the outline in exam order
+     */
+    public List<QuestionOutline> findOutlineForTakeExam(Session session, long examVersionId) {
+        return session.createQuery("""
+                        select new server.db.projections.QuestionOutline(
+                            qv.id, q.displayId, evq.ordinal, evq.points)
+                        from ExamVersionQuestion evq, QuestionVersion qv, Question q
+                        where evq.id.examVersionId = :examVersionId
+                          and qv.id = evq.id.questionVersionId
+                          and q.id = qv.questionId
+                        order by evq.ordinal
+                        """, QuestionOutline.class)
+                .setParameter("examVersionId", examVersionId)
+                .getResultList();
+    }
+
+    /**
+     * How many questions one exam version has, without fetching any of them.
+     *
+     * <p>The join screen shows "20 questions" before the student has identified herself,
+     * and the paper must not exist on her machine at that point (S-18: the identity entry
+     * is what starts the clock). Counting is also what keeps illustrations out of a
+     * response that has no use for them: {@link #findForTakeExam} carries image bytes, and
+     * a header that reused it would ship a megabyte to render a number.
+     *
+     * <p>Consumer: E10 join-by-code.
+     *
+     * @param session       the current session
+     * @param examVersionId the exam version
+     * @return the number of questions on the paper
+     */
+    public int countForTakeExam(Session session, long examVersionId) {
+        return session.createQuery("""
+                        select count(evq) from ExamVersionQuestion evq
+                        where evq.id.examVersionId = :examVersionId
+                        """, Long.class)
+                .setParameter("examVersionId", examVersionId)
+                .getSingleResult()
+                .intValue();
+    }
+
+    /**
+     * Whether a question version is actually on this paper (E10.3).
+     *
+     * <p>The autosave verb is handed a question id by the client, and a client can send
+     * any number at all. Without this check a student could write rows against questions
+     * from somebody else's exam, which would then be marked. A count rather than a load,
+     * because this runs on every keystroke-ish autosave and the question's text and image
+     * are of no interest to it.
+     *
+     * <p>Carries no correctness data and cannot: it answers a boolean.
+     *
+     * @param session           the current session
+     * @param examVersionId     the exam version being sat
+     * @param questionVersionId the question the client claims to be answering
+     * @return {@code true} when that question is on that paper
+     */
+    public boolean isOnTakeExamPaper(Session session, long examVersionId, long questionVersionId) {
+        return session.createQuery("""
+                        select count(evq) from ExamVersionQuestion evq
+                        where evq.id.examVersionId = :examVersionId
+                          and evq.id.questionVersionId = :questionVersionId
+                        """, Long.class)
+                .setParameter("examVersionId", examVersionId)
+                .setParameter("questionVersionId", questionVersionId)
+                .getSingleResult() > 0;
     }
 
     /**

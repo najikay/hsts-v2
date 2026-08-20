@@ -63,8 +63,29 @@ class VerbTest {
     }
 
     @Test
-    @DisplayName("exactly six push verbs are defined (adding one is a deliberate act)")
+    @DisplayName("the seven take-exam and monitoring verbs exist, spelled as the contract spells them")
+    void examVerbsExist() {
+        // docs/contracts/EXAM_WIRE_CONTRACT.md. Same reasoning as the grading check above:
+        // a verb travels by name between two separately-shipped JARs, so valueOf is the
+        // spelling assertion — referring to the constant would survive a rename.
+        assertThat(Verb.values()).contains(
+                Verb.EXAM_JOIN, Verb.ATTEMPT_START, Verb.ATTEMPT_RESUME,
+                Verb.ANSWER_SAVE, Verb.ATTEMPT_SUBMIT,
+                Verb.EXECUTION_EXTEND, Verb.EXECUTION_MONITOR_GET);
+
+        assertThat(Verb.valueOf("EXAM_JOIN")).isEqualTo(Verb.EXAM_JOIN);
+        assertThat(Verb.valueOf("ATTEMPT_START")).isEqualTo(Verb.ATTEMPT_START);
+        assertThat(Verb.valueOf("ATTEMPT_RESUME")).isEqualTo(Verb.ATTEMPT_RESUME);
+        assertThat(Verb.valueOf("ANSWER_SAVE")).isEqualTo(Verb.ANSWER_SAVE);
+        assertThat(Verb.valueOf("ATTEMPT_SUBMIT")).isEqualTo(Verb.ATTEMPT_SUBMIT);
+        assertThat(Verb.valueOf("EXECUTION_EXTEND")).isEqualTo(Verb.EXECUTION_EXTEND);
+        assertThat(Verb.valueOf("EXECUTION_MONITOR_GET")).isEqualTo(Verb.EXECUTION_MONITOR_GET);
+        assertThat(Verb.valueOf("PUSH_MONITOR_UPDATED")).isEqualTo(Verb.PUSH_MONITOR_UPDATED);
+    }
+
+    @Test
+    @DisplayName("exactly seven push verbs are defined (adding one is a deliberate act)")
     void pushVerbCount() {
-        assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(6);
+        assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(7);
     }
 }

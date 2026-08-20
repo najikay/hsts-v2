@@ -1,6 +1,8 @@
 package client.core;
 
 import client.features.bank.QuestionsView;
+import client.features.exam.ExecutionMonitorView;
+import client.features.exam.TakeExamView;
 import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
@@ -55,6 +57,16 @@ public final class SessionRoutes {
             // The legacy bank screen is the one feature screen that already works
             // end-to-end (over the DAO); E6 replaces it with the versioned bank.
             routes.add(Routes.QUESTIONS);
+            // The live monitor (E11). Teaching roles only, and the server re-checks
+            // ownership on every request: this list decides what is offered, never
+            // what is permitted.
+            routes.add(Routes.MONITOR);
+        }
+        if (role == Role.STUDENT) {
+            // Taking an exam is a student's, and only a student's (E10). A teacher who
+            // reached this route would still be refused by the server, which is where
+            // enrolment and identity are actually checked.
+            routes.add(Routes.TAKE_EXAM);
         }
         return List.copyOf(routes);
     }
@@ -95,6 +107,12 @@ public final class SessionRoutes {
         }
         if (Routes.QUESTIONS.id().equals(route.id())) {
             return QuestionsView::new;
+        }
+        if (Routes.TAKE_EXAM.id().equals(route.id())) {
+            return TakeExamView::new;
+        }
+        if (Routes.MONITOR.id().equals(route.id())) {
+            return ExecutionMonitorView::new;
         }
         return homeBuilder(role);
     }

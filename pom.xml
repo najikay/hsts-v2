@@ -298,6 +298,22 @@
                         <exclude>client/features/notify/NotificationsPanel*</exclude>
                         <exclude>client/features/locks/LockBanner*</exclude>
                         <exclude>client/features/locks/FxHeartbeat*</exclude>
+<!-- E10/E11 take-exam and monitor: the five thin FX views only, listed one by
+                             one. Every decision they render lives in a measured logic class
+                             beside them — ExamEntrySession, ExamAttemptSession, AttemptModel,
+                             ExecutionMonitorSession, ExamCopy, ExamClock, SaveState,
+                             QuestionChip, DelayedRunner — and the screens are additionally
+                             driven by real-input TestFX tests (TakeExamInteractionTest,
+                             ExecutionMonitorInteractionTest) covering the entry flow, the
+                             live form, the Time Extended moment and the Time Up takeover.
+                             Never a wildcard: a single '*' crosses path separators in JaCoCo
+                             and would silently un-instrument the whole feature. -->
+                        <exclude>client/features/exam/TakeExamView*</exclude>
+                        <exclude>client/features/exam/ExamEntryView*</exclude>
+                        <exclude>client/features/exam/ExamFormView*</exclude>
+                        <exclude>client/features/exam/ExamDoneView*</exclude>
+                        <exclude>client/features/exam/AnswerGridView*</exclude>
+                        <exclude>client/features/exam/ExecutionMonitorView*</exclude>
 <!-- E4 design system: only thin FX view classes are excluded; all UI *logic*
                              (theme/, anim/Motion, components/logic/, shell state) IS measured -->
                         <exclude>client/ui/components/Buttons*</exclude>

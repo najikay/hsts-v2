@@ -13,6 +13,13 @@ import server.features.auth.AuthService;
 import server.features.auth.UserDirectory;
 import server.features.auth.UserRecord;
 import server.features.bank.LegacyQuestionHandlers;
+import server.features.exam.AttemptFinalizedListener;
+import server.features.exam.AttemptService;
+import server.features.exam.ExamStore;
+import server.features.exam.ExtendService;
+import server.features.exam.JpaExamStore;
+import server.features.exam.MonitorService;
+import server.features.exam.TimerService;
 import server.features.locks.EditLockService;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
@@ -51,6 +58,7 @@ public class HSTSServer extends AbstractServer {
     private final MessageRouter router;
     private final PushGateway pushGateway;
     private final ScheduledExecutorService lockSweeper;
+    private final ScheduledExecutorService examTimers;
 
     /**
      * Production wiring: session map + router + the auth, notify, lock and legacy
@@ -70,8 +78,12 @@ public class HSTSServer extends AbstractServer {
         super(port);
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.pushGateway = new PushGateway(sessions);
-        this.lockSweeper = newSweeperThread();
-        this.router = defaultRouter(sessions, pushGateway, lockSweeper);
+        this.lockSweeper = newDaemonThread("hsts-lock-sweeper");
+        // A thread of its own, not the lock sweeper's: an expiry force-submits inside a
+        // database transaction, and a slow one must not be able to delay the sweep that
+        // frees a crashed teacher's edit lock (or the reverse).
+        this.examTimers = newDaemonThread("hsts-exam-timers");
+        this.router = defaultRouter(sessions, pushGateway, lockSweeper, examTimers);
     }
 
     /**
@@ -87,6 +99,7 @@ public class HSTSServer extends AbstractServer {
         this.router = Objects.requireNonNull(router, "router");
         this.pushGateway = new PushGateway(sessions);
         this.lockSweeper = null;
+        this.examTimers = null;
     }
 
     /**
@@ -114,7 +127,8 @@ public class HSTSServer extends AbstractServer {
      * unread count (E17.5).
      */
     private static MessageRouter defaultRouter(SessionManager sessions, PushGateway pushGateway,
-                                               ScheduledExecutorService sweeper) {
+                                               ScheduledExecutorService sweeper,
+                                               ScheduledExecutorService examTimers) {
         MessageRouter router = new MessageRouter(sessions);
         // One factory for both seams: the Singleton is what owns the pool, and asking
         // for it twice would still be one pool but would read as if it were two.
@@ -135,16 +149,74 @@ public class HSTSServer extends AbstractServer {
         sweeper.scheduleWithFixedDelay(locks::sweepExpired,
                 LOCK_SWEEP_INTERVAL.toMillis(), LOCK_SWEEP_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
 
-        new AuthService(directory, sessions, Clock.systemUTC(), notifications::unreadCount)
+        Clock clock = Clock.systemUTC();
+        new AuthService(directory, sessions, clock, notifications::unreadCount)
                 .registerOn(router);
         new LegacyQuestionHandlers(new QuestionDAO()).registerOn(router);
+
+        registerExamFeature(router, sessions, pushGateway, notifications, sessionFactory,
+                clock, examTimers);
         return router;
     }
 
+    /**
+     * Take exam, extension and live monitoring (E10/E11).
+     *
+     * <p>Assembled in this order because the dependencies genuinely run in it, and the one
+     * place they run backwards is closed explicitly:
+     *
+     * <ol>
+     *   <li>{@link AttemptService} owns the attempts and, with them, the
+     *       {@link TimerService} — expiry <em>is</em> force-submission, so the timer has no
+     *       meaning apart from the service that acts on it;</li>
+     *   <li>{@link MonitorService} reads the attempt service's tracker for the C-4
+     *       integrity flags;</li>
+     *   <li>{@code publishTo} closes the loop: the attempt service tells the monitor when
+     *       to repaint. That is the one backwards edge, and it is a setter rather than a
+     *       constructor argument so neither object has to exist half-built.</li>
+     * </ol>
+     *
+     * <p>The grading seam is {@link AttemptFinalizedListener#NO_OP} until E12 registers a
+     * real one here; submissions are complete and correct without it, they are simply not
+     * marked yet, and the no-op says so in the log rather than silently.
+     *
+     * <p>Two scheduled jobs are armed at the end, and both exist because a timer that only
+     * fires while the process is up is not a timer. {@code rearmFromDatabase} re-arms every
+     * live attempt from rows that outlived the previous process (ARCHITECTURE §4), and the
+     * periodic sweep is the backstop for a task that was lost to a long pause or a
+     * saturated executor. Expiry is a compare-and-set, so both are free to overlap.
+     */
+    private static void registerExamFeature(MessageRouter router, SessionManager sessions,
+                                            PushGateway pushGateway, NotificationService notifications,
+                                            SessionFactory sessionFactory, Clock clock,
+                                            ScheduledExecutorService examTimers) {
+        ExamStore examStore = new JpaExamStore(sessionFactory);
+
+        AttemptService attempts = new AttemptService(examStore, clock,
+                TimerService.Scheduler.on(examTimers), pushGateway, notifications,
+                AttemptFinalizedListener.NO_OP);
+        attempts.registerOn(router);
+
+        MonitorService monitors = new MonitorService(examStore, attempts, pushGateway, clock);
+        monitors.registerOn(router);
+        // A teacher who closed her laptop must stop being pushed to; the same detach hook
+        // that frees her edit locks drops her monitor subscriptions (E18.3's pattern).
+        monitors.attachTo(sessions);
+        attempts.publishTo(monitors);
+
+        new ExtendService(examStore, attempts.timers(), monitors, pushGateway, notifications, clock)
+                .registerOn(router);
+
+        attempts.rearmFromDatabase();
+        examTimers.scheduleWithFixedDelay(attempts.timers()::sweep,
+                TimerService.SWEEP_INTERVAL.toMillis(), TimerService.SWEEP_INTERVAL.toMillis(),
+                TimeUnit.MILLISECONDS);
+    }
+
     /** A single daemon thread: it must never keep a shut-down JVM alive. */
-    private static ScheduledExecutorService newSweeperThread() {
+    private static ScheduledExecutorService newDaemonThread(String name) {
         return Executors.newSingleThreadScheduledExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "hsts-lock-sweeper");
+            Thread thread = new Thread(runnable, name);
             thread.setDaemon(true);
             return thread;
         });
@@ -178,6 +250,9 @@ public class HSTSServer extends AbstractServer {
     protected void serverStopped() {
         if (lockSweeper != null) {
             lockSweeper.shutdownNow();
+        }
+        if (examTimers != null) {
+            examTimers.shutdownNow();
         }
         log.info("Server has stopped listening for connections.");
     }

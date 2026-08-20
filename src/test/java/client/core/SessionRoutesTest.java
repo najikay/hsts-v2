@@ -87,25 +87,38 @@ class SessionRoutesTest {
     class PerRole {
 
         @Test
-        @DisplayName("a teacher gets home, settings and the question bank")
+        @DisplayName("a teacher gets home, settings, the question bank and the live monitor")
         void teacher() {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
-                    .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS);
+                    .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS,
+                            Routes.MONITOR);
         }
 
         @Test
         @DisplayName("a coordinator gets the same, from her own dashboard")
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
-                    .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS);
+                    .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS,
+                            Routes.MONITOR);
         }
 
         @Test
-        @DisplayName("a student gets no question-bank route at all — it is not merely hidden")
+        @DisplayName("a student gets take-exam, and no authoring route at all")
         void student() {
             assertThat(SessionRoutes.routesFor(Role.STUDENT))
-                    .containsExactly(Routes.HOME_STUDENT, Routes.SETTINGS)
-                    .doesNotContain(Routes.QUESTIONS);
+                    .containsExactly(Routes.HOME_STUDENT, Routes.SETTINGS, Routes.TAKE_EXAM)
+                    .doesNotContain(Routes.QUESTIONS, Routes.MONITOR);
+        }
+
+        @Test
+        @DisplayName("no teaching role is offered the take-exam screen (E10)")
+        void teachersDoNotSitExams() {
+            // The server checks enrolment and identity on every one of those verbs, so this
+            // list decides what is offered and never what is permitted. It is still worth
+            // pinning: an exam screen on a teacher's rail is a demo question nobody wants.
+            assertThat(SessionRoutes.routesFor(Role.TEACHER)).doesNotContain(Routes.TAKE_EXAM);
+            assertThat(SessionRoutes.routesFor(Role.COORDINATOR)).doesNotContain(Routes.TAKE_EXAM);
+            assertThat(SessionRoutes.routesFor(Role.PRINCIPAL)).doesNotContain(Routes.TAKE_EXAM);
         }
 
         @Test
