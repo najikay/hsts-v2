@@ -20,24 +20,29 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
  *
  * <p>The fixture is the seed dataset, not an invention: execution <b>4821</b> in
  * {@code docs/seed/SEED_CONTENT.md} §9.1 is eight Algebra students whose statistics are
- * frozen in the seed as mean 78.0, median 80.5, σ 13.08. Those numbers are what the
+ * frozen in the seed as mean 72.5, median 72.5, σ 17.5. Those numbers are what the
  * histogram (F9.2) and the report engine (F9.4) display, so the arithmetic here and the
  * arithmetic in the seed document must agree exactly — if they ever drift, one of the two
  * is lying to the defence panel.
  *
- * <p>σ is checked against √171 rather than the rounded 13.08, because the rounding is a
- * display concern and the stored value is not rounded. √171 is the population form; the
- * sample form would be √(1368/7) ≈ 13.98, and {@link #sampleStandardDeviationWouldBeWrong()}
- * exists purely to fail loudly if someone "fixes" the divisor to {@code n - 1}.
+ * <p>σ here is exact rather than rounded: √(2450/8) is precisely 17.5, so every figure in the
+ * fixture is hand-checkable. The sample form would be √(2450/7) ≈ 18.71, and
+ * {@link #sampleStandardDeviationWouldBeWrong()} exists purely to fail loudly if someone
+ * "fixes" the divisor to {@code n - 1}.
+ *
+ * <p>These eight scores are also <b>reachable</b>: exam 1 v2 is six 15-point questions plus one
+ * worth 10, and §9.1.1 gives the per-question selections that produce each of them. An earlier
+ * seed used scores no combination of that exam could yield — fine as demo text, wrong the moment
+ * {@code AutoGrader} recomputes it.
  */
 class ScoreStatisticsTest {
 
     /** Seed §9.1, execution 4821 — the eight final scores, in the document's own order. */
     private static final List<Integer> SEEDED_4821 =
-            List.of(92, 78, 85, 64, 71, 96, 55, 83);
+            List.of(100, 90, 85, 75, 70, 60, 55, 45);
 
-    /** Σ(score − mean)² for {@link #SEEDED_4821}, computed by hand: 1368. */
-    private static final double SEEDED_SUM_OF_SQUARES = 1368;
+    /** Σ(score − mean)² for {@link #SEEDED_4821}, computed by hand: 2450. */
+    private static final double SEEDED_SUM_OF_SQUARES = 2450;
 
     private static ScoreStatistics compute(List<Integer> scores) {
         return ScoreStatistics.of(scores).orElseThrow();
@@ -53,36 +58,36 @@ class ScoreStatisticsTest {
             ScoreStatistics stats = compute(SEEDED_4821);
 
             assertThat(stats.count()).isEqualTo(8);
-            assertThat(stats.mean()).isEqualTo(78.0);
-            assertThat(stats.median()).isEqualTo(80.5);
-            assertThat(stats.standardDeviation()).isCloseTo(13.08, org.assertj.core.data.Offset.offset(0.005));
-            assertThat(stats.min()).isEqualTo(55);
-            assertThat(stats.max()).isEqualTo(96);
+            assertThat(stats.mean()).isEqualTo(72.5);
+            assertThat(stats.median()).isEqualTo(72.5);
+            assertThat(stats.standardDeviation()).isEqualTo(17.5);
+            assertThat(stats.min()).isEqualTo(45);
+            assertThat(stats.max()).isEqualTo(100);
         }
 
         @Test
-        @DisplayName("pass rate is 8/8 — the seed's lowest final score is exactly the pass mark")
+        @DisplayName("pass rate is 7/8 — omer.katz timed out and is the one genuine fail")
         void passRateOfTheSeededFixture() {
             ScoreStatistics stats = compute(SEEDED_4821);
 
-            assertThat(stats.passCount()).isEqualTo(8);
-            assertThat(stats.passRate()).isEqualTo(1.0);
+            assertThat(stats.passCount()).isEqualTo(7);
+            assertThat(stats.passRate()).isEqualTo(0.875);
         }
 
         @Test
         @DisplayName("the seeded override moved yael.azulay from fail to pass: auto 51 -> final 55")
         void theOverrideChangedTheOutcome() {
-            // Seed §9.1: her AUTO score was 51, below the mark; the justified override
+            // Seed §9.1: her AUTO score was 45, below the mark; the justified override
             // to 55 (the mark exactly) is what makes her a pass. Grading on the auto
-            // scores would give 7/8, so the override demo visibly changes the statistic.
-            List<Integer> autoScores = List.of(92, 78, 85, 64, 71, 96, 51, 83);
+            // scores gives 6/8, so the override demo visibly changes the statistic.
+            List<Integer> autoScores = List.of(100, 90, 85, 75, 70, 60, 45, 45);
 
-            assertThat(compute(autoScores).passCount()).isEqualTo(7);
-            assertThat(compute(SEEDED_4821).passCount()).isEqualTo(8);
+            assertThat(compute(autoScores).passCount()).isEqualTo(6);
+            assertThat(compute(SEEDED_4821).passCount()).isEqualTo(7);
         }
 
         @Test
-        @DisplayName("σ is exactly √(1368/8) — the population form, divisor n")
+        @DisplayName("σ is exactly √(2450/8) = 17.5 — the population form, divisor n")
         void populationStandardDeviation() {
             ScoreStatistics stats = compute(SEEDED_4821);
 
@@ -96,20 +101,20 @@ class ScoreStatisticsTest {
             ScoreStatistics stats = compute(SEEDED_4821);
 
             double sampleForm = Math.sqrt(SEEDED_SUM_OF_SQUARES / 7);
-            assertThat(sampleForm).isCloseTo(13.98, org.assertj.core.data.Offset.offset(0.005));
+            assertThat(sampleForm).isCloseTo(18.71, org.assertj.core.data.Offset.offset(0.005));
             assertThat(stats.standardDeviation()).isNotEqualTo(sampleForm);
             assertThat(stats.standardDeviation()).isLessThan(sampleForm);
         }
 
         @Test
-        @DisplayName("deciles match the seed: 50s:1 60s:1 70s:2 80s:2 90s:2, five buckets populated")
+        @DisplayName("deciles match the seed: 40s:1 50s:1 60s:1 70s:2 80s:1 90s:2, six buckets populated")
         void decilesMatchTheSeed() {
             ScoreStatistics stats = compute(SEEDED_4821);
 
             // index: 0-9 10s 20s 30s 40s 50s 60s 70s 80s 90-100
             assertThat(stats.deciles())
-                    .containsExactly(0, 0, 0, 0, 0, 1, 1, 2, 2, 2);
-            assertThat(stats.deciles().stream().filter(count -> count > 0)).hasSize(5);
+                    .containsExactly(0, 0, 0, 0, 1, 1, 1, 2, 1, 2);
+            assertThat(stats.deciles().stream().filter(count -> count > 0)).hasSize(6);
             assertThat(stats.deciles().stream().mapToInt(Integer::intValue).sum()).isEqualTo(8);
         }
 

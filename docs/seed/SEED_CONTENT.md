@@ -153,14 +153,14 @@ Topics: משוואות ליניאריות · פונקציות ריבועיות �
 | 11001 | משוואות ליניאריות | EASY | פתרו: `3x + 6 = 18` | `x = 4` | `x = 6` | `x = 2` | `x = 12` | 1 | |
 | 11002 | משוואות ליניאריות | EASY | פתרו: `5x - 7 = 2x + 8` | `x = 3` | `x = 5` | `x = 15` | `x = 1` | 2 | |
 | 11003 | משוואות ליניאריות | MEDIUM | לאיזה ערך של `k` למערכת `2x + ky = 4`, `4x + 6y = 8` יש אינסוף פתרונות? | `k = 2` | `k = 6` | `k = 3` | `k = 12` | 3 | |
-| 11004 | משוואות ליניאריות | HARD | סכום הספרות של מספר דו-ספרתי הוא 11. אם מחליפים את הספרות, המספר גדל ב-27. מהו המספר? | `47` | `38` | `56` | `29` | 1 | |
-| 11005 | פונקציות ריבועיות | EASY | מהם שורשי `x² - 5x + 6 = 0`? | `1, 6` | `2, 3` | `-2, -3` | `0, 5` | 2 | yes |
-| 11006 | פונקציות ריבועיות | EASY | מהו קודקוד הפרבולה `y = (x - 3)² + 4`? | `(3, 4)` | `(-3, 4)` | `(3, -4)` | `(4, 3)` | 1 | yes |
+| 11004 | משוואות ליניאריות | HARD | סכום הספרות של מספר דו-ספרתי הוא 11. אם מחליפים את הספרות, המספר גדל ב-27. מהו המספר? | `29` | `38` | `56` | `47` | 4 | |
+| 11005 | פונקציות ריבועיות | EASY | מהם שורשי `x² - 5x + 6 = 0`? | `2, 3` | `1, 6` | `-2, -3` | `0, 5` | 1 | yes |
+| 11006 | פונקציות ריבועיות | EASY | מהו קודקוד הפרבולה `y = (x - 3)² + 4`? | `(-3, 4)` | `(3, 4)` | `(3, -4)` | `(4, 3)` | 2 | yes |
 | 11007 | פונקציות ריבועיות | MEDIUM | כמה נקודות חיתוך עם ציר `x` יש לפרבולה `y = x² + 2x + 5`? | `שתיים` | `אחת` | `אף אחת` | `אינסוף` | 3 | yes |
-| 11008 | פונקציות ריבועיות | HARD | הפרבולה `y = ax² + bx + c` עוברת דרך `(0,3)`, `(1,2)` ו-`(-1,6)`. מהו `a`? | `1` | `2` | `-1` | `3` | 1 | |
+| 11008 | פונקציות ריבועיות | HARD | הפרבולה `y = ax² + bx + c` עוברת דרך `(0,3)`, `(1,2)` ו-`(-1,6)`. מהו `a`? | `3` | `2` | `-1` | `1` | 4 | |
 | 11009 | אי-שוויונות | EASY | פתרו: `2x - 4 > 6` | `x > 5` | `x > 1` | `x < 5` | `x > 10` | 1 | |
-| 11010 | אי-שוויונות | MEDIUM | פתרו: `x² - 4 < 0` | `x < -2` | `x > 2` | `-2 < x < 2` | `כל x ממשי` | 3 | yes |
-| 11011 | אי-שוויונות | HARD | לאילו ערכי `x` מתקיים `(x-1)/(x+2) ≥ 0`? | `x ≥ 1` | `x < -2 או x ≥ 1` | `-2 < x ≤ 1` | `x ≤ -2 או x ≥ 1` | 2 | |
+| 11010 | אי-שוויונות | MEDIUM | פתרו: `x² - 4 < 0` | `x < -2` | `-2 < x < 2` | `x > 2` | `כל x ממשי` | 2 | yes |
+| 11011 | אי-שוויונות | HARD | לאילו ערכי `x` מתקיים `(x-1)/(x+2) ≥ 0`? | `x ≥ 1` | `-2 < x ≤ 1` | `x < -2 או x ≥ 1` | `x ≤ -2 או x ≥ 1` | 3 | |
 
 ### 7.2 Calculus (course 12) — 9 questions
 
@@ -168,15 +168,15 @@ Topics: גבולות · נגזרות · אינטגרלים
 
 | display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
 |---|---|---|---|---|---|---|---|---|---|
-| 12001 | גבולות | EASY | חשבו: `lim(x→2) (x² - 4)/(x - 2)` | `0` | `4` | `2` | `לא קיים` | 2 | |
+| 12001 | גבולות | EASY | חשבו: `lim(x→2) (x² - 4)/(x - 2)` | `0` | `לא קיים` | `2` | `4` | 4 | |
 | 12002 | גבולות | MEDIUM | חשבו: `lim(x→∞) (3x² + x)/(x² - 5)` | `3` | `0` | `∞` | `1/3` | 1 |  |
-| 12003 | גבולות | HARD | חשבו: `lim(x→0) sin(3x)/x` | `1` | `0` | `3` | `1/3` | 3 | |
-| 12004 | נגזרות | EASY | מהי הנגזרת של `f(x) = x³`? | `3x²` | `x²` | `3x` | `x⁴/4` | 1 | |
-| 12005 | נגזרות | EASY | מהי הנגזרת של `f(x) = sin(x)`? | `-sin(x)` | `cos(x)` | `-cos(x)` | `tan(x)` | 2 | |
-| 12006 | נגזרות | MEDIUM | מהי הנגזרת של `f(x) = x·e^x`? | `e^x` | `x·e^x` | `(1 + x)·e^x` | `(x - 1)·e^x` | 3 |  |
-| 12007 | נגזרות | HARD | לפונקציה `f(x) = x³ - 3x` יש מינימום מקומי בנקודה: | `x = 1` | `x = -1` | `x = 0` | `x = 3` | 1 | yes |
-| 12008 | אינטגרלים | EASY | חשבו: `∫ 2x dx` | `x² + C` | `2 + C` | `x²/2 + C` | `2x² + C` | 1 | |
-| 12009 | אינטגרלים | MEDIUM | חשבו את השטח מתחת ל-`y = x²` בין `x=0` ל-`x=3` | `9` | `27` | `3` | `6` | 1 | yes |
+| 12003 | גבולות | HARD | חשבו: `lim(x→0) sin(3x)/x` | `1` | `3` | `0` | `1/3` | 2 | |
+| 12004 | נגזרות | EASY | מהי הנגזרת של `f(x) = x³`? | `3x` | `x²` | `3x²` | `x⁴/4` | 3 | |
+| 12005 | נגזרות | EASY | מהי הנגזרת של `f(x) = sin(x)`? | `-sin(x)` | `tan(x)` | `-cos(x)` | `cos(x)` | 4 | |
+| 12006 | נגזרות | MEDIUM | מהי הנגזרת של `f(x) = x·e^x`? | `(1 + x)·e^x` | `x·e^x` | `e^x` | `(x - 1)·e^x` | 1 |  |
+| 12007 | נגזרות | HARD | לפונקציה `f(x) = x³ - 3x` יש מינימום מקומי בנקודה: | `x = -1` | `x = 1` | `x = 0` | `x = 3` | 2 | yes |
+| 12008 | אינטגרלים | EASY | חשבו: `∫ 2x dx` | `x²/2 + C` | `2 + C` | `x² + C` | `2x² + C` | 3 | |
+| 12009 | אינטגרלים | MEDIUM | חשבו את השטח מתחת ל-`y = x²` בין `x=0` ל-`x=3` | `6` | `27` | `3` | `9` | 4 | yes |
 
 ### 7.3 Java (course 21) — 11 questions
 
@@ -187,14 +187,14 @@ Topics: OOP Basics · Collections · Exceptions · **Recursion (the thin one)**
 | 21001 | OOP Basics | EASY | Which keyword prevents a class from being subclassed? | `final` | `static` | `private` | `sealed` | 1 | |
 | 21002 | OOP Basics | EASY | What is the default value of an uninitialised `int` field? | `null` | `0` | `undefined` | `-1` | 2 | |
 | 21003 | OOP Basics | MEDIUM | A class implements two interfaces that both declare `default void run()`. What happens? | It compiles, the first interface wins | It compiles, the second interface wins | Compile error until the class overrides it | A runtime `AmbiguousMethodError` | 3 |  |
-| 21004 | OOP Basics | HARD | Which statement about `equals` and `hashCode` is true? | Equal objects must have equal hash codes | Equal hash codes mean the objects are equal | `hashCode` must be unique for every object | Overriding `equals` alone is always safe | 1 | |
-| 21005 | Collections | EASY | Which collection forbids duplicate elements? | `ArrayList` | `HashSet` | `LinkedList` | `ArrayDeque` | 2 | |
-| 21006 | Collections | EASY | Which interface does `HashMap` implement? | `List` | `Set` | `Map` | `Queue` | 3 | yes |
-| 21007 | Collections | MEDIUM | What is the average-case time complexity of `HashMap.get`? | `O(1)` | `O(log n)` | `O(n)` | `O(n log n)` | 1 |  |
-| 21008 | Collections | HARD | Removing an element from an `ArrayList` inside a for-each loop throws: | `IndexOutOfBoundsException` | `ConcurrentModificationException` | `UnsupportedOperationException` | Nothing — it is safe | 2 | |
+| 21004 | OOP Basics | HARD | Which statement about `equals` and `hashCode` is true? | Overriding `equals` alone is always safe | Equal hash codes mean the objects are equal | `hashCode` must be unique for every object | Equal objects must have equal hash codes | 4 | |
+| 21005 | Collections | EASY | Which collection forbids duplicate elements? | `HashSet` | `ArrayList` | `LinkedList` | `ArrayDeque` | 1 | |
+| 21006 | Collections | EASY | Which interface does `HashMap` implement? | `List` | `Map` | `Set` | `Queue` | 2 | yes |
+| 21007 | Collections | MEDIUM | What is the average-case time complexity of `HashMap.get`? | `O(n)` | `O(log n)` | `O(1)` | `O(n log n)` | 3 |  |
+| 21008 | Collections | HARD | Removing an element from an `ArrayList` inside a for-each loop throws: | `ConcurrentModificationException` | `IndexOutOfBoundsException` | `UnsupportedOperationException` | Nothing — it is safe | 1 | |
 | 21009 | Exceptions | EASY | Which of these is a checked exception? | `NullPointerException` | `IOException` | `ArithmeticException` | `IllegalStateException` | 2 | |
-| 21010 | Recursion | EASY | What does a recursive method need in order to terminate? | A base case | A `static` modifier | An enclosing loop | A `return null` statement | 1 | yes |
-| 21011 | Recursion | MEDIUM | Recursion with no reachable base case fails with: | `OutOfMemoryError` | `StackOverflowError` | `IllegalStateException` | An infinite loop and no error | 2 | |
+| 21010 | Recursion | EASY | What does a recursive method need in order to terminate? | An enclosing loop | A `static` modifier | A base case | A `return null` statement | 3 | yes |
+| 21011 | Recursion | MEDIUM | Recursion with no reachable base case fails with: | `OutOfMemoryError` | An infinite loop and no error | `IllegalStateException` | `StackOverflowError` | 4 | |
 
 > ### The deliberately thin topic — do not "fix" it
 > **Recursion has exactly 2 questions and no HARD one.** This is not an oversight: it is
@@ -210,15 +210,15 @@ Topics: SQL Queries · Normalization · Transactions
 
 | display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
 |---|---|---|---|---|---|---|---|---|---|
-| 22001 | SQL Queries | EASY | Which clause filters rows *before* grouping? | `HAVING` | `WHERE` | `ORDER BY` | `LIMIT` | 2 | |
+| 22001 | SQL Queries | EASY | Which clause filters rows *before* grouping? | `WHERE` | `HAVING` | `ORDER BY` | `LIMIT` | 1 | |
 | 22002 | SQL Queries | EASY | Which join returns every row of the left table? | `INNER JOIN` | `LEFT JOIN` | `CROSS JOIN` | `SELF JOIN` | 2 | yes |
-| 22003 | SQL Queries | MEDIUM | `COUNT(column)` differs from `COUNT(*)` because it: | Is always faster | Ignores NULLs | Counts distinct values only | Requires an index | 2 | |
-| 22004 | SQL Queries | HARD | A join of two tables returns more rows than either table holds. The cause is: | A missing index | Duplicate values in the join key | A NULL in the ON clause | An implicit CROSS JOIN, always | 2 |  |
-| 22005 | Normalization | EASY | First normal form requires every column to be: | Indexed | Atomic | Unique | Non-null | 2 | |
+| 22003 | SQL Queries | MEDIUM | `COUNT(column)` differs from `COUNT(*)` because it: | Is always faster | Counts distinct values only | Ignores NULLs | Requires an index | 3 | |
+| 22004 | SQL Queries | HARD | A join of two tables returns more rows than either table holds. The cause is: | A missing index | An implicit CROSS JOIN, always | A NULL in the ON clause | Duplicate values in the join key | 4 |  |
+| 22005 | Normalization | EASY | First normal form requires every column to be: | Atomic | Indexed | Unique | Non-null | 1 | |
 | 22006 | Normalization | MEDIUM | Removing a partial dependency on part of a composite key achieves: | 1NF | 2NF | 3NF | BCNF | 2 | yes |
-| 22007 | Normalization | HARD | A table in 3NF but not in BCNF must contain: | A transitive dependency | A determinant that is not a candidate key | A repeating group | A surrogate key | 2 | |
-| 22008 | Transactions | EASY | What does the "D" in ACID stand for? | Distributed | Durability | Deterministic | Deferred | 2 | |
-| 22009 | Transactions | MEDIUM | Which isolation level still permits a phantom read? | SERIALIZABLE | REPEATABLE READ | READ COMMITTED | None of them | 3 | |
+| 22007 | Normalization | HARD | A table in 3NF but not in BCNF must contain: | A transitive dependency | A repeating group | A determinant that is not a candidate key | A surrogate key | 3 | |
+| 22008 | Transactions | EASY | What does the "D" in ACID stand for? | Distributed | Deferred | Deterministic | Durability | 4 | |
+| 22009 | Transactions | MEDIUM | Which isolation level still permits a phantom read? | READ COMMITTED | REPEATABLE READ | SERIALIZABLE | None of them | 1 | |
 
 ### 7.5 Second versions (T-2.2 — "the previous version remains in the bank")
 
@@ -320,17 +320,24 @@ exactly. `extra_minutes = 0`.
 
 | student | attempt status | solving time (S-19) | auto | final | note |
 |---|---|---|---|---|---|
-| 7 noa.friedman | SUBMITTED | 52 min | 92 | 92 | |
-| 8 itay.regev | SUBMITTED | 68 min | 78 | 78 | |
+| 15 lior.gabay | SUBMITTED | 45 min | 100 | 100 | all seven correct |
+| 7 noa.friedman | SUBMITTED | 52 min | 90 | 90 | |
 | 9 shira.dahan | SUBMITTED | 61 min | 85 | 85 | |
-| 10 omer.katz | **TIMED_OUT** | 75 min | 64 | 64 | Auto-submitted at expiry — the S-19 "did not make it in time" row |
-| 11 maya.levi | SUBMITTED | 70 min | 71 | 71 | |
-| 13 yael.azulay | SUBMITTED | 73 min | 51 | **55** | **Manual override**, see below |
-| 14 daniel.shapira | SUBMITTED | 58 min | 83 | 83 | |
-| 15 lior.gabay | SUBMITTED | 45 min | 96 | 96 | |
+| 14 daniel.shapira | SUBMITTED | 58 min | 75 | 75 | |
+| 8 itay.regev | SUBMITTED | 68 min | 70 | 70 | |
+| 11 maya.levi | SUBMITTED | 70 min | 60 | 60 | |
+| 13 yael.azulay | SUBMITTED | 73 min | 45 | **55** | **Manual override**, see below — the only fail turned into a pass |
+| 10 omer.katz | **TIMED_OUT** | 75 min | 45 | 45 | Auto-submitted at expiry with four questions never reached — the S-19 "did not make it in time" row, and the one genuine fail |
+
+> **Every auto score above is reachable by this exam.** Exam 1 v2 is six 15-point questions plus
+> one worth 10, so the only totals auto-grading can produce are
+> `0, 10, 15, 25, 30, 40, 45, 55, 60, 70, 75, 85, 90, 100`. An earlier draft of this section used
+> scores like 92 and 78, which no combination of these questions can yield — invisible while the
+> seed was only demo data, and wrong the moment `AutoGrader` recomputes it. §9.1.1 gives the
+> per-question selections that produce each score.
 
 **Manual override (T-8.3 / S-23 — a change requires an explanation):**
-- yael.azulay, 51 → 55, by **2 dana.cohen** — the teacher who wrote and released the exam.
+- yael.azulay, 45 → 55, by **2 dana.cohen** — the teacher who wrote and released the exam.
   The coordinator approves *exams*, the teacher approves *grades* (T-8.2 / T-8.3); here they
   are deliberately different people.
 - Reason: `בשאלה 11011 נכתב פתרון נכון עם טעות סימן בשורה האחרונה — ניתן ניקוד חלקי.`
@@ -342,20 +349,78 @@ exactly. `extra_minutes = 0`.
 
 | metric | value |
 |---|---|
-| mean | 78.0 |
-| median | 80.5 |
-| stddev | 13.08 |
-| min | 55 |
-| max | 96 |
-| deciles | 50–59: 1 · 60–69: 1 · 70–79: 2 · 80–89: 2 · 90–100: 2 |
+| mean | 72.5 |
+| median | 72.5 |
+| stddev | 17.5 |
+| min | 45 |
+| max | 100 |
+| pass rate | 7 / 8 = 0.875 |
+| deciles | 40–49: 1 · 50–59: 1 · 60–69: 1 · 70–79: 2 · 80–89: 1 · 90–100: 2 |
 
 > **stddev is the population standard deviation** (divisor `n`, not `n-1`): the class is
-> the whole population, not a sample of one. 13.08 here; the sample form would give
-> 13.98. E14 must use the same divisor or the seeded stats and the recomputed ones will
+> the whole population, not a sample of one. Σ(x−72.5)² = 2450, so σ = √(2450/8) = **exactly
+> 17.5** — every figure in this table is hand-checkable, which is what E12.4's "unit-tested
+> against hand-computed fixtures" asks for. The sample form would give ≈18.71. E14 must use the same divisor or the seeded stats and the recomputed ones will
 > disagree by ~1 point and look like a bug.
 
-Five populated deciles across eight students — the histogram (T-10 note, F9.3) reads as
+Six populated deciles across eight students — the histogram (T-10 note, F9.3) reads as
 a real class. A uniform spread would look fabricated; a single spike would look broken.
+
+
+#### 9.1.1 `attempt_answers` — what each student actually selected
+
+Without this, no attempt can be re-graded and E12.1's auto-grading has nothing to run on. Every
+row below was checked against the exam's answer key: the totals in §9.1 are what `AutoGrader`
+produces from these selections, not numbers chosen first and justified afterwards.
+
+Exam 1 v2's key, from §7.1 (question → correct answer, points):
+
+| # | question | correct | points |
+|---|---|---|---|
+| 1 | 11001 | 1 | 15 |
+| 2 | 11002 | 2 | 15 |
+| 3 | 11005 **v1** | 1 | 15 |
+| 4 | 11007 | 3 | 15 |
+| 5 | 11009 | 1 | 15 |
+| 6 | 11010 | 2 | 15 |
+| 7 | 11011 | 3 | 10 |
+
+Selections — **`—` means no row in `attempt_answers`**, not a row with a null selection. A
+question the student never answered is absent, and the grader scores absence as 0 (F6.9):
+
+| student | 11001 | 11002 | 11005 | 11007 | 11009 | 11010 | 11011 | auto |
+|---|---|---|---|---|---|---|---|---|
+| 15 lior.gabay | 1 | 2 | 1 | 3 | 1 | 2 | 3 | **100** |
+| 7 noa.friedman | 1 | 2 | 1 | 3 | 1 | 2 | 1 | **90** |
+| 9 shira.dahan | 1 | 2 | 1 | 3 | 1 | 4 | 3 | **85** |
+| 14 daniel.shapira | 1 | 2 | 1 | 1 | 1 | 2 | 2 | **75** |
+| 8 itay.regev | 1 | 2 | 1 | 3 | 3 | 1 | 3 | **70** |
+| 11 maya.levi | 1 | 2 | 1 | 2 | 1 | 3 | 1 | **60** |
+| 13 yael.azulay | 1 | 4 | 1 | 1 | 1 | 4 | 2 | **45** |
+| 10 omer.katz | 1 | 2 | 1 | — | — | — | — | **45** |
+
+Three things in that table are deliberate:
+
+**`omer.katz` has four absent rows, not four wrong answers.** He timed out (§9.1), so he never
+reached questions 4–7. That is the only attempt in the seed distinguishing "answered wrongly"
+from "never answered" — the distinction F6.9 promises and H12.4 tests, and it cannot be
+demonstrated from a dataset where every attempt answered everything.
+
+**`yael.azulay` is wrong on 11011**, which is the question her override is about: the stored
+reason says she wrote a correct method with a sign error there. Her auto score is 45; the
+10 points for 11011 awarded by hand take her to exactly 55 — the pass mark. The override demo
+therefore moves a real student across a real threshold, and the execution's pass rate with it
+(7/8 rather than 6/8).
+
+**Wrong answers are spread, not nested.** Each student misses a different combination rather than
+a prefix of the same list, so the per-question difficulty in the results view varies the way a
+real class does. 11007 and 11010 are the two most-missed; 11001 and 11005 are missed by nobody.
+
+**Executions 2, 3 and 4 have no `attempt_answers`.** Execution 2's eight Java attempts carry auto
+scores only (§9.2) and are the fixture for approving grades, not for re-grading; 3 and 4 have no
+attempts at all by design (§9.3).
+
+---
 
 ### 9.2 Execution 2 — closed, awaiting grading
 
