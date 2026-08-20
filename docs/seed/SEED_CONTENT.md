@@ -1,5 +1,10 @@
 # Seed content (E2.15 / E2.16) — the demo dataset
 
+> **This document is machine-read.** `SeedDocument` (`src/test/java`) parses the tables in
+> sections 3–9.1.1 and two build-failing tests consume the parsed view. Reformatting a table is a
+> contract change: update the parser expectations in the same commit, or the build goes red by
+> design.
+
 **Owner:** Member B (content) · **Implements:** Member A (loader, E2.15) · **Reviewer:** Naji
 **Spec:** PRD §5 "well-filled, not overstuffed" (NFR-17) · Schema: `ARCHITECTURE.md` §5
 
@@ -92,8 +97,8 @@ when the fixture is replaced.
 | `21` Java | 5 tamar.shani | co-teacher on Java (PRD §5) |
 | `22` Databases | 6 michal.sharon | |
 
-Coverage: every course has at least one teacher (S-1), **Calculus and Java each have two**,
-and `dana.cohen` teaches two courses. See deviation 3 in the PR report — PRD §5 describes
+Coverage: every course has at least one teacher (S-1), **Java has two**, and `dana.cohen`
+teaches two courses alone (Algebra and Calculus). See deviation 3 in the PR report — PRD §5 describes
 "one per course + one co-teacher on Java", and DEMO_ACCOUNTS.md forces a second co-taught
 course. The richer shape is defensible on S-1 ("one or more teachers") but it is a
 divergence from PRD §5 as written, not an accident.
@@ -254,7 +259,7 @@ sum to **100** (service rule, §5). `status` lives on the *version*, not the exa
 | 6 | `202201` | 22 | Databases Final | 6 michal.sharon | v1 **APPROVED** |
 
 Every author teaches the course they wrote for (S-5). `dana.cohen` writes all three
-Mathematics exams because she is the only teacher on Algebra and one of two on Calculus —
+Mathematics exams because she is the only teacher on both Algebra and Calculus —
 which keeps `rina.barak` free to be the *approver* on both, never her own.
 
 ### 8.1 Composition
@@ -299,6 +304,19 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 Times are **relative to load time**, resolved by the loader, and stored UTC. Codes are 4
 alphanumeric (C-1); the demo uses digits.
+
+**Rules for the four NOT NULL columns the tables below do not spell out.** These are stated once
+here rather than repeated per row, and the loader applies them uniformly:
+
+| Column | Rule |
+|---|---|
+| `exam_executions.created_by` | the **releasing teacher** — the author of the exam version being released. Executions 1 and 4 → `2 dana.cohen`; execution 2 → `4 avi.mizrahi`; execution 3 → `6 michal.sharon`. |
+| `grades.status` / `approved_by` / `approved_at` | **execution 1 only**: every grade is `APPROVED`, `approved_by` = the **executing teacher** (`2 dana.cohen`, who released it and owns the grades per T-8.2), `approved_at` = close time + 2 days. Execution 2's grades are `AUTO` with all three left null — that is what "awaiting grading" means. |
+| `exam_attempts.started_at` | **derived, not invented**: window start + a small stagger, such that `started_at + solving time` lands inside the window. The per-student solving times in §9.1 and §9.2 are the input; the loader computes the timestamp so the two can never disagree. |
+
+`ended_at` follows from `started_at` + solving time for `SUBMITTED` attempts, and equals the
+window close for `TIMED_OUT` ones — which is what makes `omer.katz`'s 75 minutes in §9.1 the full
+allotted duration rather than a number someone chose.
 
 | # | exam / version | code | window | status | note |
 |---|---|---|---|---|---|
@@ -424,9 +442,74 @@ attempts at all by design (§9.3).
 
 ### 9.2 Execution 2 — closed, awaiting grading
 
-8 Java students, all SUBMITTED, solving times 38–59 min. Auto-scores computed, **no
-grade approved** — `grades.status = AUTO` for all eight. This is the fixture for T-8.2
-(the teacher approves grades) and for S-24: **nothing here is visible to a student yet.**
+The eight students enrolled in Java (21) sat exam 4 v1, all **SUBMITTED** — nobody timed out, so
+this execution is the clean contrast to §9.1. Auto-scores are computed; **no grade is approved**.
+`grades.status = AUTO` for all eight, with `final_score`, `override_reason`, `teacher_comment`,
+`approved_by` and `approved_at` all null.
+
+This is the fixture for **T-8.2** (the teacher approves grades) and for **S-24**: nothing here is
+visible to a student yet, and `MY_GRADES_GET` returns nothing for any of these eight until
+somebody approves.
+
+| student | attempt status | solving time (S-19) | auto | final |
+|---|---|---|---|---|
+| 11 maya.levi | SUBMITTED | 41 min | 100 | — |
+| 18 eitan.solomon | SUBMITTED | 47 min | 85 | — |
+| 7 noa.friedman | SUBMITTED | 52 min | 75 | — |
+| 17 roni.malka | SUBMITTED | 44 min | 70 | — |
+| 8 itay.regev | SUBMITTED | 55 min | 60 | — |
+| 12 noam.peretz | SUBMITTED | 38 min | 55 | — |
+| 10 omer.katz | SUBMITTED | 59 min | 40 | — |
+| 14 daniel.shapira | SUBMITTED | 58 min | 30 | — |
+
+Exam 4 v1 is 6×15 + 10, the same shape as exam 1 v2, so the reachable totals are the same
+fourteen values and every score above is one of them.
+
+**The spread is deliberately unlike execution 1's.** Execution 1 finals are
+`45, 55, 60, 70, 75, 85, 90, 100`; these are `30, 40, 55, 60, 70, 75, 85, 100`. **Two students sit
+below the pass mark** rather than one, so approving these grades visibly moves a pass rate from
+6/8 to something a teacher can see change — and the two executions cannot be mistaken for copies
+of each other in a results list.
+
+Solving times stay inside the exam's 60-minute duration and, unlike §9.1, none equals it: nobody
+here ran out of time.
+
+#### 9.2.1 `attempt_answers` for execution 2
+
+Exam 4 v1's key, from §7.3 (question → correct answer, points):
+
+| # | question | correct | points |
+|---|---|---|---|
+| 1 | 21001 | 1 | 15 |
+| 2 | 21002 | 2 | 15 |
+| 3 | 21005 | 1 | 15 |
+| 4 | 21006 | 2 | 15 |
+| 5 | 21009 | 2 | 15 |
+| 6 | 21010 | 3 | 15 |
+| 7 | 21011 | 4 | 10 |
+
+Every student answered every question — there are no `—` entries here, because nobody timed out.
+That is the point of having two executions: §9.1.1 exercises absent-versus-wrong, and this one
+exercises a full paper.
+
+| student | 21001 | 21002 | 21005 | 21006 | 21009 | 21010 | 21011 | auto |
+|---|---|---|---|---|---|---|---|---|
+| 11 maya.levi | 1 | 2 | 1 | 2 | 2 | 3 | 4 | **100** |
+| 18 eitan.solomon | 1 | 2 | 1 | 2 | 2 | 1 | 4 | **85** |
+| 7 noa.friedman | 1 | 2 | 1 | 2 | 2 | 1 | 1 | **75** |
+| 17 roni.malka | 1 | 2 | 1 | 2 | 1 | 1 | 4 | **70** |
+| 8 itay.regev | 1 | 2 | 1 | 1 | 2 | 1 | 1 | **60** |
+| 12 noam.peretz | 1 | 2 | 2 | 2 | 1 | 1 | 4 | **55** |
+| 10 omer.katz | 1 | 1 | 2 | 1 | 1 | 3 | 4 | **40** |
+| 14 daniel.shapira | 1 | 1 | 2 | 1 | 1 | 3 | 1 | **30** |
+
+**21010 is the most-missed question** — six of eight got it wrong — and **21001 nobody missed**.
+That gives the per-question breakdown in the grading review (E12.6) something to actually show:
+a flat difficulty profile would make that screen look like it was not reading the data.
+
+`21011` is the only question whose correct answer is **4**, and five students picked something
+else. Worth keeping when the answer key is next touched: it is the seed's clearest demonstration
+that the fourth option is a real answer and not decoration.
 
 ### 9.3 Executions 3 and 4 — nothing pre-seeded
 
@@ -441,6 +524,15 @@ demo unrepeatable.
 One bot per course (S-30), 4 bots, 2 sources each. **`raw` and `extracted_text` are both
 NOT NULL** (E2 PR1 review) — a source row only exists after successful extraction, so
 every source below carries real body text, not a placeholder.
+
+> **All eight seeded sources are `type = TEXT`, with `raw` = the UTF-8 bytes of
+> `extracted_text`.** The five that read as PDF or DOCX below are seeded as TEXT too: shipping
+> binary fixtures would mean the seed could only be loaded from a checkout carrying those files,
+> and it would prove nothing the parse pipeline does not already prove. **The PDF/POI extraction
+> path is covered by E16's own tests and demoed live** by uploading a real document during the
+> defence — a better demonstration than a pre-parsed blob nobody watches being parsed. Ruling of
+> 2026-08-20; each source keeps its original document name in `title`, so the set still *reads*
+> as mixed.
 
 | bot | course | name | active |
 |---|---|---|---|
@@ -483,16 +575,20 @@ Text is abridged here for readability; the loader stores the full paragraph.
 
 ### 10.2 Recorded sessions (8) — S-33 stores question, answer and time
 
-| # | bot | student | asked | question | answer sketch |
-|---|---|---|---|---|---|
-| 1 | 1 | 7 noa.friedman | T−12d | איך פותרים משוואה עם שברים? | מכפילים את שני האגפים במכנה המשותף כדי להיפטר מהשברים, ואז פותרים כרגיל. |
-| 2 | 1 | 11 maya.levi | T−10d | מה זו דיסקרימיננטה? | הביטוי b²-4ac. הסימן שלו קובע כמה שורשים ממשיים יש לפרבולה. |
-| 3 | 1 | 7 noa.friedman | T−9d | מתי לפרבולה אין שורשים? | כאשר הדיסקרימיננטה שלילית — הפרבולה כולה מעל ציר x או כולה מתחתיו. |
-| 4 | 2 | 16 tal.harari | T−8d | למה הגבול של sin(x)/x באפס שווה 1? | זהו גבול מיוחד שמוכיחים גיאומטרית בעזרת מעגל היחידה וכלל הסנדוויץ. |
-| 5 | 3 | 10 omer.katz | T−6d | When should I use a LinkedList instead of an ArrayList? | Only when you insert or remove at the ends far more often than you read by index. |
-| 6 | 3 | 17 roni.malka | T−5d | What is the difference between an interface and an abstract class? | An interface declares a contract and a class may implement many; an abstract class can hold state and a class may extend only one. |
-| 7 | 3 | 10 omer.katz | T−4d | Why did my for-each loop throw ConcurrentModificationException? | The list was structurally modified during iteration. Use an Iterator and call its remove method, or use removeIf. |
-| 8 | 3 | 12 noam.peretz | T−2d | What does the JVM do when recursion goes too deep? | Each call takes a stack frame; when the thread stack is exhausted the JVM throws StackOverflowError. |
+`bot_messages.provider` is **`deepseek`** on every row except session 6, which is
+**`anthropic`** — the one row proving the ADR-009 fallback chain actually fired and was recorded.
+Without it the provider column is a constant and demonstrates nothing.
+
+| # | bot | student | asked | provider | question | answer sketch |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 7 noa.friedman | T−12d | `deepseek` | איך פותרים משוואה עם שברים? | מכפילים את שני האגפים במכנה המשותף כדי להיפטר מהשברים, ואז פותרים כרגיל. |
+| 2 | 1 | 11 maya.levi | T−10d | `deepseek` | מה זו דיסקרימיננטה? | הביטוי b²-4ac. הסימן שלו קובע כמה שורשים ממשיים יש לפרבולה. |
+| 3 | 1 | 7 noa.friedman | T−9d | `deepseek` | מתי לפרבולה אין שורשים? | כאשר הדיסקרימיננטה שלילית — הפרבולה כולה מעל ציר x או כולה מתחתיו. |
+| 4 | 2 | 16 tal.harari | T−8d | `deepseek` | למה הגבול של sin(x)/x באפס שווה 1? | זהו גבול מיוחד שמוכיחים גיאומטרית בעזרת מעגל היחידה וכלל הסנדוויץ. |
+| 5 | 3 | 10 omer.katz | T−6d | `deepseek` | When should I use a LinkedList instead of an ArrayList? | Only when you insert or remove at the ends far more often than you read by index. |
+| 6 | 3 | 17 roni.malka | T−5d | `anthropic` | What is the difference between an interface and an abstract class? | An interface declares a contract and a class may implement many; an abstract class can hold state and a class may extend only one. |
+| 7 | 3 | 10 omer.katz | T−4d | `deepseek` | Why did my for-each loop throw ConcurrentModificationException? | The list was structurally modified during iteration. Use an Iterator and call its remove method, or use removeIf. |
+| 8 | 3 | 12 noam.peretz | T−2d | `deepseek` | What does the JVM do when recursion goes too deep? | Each call takes a stack frame; when the thread stack is exhausted the JVM throws StackOverflowError. |
 
 Sessions cluster on bots 1 and 3, and both `omer.katz` and `noa.friedman` asked twice.
 That is deliberate: T-14.3 / S-34 shows the teacher an **anonymised** aggregate ("8
@@ -508,19 +604,30 @@ Bot 4 (Databases) has **no sessions** — it has never been active.
 
 Enough that the notification centre is populated at login rather than empty (NFR-21).
 
-| # | recipient | type | title | read |
-|---|---|---|---|---|
-| 1 | 2 dana.cohen | EXAM_REJECTED | מבחן הוחזר לתיקון — גרסה 1 של "מבחן אמצע — אלגברה" | read |
-| 2 | 2 dana.cohen | EXAM_PENDING | המבחן נשלח לאישור רכזת המקצוע | unread |
-| 3 | 3 rina.barak | APPROVAL_REQUEST | מבחן ממתין לאישורך במקצוע מתמטיקה | unread |
-| 4 | 5 tamar.shani | EXAM_REJECTED | Collections Quiz was returned for revision | unread |
-| 5 | 7 noa.friedman | GRADE_PUBLISHED | הציון שלך במבחן אמצע — אלגברה זמין לצפייה | read |
-| 6 | 13 yael.azulay | GRADE_PUBLISHED | הציון שלך זמין לצפייה, כולל הערת מורה | unread |
-| 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
-| 8 | 1 principal.avia | EXECUTION_CLOSED | בחינה הסתיימה — 8 נבחנים, ממוצע 78 | unread |
+**`seed_id` is the stable identifier** (the D8 ruling): the loader keys idempotency on it, so a
+second load updates rather than duplicating, and every other document — acceptance cases, demo
+script, `SeedLoadedDbTest` — refers to a notification by `seed_id` rather than by row order.
+The `#` column is presentation order only and carries no meaning.
 
-Notification 8 exists so the principal's first screen is not empty at login: S-7 makes
-her read-only, so she can never generate her own activity.
+| seed_id | # | recipient | type | title | read |
+|---|---|---|---|---|---|
+| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | EXAM_REJECTED | מבחן הוחזר לתיקון — גרסה 1 של "מבחן אמצע — אלגברה" | read |
+| `N-EXAM-PENDING-CALC` | 2 | 2 dana.cohen | EXAM_PENDING | המבחן נשלח לאישור רכזת המקצוע | unread |
+| `N-APPROVAL-REQ-MATH` | 3 | 3 rina.barak | APPROVAL_REQUEST | מבחן ממתין לאישורך במקצוע מתמטיקה | unread |
+| `N-EXAM-REJECTED-JAVA` | 4 | 5 tamar.shani | EXAM_REJECTED | Collections Quiz was returned for revision | unread |
+| `N-GRADE-NOA` | 5 | 7 noa.friedman | GRADE_PUBLISHED | הציון שלך במבחן אמצע — אלגברה זמין לצפייה | read |
+| `N-GRADE-YAEL` | 6 | 13 yael.azulay | GRADE_PUBLISHED | הציון שלך זמין לצפייה, כולל הערת מורה | unread |
+| `N-GRADING-DUE-JAVA` | 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
+| `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | בחינה הסתיימה — 8 נבחנים, ממוצע 72.5 | unread |
+
+`N-EXEC-CLOSED-ALG` exists so the principal's first screen is not empty at login: S-7 makes
+her read-only, so she can never generate her own activity. **Its title quotes the mean, so it is
+derived data in a text column** — it reads 72.5, matching §9.1's frozen stats. It said 78 until
+the score fix; anything that changes the seeded grades has to change this string too, which is
+exactly the sort of copy nobody thinks to re-check.
+
+`N-GRADING-DUE-JAVA` says eight attempts, which is §9.2's eight AUTO grades — the same coupling,
+and it stays true as long as the Java roster stays at eight.
 
 Every recipient is the person the event actually concerns: rejections and pending-approval
 notices go to the **author** (`dana.cohen`, `tamar.shani`), the approval request goes to the
