@@ -171,7 +171,7 @@ own. Speculative API is the same mistake as a speculative query.
 - [x] No secrets; `demo123` is a documented demo credential, hashed at load, and the working
       tree carries no `server.properties`, `.claude/` or `CLAUDE.md`
 - [x] `docs/TODO.md` updated: E2.17 ticked, E2.15 annotated with what remains, E2.16 left alone
-- [ ] CI green — ticked after the run
+- [x] CI green — run 32393802397, 2m56s
 
 ## 9. What I need from you
 
