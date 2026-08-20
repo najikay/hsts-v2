@@ -6,19 +6,21 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * The exam-code entry on the student dashboard (Presentation tier, E5.6 → E10).
+ * The exam-code entry on the student dashboard (Presentation tier, E5.6 → E10.9).
  *
- * <p>The card is real UI with a real rule behind it — the 4-character
- * alphanumeric execution code of C-1/F5.3 — but the flow it opens does not exist
- * until E10. So it validates honestly and then says so: {@link #submit()} answers
- * {@link #NOT_BUILT_YET}, which the screen shows as an info toast. That is the
- * deliberate alternative to a fake "loading…" or a dead button; PRD §4.1 asks for
- * no mystery states, and "this part is not built yet" is not a mystery.
+ * <p>The 4-character alphanumeric execution code of C-1/F5.3, validated locally so the
+ * button is honest before anything is sent. It is a shortcut, not the flow: submitting a
+ * well-formed code hands it to the take-exam screen, which owns the two-step entry, the
+ * four distinct refusals and the identity check that starts the clock (S-18).
  *
- * <p>Validation matches the server's future rule exactly (case-insensitive on
- * entry, upper-cased for display), so when E10 replaces {@link #submit()} with a
- * real {@code START_ATTEMPT} request, nothing about this class's contract or its
- * tests changes.
+ * <p>The rule here matches the server's exactly (case-insensitive on entry, upper-cased on
+ * the way out), so the only thing this card can be wrong about is a code the server would
+ * also reject.
+ *
+ * <p><b>It answers a decision, not a message.</b> Before E10 landed, {@link #submit()}
+ * returned the sentence "not built yet"; now it says whether the code is good enough to
+ * travel with, and the screen navigates. The distinction matters because a dashboard that
+ * knew what the take-exam screen says next would be a second place for that copy to live.
  */
 public final class StudentHomeSession {
 
@@ -31,8 +33,14 @@ public final class StudentHomeSession {
     /** Inline message for anything that is not a well-formed code. */
     public static final String INVALID_CODE = "Codes are 4 letters or digits.";
 
-    /** The honest placeholder shown on submit until E10 lands. */
-    public static final String NOT_BUILT_YET = "Exam taking arrives in E10";
+    /**
+     * The navigation parameter the take-exam screen reads a pre-filled code from.
+     *
+     * <p>A hint, never a shortcut past anything: the screen still calls {@code EXAM_JOIN}
+     * and still asks for an ID, so arriving with a code saves four keystrokes and skips no
+     * rule (S-18).
+     */
+    public static final String CODE_PARAM = "code";
 
     private Runnable onChange = () -> { };
     private String code = "";
@@ -90,14 +98,16 @@ public final class StudentHomeSession {
     }
 
     /**
-     * "Starts" the attempt.
+     * Decides what pressing Enter does.
      *
-     * @return the message for the screen to show — {@link #NOT_BUILT_YET} on a
-     *         valid code, {@link #INVALID_CODE} otherwise. Never empty: pressing a
-     *         button must always produce feedback (NFR-21)
+     * <p>Never silent: a valid code navigates and an invalid one shows the inline rule, so
+     * the button always produces feedback (NFR-21). What it never does is guess why the
+     * server might refuse the code, because the server is the tier that knows.
+     *
+     * @return {@code true} when the take-exam screen should be opened with this code
      */
-    public String submit() {
-        return canSubmit() ? NOT_BUILT_YET : INVALID_CODE;
+    public boolean submit() {
+        return canSubmit();
     }
 
     /** Clears the field (after a submit, or on revisiting the dashboard). */
