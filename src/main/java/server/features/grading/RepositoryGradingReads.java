@@ -1,10 +1,10 @@
 package server.features.grading;
 
 import org.hibernate.Session;
-import server.db.entities.AttemptAnswer;
 import server.db.entities.ExamExecution;
 import server.db.entities.ExamVersionQuestion;
 import server.db.entities.QuestionVersion;
+import server.db.projections.AnswerRow;
 import server.db.repos.AttemptRepository;
 import server.db.repos.ExamRepository;
 import server.db.repos.ExecutionRepository;
@@ -86,11 +86,13 @@ public class RepositoryGradingReads implements GradingReads {
     @Override
     public Map<Long, Byte> selectedAnswers(Session session, long attemptId) {
         Map<Long, Byte> selected = new LinkedHashMap<>();
-        for (AttemptAnswer answer : attempts.findAnswers(session, attemptId)) {
+        for (AnswerRow answer : attempts.findAnswers(session, attemptId)) {
             // An unanswered question is absent from the map, never present with a null — the
             // grader treats a missing key as unanswered and there must be only one way to say it.
             if (answer.isAnswered()) {
-                selected.put(answer.getQuestionVersionId(), answer.getSelected());
+                // AnswerRow carries Integer because that is what the take-exam path wires;
+                // a selection is 1..4 (C-8), so narrowing to the grader's byte is lossless.
+                selected.put(answer.questionVersionId(), answer.selected().byteValue());
             }
         }
         return selected;

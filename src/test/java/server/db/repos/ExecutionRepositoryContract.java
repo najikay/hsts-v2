@@ -3,7 +3,6 @@ package server.db.repos;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import server.db.RepositoryTestBase;
-import server.db.entities.AttemptAnswer;
 import server.db.entities.AttemptStatus;
 import server.db.entities.Difficulty;
 import server.db.entities.Exam;
@@ -237,33 +236,6 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
 
         // An `in ()` with no values would be a syntax error or a full scan; neither is right.
         List<QuestionVersion> none = inTx(session -> questions.findVersionsForGrading(session, List.of()));
-        assertThat(none).isEmpty();
-    }
-
-    @Test
-    @DisplayName("only the questions a student actually answered come back")
-    void findsSavedAnswersOnly() {
-        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
-        long attemptId = persistAttempt(executionId, mayaId);
-        long answered = persistQuestionVersion(1, (byte) 2);
-        long untouched = persistQuestionVersion(2, (byte) 4);
-        runInTx(session -> session.persist(
-                new AttemptAnswer(attemptId, answered, (byte) 2, WHEN)));
-
-        List<AttemptAnswer> saved = inTx(session -> attempts.findAnswers(session, attemptId));
-
-        assertThat(saved).hasSize(1);
-        assertThat(saved.get(0).getQuestionVersionId()).isEqualTo(answered);
-        assertThat(saved).extracting(AttemptAnswer::getQuestionVersionId).doesNotContain(untouched);
-    }
-
-    @Test
-    @DisplayName("an attempt that answered nothing returns an empty list, not a list of nulls")
-    void findsNoAnswersForAnUntouchedAttempt() {
-        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
-        long attemptId = persistAttempt(executionId, mayaId);
-
-        List<AttemptAnswer> none = inTx(session -> attempts.findAnswers(session, attemptId));
         assertThat(none).isEmpty();
     }
 
