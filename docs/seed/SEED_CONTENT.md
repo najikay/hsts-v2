@@ -87,7 +87,7 @@ when the fixture is replaced.
 |---|---|---|
 | `11` אלגברה | 2 dana.cohen | ★ `DEMO_ACCOUNTS.md`: dana.cohen teaches Algebra 11 |
 | `12` חדו"א | 2 dana.cohen | ★ same teacher, second course |
-| `12` חדו"א | 3 rina.barak | ★ `DEMO_ACCOUNTS.md`: rina.barak teaches Calculus 12 |
+| `12` חדו"א | — | ★ roster change 2026-08-20: rina.barak no longer co-teaches; dana.cohen teaches Calculus alone. Rina is the pure coordinator |
 | `21` Java | 4 avi.mizrahi | |
 | `21` Java | 5 tamar.shani | co-teacher on Java (PRD §5) |
 | `22` Databases | 6 michal.sharon | |
@@ -105,7 +105,7 @@ divergence from PRD §5 as written, not an accident.
 | `10` מתמטיקה | 3 rina.barak | 11 אלגברה, 12 חדו"א |
 | `20` מדעי המחשב | 6 michal.sharon | 21 Java, 22 Databases |
 
-`rina.barak` teaches Calculus (12) *and* coordinates Mathematics (10), so she approves
+`rina.barak` coordinates Mathematics (10) and teaches nothing (pure coordinator, decided 2026-08-20), so she approves
 `dana.cohen`'s Algebra and Calculus exams. That is the intended demo shape: **the approver is
 a peer teacher, not an administrator** (S-1).
 

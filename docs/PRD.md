@@ -166,7 +166,7 @@ Home dashboards are role-specific with live cards (upcoming executions, pending 
 
 ## 5. Seed dataset (NFR-17) — "well-filled, not overstuffed"
 - 2 subjects (Mathematics=10, Computer Science=20), 4 courses (Algebra 11, Calculus 12, Java Programming 21, Databases 22).
-- Users: 1 principal, 5 teachers (dana.cohen teaches Algebra 11 AND Calculus 12; Calculus and Java each also have a co-teacher; 2 teachers are coordinators — mirrors docs/DEMO_ACCOUNTS.md exactly, which is authoritative for the roster), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
+- Users: 1 principal, 5 teachers (dana.cohen teaches Algebra 11 AND Calculus 12, Calculus solo since 2026-08-20; Java has a co-teacher; rina.barak coordinates Mathematics while teaching nothing — the PURE coordinator login the defense demos — and michal.sharon is the dual-hat coordinator+teacher; mirrors docs/DEMO_ACCOUNTS.md exactly, which is authoritative for the roster), 12 students with realistic names, overlapping enrollments (each student in 2–3 courses).
 - ~40 questions across courses/topics/difficulties, ~10 with illustrations, a few with 2 versions. **One deliberately thin topic** (e.g. "Recursion" in Java: 2 questions, no Hard ones) so the auto-generation infeasibility report (F3.3) can be demoed live without touching the DB.
 - 6 exams in mixed states (draft / pending / rejected-with-reason / approved), 4 executions (one closed & fully graded with stats, one closed awaiting grading, one scheduled for "today" for the live demo, one live).
 - Grades + stats for the closed execution (a realistic distribution so the histogram looks good), 2 bot sources per course with real content, ~8 recorded bot sessions, seeded notifications.
