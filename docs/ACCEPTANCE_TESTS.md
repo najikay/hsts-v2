@@ -214,7 +214,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 |---|---|---|---|---|---|
 | 10.1 | As `dana.cohen`, open Results. | Lists the exams **she wrote**, including executions run by other teachers (S-35). | | ⬜ | |
 | 10.2 | Open execution `4821`. Read the table. | Per-student rows: score, submitted vs timed out, solving time. 8 students, matching the seeded roster. | | ⬜ | |
-| 10.3 | Switch to the histogram view. | Score-bucket bars themed to the active palette, with mean, median and ±1σ markers labelled. Stat cards above: average, median, std, min/max, pass rate, participants. Values match the seeded stats — **mean 78.0, median 80.5, σ 13.08**. | | ⬜ | |
+| 10.3 | Switch to the histogram view. | Score-bucket bars themed to the active palette, with mean, median and ±1σ markers labelled. Stat cards above: average, median, std, min/max, pass rate, participants. Values match the seeded stats — **mean 72.5, median 72.5, σ 17.5, pass rate 7/8**. | | ⬜ | |
 | 10.4 | Hover a bar; toggle count ↔ percentage. | Tooltip gives bucket range, count, percentage. Toggle switches the axis without a reload. | | ⬜ | |
 | 10.5 | Open results for an execution with no attempts (`5164`, scheduled). | A proper empty / insufficient-data state — not a blank panel or a crash. | | ⬜ | |
 
@@ -242,7 +242,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 | 12.1 | As `principal.avia`, open Reports. Run the report comparing **different exams of the same teacher**. | Average, median and decile distribution per execution, compared side by side (T-12). | | ⬜ | |
 | 12.2 | Run the report comparing **different exams of the same course**. | Same three measures, grouped by course. | | ⬜ | |
 | 12.3 | Run the report comparing **different exams of the same student**. | Same three measures, tracking one student across her executions. | | ⬜ | |
-| 12.4 | Cross-check any figure against the stored statistics for execution `4821`. | The report reads the **stored** per-execution statistics (S-25) rather than recomputing differently. Mean 78.0, median 80.5 — identical to §9.1 of the seed. | | ⬜ | |
+| 12.4 | Cross-check any figure against the stored statistics for execution `4821`. | The report reads the **stored** per-execution statistics (S-25) rather than recomputing differently. Mean 72.5, median 72.5 — identical to §9.1 of the seed. | | ⬜ | |
 | 12.5 | **Defense question rehearsal:** ask what it takes to add a new report dimension. | Answer demonstrable in the code: one new Strategy class plus a menu entry, nothing else (F9.4, S-37, NFR-19). | | ⬜ | |
 
 ---
@@ -436,7 +436,7 @@ here. Every `gap` row is a claim that PRD §6 under-covers my epics; see the not
 | H14.1 | §6 | **Given** execution 5164 with no participants, **when** the teacher opens its results, **then** statistics read N/A and the histogram shows an insufficient-data state — no divide-by-zero, no empty chart frame. |
 | H14.2 | §6 | **Given** an execution with exactly one participant, **when** statistics are computed, **then** median equals the average, σ is 0, and the histogram renders one bucket without collapsing. |
 | H14.3 | gap | **Given** an execution where every student scored the same, **when** the histogram renders, **then** one full-height bucket with σ = 0 and the mean/median/±1σ markers coincident — the marker overlay must not misdraw when they stack. |
-| H14.4 | gap | **Given** the seeded execution 4821, **when** E14 recomputes statistics, **then** they equal the stored ones exactly: mean 78.0, median 80.5, σ 13.08. **σ uses the population divisor `n`.** A sample divisor gives 13.98 and would read as a bug. |
+| H14.4 | gap | **Given** the seeded execution 4821, **when** E14 recomputes statistics, **then** they equal the stored ones exactly: Mean 72.5, median 72.5, σ 17.5. **σ uses the population divisor `n`.** A sample divisor gives 18.71 and would read as a bug. |
 | H14.5 | gap | **Given** `dana.cohen` wrote exam 101101 and another teacher ran an execution of it, **when** she opens Results, **then** that execution appears — she sees every execution of exams she wrote, not only her own (S-35). |
 | H14.6 | gap | **Given** the results table for 4821, **when** it is read, **then** it holds exactly 8 rows and they match the seeded Algebra roster — a participant count that disagrees with the attempt rows means the derived counts (F7.3) drifted. |
 | H14.7 | gap | **Given** the histogram in count mode, **when** toggled to percentage, **then** the buckets sum to 100% and no bar changes relative height. |
@@ -447,7 +447,7 @@ here. Every `gap` row is a claim that PRD §6 under-covers my epics; see the not
 |---|---|---|
 | H15.1 | gap | **Given** `principal.avia` signed in, **when** any mutating verb is replayed with her session, **then** the server refuses — the role has zero mutating verbs authorized, not merely hidden buttons (F9.3, S-7). |
 | H15.2 | gap | **Given** a CANCELLED execution, **when** any report runs, **then** it is excluded from the corpus. ARCHITECTURE §5 says CANCELLED executions are excluded from statistics; a zero-participant row would skew every average (F5.5). |
-| H15.3 | gap | **Given** stored statistics exist for 4821, **when** a report displays its average, **then** the figure comes from the **stored** stats (S-25), not a fresh computation — two code paths producing 78.0 and 77.9 is the failure this prevents. |
+| H15.3 | gap | **Given** stored statistics exist for 4821, **when** a report displays its average, **then** the figure comes from the **stored** stats (S-25), not a fresh computation — two code paths producing 72.5 and 77.9 is the failure this prevents. |
 | H15.4 | gap | **Given** the same-student comparison, **when** the student sat exams in different courses, **then** the report groups correctly and does not silently average across incomparable exams. |
 | H15.5 | gap | **Given** a teacher with exactly one execution, **when** the same-teacher comparison runs, **then** it renders a single-series result rather than an error or a blank comparison. |
 | H15.6 | gap | **Given** the report engine, **when** a new dimension is added, **then** it requires one new Strategy class and a menu entry and nothing else — verified by actually adding a throwaway one, not by assertion (S-37, NFR-19, and the T-19 defense question). |
