@@ -51,8 +51,13 @@ open dashboard; the notification is the durable record.
 - `ExecutionGrades(ExecutionGradingSummary summary, List<StudentGradeRow> rows)`
 - `StudentGradeRow(long gradeId, long studentId, String studentName, int autoScore,
   Integer finalScore, int effectiveScore, GradeState state, String overrideReason,
-  String teacherComment, Instant approvedAt)` — `overrideReason`/`teacherComment`/`approvedAt`
-  nullable; `finalScore` null until overridden.
+  String teacherComment, Instant approvedAt, String examName, String courseCode)` —
+  `overrideReason`/`teacherComment`/`approvedAt` nullable; `finalScore` null until overridden.
+  **Amendment v1.1 (2026-08-20, additive, found in E13 PR 1 review):** `examName` and
+  `courseCode` added, nullable. Populated on the STUDENT paths (`MY_GRADES_GET`,
+  `CHECKED_FORM_GET`) where every row is a different exam and T-9.1 needs the label; left null
+  on the teacher paths, where `ExecutionGradingSummary` already carries them once per execution.
+  The previous 10-component constructor is retained for teacher-path callers.
 - `GradeReviewRequest(long gradeId)`
 - `GradeReview(StudentGradeRow grade, List<AnswerReviewRow> answers)` — teacher-only view.
 - `AnswerReviewRow(int ordinal, String displayId, String questionText, String answer1, String

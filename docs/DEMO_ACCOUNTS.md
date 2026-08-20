@@ -17,7 +17,7 @@ username and password below.
 | Username | Password | Name | Role | Courses |
 |---|---|---|---|---|
 | `dana.cohen` | `demo123` | Dana Cohen | TEACHER | Algebra 11 (11), Calculus 12 (12) — teaches |
-| `rina.barak` | `demo123` | Rina Barak | COORDINATOR | Calculus 12 (12) — teaches, and coordinates |
+| `rina.barak` | `demo123` | Rina Barak | COORDINATOR | none — coordinates Mathematics (10) without teaching: the pure-coordinator login (decided 2026-08-20; the dual-hat case is michal.sharon) |
 | `maya.levi` | `demo123` | Maya Levi | STUDENT | Algebra 11 (11), Java Programming 21 (21), Databases 22 (22) — enrolled |
 | `noam.peretz` | `demo123` | Noam Peretz | STUDENT | Calculus 12 (12), Java Programming 21 (21) — enrolled |
 | `principal.avia` | `demo123` | Avia Shalev | PRINCIPAL | — (school-wide read-only, S-7) |

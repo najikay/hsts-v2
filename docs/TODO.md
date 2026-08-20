@@ -107,6 +107,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [x] E5.8 Integration: LoginIntegrationTest (success, wrong pass, throttle, duplicate, disconnect frees session)
 
 ## E6 — Question bank [A]
+*Note (2026-08-20): the bank list shows a live "Editing · <name>" chip per row, fed by E18.8's LOCK_WATCH + LOCKS_SNAPSHOT (server side provided by the lead). Rows update live on LOCK_CHANGED pushes; opening a locked question still gets the full E18 banner + read-only mode.*
 
 Server:
 - [ ] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
@@ -175,32 +176,32 @@ Client:
 ## E10 — Take exam [L]
 
 Server:
-- [ ] E10.1 AttemptService.start: code lookup (live executions), student identity check (own ת"ז), enrollment check, window check, single-attempt check → create attempt, start server timer (S-18)
-- [ ] E10.2 Exam form DTO via the no-correctness projection (E2.12) ⚑
-- [ ] E10.3 SAVE_ANSWER verb: upsert attempt_answers, reject if attempt not IN_PROGRESS or past deadline (server clock) ⚑
-- [ ] E10.4 SUBMIT verb: finalize, record actual minutes (S-19), trigger auto-grade (E12); participation counts derived from attempts (no counter mutation) + pushed to monitor
-- [ ] E10.5 TimerService expiry: transactional force-submit + TIMED_OUT + push FORCE_SUBMITTED + counters — **works even if client is gone** ⚑
-- [ ] E10.6 Reconnect/resume: attempt state + saved answers + authoritative remaining time returned on re-entry
-- [ ] E10.7 Attempt-in-progress state exposed to BotService with attempt lifecycle (C-4): same-course bot locked; cross-course use triggers integrity notice + teacher notification + monitor-row flag
-- [ ] E10.8 Concurrency integration tests: two students parallel, answer-after-expiry rejected, resume after kill, double-attempt blocked ⚑
+- [x] E10.1 AttemptService.start: code lookup (live executions), student identity check (own ת"ז), enrollment check, window check, single-attempt check → create attempt, start server timer (S-18)
+- [x] E10.2 Exam form DTO via the no-correctness projection (E2.12) ⚑
+- [x] E10.3 SAVE_ANSWER verb: upsert attempt_answers, reject if attempt not IN_PROGRESS or past deadline (server clock) ⚑
+- [x] E10.4 SUBMIT verb: finalize, record actual minutes (S-19), trigger auto-grade (E12); participation counts derived from attempts (no counter mutation) + pushed to monitor
+- [x] E10.5 TimerService expiry: transactional force-submit + TIMED_OUT + push FORCE_SUBMITTED + counters — **works even if client is gone** ⚑
+- [x] E10.6 Reconnect/resume: attempt state + saved answers + authoritative remaining time returned on re-entry
+- [x] E10.7 Attempt-in-progress state exposed to BotService with attempt lifecycle (C-4): same-course bot locked; cross-course use triggers integrity notice + teacher notification + monitor-row flag
+- [x] E10.8 Concurrency integration tests: two students parallel, answer-after-expiry rejected, resume after kill, double-attempt blocked ⚑
 Client:
-- [ ] E10.9 Entry flow screens: code entry → ID entry (each with distinct, specific error messages)
-- [ ] E10.10 Exam form: general text header, question cards (text, image, 4 options single-select), progress bar (answered x/y), question navigator strip
-- [ ] E10.11 Debounced auto-save with saved-state indicator ("All changes saved ✓")
-- [ ] E10.12 Countdown widget wired to server sync + TIMER_EXTENDED push as a designed moment (F7.1 / *Time Extended* mockup): green flash + glow pulse on the timer, floating "+mm:ss", toast with teacher + new end time ⚑
-- [ ] E10.13 Manual submit flow (F6.9 / *Submit Confirm* mockup): WarnConfirm with answer-summary grid (chips clickable → jump to question), remaining-time note → *Submitted* success screen (F6.10): check animation, handed-in time, solving minutes, summary, Back to dashboard
-- [ ] E10.14 Time-up takeover (F6.4 / *Time Up* mockup) on FORCE_SUBMITTED push or on resume: full-screen, animated clock, NO confirmation, answers locked (server already enforces), submitted-summary grid, single Back-to-dashboard navigation, exam unreachable afterwards ⚑
-- [ ] E10.15 Disconnect mid-exam UX: reconnect banner, resume seamlessly, no lost answers
-- [ ] E10.16 Session tests: full state machine incl. expiry/resume/push paths
+- [x] E10.9 Entry flow screens: code entry → ID entry (each with distinct, specific error messages)
+- [x] E10.10 Exam form: general text header, question cards (text, image, 4 options single-select), progress bar (answered x/y), question navigator strip
+- [x] E10.11 Debounced auto-save with saved-state indicator ("All changes saved ✓")
+- [x] E10.12 Countdown widget wired to server sync + TIMER_EXTENDED push as a designed moment (F7.1 / *Time Extended* mockup): green flash + glow pulse on the timer, floating "+mm:ss", toast with teacher + new end time ⚑
+- [x] E10.13 Manual submit flow (F6.9 / *Submit Confirm* mockup): WarnConfirm with answer-summary grid (chips clickable → jump to question), remaining-time note → *Submitted* success screen (F6.10): check animation, handed-in time, solving minutes, summary, Back to dashboard
+- [x] E10.14 Time-up takeover (F6.4 / *Time Up* mockup) on FORCE_SUBMITTED push or on resume: full-screen, animated clock, NO confirmation, answers locked (server already enforces), submitted-summary grid, single Back-to-dashboard navigation, exam unreachable afterwards ⚑
+- [x] E10.15 Disconnect mid-exam UX: reconnect banner, resume seamlessly, no lost answers
+- [x] E10.16 Session tests: full state machine incl. expiry/resume/push paths
 - [ ] E10.17 Acceptance pass vs T-6 ⚑
 
 ## E11 — Extension & monitoring [L]
 
-- [ ] E11.1 ExtendService: minutes>0, execution LIVE, applies to execution only (S-20); reschedules attempt timers; pushes to active students + records in execution
-- [ ] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
-- [ ] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
-- [ ] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
-- [ ] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
+- [x] E11.1 ExtendService: minutes>0, execution LIVE, applies to execution only (S-20); reschedules attempt timers; pushes to active students + records in execution
+- [x] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
+- [x] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
+- [x] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
+- [x] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
 - [ ] E11.6 Acceptance pass vs T-7 ⚑
 
 ## E12 — Grading [B]
@@ -285,6 +286,7 @@ Client:
 - [ ] E18.5 (done for the question editor; the other four compose LockAwareEditor when their screens land) Wire into: question editor, exam builder, bot sources, release schedule editor, grading review
 - [x] E18.6 Concurrency integration tests: two clients editing same entity (lock visible live), lock-expiry takeover, stale-write rejected ⚑
 - [x] E18.7 Disconnect releases locks (ties to E3.4) — test
+- [ ] E18.8 List-level lock visibility (Naji, 2026-08-20): LOCK_WATCH verb (watch without contending; EditLockService.watch already separable) + LOCKS_SNAPSHOT bulk query (entity type + ids → holders) so list screens can badge rows "Editing · <name>" live. Server half lands right after E10/E11; the UI chip ships with E6's rebuilt bank list (see E6 note)
 
 ## E19 — Server console & network [L]
 
@@ -297,6 +299,7 @@ Client:
 - [ ] E19.7 Console styled with the same design system (dark by default) ⚑
 - [ ] E19.8 Discovery responder (F13.3): UDP listener on its own port, reply {ip, port, name, fingerprint}; fingerprint generated on first boot + persisted; console shows it next to the address; console toggle on/off; malformed/flood packets ignored + logged (fuzz test) ⚑
 - [ ] E19.9 Fingerprint persistence + regeneration path (server reinstall) — documented behavior, test
+- [ ] E19.11 Connect screen demoted to fallback (Naji, 2026-08-20): with a pinned server the client auto-connects and the FIRST screen is Login, carrying only a subtle status line "Connected to <server name> · change server". The host/port editor appears only when discovery finds nothing, the pinned server is unreachable, or the user clicks "change server". Host and port belong on the server console, not in the user's face
 - [ ] E19.10 Client discovery (F13.4): broadcast + ~2s collect, picker UI (name · address · fingerprint), TOFU pinning of {address, fingerprint}, auto-connect to pinned server, mismatch → prominent warning dialog requiring explicit confirm; "nothing found" → manual entry with defaults ⚑
 - [ ] E19.11 Discovery tests: responder round-trip, timeout path, pin/mismatch state machine, isolation-network fallback (responder off) — all without real multicast in CI (loopback/injected transport seam)
 - [ ] E19.12 **[GATED — decide at M6, criteria in ADR-019]** TLS over OCSF: SSLServerSocket in vendored OCSF, self-signed cert generated on first boot, discovery ID becomes the cert's fingerprint (no UX change), client verifies pinned fingerprint against the presented cert; encrypts credentials in transit. ~2–3 days incl. keystore handling + demo-machine rehearsal. If not taken: phase-2 slide + cleartext-transit limitation stated in submission doc
