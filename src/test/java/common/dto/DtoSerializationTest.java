@@ -126,6 +126,56 @@ class DtoSerializationTest {
     }
 
     @Test
+    @DisplayName("LoginResult carries the unread notification count across the wire (E17.5)")
+    void loginResultCarriesTheUnreadCount() throws Exception {
+        LoginResult original = new LoginResult(7L, "dana", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")), 12);
+
+        LoginResult restored = roundTrip(original);
+
+        assertThat(restored.unreadNotifications()).isEqualTo(12);
+        assertThat(restored).isEqualTo(original);
+    }
+
+    @Test
+    @DisplayName("the pre-E17 five-argument shape still compiles and reports no notifications")
+    void loginResultStaysBackwardCompatible() throws Exception {
+        LoginResult result = new LoginResult(7L, "dana", "Dana Cohen", Role.TEACHER, List.of());
+
+        assertThat(result.unreadNotifications())
+                .as("a caller with no count to report says zero rather than guessing")
+                .isZero();
+        assertThat(roundTrip(result).unreadNotifications()).isZero();
+    }
+
+    @Test
+    @DisplayName("a negative unread count is clamped, on both sides of the wire")
+    void loginResultClampsNegativeCounts() throws Exception {
+        LoginResult result = new LoginResult(7L, "dana", "Dana", Role.STUDENT, List.of(), -3);
+
+        assertThat(result.unreadNotifications()).isZero();
+        assertThat(roundTrip(result).unreadNotifications()).isZero();
+    }
+
+    @Test
+    @DisplayName("withUnreadNotifications copies the result and changes only the count")
+    void loginResultWithUnreadCount() {
+        LoginResult original = new LoginResult(7L, "dana", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")));
+
+        LoginResult stamped = original.withUnreadNotifications(4);
+
+        assertThat(stamped.unreadNotifications()).isEqualTo(4);
+        assertThat(stamped.userId()).isEqualTo(original.userId());
+        assertThat(stamped.displayName()).isEqualTo(original.displayName());
+        assertThat(stamped.role()).isEqualTo(original.role());
+        assertThat(stamped.courses()).isEqualTo(original.courses());
+        assertThat(original.unreadNotifications())
+                .as("the original is untouched; records are values")
+                .isZero();
+    }
+
+    @Test
     @DisplayName("a DTO inside a Message payload survives the same round-trip")
     void dtoInsideAnEnvelope() throws Exception {
         LoginResult result = new LoginResult(3L, "sam", "Sam", Role.COORDINATOR, List.of());

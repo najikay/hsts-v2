@@ -1,6 +1,7 @@
 package server.features.bank;
 
 import common.dto.bank.Question;
+import common.dto.bank.QuestionUpdate;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Status;
@@ -182,6 +183,93 @@ class LegacyQuestionHandlersTest {
         router.handle(Message.request(Verb.UPDATE_QUESTION, null), connection);
 
         assertThat(captureResponse().getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+    }
+
+    // ===================== Optimistic concurrency (E18.4) ================
+
+    @Test
+    @DisplayName("a guarded update whose baseline still matches saves and returns the fresh list")
+    void guardedUpdateSaves() throws Exception {
+        QuestionUpdate update = new QuestionUpdate(
+                new Question(2, "2 + 2 = ?", "four"), "2 + 2 = ?", "4");
+        when(questionDAO.updateGuarded(update)).thenReturn(QuestionDAO.UpdateOutcome.SAVED);
+        when(questionDAO.getAll()).thenReturn(new ArrayList<>(List.of(update.edited())));
+
+        router.handle(Message.request(Verb.UPDATE_QUESTION, update), connection);
+
+        Message response = captureResponse();
+        assertThat(response.isOk()).isTrue();
+        assertThat((List<?>) response.getPayload()).hasSize(1);
+        verify(questionDAO, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("a stale guarded update is refused with CONFLICT and writes nothing")
+    void guardedUpdateRejectsAStaleWrite() throws Exception {
+        QuestionUpdate update = new QuestionUpdate(
+                new Question(2, "mine", "mine"), "what I loaded", "what I loaded");
+        when(questionDAO.updateGuarded(update)).thenReturn(QuestionDAO.UpdateOutcome.STALE);
+
+        router.handle(Message.request(Verb.UPDATE_QUESTION, update), connection);
+
+        Message response = captureResponse();
+        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+        assertThat(response.errorMessage())
+                .isEqualTo(LegacyQuestionHandlers.STALE_WRITE_MESSAGE)
+                .contains("Reload");
+        verify(questionDAO, never()).getAll();
+    }
+
+    @Test
+    @DisplayName("a guarded update on a row that is gone is NOT_FOUND, not CONFLICT")
+    void guardedUpdateOnAMissingRow() throws Exception {
+        QuestionUpdate update = new QuestionUpdate(new Question(404, "gone", "gone"), "", "");
+        when(questionDAO.updateGuarded(update)).thenReturn(QuestionDAO.UpdateOutcome.MISSING);
+
+        router.handle(Message.request(Verb.UPDATE_QUESTION, update), connection);
+
+        Message response = captureResponse();
+        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+        assertThat(response.errorMessage()).contains("404");
+    }
+
+    @Test
+    @DisplayName("a database failure is INTERNAL, never 'it may have been removed'")
+    void guardedUpdateOnADatabaseFailure() throws Exception {
+        QuestionUpdate update = new QuestionUpdate(new Question(2, "mine", "mine"), "loaded", "loaded");
+        when(questionDAO.updateGuarded(update)).thenReturn(QuestionDAO.UpdateOutcome.FAILED);
+
+        router.handle(Message.request(Verb.UPDATE_QUESTION, update), connection);
+
+        Message response = captureResponse();
+        // An outage must not masquerade as a deleted question: the user would stop
+        // trying to save work that is perfectly saveable once the DB is back.
+        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.INTERNAL);
+        assertThat(response.errorMessage()).contains("try again");
+        verify(questionDAO, never()).getAll();
+    }
+
+    @Test
+    @DisplayName("the pre-E18 bare-Question payload still writes unguarded (backward compatible)")
+    void bareQuestionStillTakesTheOldPath() throws Exception {
+        Question edited = new Question(2, "2 + 2 = ?", "four");
+        when(questionDAO.update(edited)).thenReturn(true);
+        when(questionDAO.getAll()).thenReturn(new ArrayList<>(List.of(edited)));
+
+        router.handle(Message.request(Verb.UPDATE_QUESTION, edited), connection);
+
+        assertThat(captureResponse().isOk()).isTrue();
+        verify(questionDAO).update(edited);
+        verify(questionDAO, never()).updateGuarded(any());
+    }
+
+    @Test
+    @DisplayName("the stale-write message says what happened and what to do next (PRD §4.1)")
+    void staleWriteCopyRules() {
+        assertThat(LegacyQuestionHandlers.STALE_WRITE_MESSAGE)
+                .doesNotContain("—")
+                .contains("changed by someone else")
+                .contains("Reload the latest version");
     }
 
     @Test

@@ -39,4 +39,25 @@ public interface UserDirectory {
      *         indistinguishable to the caller (F1.1)
      */
     Optional<UserRecord> findByUsername(String username);
+
+    /**
+     * Looks a user up by internal id.
+     *
+     * <p>Added for E18: an edit-lock banner has to say "Rina Barak is editing
+     * this question", and all the lock service ever holds is the user id its
+     * {@code SessionManager} gave it. Handing the client a roster endpoint to
+     * resolve names itself would leak every user in the school to everyone.
+     *
+     * <p>A {@code default} returning empty rather than a second abstract method,
+     * for two reasons: this interface stays a {@link FunctionalInterface} (test
+     * doubles remain one-line lambdas), and a directory that genuinely cannot
+     * answer by id degrades to {@link common.dto.lock.LockHolder#UNKNOWN_NAME}
+     * instead of failing a lock acquisition. Real implementations override it.
+     *
+     * @param userId internal user id
+     * @return the user, or empty when there is no such id
+     */
+    default Optional<UserRecord> findById(long userId) {
+        return Optional.empty();
+    }
 }

@@ -9,9 +9,11 @@ package common.protocol;
  * {@code PUSH_*} verbs travel server → client unsolicited over the push channel
  * ({@code server.realtime.PushGateway}).
  *
- * <p>Verbs are only ever added, never renamed or reordered — both tiers ship in
+ * <p>Verbs are only ever added, never renamed or removed — both tiers ship in
  * separate JARs and an unknown verb must stay a recoverable "unsupported verb"
- * error rather than a deserialization failure.
+ * error rather than a deserialization failure. Names are the whole wire
+ * contract (Java serializes enums by name, never by ordinal), so new verbs are
+ * inserted into their feature's group for readability rather than appended.
  */
 public enum Verb {
 
@@ -35,6 +37,37 @@ public enum Verb {
 
     /** Persist an edited question. Request payload: {@code Question}. */
     UPDATE_QUESTION,
+
+    // ===================== Notifications (E17) =============================
+
+    /**
+     * Fetch the caller's most recent notifications and unread count.
+     * Request payload: {@code NotificationsGetRequest}; response:
+     * {@code NotificationsPage}. The caller is always the recipient — the
+     * request carries no user id, because it could only ever be someone else's.
+     */
+    NOTIFICATIONS_GET,
+
+    /**
+     * Mark one of the caller's notifications read, or all of them.
+     * Request payload: {@code MarkReadRequest}; response: {@code NotificationsPage}
+     * so the badge and the list stay in step with one round trip.
+     */
+    NOTIFICATIONS_MARK_READ,
+
+    // ===================== Edit locks (E18) ================================
+    // All three carry a {@code common.dto.lock.LockRequest} and answer with a
+    // {@code LockResponse}. Acquiring also registers the caller as a watcher of
+    // that entity, which is how {@link #PUSH_LOCK_CHANGED} finds its recipients.
+
+    /** Take (or take over) the advisory edit lock on one entity. */
+    LOCK_ACQUIRE,
+
+    /** Heartbeat: extend the caller's own lock before its TTL runs out. */
+    LOCK_RENEW,
+
+    /** Give the lock back and stop watching the entity. */
+    LOCK_RELEASE,
 
     // ===================== Server push channel =============================
     // Constants only for now — the producing services arrive with their epics.

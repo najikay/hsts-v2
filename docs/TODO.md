@@ -269,22 +269,22 @@ Client:
 
 ## E17 — Notifications & realtime [L]
 
-- [ ] E17.1 NotificationService: persist + push-if-online; helper `notify(users, type, title, body, ref)`
-- [ ] E17.2 Emit points wired: approval requested/approved/rejected, grade published, extension, bot source changed, release opening soon (scheduled), possible-cheating alert (cross-course bot use mid-attempt → executing teacher, C-4)
-- [ ] E17.3 GET/MARK_READ verbs, unread count in LoginResult
-- [ ] E17.4 Bell + badge in navbar (live), notification panel (list, icons, relative time, click-through navigation, mark-all)
-- [ ] E17.5 Toast integration for foreground pushes
-- [ ] E17.6 Tests: persistence, routing (only intended recipients — negative tests), offline user gets it on next login ⚑
+- [x] E17.1 NotificationService: persist + push-if-online; helper `notify(users, type, title, body, ref)`
+- [ ] E17.2 (infrastructure ready, emit calls land with their epics; see docs/reports/lead/E17-E18.md §4) Emit points wired: approval requested/approved/rejected, grade published, extension, bot source changed, release opening soon (scheduled), possible-cheating alert (cross-course bot use mid-attempt → executing teacher, C-4)
+- [x] E17.3 GET/MARK_READ verbs, unread count in LoginResult
+- [x] E17.4 Bell + badge in navbar (live), notification panel (list, icons, relative time, click-through navigation, mark-all)
+- [x] E17.5 Toast integration for foreground pushes
+- [x] E17.6 Tests: persistence, routing (only intended recipients — negative tests), offline user gets it on next login ⚑
 
 ## E18 — Edit locks & concurrency [L]
 
-- [ ] E18.1 EditLockService: acquire/renew/release, TTL expiry sweep, per-entity keys; unit tests incl. expiry races
-- [ ] E18.2 Verbs: ACQUIRE/RENEW/RELEASE + LOCK_CHANGED push to viewers of that entity
-- [ ] E18.3 Client `LockAwareEditor` mixin: heartbeat while open, release on close/navigate/crash (best effort), UI states (owner / locked-by-other read-only banner with name / lock released → "Take over editing?" prompt)
-- [ ] E18.4 Optimistic `@Version` conflict → `CONFLICT` error → client dialog "Changed by someone else — reload?" ⚑
-- [ ] E18.5 Wire into: question editor, exam builder, bot sources, release schedule editor, grading review
-- [ ] E18.6 Concurrency integration tests: two clients editing same entity (lock visible live), lock-expiry takeover, stale-write rejected ⚑
-- [ ] E18.7 Disconnect releases locks (ties to E3.4) — test
+- [x] E18.1 EditLockService: acquire/renew/release, TTL expiry sweep, per-entity keys; unit tests incl. expiry races
+- [x] E18.2 Verbs: ACQUIRE/RENEW/RELEASE + LOCK_CHANGED push to viewers of that entity
+- [x] E18.3 Client `LockAwareEditor` mixin: heartbeat while open, release on close/navigate/crash (best effort), UI states (owner / locked-by-other read-only banner with name / lock released → "Take over editing?" prompt)
+- [x] E18.4 Optimistic `@Version` conflict → `CONFLICT` error → client dialog "Changed by someone else — reload?" ⚑
+- [ ] E18.5 (done for the question editor; the other four compose LockAwareEditor when their screens land) Wire into: question editor, exam builder, bot sources, release schedule editor, grading review
+- [x] E18.6 Concurrency integration tests: two clients editing same entity (lock visible live), lock-expiry takeover, stale-write rejected ⚑
+- [x] E18.7 Disconnect releases locks (ties to E3.4) — test
 
 ## E19 — Server console & network [L]
 

@@ -289,6 +289,15 @@
                         <exclude>client/features/home/CoordinatorHomeView*</exclude>
                         <exclude>client/features/home/StudentHomeView*</exclude>
                         <exclude>client/features/home/PrincipalHomeView*</exclude>
+<!-- E17/E18 thin FX views. Every decision they render lives in a measured
+                             logic class next to them — NotificationsModel, NotificationPresenter,
+                             NotificationsSession, EditLockState, LockAwareEditor, LockCopy — and
+                             the panel is additionally driven by a real-input TestFX test
+                             (NotificationsInteractionTest). Listed one by one, never as a
+                             wildcard: a single '*' crosses path separators in JaCoCo. -->
+                        <exclude>client/features/notify/NotificationsPanel*</exclude>
+                        <exclude>client/features/locks/LockBanner*</exclude>
+                        <exclude>client/features/locks/FxHeartbeat*</exclude>
 <!-- E4 design system: only thin FX view classes are excluded; all UI *logic*
                              (theme/, anim/Motion, components/logic/, shell state) IS measured -->
                         <exclude>client/ui/components/Buttons*</exclude>

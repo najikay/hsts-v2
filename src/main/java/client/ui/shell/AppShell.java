@@ -56,6 +56,7 @@ public final class AppShell extends BorderPane {
     private final HBox breadcrumbs = new HBox();
     private final StackPane contentHost = new StackPane();
     private final ToastStack toasts = new ToastStack();
+    private final StackPane popovers = new StackPane();
     private final ReconnectBanner reconnectBanner = new ReconnectBanner();
     private final Button bell = Buttons.icon(Icons.BELL, "Notifications");
     private final StackPane bellBadge = new StackPane();
@@ -76,7 +77,7 @@ public final class AppShell extends BorderPane {
 
         setTop(buildTop());
         setLeft(rail);
-        setCenter(toasts.over(contentHost));
+        setCenter(buildCenter());
 
         rail.getStyleClass().add("hsts-rail");
         railToggle.setOnAction(e -> {
@@ -113,6 +114,21 @@ public final class AppShell extends BorderPane {
     /** @return the notification bell, for wiring the panel in E5/F11.2. */
     public Button bell() {
         return bell;
+    }
+
+    /**
+     * The layer anything anchored to the navbar drops down into: the
+     * notifications panel today (E17.4), any future navbar menu.
+     *
+     * <p>A layer inside the shell rather than a {@code Popup} in its own window,
+     * for three reasons: it inherits the scene's stylesheets and the dark-mode
+     * root class for free, it moves with the window without a listener, and it is
+     * reachable from a {@code scene.lookup(...)} so TestFX can assert on it.
+     *
+     * @return the popover host; add a node to open, remove it to close
+     */
+    public StackPane popovers() {
+        return popovers;
     }
 
     /** Replaces the rail contents — called once the role is known. */
@@ -185,6 +201,23 @@ public final class AppShell extends BorderPane {
     public void refresh() {
         renderRail();
         renderBellBadge();
+    }
+
+    /**
+     * Content, with the toast overlay and the popover layer floating over it.
+     *
+     * <p>The popover layer carries no background of its own and is
+     * {@code pickOnBounds(false)}: a full-scene layer that painted even a
+     * transparent fill would swallow every click on the content underneath it,
+     * which is exactly the defect {@code GalleryInteractionTest} guards against.
+     */
+    private StackPane buildCenter() {
+        StackPane center = toasts.over(contentHost);
+        popovers.getStyleClass().add("hsts-popover-layer");
+        popovers.setPickOnBounds(false);
+        center.getChildren().add(popovers);
+        StackPane.setAlignment(popovers, Pos.TOP_RIGHT);
+        return center;
     }
 
     // ------------------------------------------------------------------ navbar

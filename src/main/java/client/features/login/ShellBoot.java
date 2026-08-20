@@ -4,6 +4,10 @@ import client.core.Routes;
 import client.core.ScreenManager;
 import client.core.SessionRoutes;
 import client.events.ConnectionWatcher;
+import client.features.notify.NotificationPresenter;
+import client.features.notify.NotificationsModel;
+import client.features.notify.NotificationsPanel;
+import client.features.notify.NotificationsSession;
 import client.net.RequestDispatcher;
 import client.ui.shell.AppShell;
 import client.ui.shell.RoleNav;
@@ -50,6 +54,16 @@ public final class ShellBoot {
      */
     private static ConnectionWatcher connectionWatcher;
 
+    /**
+     * The bell's session for the current shell (E17.4).
+     *
+     * <p>Static for the same reason as {@link #connectionWatcher}: there is one
+     * shell at a time, and logout has to unsubscribe the subscriber that login
+     * registered, or the next user's bell would still be fed by the previous
+     * user's session.
+     */
+    private static NotificationsSession notifications;
+
     private ShellBoot() {
     }
 
@@ -68,11 +82,7 @@ public final class ShellBoot {
         AppShell shell = new AppShell(manager.navigator(), new ShellState());
         shell.setNavItems(RoleNav.itemsFor(login.role()));
         shell.setUser(login.displayName(), login.role());
-        // Notifications are E17; until then the bell carries no count and says so
-        // rather than being a button that silently does nothing.
-        shell.state().setUnreadNotifications(0);
-        shell.bell().setOnAction(e -> shell.toasts()
-                .info("Not built yet", "Notifications arrive with E17"));
+        startNotifications(manager, shell, login);
         shell.setOnLogout(() -> logout(manager));
 
         watchConnection(manager, shell);
@@ -106,6 +116,7 @@ public final class ShellBoot {
         }
 
         stopWatchingConnection(manager);
+        stopNotifications(manager);
         // Nothing of this session survives into the next one: every cached screen
         // goes, including the login screen itself, which therefore comes back blank.
         manager.screens().evictAll();
@@ -113,6 +124,48 @@ public final class ShellBoot {
         manager.setSignedInUser(null);
         manager.navigator().reset(Routes.LOGIN.id());
         log.info("Signed out; back to the login screen");
+    }
+
+    /**
+     * Brings the navbar bell to life (E17.4/E17.5).
+     *
+     * <p>Order is the point again: the badge is seeded from the sign-in answer
+     * <i>before</i> the first frame, so the user never sees a zero correct itself
+     * a moment later. The list itself is fetched lazily, when the panel opens.
+     *
+     * <p>Three wires, one for each way notifications reach the user: the badge
+     * follows the model, a foreground push also raises a toast (F11.3), and the
+     * bell opens the panel.
+     */
+    private static void startNotifications(ScreenManager manager, AppShell shell, LoginResult login) {
+        RequestDispatcher dispatcher = manager.getDispatcher();
+        if (dispatcher == null) {
+            // No connection (a test harness, or a shell built before connecting):
+            // the bell stays silent rather than throwing on a null dispatcher.
+            shell.state().setUnreadNotifications(login.unreadNotifications());
+            return;
+        }
+        NotificationsSession session =
+                new NotificationsSession(dispatcher, manager.eventBus(), new NotificationsModel());
+        NotificationsPanel panel =
+                new NotificationsPanel(session, manager.navigator(), shell.popovers());
+
+        session.model().onChange(() ->
+                shell.state().setUnreadNotifications(session.model().unreadCount()));
+        session.onPushed(notification ->
+                shell.toasts().show(NotificationPresenter.toastFor(notification)));
+        shell.bell().setOnAction(e -> panel.toggle());
+
+        session.start(login.unreadNotifications());
+        notifications = session;
+    }
+
+    /** Unsubscribes the bell so the next user does not inherit this one's pushes. */
+    private static void stopNotifications(ScreenManager manager) {
+        if (notifications != null) {
+            notifications.stop();
+            notifications = null;
+        }
     }
 
     /** Subscribes the banner-raiser for this shell, replacing any previous one. */

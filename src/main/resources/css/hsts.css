@@ -904,3 +904,69 @@
 .hsts-rail .nav-item.disabled:hover { -fx-background-color: transparent; }
 .hsts-rail .nav-item.disabled:hover .nav-label { -fx-text-fill: -hsts-muted; }
 .hsts-rail .nav-item.disabled:hover .nav-icon  { -fx-fill: -hsts-muted; }
+
+/* =====================================================================
+   19. NOTIFICATIONS PANEL  (E17.4 — F11.2)
+
+   The bell's drop-down lives inside the shell's popover layer, so it
+   inherits the scene's tokens and the dark root class. It is a card, not
+   a window: same radius, border and surface as .hsts-card, plus the one
+   shadow in the app that is allowed to be slightly deeper than a card's
+   because it floats over content rather than sitting in it.
+   ===================================================================== */
+
+/* The layer itself paints NOTHING, and that is load-bearing: a region with
+   any -fx-background-color, `transparent` included, becomes pickable and
+   swallows every click on the content underneath it. pickOnBounds(false)
+   does not save you. This is the exact defect GalleryInteractionTest was
+   written for, so the rule is: no background property on this selector. */
+.hsts-popover-layer { -fx-padding: 8px 16px 0 0; }
+
+.hsts-notification-panel {
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 12px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.16), 18, 0.0, 0, 6);
+}
+.root.dark .hsts-notification-panel {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.55), 18, 0.0, 0, 6);
+}
+
+.hsts-notification-panel .panel-header {
+    -fx-padding: 12px 12px 8px 14px;
+    -fx-border-color: transparent transparent -hsts-border transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+.hsts-notification-panel .panel-title { -fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+
+.hsts-notification-panel .panel-scroller { -fx-background-color: transparent; }
+.hsts-notification-panel .panel-list { -fx-padding: 6px; -fx-spacing: 2px; }
+
+.hsts-notification-panel .panel-row {
+    -fx-padding: 10px 10px 10px 12px;
+    -fx-background-radius: 8px;
+    -fx-background-color: transparent;
+    -fx-cursor: hand;
+    -fx-alignment: top-left;
+}
+.hsts-notification-panel .panel-row:hover { -fx-background-color: -hsts-accent-soft; }
+.hsts-notification-panel .row-icon  { -fx-fill: -hsts-muted; }
+.hsts-notification-panel .row-title { -fx-font-size: 13px; -fx-text-fill: -hsts-text; }
+.hsts-notification-panel .row-body  { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+.hsts-notification-panel .row-age   { -fx-font-size: 11px; -fx-text-fill: -hsts-faint; }
+
+/* Unread: an accent left rail and a bold title. Colour alone would not
+   survive a colour-blind reader, so the weight carries it too. */
+.hsts-notification-panel .panel-row.unread {
+    -fx-background-color: -hsts-accent-soft;
+    -fx-border-color: -hsts-accent transparent transparent transparent;
+    -fx-border-width: 0 0 0 3px;
+    -fx-border-radius: 0;
+}
+.hsts-notification-panel .panel-row.unread .row-title { -fx-font-weight: bold; }
+.hsts-notification-panel .panel-row.unread .row-icon  { -fx-fill: -hsts-accent; }
+
+/* The panel's empty state is a compact version of the page-level one. */
+.hsts-notification-panel .hsts-empty-state { -fx-padding: 24px 16px; }

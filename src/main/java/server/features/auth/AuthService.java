@@ -16,6 +16,7 @@ import server.core.SessionManager;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.LongToIntFunction;
 
 /**
  * Sign-in and sign-out (Logic tier, E5.1/E5.2 — F1.1, F1.3, F1.4).
@@ -73,20 +74,42 @@ public class AuthService {
     private static final String DUMMY_HASH = BCrypt.withDefaults()
             .hashToString(10, java.util.UUID.randomUUID().toString().toCharArray());
 
+    /**
+     * How many notifications are waiting for a user (E17.5).
+     *
+     * <p>A function rather than a {@code NotificationService} field, because
+     * authentication does not depend on notifications: it needs one number for
+     * the bell badge and must keep signing people in if that number cannot be
+     * produced. The default answers zero, which is what every existing test and
+     * the pre-E17 wiring get.
+     */
+    private final LongToIntFunction unreadNotifications;
+
     private final UserDirectory directory;
     private final SessionManager sessions;
     private final LoginThrottle throttle;
 
-    /** Production wiring: system clock. */
+    /** Production wiring: system clock, no notification count. */
     public AuthService(UserDirectory directory, SessionManager sessions) {
         this(directory, sessions, Clock.systemUTC());
     }
 
     /** @param clock time source for the lockout window; a test clock in tests */
     public AuthService(UserDirectory directory, SessionManager sessions, Clock clock) {
+        this(directory, sessions, clock, userId -> 0);
+    }
+
+    /**
+     * @param clock               time source for the lockout window
+     * @param unreadNotifications the unread count for the {@code LoginResult}
+     *                            badge, normally {@code NotificationService::unreadCount}
+     */
+    public AuthService(UserDirectory directory, SessionManager sessions, Clock clock,
+                       LongToIntFunction unreadNotifications) {
         this.directory = Objects.requireNonNull(directory, "directory");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.throttle = new LoginThrottle(Objects.requireNonNull(clock, "clock"));
+        this.unreadNotifications = Objects.requireNonNull(unreadNotifications, "unreadNotifications");
     }
 
     /** Registers {@code LOGIN} (open) and {@code LOGOUT} (authenticated) handlers. */
@@ -168,7 +191,20 @@ public class AuthService {
         throttle.recordSuccess(name);
         log.info("User {} ({}) signed in as {}", user.id(), user.username(), user.role());
         return Outcome.success(new LoginResult(user.id(), user.username(), user.displayName(),
-                user.role(), user.courses()));
+                user.role(), user.courses(), unreadCountOf(user.id())));
+    }
+
+    /**
+     * The bell badge must never be able to fail a sign-in: a store that throws
+     * costs the user a badge, not their session.
+     */
+    private int unreadCountOf(long userId) {
+        try {
+            return unreadNotifications.applyAsInt(userId);
+        } catch (RuntimeException e) {
+            log.warn("Could not read the unread notification count for user {}: {}", userId, e.toString());
+            return 0;
+        }
     }
 
     /**

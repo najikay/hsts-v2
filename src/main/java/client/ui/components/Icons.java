@@ -45,7 +45,10 @@ public final class Icons {
     public static final String GRADING = "mdoal-grading";
     public static final String RESULTS = "mdoal-bar_chart";
     public static final String REPORTS = "mdoal-insert_chart_outlined";
-    public static final String BOT = "mdomz-smart_toy";
+    // Not smart_toy: that icon postdates the material2 pack (Ikonli 12.3.1 has no
+    // SMART_TOY; it logged "unknown literal" and rendered blank). The brain reads
+    // as "study bot" just as well and actually exists.
+    public static final String BOT = "mdomz-psychology";
     public static final String SETTINGS = "mdomz-settings";
     public static final String BELL = "mdomz-notifications_none";
     public static final String CLOCK = "mdoal-access_time";

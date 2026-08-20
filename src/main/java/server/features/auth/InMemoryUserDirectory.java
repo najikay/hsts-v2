@@ -49,6 +49,7 @@ public final class InMemoryUserDirectory implements UserDirectory {
     private static final CourseRef DATABASES_22 = new CourseRef("22", "Databases 22");
 
     private final Map<String, UserRecord> byUsername = new LinkedHashMap<>();
+    private final Map<Long, UserRecord> byId = new LinkedHashMap<>();
 
     /** Builds the fixture with {@link #DEV_PASSWORD} for every user. */
     public InMemoryUserDirectory() {
@@ -83,6 +84,16 @@ public final class InMemoryUserDirectory implements UserDirectory {
         return Optional.ofNullable(byUsername.get(normalize(username)));
     }
 
+    /**
+     * The id lookup E18's lock banner needs. A second map rather than a scan:
+     * every lock acquisition on a held entity resolves a name, so this is a hot
+     * path even in a five-user fixture.
+     */
+    @Override
+    public Optional<UserRecord> findById(long userId) {
+        return Optional.ofNullable(byId.get(userId));
+    }
+
     /** @return every fixture user, in declaration order (console listings, tests). */
     public List<UserRecord> all() {
         return List.copyOf(byUsername.values());
@@ -95,6 +106,7 @@ public final class InMemoryUserDirectory implements UserDirectory {
 
     private void add(UserRecord user) {
         byUsername.put(normalize(user.username()), user);
+        byId.put(user.id(), user);
     }
 
     /** @return a BCrypt hash at {@link #DEV_COST}. */
