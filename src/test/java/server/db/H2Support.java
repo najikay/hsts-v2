@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.hibernate.SessionFactory;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -59,6 +60,21 @@ final class H2Support {
      * @return an open database; close it when the test finishes
      */
     static H2Db fresh() {
+        return fresh(Map.of());
+    }
+
+    /**
+     * A fresh database with extra Hibernate settings.
+     *
+     * <p>Exists so a test can install a {@code StatementInspector} and assert on the SQL
+     * Hibernate actually emits — the only way to prove that a projection query never
+     * <em>fetches</em> a column, as opposed to fetching it and leaving it out of the result
+     * type. E2.12 needs exactly that distinction.
+     *
+     * @param extraSettings settings merged over the defaults
+     * @return an open database; close it when the test finishes
+     */
+    static H2Db fresh(Map<String, Object> extraSettings) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:h2:mem:hsts_" + UUID.randomUUID().toString().replace("-", "")
                 + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
@@ -67,9 +83,13 @@ final class H2Support {
         config.setMaximumPoolSize(4);
         config.setPoolName("hsts-h2-test");
 
+        Map<String, Object> settings = new HashMap<>();
+        settings.put("hibernate.hbm2ddl.auto", "create");
+        settings.putAll(extraSettings);
+
         HikariDataSource pool = new HikariDataSource(config);
         try {
-            return new H2Db(HibernateUtil.build(pool, Map.of("hibernate.hbm2ddl.auto", "create")), pool);
+            return new H2Db(HibernateUtil.build(pool, settings), pool);
         } catch (RuntimeException | Error e) {
             pool.close();
             throw e;
