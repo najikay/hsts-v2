@@ -1,52 +1,98 @@
 # HSTS — demo accounts
 
-> **Scope: development credentials only.** These users come from
-> `server.features.auth.InMemoryUserDirectory`, the fixture directory E5 ships so the
-> login flow, the four role shells and the single-session rule are demonstrable before
-> the database exists. **It is replaced by the seeded DB in E2 PR3** — at that point the
-> usernames stay (the seed mirrors them), the directory implementation changes, and this
-> file is re-pointed at the seed migration. Not part of the submission document (PRD §5).
+> **These accounts come from the seeded database** (`server.db.seed`, E2.15), not from a
+> hand-written fixture. E5 originally shipped `server.features.auth.InMemoryUserDirectory` so
+> the login flow and the four role shells were demonstrable before the database existed; that
+> directory has been replaced by `RepositoryUserDirectory`, which reads the same usernames out
+> of MySQL. The usernames and the password did not change, so nothing in the demo script does.
+> Not part of the submission document (PRD §5).
+
+## Before a demo: reseed
+
+The seed's execution windows are **relative to when it was loaded**. One execution is
+"scheduled for today", another is "live right now", and those are what the release demo and the
+take-exam demo need. A database seeded a fortnight ago presents a live exam whose window closed
+two weeks earlier.
+
+So the standard step before a demo is a **reseed**, from the server console button or the
+command line flag. It empties the database and reloads, resolving every timestamp against the
+current clock. It asks for confirmation first, because it deletes everything.
+
+A plain load, the default and what first boot offers, only inserts rows that are missing. It is
+safe to repeat and safe to run against a database somebody is using, but it will **not** refresh
+those windows, because the rows are already there.
 
 ## Sign in
 
-Connect screen → server address (default `localhost:5555`) → **Sign in** with the
-username and password below.
+Connect screen → server address (default `localhost:5555`) → **Sign in** with the username and
+password below.
 
-**Password for every dev user: `demo123`**
+**Password for every seeded user: `demo123`**
+
+The seed hashes it with BCrypt at load, once per user, so the eighteen stored hashes all differ.
+Verification goes through the real `BCrypt.verifyer()` path (F1.1, S-38).
 
 | Username | Password | Name | Role | Courses |
 |---|---|---|---|---|
-| `dana.cohen` | `demo123` | Dana Cohen | TEACHER | Algebra 11 (11), Calculus 12 (12) — teaches |
-| `rina.barak` | `demo123` | Rina Barak | COORDINATOR | none — coordinates Mathematics (10) without teaching: the pure-coordinator login (decided 2026-08-20; the dual-hat case is michal.sharon) |
-| `maya.levi` | `demo123` | Maya Levi | STUDENT | Algebra 11 (11), Java Programming 21 (21), Databases 22 (22) — enrolled |
-| `noam.peretz` | `demo123` | Noam Peretz | STUDENT | Calculus 12 (12), Java Programming 21 (21) — enrolled |
-| `principal.avia` | `demo123` | Avia Shalev | PRINCIPAL | — (school-wide read-only, S-7) |
+| `dana.cohen` | `demo123` | Dana Cohen (דנה כהן) | TEACHER | Algebra 11, Calculus 12 — teaches |
+| `rina.barak` | `demo123` | Rina Barak (רינה ברק) | COORDINATOR \* | none; coordinates Mathematics 10 without teaching. The **pure-coordinator** login (roster decision, 2026-08-20); the dual-hat case is `michal.sharon` |
+| `maya.levi` | `demo123` | Maya Levi (מאיה לוי) | STUDENT | Algebra 11, Java Programming 21, Databases 22 — enrolled |
+| `noam.peretz` | `demo123` | Noam Peretz (נועם פרץ) | STUDENT | Calculus 12, Java Programming 21 — enrolled |
+| `principal.avia` | `demo123` | Avia Shalev (אביה שלו) | PRINCIPAL | none (school-wide read-only, S-7) |
 
-Course codes are the 2-character `courses.code2` values from ARCHITECTURE §5 and match
-the seed dataset in PRD §5 (Mathematics = 10 → Algebra 11, Calculus 12; Computer
-Science = 20 → Java Programming 21, Databases 22).
+\* **`COORDINATOR` is a wire role, not a stored one.** `users.role` is
+`ENUM('STUDENT','TEACHER','PRINCIPAL')` and has no COORDINATOR member. `rina.barak` is stored as
+a **TEACHER** with a row in `coordinators` for subject `10`, and the role is derived at login:
+stored TEACHER plus a coordinators row becomes wire `Role.COORDINATOR` (ARCHITECTURE §5,
+round-2). Coordinator-ness is per-subject state, so it can never drift from a stored role that
+disagrees with it. If you query the database directly during a demo, expect to see `TEACHER`.
 
-## What the fixture does and does not do
+**The seed carries both shapes of coordinator on purpose.** `rina.barak` is the *pure*
+coordinator: she coordinates Mathematics and teaches nothing, so she has zero `course_teachers`
+rows. `michal.sharon` is the *dual-hat* case: she teaches Databases 22 and coordinates Computer
+Science 20. Keeping both is what makes the derived role provable, because coordinator-ness lives
+only in the `coordinators` table. If every coordinator also taught a course, an implementation
+that derived the role from `course_teachers` by mistake would look correct. Rina is the account
+that catches it, which is worth knowing if the login role is ever questioned in review.
 
-- Passwords are **BCrypt-hashed at construction** (cost 10) and verified through the
-  real `BCrypt.verifyer()` path — the fixture shortcuts the storage, never the
-  verification (F1.1, S-38).
-- The **throttle is live**: 5 failed attempts on a username → 30-second lockout, keyed by
-  the normalised username. Locking yourself out during a rehearsal is a 30-second problem;
-  restarting the server also clears it (the counters are in memory).
-- **One session per user** (F1.3): signing `dana.cohen` in on a second client is refused
-  with "This account is already signed in elsewhere." Closing the first client — or
-  killing it — frees the session immediately, as does Sign out.
-- Roles here drive the shell only. Server-side permission guards read the role from the
-  session on **every** request; nothing trusts the client's copy.
+Names are stored in Hebrew, which is what the UI shows; the Latin transliterations above are for
+reading this file. Course codes are the 2-character `courses.code2` values from ARCHITECTURE §5
+(Mathematics 10 → Algebra 11, Calculus 12; Computer Science 20 → Java 21, Databases 22).
+
+## The other thirteen
+
+These five are the ones the demo script names. The seed loads **eighteen** users in total: one
+principal, five teachers and twelve students, listed in `docs/seed/SEED_CONTENT.md` §3. All of
+them sign in with `demo123`. The extras exist so class rosters, approval queues and grade
+distributions look like a school rather than a fixture. Notable ones:
+
+- `michal.sharon` — teaches Databases 22 **and** coordinates Computer Science 20, so she
+  approves the Java exams. The dual-hat counterpart to `rina.barak`.
+- `avi.mizrahi` and `tamar.shani` — co-teachers on Java 21, now the only co-taught course, which
+  is what keeps the "two teachers, one course" case demonstrable.
+- `yael.azulay` — the student whose grade carries a manual override with a written
+  justification (T-8.3, S-23).
+- `omer.katz` — the student whose attempt timed out rather than being submitted (S-19).
+
+## What the login path does and does not do
+
+- **The throttle is live**: 5 failed attempts on a username → 30-second lockout, keyed by the
+  normalised username. Restarting the server clears it, since the counters are in memory.
+- **One session per user** (F1.3): signing `dana.cohen` in on a second client is refused with
+  "This account is already signed in elsewhere." Closing or killing the first client frees the
+  session immediately, as does Sign out.
+- Roles drive the shell only. Server-side permission guards read the role from the session on
+  **every** request; nothing trusts the client's copy.
 
 ## Demo tips
 
-- **Two-machine duplicate-login demo:** sign in as `dana.cohen` on machine A, try the same
-  on machine B → the exact F1.3 message appears inline under the password field. Sign out
-  on A, retry on B → it works.
-- **Throttle demo:** type a wrong password 5 times for `maya.levi`; the 6th attempt — even
-  with the right password — answers "Too many attempts — try again shortly." for 30 seconds.
+- **Two-machine duplicate-login demo:** sign in as `dana.cohen` on machine A, try the same on
+  machine B → the exact F1.3 message appears inline under the password field. Sign out on A,
+  retry on B → it works.
+- **Throttle demo:** type a wrong password 5 times for `maya.levi`; the 6th attempt, even with
+  the right password, answers "Too many attempts, try again shortly." for 30 seconds.
 - **Role tour:** `maya.levi` (student rail: Dashboard / Take Exam / My Grades / Study Bot /
-  Settings) → `dana.cohen` (teacher rail, no Approvals) → `rina.barak` (same plus
-  Approvals) → `principal.avia` (Dashboard / Data / Reports / Settings, nothing mutating).
+  Settings) → `dana.cohen` (teacher rail, no Approvals) → `rina.barak` (same plus Approvals) →
+  `principal.avia` (Dashboard / Data / Reports / Settings, nothing mutating).
+- **Coordinator demo:** `rina.barak` sees the Mathematics approval queue only. The Calculus exam
+  `101201` is seeded PENDING and waiting for her.
