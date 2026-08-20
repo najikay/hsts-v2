@@ -22,11 +22,12 @@ import java.util.Optional;
  * reading high is a bug, not a rounding difference. E14 renders these values and must not
  * recompute them with a different divisor.
  *
- * <p><b>Pass rate is deliberately absent.</b> F8.5 and F9.2 both list it, but no passing
- * threshold is defined anywhere in the PRD, and neither is whether a timed-out attempt
- * scoring 0 belongs in the denominator. Guessing 55 or 60 here would bake an invisible
- * assumption into a stored, defence-critical number. It is added as one more component
- * once the threshold is decided — additive, and it changes nothing below.
+ * <p><b>Pass mark is {@value #PASS_MARK}</b>, and the denominator is <b>every</b> attempt
+ * carrying a final score — forced-submit zeros included, not filtered out as "did not really
+ * sit it". Decided in the PR #2 review. E14 and E15 render the stored value and never
+ * redefine the threshold: a pass rate computed twice from two thresholds is the same class
+ * of bug as a σ computed from two divisors, and harder to spot because both numbers look
+ * plausible.
  *
  * @param count             how many graded attempts the statistics cover
  * @param mean              arithmetic average of the final scores
@@ -34,6 +35,11 @@ import java.util.Optional;
  * @param standardDeviation population standard deviation (divisor {@code count})
  * @param min               lowest final score
  * @param max               highest final score
+ * @param passCount         how many attempts scored at least {@value #PASS_MARK}
+ * @param passRate          {@code passCount / count} as a fraction in {@code [0, 1]} — a
+ *                          fraction, not a percentage, so no caller has to guess whether
+ *                          {@code 0.875} means 0.875% or 87.5%; {@code passCount} is kept
+ *                          alongside it so the raw numerator is never inferred by multiplying
  * @param deciles           ten counts: index {@code i} holds scores in {@code [i*10, i*10+9]},
  *                          except index 9 which is {@code [90, 100]} so a perfect score lands
  *                          in the top bucket rather than an eleventh one
@@ -45,6 +51,8 @@ public record ScoreStatistics(
         double standardDeviation,
         int min,
         int max,
+        int passCount,
+        double passRate,
         List<Integer> deciles) {
 
     /** Grades are 0..100 (`ck_grades_final_score`); anything else is a caller bug, not data. */
@@ -52,6 +60,9 @@ public record ScoreStatistics(
     private static final int MAX_SCORE = 100;
 
     private static final int DECILE_BUCKETS = 10;
+
+    /** A final score of 55 or more is a pass (PR #2 review; F8.5). */
+    public static final int PASS_MARK = 55;
 
     public ScoreStatistics {
         deciles = List.copyOf(deciles);
@@ -94,6 +105,7 @@ public record ScoreStatistics(
 
         int count = sorted.size();
         double mean = mean(sorted);
+        int passCount = passCount(sorted);
 
         return Optional.of(new ScoreStatistics(
                 count,
@@ -102,6 +114,8 @@ public record ScoreStatistics(
                 populationStandardDeviation(sorted, mean),
                 sorted.get(0),
                 sorted.get(count - 1),
+                passCount,
+                (double) passCount / count,
                 deciles(sorted)));
     }
 
@@ -133,6 +147,20 @@ public record ScoreStatistics(
             sumOfSquares += deviation * deviation;
         }
         return Math.sqrt(sumOfSquares / scores.size());
+    }
+
+    /**
+     * Every score in {@code scores} is in the denominator — a forced-submit 0 is an attempt
+     * that was sat and failed, not an absence, so excluding it would flatter the rate.
+     */
+    private static int passCount(List<Integer> scores) {
+        int passed = 0;
+        for (int score : scores) {
+            if (score >= PASS_MARK) {
+                passed++;
+            }
+        }
+        return passed;
     }
 
     private static List<Integer> deciles(List<Integer> scores) {
