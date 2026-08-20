@@ -149,6 +149,23 @@ Language is mixed on purpose: Algebra and Calculus are Hebrew (RTL must be prove
 Java and Databases are English (code and SQL read badly reversed). Both appear in every
 demoed screen.
 
+**Authorship (`question_versions.created_by`) is a rule, not a column** — D9, stated here rather
+than repeated across 43 version rows:
+
+- **v1 of every question** is authored by the course's **first-listed teacher in §4**. So all
+  Algebra and Calculus questions are `2 dana.cohen`, all Java questions `4 avi.mizrahi`, all
+  Databases questions `6 michal.sharon`.
+- **A second version in a co-taught course** is authored by the **co-teacher**. Java (21) is the
+  only co-taught course, so today this resolves to exactly one row: **`21003` v2 =
+  `5 tamar.shani`**. Second versions in singly-taught courses stay with the first-listed teacher,
+  which means `11005` v2 is `2 dana.cohen` and `22004` v2 is `6 michal.sharon`.
+
+The second clause exists so the bank is not authored entirely by one person per course: T-2.2's
+"the previous version remains" is more convincing when a version history shows two names, and
+`21003` is the row that demonstrates it. If Java ever stops being co-taught, or another course
+gains a co-teacher, this rule re-resolves on its own — which is why it is a rule and not 43
+hand-written values.
+
 ### 7.1 Algebra (course 11) — 11 questions
 
 Topics: משוואות ליניאריות · פונקציות ריבועיות · אי-שוויונות
