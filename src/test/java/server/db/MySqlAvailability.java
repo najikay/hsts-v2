@@ -62,7 +62,21 @@ final class MySqlAvailability {
 
     /** JDBC URL pointing at the throwaway test schema. */
     static String schemaUrl() {
-        return DbBootstrap.jdbcUrl(HOST, PORT, TEST_SCHEMA);
+        return schemaUrl(TEST_SCHEMA);
+    }
+
+    /**
+     * JDBC URL for any schema on the configured server.
+     *
+     * <p>The repository suite (E2.13) needs a schema of its own: {@link #TEST_SCHEMA} is
+     * dropped and recreated by every migration test, so a repository test sharing it would
+     * have its tables deleted out from under it mid-run.
+     *
+     * @param schema the schema name to connect to
+     * @return the JDBC URL for that schema on the configured host and port
+     */
+    static String schemaUrl(String schema) {
+        return DbBootstrap.jdbcUrl(HOST, PORT, schema);
     }
 
     static String user() {

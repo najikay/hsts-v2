@@ -46,12 +46,12 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [x] E2.6 V5 grading: grades (audit fields)
 - [x] E2.7 V6 bot: bots, bot_sources, bot_sessions (JSON transcript), bot_messages (normalized analytics copy, dual-written)
 - [x] E2.8 V7 notifications
-- [ ] E2.9 JPA entities for all tables (+`@Version` on editables), enums, converters (JSON transcript ↔ objects)
-- [ ] E2.10 HibernateUtil (Singleton SessionFactory from HikariCP) + `Transactions` helper (`inTx(fn)`) with tests
-- [ ] E2.11 Repositories: UserRepo, CourseRepo, QuestionRepo, ExamRepo, ExecutionRepo, AttemptRepo, GradeRepo, BotRepo, NotificationRepo — query-per-need, projections for wire DTOs
-- [ ] E2.12 Take-exam projection that structurally excludes `correct_answer` (F6.6) + test proving the DTO has no correctness data ⚑
-- [ ] E2.13 Repo test suites: H2 fast suite + MySQL suite (test base class = Template Method wipe/reseed)
-- [ ] E2.14 ID allocators: 5-digit question display id (course2+serial3), 6-digit exam id (subject2+course2+serial2), concurrency-safe, with tests (S-8, S-10)
+- [x] E2.9 JPA entities for all tables (+`@Version` on editables), enums, converters (JSON transcript ↔ objects)
+- [x] E2.10 HibernateUtil (Singleton SessionFactory from HikariCP) + `Transactions` helper (`inTx(fn)`) with tests
+- [x] E2.11 Repositories: UserRepo, CourseRepo, QuestionRepo, ExamRepo, ExecutionRepo, AttemptRepo, GradeRepo, BotRepo, NotificationRepo — query-per-need, projections for wire DTOs
+- [x] E2.12 Take-exam projection that structurally excludes `correct_answer` (F6.6) + test proving the DTO has no correctness data ⚑
+- [x] E2.13 Repo test suites: H2 fast suite + MySQL suite (test base class = Template Method wipe/reseed)
+- [x] E2.14 ID allocators: 5-digit question display id (course2+serial3), 6-digit exam id (subject2+course2+serial2), concurrency-safe, with tests (S-8, S-10)
 - [ ] E2.15 Seed migration/loader per PRD §5 (idempotent, one command + server-console button)
 - [ ] E2.16 Seed review pass with [L]: every demo screen looks "well-filled" ⚑
 - [ ] E2.17 BCrypt hashing for all seeded users; document demo credentials in DEMO_ACCOUNTS.md
