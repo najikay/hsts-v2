@@ -167,6 +167,90 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
         assertThat(queue).extracting(Grade::getAttemptId).containsExactly(mayasAttempt);
     }
 
+    @Test
+    @DisplayName("a student's grades are approved ones only — marking in progress publishes nothing")
+    void approvedForStudentExcludesUnapproved() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long approvedAttempt = persistAttempt(executionId, mayaId);
+        long pendingAttempt = persistAttempt(executionId, danaId);
+        runInTx(session -> {
+            session.persist(approvedGrade(approvedAttempt));
+            session.persist(new Grade(pendingAttempt, 91));
+        });
+
+        List<Grade> mine = inTx(session -> grades.findApprovedForStudent(session, mayaId));
+        List<Grade> theirs = inTx(session -> grades.findApprovedForStudent(session, danaId));
+
+        assertThat(mine).extracting(Grade::getAttemptId).containsExactly(approvedAttempt);
+        // danaId's only grade is still AUTO, so she sees nothing at all (C-3, S-24).
+        assertThat(theirs).isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚑ a student's grades never include another student's")
+    void approvedForStudentIsScopedToTheStudent() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long mayasAttempt = persistAttempt(executionId, mayaId);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        runInTx(session -> {
+            session.persist(approvedGrade(mayasAttempt));
+            session.persist(approvedGrade(danasAttempt));
+        });
+
+        List<Grade> mine = inTx(session -> grades.findApprovedForStudent(session, mayaId));
+
+        assertThat(mine).hasSize(1);
+        assertThat(mine.get(0).getAttemptId()).isEqualTo(mayasAttempt);
+    }
+
+    @Test
+    @DisplayName("a student who has been approved nothing gets an empty list, not an error")
+    void approvedForStudentEmptyWhenNothingApproved() {
+        List<Grade> none = inTx(session -> grades.findApprovedForStudent(session, mayaId));
+
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a student's own grade is found by id")
+    void findsOwnGradeById() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long attemptId = persistAttempt(executionId, mayaId);
+        long gradeId = inTx(session -> {
+            Grade grade = approvedGrade(attemptId);
+            session.persist(grade);
+            session.flush();
+            return grade.getId();
+        });
+
+        Optional<Grade> found = inTx(session -> grades.findForStudent(session, gradeId, mayaId));
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getAttemptId()).isEqualTo(attemptId);
+    }
+
+    @Test
+    @DisplayName("⚑ another student's grade id is empty, exactly like an id that does not exist")
+    void anotherStudentsGradeIsIndistinguishableFromMissing() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        long danasGradeId = inTx(session -> {
+            Grade grade = approvedGrade(danasAttempt);
+            session.persist(grade);
+            session.flush();
+            return grade.getId();
+        });
+
+        // maya asks for dana's grade, and for one that was never created.
+        Optional<Grade> somebodyElses =
+                inTx(session -> grades.findForStudent(session, danasGradeId, mayaId));
+        Optional<Grade> neverExisted =
+                inTx(session -> grades.findForStudent(session, 999_999L, mayaId));
+
+        // Identical answers: the query cannot be used to discover that a grade exists.
+        assertThat(somebodyElses).isEqualTo(neverExisted).isEmpty();
+    }
+
     private long persistExecution(String code, ExecutionStatus status) {
         long examVersionId = newExamVersion();
         return inTx(session -> {
