@@ -41,6 +41,13 @@ E21 hardening is everyone (each attacks the others' features); E23 stretch assig
 
 ## 2. Load & sequencing
 
+**Endgame update (2026-08-21):** the defense moved to **Aug 27** and the group name is **12-1**.
+Compressed plan: features done Aug 23-24 · integration + lead's manual passes Aug 24-25 ·
+hardening Aug 26 · submission zip + two-machine rehearsal + DEFENSE Aug 27. Because of the lost
+day, **E14.3 (StatChart) moved to the lead** (it is shared design-system work; B keeps E14 and
+wires the finished component), and the lead also runs E11.7. The E8 absorption offer to A stays
+open through Aug 24.
+
 | Milestone | L | A | B |
 |---|---|---|---|
 | M0–M1 | E0,E1,E3,E4,E5 | E2 schema+entities+repos | studies component library; drafts acceptance-test table skeleton; E2 seed content |

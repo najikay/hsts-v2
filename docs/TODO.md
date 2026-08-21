@@ -201,7 +201,7 @@ Client:
 - [x] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
 - [x] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
 - [x] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
-- [ ] E11.7 Attention events (F7.1b, Naji 2026-08-21): client reports exam-window focus loss during IN_PROGRESS (debounced, resumes counted); server extends the monitor row flags (reuse IntegrityFlag shape); live push to watching teachers; no student-facing UI; tests incl. flicker debounce and the flag surviving resume. Build with the post-manual-test polish round
+- [ ] E11.7 **[in progress, L, 2026-08-21]** Attention events (F7.1b): client reports exam-window focus loss during IN_PROGRESS (debounced, resumes counted); server extends the monitor row flags (reuse IntegrityFlag shape); live push to watching teachers; no student-facing UI; tests incl. flicker debounce and the flag surviving resume. Build with the post-manual-test polish round
 - [x] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
 - [ ] E11.6 Acceptance pass vs T-7 ⚑
 
@@ -232,7 +232,7 @@ Client:
 
 - [ ] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
 - [ ] E14.2 Results screen: exam → execution picker → student table (sortable) + stat cards (avg · median · std · min/max · pass rate · participants)
-- [ ] E14.3 **StatChart component** (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance, theme/palette-aware colors, empty & insufficient-data states ⚑
+- [ ] E14.3 **[REASSIGNED to L, 2026-08-21 — in progress]** StatChart component (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance, theme/palette-aware colors, empty & insufficient-data states ⚑
 - [ ] E14.3b Wire StatChart into teacher results; visual QA against seed data distribution ⚑
 - [ ] E14.4 Table/histogram toggle (T-10 note), export/print-friendly layout
 - [ ] E14.5 Session tests + acceptance pass vs T-10 ⚑
