@@ -3,6 +3,7 @@ package server.db.repos;
 import org.hibernate.Session;
 import server.db.entities.Grade;
 import server.db.entities.GradeStatus;
+import server.db.projections.GradeExamLabel;
 import server.db.projections.StudentResultRow;
 
 import java.util.Collection;
@@ -29,6 +30,32 @@ public final class GradeRepository {
         return session.createQuery("from Grade where attemptId = :attemptId", Grade.class)
                 .setParameter("attemptId", attemptId)
                 .uniqueResultOptional();
+    }
+
+    /**
+     * One grade by its id, with no scoping at all.
+     *
+     * <p>The unscoped read, and the only one here: every other read on this repository has an
+     * owner baked into its query. It exists because the teacher verbs cannot express their
+     * ownership rule in SQL — "the executing teacher, or the exam's author" lives two joins
+     * away in {@code exam_executions}, and the caller resolves it through
+     * {@code ExecutionContext} rather than duplicating that join into every grading query.
+     *
+     * <p>So the rule for this one is a caller rule: <b>a handler that calls this must resolve
+     * ownership before answering with anything it returns.</b> Student paths must not use it
+     * at all — they have {@link #findForStudent}, which makes ownership the query, and which
+     * exists precisely so E13.1's guarantee cannot be forgotten.
+     *
+     * <p>Consumers: E12.3's {@code GRADE_OVERRIDE} and E12.6's {@code GRADE_REVIEW_GET},
+     * through {@code server.features.grading.GradeReviewService#contextOf}, which reads the
+     * execution in the same breath and hands both to the gate.
+     *
+     * @param session the current session
+     * @param gradeId the grade
+     * @return the grade, or empty when no such row exists
+     */
+    public Optional<Grade> findById(Session session, long gradeId) {
+        return Optional.ofNullable(session.get(Grade.class, gradeId));
     }
 
     /**
@@ -59,6 +86,51 @@ public final class GradeRepository {
                 .setParameter("studentId", studentId)
                 .setParameter("status", GradeStatus.APPROVED)
                 .getResultList();
+    }
+
+    /**
+     * Which exam each of these grades was for (contract amendment v1.1).
+     *
+     * <p>One read for the whole list rather than one per row. A student's grade list is short,
+     * so the N+1 version would also have worked — and would have been the shape that quietly
+     * became a problem the first time somebody reused it for a principal's report over a
+     * whole cohort. Reading labels in bulk costs nothing here and stays correct there.
+     *
+     * <p>Deliberately keyed by grade id rather than returned in list order, so the caller pairs
+     * rows explicitly and a grade whose joins do not resolve is simply unlabelled instead of
+     * silently taking its neighbour's exam name.
+     *
+     * <p>Carries no scores and no correctness — see {@link GradeExamLabel} — so it is safe on
+     * the student path it exists for.
+     *
+     * <p>Consumers: E13.3's {@code MY_GRADES_GET} and E13.4's {@code CHECKED_FORM_GET}.
+     *
+     * @param session  the current session
+     * @param gradeIds the grades to label; an empty collection returns an empty map
+     * @return exam name and course code by grade id
+     */
+    public Map<Long, GradeExamLabel> findExamLabels(Session session, Collection<Long> gradeIds) {
+        if (gradeIds == null || gradeIds.isEmpty()) {
+            // Same `in ()` reason as findByIds.
+            return Map.of();
+        }
+        List<GradeExamLabel> labels = session.createQuery("""
+                        select new server.db.projections.GradeExamLabel(g.id, v.name, e.courseCode)
+                        from Grade g, ExamAttempt a, ExamExecution ex, ExamVersion v, Exam e
+                        where g.id in (:ids)
+                          and a.id = g.attemptId
+                          and ex.id = a.executionId
+                          and v.id = ex.examVersionId
+                          and e.id = v.examId
+                        """, GradeExamLabel.class)
+                .setParameter("ids", gradeIds)
+                .getResultList();
+
+        Map<Long, GradeExamLabel> byGrade = new LinkedHashMap<>();
+        for (GradeExamLabel label : labels) {
+            byGrade.put(label.gradeId(), label);
+        }
+        return byGrade;
     }
 
     /**

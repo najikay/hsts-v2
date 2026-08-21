@@ -7,11 +7,13 @@ import org.hibernate.Session;
 import server.db.entities.Grade;
 import server.db.entities.GradeStatus;
 import server.db.entities.User;
+import server.db.projections.GradeExamLabel;
 import server.db.repos.GradeRepository;
 import server.db.repos.UserRepository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -70,11 +72,31 @@ public class ResultsService {
             return MyGrades.EMPTY;
         }
 
+        // v1.1: every row here is a different exam, so each carries its own label. One read for
+        // the whole list, paired by grade id.
+        List<Long> gradeIds = new ArrayList<>(approved.size());
+        for (Grade grade : approved) {
+            gradeIds.add(grade.getId());
+        }
+        Map<Long, GradeExamLabel> labels = grades.findExamLabels(session, gradeIds);
+
         List<StudentGradeRow> rows = new ArrayList<>(approved.size());
         for (Grade grade : approved) {
-            rows.add(toRow(grade, studentId, studentName));
+            rows.add(label(toRow(grade, studentId, studentName), labels.get(grade.getId())));
         }
         return new MyGrades(rows);
+    }
+
+    /**
+     * Applies an exam label to a row, if one resolved.
+     *
+     * <p>An unlabelled row keeps its nulls rather than borrowing a neighbour's exam name or
+     * inventing a placeholder. A grade whose joins do not resolve is a data problem worth
+     * seeing as a blank, not one worth papering over with the wrong exam's name on a
+     * student's transcript.
+     */
+    private static StudentGradeRow label(StudentGradeRow row, GradeExamLabel exam) {
+        return exam == null ? row : row.withExam(exam.examName(), exam.courseCode());
     }
 
     /**

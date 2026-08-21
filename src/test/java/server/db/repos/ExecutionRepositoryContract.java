@@ -14,11 +14,14 @@ import server.db.entities.ExamVersionStatus;
 import server.db.entities.ExecutionStatus;
 import server.db.entities.Grade;
 import server.db.entities.Question;
+
 import server.db.entities.QuestionVersion;
+import server.db.projections.GradeExamLabel;
 import server.db.projections.ParticipationCounts;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -236,6 +239,110 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
 
         // An `in ()` with no values would be a syntax error or a full scan; neither is right.
         List<QuestionVersion> none = inTx(session -> questions.findVersionsForGrading(session, List.of()));
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a grade is fetched by its own id, unscoped")
+    void findsGradeById() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long attemptId = persistAttempt(executionId, mayaId);
+        long gradeId = inTx(session -> {
+            Grade grade = new Grade(attemptId, 88);
+            session.persist(grade);
+            session.flush();
+            return grade.getId();
+        });
+
+        Optional<Grade> found = inTx(session -> grades.findById(session, gradeId));
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getAutoScore()).isEqualTo(88);
+    }
+
+    @Test
+    @DisplayName("a grade id that was never issued is empty, not an exception")
+    void findByIdIsEmptyForUnknown() {
+        Optional<Grade> none = inTx(session -> grades.findById(session, 999_999L));
+
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("grades are labelled with the exam they were for, keyed by grade id")
+    void findsExamLabels() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long mayasAttempt = persistAttempt(executionId, mayaId);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        List<Long> ids = inTx(session -> {
+            Grade a = new Grade(mayasAttempt, 88);
+            Grade b = new Grade(danasAttempt, 71);
+            session.persist(a);
+            session.persist(b);
+            session.flush();
+            return List.of(a.getId(), b.getId());
+        });
+
+        Map<Long, GradeExamLabel> labels =
+                inTx(session -> grades.findExamLabels(session, ids));
+
+        // Four joins away from the grade row, which is the whole reason this read exists.
+        assertThat(labels).hasSize(2);
+        assertThat(labels.get(ids.get(0)).examName()).isEqualTo("מבחן");
+        assertThat(labels.get(ids.get(0)).courseCode()).isEqualTo(COURSE_ALGEBRA);
+        assertThat(labels.get(ids.get(1)).gradeId()).isEqualTo(ids.get(1));
+    }
+
+    @Test
+    @DisplayName("a grade whose label was not asked for is simply absent from the map")
+    void findsExamLabelsOnlyForWhatWasAsked() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long attemptId = persistAttempt(executionId, mayaId);
+        long gradeId = inTx(session -> {
+            Grade grade = new Grade(attemptId, 88);
+            session.persist(grade);
+            session.flush();
+            return grade.getId();
+        });
+
+        Map<Long, GradeExamLabel> labels = inTx(session ->
+                grades.findExamLabels(session, List.of(gradeId, 999_999L)));
+
+        assertThat(labels).containsOnlyKeys(gradeId);
+    }
+
+    @Test
+    @DisplayName("asking for no labels returns none, not every grade's")
+    void findsNoLabelsForAnEmptyIdList() {
+        Map<Long, GradeExamLabel> none =
+                inTx(session -> grades.findExamLabels(session, List.of()));
+
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("display ids come back by question id, for a marked paper")
+    void findsDisplayIds() {
+        long first = persistQuestionVersion(1, (byte) 1);
+        long second = persistQuestionVersion(2, (byte) 4);
+        List<Long> questionIds = inTx(session ->
+                List.of(questionIdOf(session, first), questionIdOf(session, second)));
+
+        Map<Long, String> displayIds =
+                inTx(session -> questions.findDisplayIds(session, questionIds));
+
+        assertThat(displayIds).hasSize(2);
+        assertThat(displayIds.get(questionIds.get(0))).isEqualTo(COURSE_ALGEBRA + "001");
+        assertThat(displayIds.get(questionIds.get(1))).isEqualTo(COURSE_ALGEBRA + "002");
+    }
+
+    @Test
+    @DisplayName("asking for no display ids returns none, not the whole bank")
+    void findsNoDisplayIdsForAnEmptyIdList() {
+        persistQuestionVersion(1, (byte) 1);
+
+        Map<Long, String> none = inTx(session -> questions.findDisplayIds(session, List.of()));
+
         assertThat(none).isEmpty();
     }
 

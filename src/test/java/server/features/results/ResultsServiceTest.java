@@ -13,12 +13,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import server.db.entities.Grade;
 import server.db.entities.User;
 import server.db.entities.UserRole;
+import server.db.projections.GradeExamLabel;
 import server.db.repos.GradeRepository;
 import server.db.repos.UserRepository;
 
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +63,10 @@ class ResultsServiceTest {
     @BeforeEach
     void setUp() {
         service = new ResultsService(grades, users);
+        // v1.1 labels: every myGrades call now asks for the exam names in one extra read.
+        // Stubbed empty by default so the tests that are about scoping and stripping stay
+        // about those things; the labelling tests stub it explicitly.
+        lenient().when(grades.findExamLabels(any(), any())).thenReturn(Map.of());
     }
 
     private void stubStudent(long id, String name) {
@@ -121,6 +127,56 @@ class ResultsServiceTest {
 
             assertThat(result.isEmpty()).isTrue();
             assertThat(result.grades()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("each row is labelled with its own exam (contract amendment v1.1)")
+        void rowsCarryTheirOwnExamLabel() {
+            stubStudent(MAYA, MAYA_NAME);
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null), approved(2, 88, null, null)));
+            when(grades.findExamLabels(any(), any())).thenReturn(Map.of(
+                    1L, new GradeExamLabel(1, "Java midterm", "01"),
+                    2L, new GradeExamLabel(2, "Databases final", "02")));
+
+            MyGrades result = service.myGrades(session, MAYA);
+
+            // Unlike a teacher's table, every row here is a different exam — which is exactly
+            // why v1.1 put the labels on the row rather than once above it.
+            assertThat(result.grades()).extracting(row -> row.examName())
+                    .containsExactly("Java midterm", "Databases final");
+            assertThat(result.grades()).extracting(row -> row.courseCode())
+                    .containsExactly("01", "02");
+        }
+
+        @Test
+        @DisplayName("labels are asked for in one read, not one per row")
+        void labelsAreReadInBulk() {
+            stubStudent(MAYA, MAYA_NAME);
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null), approved(2, 88, null, null)));
+
+            service.myGrades(session, MAYA);
+
+            verify(grades, org.mockito.Mockito.times(1)).findExamLabels(any(), any());
+        }
+
+        @Test
+        @DisplayName("a row whose label did not resolve stays blank rather than borrowing one")
+        void unlabelledRowStaysBlank() {
+            stubStudent(MAYA, MAYA_NAME);
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null), approved(2, 88, null, null)));
+            when(grades.findExamLabels(any(), any()))
+                    .thenReturn(Map.of(1L, new GradeExamLabel(1, "Java midterm", "01")));
+
+            MyGrades result = service.myGrades(session, MAYA);
+
+            assertThat(result.grades().get(0).examName()).isEqualTo("Java midterm");
+            // The second row is blank, not "Java midterm" — a wrong exam name on a transcript
+            // is worse than a missing one.
+            assertThat(result.grades().get(1).examName()).isNull();
+            assertThat(result.grades().get(1).courseCode()).isNull();
         }
 
         @Test
