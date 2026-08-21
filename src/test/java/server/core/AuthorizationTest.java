@@ -13,6 +13,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -507,6 +509,160 @@ class AuthorizationTest {
      * <em>this</em> subject. The second without the first is what would let a plain teacher
      * with a coordinators row approve; the first without the second is what would let the
      * Mathematics coordinator approve a Computer Science exam.
+     */
+    /**
+     * The read half of the bank's two-scope split (E6, §7.3).
+     *
+     * <p>There is deliberately <b>no throwing form</b>. Every bank read resolves its course from a
+     * stored question, so a refusal naming that course is the existence oracle contract §2 forbids
+     * — the handler asks and answers {@code NOT_FOUND} itself. A throwing sibling would be a
+     * one-line wrong answer sitting next to a three-line right one, which is the shape a guard
+     * family should never offer.
+     *
+     * <p>{@link #coordinatorReadsWhereSheCannotWrite} is the whole ruling in one test: the same
+     * caller, the same course, read allowed and write refused.
+     */
+    @Nested
+    @DisplayName("reachesCourse, the bank read scope (implemented in E6)")
+    class BankRead {
+
+        /** Rina coordinates Maths and teaches nothing: Algebra and Calculus are readable. */
+        private final Authorization.ReachableCourses rina =
+                caller -> caller.userId() == 3L ? Set.of("11", "12") : Set.of();
+
+        @AfterEach
+        void uninstall() {
+            Authorization.useReachableCourses(null);
+        }
+
+        @Test
+        @DisplayName("a coordinator reads a course she does not teach: the whole point of the split")
+        void coordinatorReadsWhereSheCannotWrite() {
+            // rina.barak holds a coordinators row and zero course_teachers rows, deliberately.
+            // Scoping reads by teaching would show a starred demo account an empty bank.
+            CallerContext coordinator = caller(3L, Role.COORDINATOR);
+            assertThat(Authorization.reachesCourse(coordinator, "11", rina)).isTrue();
+
+            // ...and the write gate refuses her on the same course. Two questions, two answers.
+            Authorization.CourseTeachers teachesNothing = (teacherId, courseCode) -> false;
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            coordinator, "11", teachesNothing));
+        }
+
+        @Test
+        @DisplayName("the principal reaches every course, which no union query can produce")
+        void principalReachesEverything() {
+            // The finding that changed this seam's signature. A principal has no course_teachers
+            // rows and no coordinators rows, so findTaughtCourseCodes UNION
+            // findCoordinatedCourseCodes returns her NOTHING and F9.3's read-only browse would
+            // show an empty bank. The answer depends on her ROLE, which is why the directory
+            // takes the whole caller and not a user id.
+            Authorization.ReachableCourses byRole = caller ->
+                    caller.hasAnyRole(Role.PRINCIPAL) ? Set.of("11", "12", "21", "22") : Set.of();
+            CallerContext principal = caller(7L, Role.PRINCIPAL);
+
+            assertThat(Authorization.reachesCourse(principal, "21", byRole)).isTrue();
+
+            // And F9.3's other half: literally zero mutating verbs, so the write gate refuses her
+            // even with a directory that lies.
+            Authorization.CourseTeachers lying = (teacherId, courseCode) -> true;
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(principal, "21", lying));
+        }
+
+        @Test
+        @DisplayName("refuses a course outside the reachable set")
+        void refusesWhatSheCannotReach() {
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), "21", rina))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("the directory is asked about the caller, not about the course alone")
+        void theSetIsPerCaller() {
+            // Paired with coordinatorReadsWhereSheCannotWrite, which needs user 3 to return a
+            // non-empty set, this forces the lookup to be caller-derived. Neither pins it alone.
+            assertThat(Authorization.reachesCourse(caller(9L, Role.TEACHER), "11", rina)).isFalse();
+        }
+
+        @Test
+        @DisplayName("answers the membership question, not the role question")
+        void membershipNotRole() {
+            // A student whose set contains the course gets true. That is correct separation: the
+            // role check is the handler's, and mixing them would make this unusable for the one
+            // thing it is for. It is also why the javadoc says every caller must have run
+            // requireRole first, and why that clause matters more here than on the write side:
+            // a bank read hands back a QuestionDetail, which carries the answer key.
+            Authorization.ReachableCourses enrolled = caller -> Set.of("11");
+            assertThat(Authorization.reachesCourse(caller(9L, Role.STUDENT), "11", enrolled))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a padded course code is stripped, not trimmed")
+        void paddedCodeIsStripped() {
+            // courses.code2 is CHAR(2) under PAD SPACE, so a padded code matches the row in SQL
+            // while failing Java equality against this set. The literal below carries U+200A HAIR
+            // SPACE, which is above U+0020: trim() leaves it and strip() removes it, so swapping
+            // the two turns this assertion false.
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), " 11 ", rina))
+                    .isTrue();
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), " 11", rina))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("fails closed on every missing input")
+        void failsClosed() {
+            assertThat(Authorization.reachesCourse(anonymous(), "11", rina)).isFalse();
+            assertThat(Authorization.reachesCourse(null, "11", rina)).isFalse();
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), null, rina))
+                    .isFalse();
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), "  ", rina))
+                    .isFalse();
+            // A directory answering null rather than an empty set must not NPE the guard.
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), "11",
+                    caller -> null)).isFalse();
+        }
+
+        @Test
+        @DisplayName("an explicit null directory refuses even while a permissive one is installed")
+        void nullDirectoryDoesNotFallBackToGlobalState() {
+            // The mutation the first version of this suite could not catch. Insert a silent
+            // `if (directory == null) directory = REACHABLE_COURSES.get();` and every other test
+            // stays green, because the field's default is UNWIRED and @AfterEach resets it there.
+            // Installing a permissive directory first is what makes the fallback visible, and the
+            // explicit-directory form's whole point is depending on nothing global.
+            Authorization.useReachableCourses(caller -> Set.of("11", "12", "21", "22"));
+
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), "11", null))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("UNWIRED reaches nothing, and is the default at the field")
+        void unwiredReachesNothing() {
+            Authorization.ReachableCourses previous =
+                    Authorization.useReachableCourses(caller -> Set.of("11"));
+            assertThat(previous).isSameAs(Authorization.ReachableCourses.UNWIRED);
+            assertThat(Authorization.ReachableCourses.UNWIRED.forCaller(caller(3L, Role.TEACHER)))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("installing null goes back to refusing, not to the last real directory")
+        void installingNullFailsClosed() {
+            Authorization.useReachableCourses(rina);
+            Authorization.useReachableCourses(null);
+
+            assertThat(Authorization.ReachableCourses.UNWIRED.forCaller(caller(3L, Role.COORDINATOR)))
+                    .isEmpty();
+        }
+    }
+
+    /**
+     * The one course-scoped guard that is no longer a stub (E8).
      */
     @Nested
     @DisplayName("requireCoordinatorOf (implemented in E8)")

@@ -88,8 +88,10 @@ retirement PR lands the allow-list shrinks by two, and that diff is the proof.
   approves exams built from a bank she must therefore be able to see, which is F4.1 and F4.2's
   need, not an authoring licence.
 
-  So a coordinator who does not teach a course **may read its bank and may not add to it.** The two
-  guards are `requireBankRead` and `requireTeachesCourse`, and §3 names which one each verb uses.
+  So a coordinator who does not teach a course **may read its bank and may not add to it.** The
+  read scope is `requireBankRead` and its boolean sibling `reachesCourse`; the write scope is
+  `requireTeachesCourse` and its sibling `teachesCourse`. §3 names which applies to each verb and
+  whether it throws or answers.
 
   **Why the read half cannot be narrowed.** `rina.barak` holds a `coordinators` row for subject 10
   and **zero `course_teachers` rows**, deliberately, so that an implementation deriving
@@ -123,32 +125,44 @@ retirement PR lands the allow-list shrinks by two, and that diff is the proof.
 
 ## 3. Verbs
 
-| Verb | Caller | **Scope guard** | Request payload | OK payload |
+| Verb | Caller | **How scope applies** | Request payload | OK payload |
 |---|---|---|---|---|
-| `BANK_LIST` | teacher, coordinator, principal | `requireBankRead` | `BankListRequest` | `BankPage` |
-| `QUESTION_GET` | teacher, coordinator, principal | `requireBankRead` | `QuestionRequest` | `QuestionDetail` |
-| `QUESTION_VERSIONS` | teacher, coordinator, principal | `requireBankRead` | `QuestionRequest` | `VersionHistory` |
-| `QUESTION_IMAGE_GET` | teacher, coordinator, principal | `requireBankRead` | `QuestionImageRequest` | `QuestionImage` |
-| `QUESTION_CREATE` | teacher, coordinator | `requireTeachesCourse` | `QuestionDraft` | `QuestionDetail` |
-| `QUESTION_UPDATE` | teacher, coordinator | `requireTeachesCourse` | `QuestionEdit` | `QuestionDetail` (the new version) |
-| `QUESTION_DELETE` | teacher, coordinator | `requireTeachesCourse` | `QuestionDeleteRequest` | `DeleteOutcome` |
+| `BANK_LIST` | teacher, coordinator, principal | **filter**: the reachable set | `BankListRequest` | `BankPage` |
+| `QUESTION_GET` | teacher, coordinator, principal | `reachesCourse` → `NOT_FOUND` | `QuestionRequest` | `QuestionDetail` |
+| `QUESTION_VERSIONS` | teacher, coordinator, principal | `reachesCourse` → `NOT_FOUND` | `QuestionRequest` | `VersionHistory` |
+| `QUESTION_IMAGE_GET` | teacher, coordinator, principal | `reachesCourse` → `NOT_FOUND` | `QuestionImageRequest` | `QuestionImage` |
+| `QUESTION_CREATE` | teacher, coordinator | `requireTeachesCourse` (throws) | `QuestionDraft` | `QuestionDetail` |
+| `QUESTION_UPDATE` | teacher, coordinator | `teachesCourse` → `NOT_FOUND` | `QuestionEdit` | `QuestionDetail` (the new version) |
+| `QUESTION_DELETE` | teacher, coordinator | `teachesCourse` → `NOT_FOUND` | `QuestionDeleteRequest` | `DeleteOutcome` |
 
-**The guard column is the point of the split.** Handlers compose nothing: a read calls the read
-guard, a write calls the write guard, and **a handler calling the wrong one is visibly wrong in
-review** against this table. That property is what the two-guard shape buys over one composed
-guard that decides internally, where the same mistake is invisible.
+**The column is the point of the split.** Handlers compose nothing: the verb determines which
+scope applies and how, and **a handler using the wrong one is visibly wrong in review** against
+this table. That is what the two-guard shape buys over one composed guard deciding internally,
+where the same mistake is invisible.
 
-**`requireBankRead` and the `BANK_LIST` filter are the same query.** The union
-(`findTaughtCourseCodes` ∪ `findCoordinatedCourseCodes`) is computed once as the caller's reachable
-set; the guard checks membership in it and the browse filters by it. Two expressions of one rule
-that must agree and are checked against each other nowhere is the hazard §2 names, and this is how
-it is avoided rather than restated.
+**Only `QUESTION_CREATE` throws, and the reason is the existence oracle again.** It is the one verb
+where the caller *supplies* the course, so a `FORBIDDEN` naming it tells her nothing she did not
+already know. Every other scoped verb resolves the course from a **stored** question, where naming
+it would tell a caller probing ids both that the question exists and which course it belongs to.
+Those use the boolean forms and answer `NOT_FOUND` themselves, per §2. This contract has already
+been wrong about that once (§9), and the correction is why the boolean siblings exist at all.
 
-**On update and delete the write guard's refusal must not reach the client as `FORBIDDEN`.** Those
-two resolve the course from the stored question, so a refusal naming the course tells a caller
-probing ids both that a question exists and which course it is in. The service uses
-`Authorization.teachesCourse`, the boolean sibling, and answers `NOT_FOUND` itself. See §2's
-existence-oracle rule, which this contract has already been wrong about once.
+**`BANK_LIST` is a filter, not a guard, and this table said otherwise until it was corrected.**
+There is no single course for a guard to check: the browse intersects the caller's reachable set
+with whatever she filtered by. An earlier version of this column named `requireBankRead` on that
+row, which is a rule no handler could implement.
+
+**One reachable set, computed once per request.** The union
+(`findTaughtCourseCodes` ∪ `findCoordinatedCourseCodes`) serves both the `BANK_LIST` filter and the
+three single-question reads, so the guard and the list can never disagree about what a caller
+reaches. Two expressions of one rule checked against each other nowhere is §2's hazard; sharing the
+query is how it is avoided rather than restated.
+
+**The guard takes a lookup, never an answer.** `requireBankRead` and `reachesCourse` receive a
+`ReachableCourses` directory (`userId → Set<String>`), not a pre-computed set, for the reason
+`CourseTeachers` does: a guard handed the answer cannot tell whether the caller computed it
+correctly, and a handler passing the wrong set would pass the guard. The service memoizes per
+request, so "one query" holds without the guard giving up its integrity.
 
 No pushes. The bank list's live "being edited by" badges are **not** a bank concern: they ride
 E18.8's existing `LOCK_WATCH` / `LOCKS_SNAPSHOT` / `PUSH_LOCK_CHANGED`, and the client merges lock
@@ -236,9 +250,18 @@ Difficulty = EASY | MEDIUM | HARD
 
 ## 5. Rules the handlers enforce
 
-**Scope, before anything else.** Reads call `requireBankRead`, writes call `requireTeachesCourse`,
-per §3's guard column. Neither guard is composed inside the other and no handler decides between
-them: the verb determines which one, and the table is the record.
+**Scope, before anything else**, per §3's column: the reachable set filters `BANK_LIST`, the
+boolean forms answer `NOT_FOUND` on the four verbs that resolve a course from a stored question,
+and `requireTeachesCourse` throws on `QUESTION_CREATE` alone. Neither guard is composed inside the
+other and no handler decides between them: the verb determines which applies, and the table is the
+record.
+
+**One normalisation, applied at the boundary.** Course codes are `strip()`ped before any scope
+comparison, never `trim()`ped. The two are different functions — `trim()` cuts only characters at
+or below U+0020 — and `courses.code2` is `CHAR(2)` under a PAD SPACE collation, so a code carrying
+a Unicode space matches the row in SQL while failing Java equality against the reachable set. The
+handlers strip regardless of what any DTO does, because two normalisations of one value is the same
+"two answers to one question" this contract keeps having to close.
 
 **Each guard's javadoc names the other and states the split's source**, so they read as two answers
 to two questions rather than two answers to one. `requireTeachesCourse` cites spec §3 and F2.1,
