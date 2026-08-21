@@ -160,6 +160,64 @@ public final class CourseRepository {
                 .uniqueResultOptional();
     }
 
+    // ===================== E6 bank scope ==================================
+
+    /**
+     * The course codes a teacher may author in (E6 - S-5).
+     *
+     * <p>{@link #findForUser} cannot serve this: it merges taught courses with <em>enrolled</em>
+     * ones, because a home screen shows both. Authoring scope must not, or a teacher who is also
+     * enrolled somewhere could write questions into that course's bank.
+     *
+     * <p>Consumer: E6.5's {@code BANK_LIST} and E6.1's create.
+     *
+     * @param session   the current session
+     * @param teacherId the caller
+     * @return her course codes, sorted, possibly empty
+     */
+    public List<String> findTaughtCourseCodes(Session session, long teacherId) {
+        return session.createQuery("""
+                        select ct.id.courseCode from CourseTeacher ct
+                        where ct.id.teacherId = :userId
+                        order by ct.id.courseCode
+                        """, String.class)
+                .setParameter("userId", teacherId)
+                .getResultList();
+    }
+
+    /**
+     * The course codes a coordinator reaches: every course of every subject she coordinates.
+     *
+     * <h2>Why this is not "the courses she teaches"</h2>
+     *
+     * <p>Because a coordinator need not teach anything. {@code rina.barak} holds a
+     * {@code coordinators} row for subject 10 and <b>zero {@code course_teachers} rows</b>,
+     * deliberately, so that an implementation deriving coordinator-ness from the wrong table
+     * fails (see {@code FacultySection}, roster decision 2026-08-20). Scoping her bank by
+     * teaching would show one of the five starred demo accounts an empty question bank, while
+     * F4.1 requires her to preview exams built from those very questions.
+     *
+     * <p>A dual-hat coordinator who also teaches, like {@code michal.sharon}, reaches her
+     * subject's courses through this method and her taught ones through
+     * {@link #findTaughtCourseCodes}; for her the two sets coincide. The service unions them
+     * rather than choosing, so neither hat can take something away.
+     *
+     * <p>Consumer: E6.5's {@code BANK_LIST}. Ruling requested in BANK_WIRE_CONTRACT §7.3.
+     *
+     * @param session       the current session
+     * @param coordinatorId the caller
+     * @return the course codes, sorted, possibly empty
+     */
+    public List<String> findCoordinatedCourseCodes(Session session, long coordinatorId) {
+        return session.createQuery("""
+                        select c.code from Course c, Coordinator co
+                        where co.subjectCode = c.subjectCode and co.teacherId = :userId
+                        order by c.code
+                        """, String.class)
+                .setParameter("userId", coordinatorId)
+                .getResultList();
+    }
+
     private static List<CourseSummary> query(Session session, String hql, long userId) {
         return session.createQuery(hql, CourseSummary.class)
                 .setParameter("userId", userId)

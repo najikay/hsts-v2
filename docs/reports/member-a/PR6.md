@@ -160,3 +160,85 @@ question with everything wrong reports the missing text rather than a consequenc
       tested, but "server-side validation with precise error messages" means reachable by a
       caller, and the handler waits on §7's rulings
 - [x] CI green — run 32484647276, conclusion success
+
+---
+
+# E6 PR 2 — the bank's two missing queries (E6.4, E6.5)
+
+**Appended to this report rather than filed separately**, because it is the same epic and the
+same reviewer pass. The PR is separate; this section is what changed after PR 1's commit.
+
+## 8. What is in it
+
+Nothing in the codebase could answer either question the bank screen has to ask.
+
+**E6.5, the browse.** `QuestionRepository.findBankPage` plus `countBank`, returning a new
+`BankQuestionSummary` projection: latest version per question, soft-deleted excluded, scoped
+server-side, filterable by course, topic, difficulty and free text, paged and deterministically
+ordered.
+
+**E6.4, the blocked delete.** `findReferencingExams`, returning `ReferencingExam` (exam display
+id and name), which is what T-2.7's dialog must list or the teacher has no next move.
+
+**Scope resolution.** `CourseRepository.findTaughtCourseCodes` and `findCoordinatedCourseCodes`,
+which is where §7.3's ruling actually lands in code.
+
+**`findActiveByDisplayId`**, the `deleted_at`-filtered lookup E6 needs and the seed loader must
+not have.
+
+## 9. Decisions taken
+
+| # | Decision | Why | Reversal |
+|---|---|---|---|
+| D17 | **`hasImage` is computed with `case when image is null`, never by selecting the blob** | `question_versions.image` is a `MEDIUMBLOB` holding up to 2MB. A projection that selected it would move up to 80MB to render forty rows of text. This is the difference between a list and an outage | none |
+| D18 | **The browse returns the full stem; truncation is a service concern** | §7.5 is still an open ruling. Truncating in SQL means a query change if you prefer the wire to carry everything; truncating above means a constant | none |
+| D19 | **`BankQuery` is a record with `allCourses` and `reachableCourses` as separate fields** | six parameters of which four are adjacent nullable strings is the shape METHOD flagged in PR 2b. More importantly, **empty scope and unrestricted scope must never be one state**, and a nullable list would make them one | one record |
+| D20 | **Scope and filter are separate concepts in that record** | scope is authorization and comes from the role; `courseCode` is a filter and comes from the client. A filter naming an unreachable course is not a refusal, it simply intersects to nothing, which keeps the client's filter list a convenience rather than a boundary | none |
+| D21 | **The WHERE is assembled, not written as one block of `:topic is null or ...`** | an unfiltered browse is the common case, and those disjunctions defeat the index on every filter at once | one method |
+| D22 | **Search lowercases both sides in the query rather than leaning on the collation** | H2 does not reproduce `utf8mb4_unicode_ci`, so a collation-dependent search would behave differently on the two engines and the H2 leaf would certify something untrue. The MySQL leaf asserts the result on the engine that ships | none |
+| D23 | **A new contract pair (`BankBrowseContract`) rather than more tests on `BankRepositoryContract`** | that class holds E2.11's authoring reads; this needs a different fixture entirely. Mixing them makes both harder to read | file move |
+| D24 | **The blocking query collapses to the exam and takes its name from the latest version** | `exam_version_questions` is keyed on the version, and seed exam `101101` pins `11005` in both of its versions | none |
+
+## 10. Three guards, planted and watched failing
+
+Per the rule that a test not seen to fail is decoration.
+
+**The de-duplication.** Replaced the collapse with the obvious join. Two tests fired:
+`oneRowPerExamNotPerVersion` with **"Expected size: 1 but was: 2"**, which is literally T-2.7's
+"Algebra Midterm, Algebra Midterm", and `nameComesFromTheLatestVersion` with "expected Current
+Name but was Old Name".
+
+**The scope predicate.** Made the WHERE skip the course clause when the reachable list is empty,
+which is the natural-looking way to "handle" that case. `emptyScopeMatchesNothing` caught it:
+**"Expecting empty but was: [BankQuestionSummary[displayId=11001, ...]]"** — every question in
+the school handed to a caller entitled to none.
+
+**And one claim of mine that the planting proved wrong.** I had written, in a javadoc and a test
+comment, that the empty-scope short-circuit prevented a crash because `in ()` is invalid HQL.
+It does not: Hibernate 6 expands an empty list into a false predicate on **both** engines, and
+removing the short-circuit leaves every test green. The guard is an optimisation and is now
+documented as one. The load-bearing property was somewhere else entirely, in the WHERE clause,
+which is where the real attack landed. Recorded because a comment asserting a safety property
+that is not there is worse than no comment: the next person trusts it.
+
+## 11. One divergence worth your ruling, not mine to fix
+
+**`RepositoryTestBase`'s roster predates the pure-coordinator decision.** The shared fixture has
+`rina` teaching Calculus and coordinating Maths; the seed made her a coordinator who teaches
+**nothing** on 2026-08-20, which is exactly the shape that caused PR 1's empty-bank finding.
+
+So the fixture every repository contract inherits cannot express the case that just bit us. I did
+**not** change it: it is shared by nine contracts and a roster change there ripples into other
+people's tests. `pureCoordinatorReachesHerSubject` builds its own coordinator instead, and says
+why in a comment.
+
+Worth deciding whether the shared fixture should track the seed's roster. If yes it is a small
+change and a wide blast radius, so it wants to be its own PR and probably not this week.
+
+## 12. Verification
+
+| | |
+|---|---|
+| New tests | **50** — 21 H2, 24 MySQL (21 shared + 3 collation-only), 5 pure unit |
+| Both leaves | ran with real timings, neither skipped |
+| `BankQuery`, `BankQuestionSummary`, `ReferencingExam` | **100%** instructions |

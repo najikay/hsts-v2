@@ -3,8 +3,10 @@ package server.db.repos;
 import org.hibernate.Session;
 import server.db.entities.Question;
 import server.db.entities.QuestionVersion;
+import server.db.projections.BankQuestionSummary;
 import server.db.projections.BotBankQuestion;
 import server.db.projections.QuestionOutline;
+import server.db.projections.ReferencingExam;
 import server.db.projections.TakeExamQuestion;
 
 import java.util.Collection;
@@ -276,5 +278,194 @@ public final class QuestionRepository {
                 .setParameter("questionId", questionId)
                 .setMaxResults(1)
                 .uniqueResultOptional();
+    }
+
+    // ===================== E6 bank browse and delete ======================
+
+    /**
+     * One page of the question bank browse (E6.5 - F2.4, T-2.6).
+     *
+     * <p>Returns the <b>latest</b> version of each question, which is what the bank always
+     * lists (F2.3) while exams stay pinned to whatever they were built from (C-2).
+     *
+     * <p>A constructor expression, and the reason is size rather than secrecy this time:
+     * {@code hasImage} is computed with a {@code case} so the {@code MEDIUMBLOB} is never in
+     * the SELECT list. Selecting the entity instead would move up to 2MB per row to render a
+     * list of stems. It also happens to carry no correct answer, which is why the name does not
+     * end {@code ForAuthoring}.
+     *
+     * <p>Consumer: E6.5's {@code BANK_LIST}.
+     *
+     * @param session the current session
+     * @param query   scope and filters; see {@link BankQuery}
+     * @param offset  rows to skip, {@code page * size}
+     * @param limit   page size, already clamped by the caller
+     * @return the page, ordered by display id so paging is stable
+     */
+    public List<BankQuestionSummary> findBankPage(Session session, BankQuery query,
+                                                  int offset, int limit) {
+        if (query.matchesNothing()) {
+            return List.of();
+        }
+        var select = session.createQuery("""
+                select new server.db.projections.BankQuestionSummary(
+                    q.displayId, q.courseCode, c.name, qv.text, qv.topic, qv.difficulty,
+                    qv.versionNo,
+                    case when qv.image is null then false else true end,
+                    qv.createdAt)
+                """ + bankFrom() + bankWhere(query) + """
+                order by q.displayId
+                """, BankQuestionSummary.class);
+        bindBank(select, query);
+        return select.setFirstResult(offset).setMaxResults(limit).getResultList();
+    }
+
+    /**
+     * How many questions the same browse matches, for the pager (E6.5).
+     *
+     * <p>Separate from {@link #findBankPage} rather than derived from it, because "how many
+     * pages are there" cannot be answered from one page of rows. The two share their FROM and
+     * WHERE through {@link #bankFrom} and {@link #bankWhere} so a filter can never apply to one
+     * and not the other, which would show a pager that scrolls to empty pages.
+     *
+     * @param session the current session
+     * @param query   the same query passed to {@link #findBankPage}
+     * @return the total matching questions
+     */
+    public long countBank(Session session, BankQuery query) {
+        if (query.matchesNothing()) {
+            return 0L;
+        }
+        var count = session.createQuery(
+                "select count(q) " + bankFrom() + bankWhere(query), Long.class);
+        bindBank(count, query);
+        return count.getSingleResult();
+    }
+
+    /**
+     * The exams that block deleting a question (E6.4 - F2.5, T-2.7).
+     *
+     * <p><b>One row per exam, not per exam version.</b> References live in
+     * {@code exam_version_questions}, which is keyed on the version, and seed exam
+     * {@code 101101} pins question {@code 11005} in both of its versions. A query without the
+     * collapse tells the teacher "2 exams use it: Algebra Midterm, Algebra Midterm".
+     *
+     * <p>The name comes from the exam's latest version, because that is the name on her own
+     * exam list. Matching is on any version: an old version still referencing the question is
+     * still a reason the history would break.
+     *
+     * <p>Consumer: E6.4's {@code QUESTION_DELETE}.
+     *
+     * @param session    the current session
+     * @param questionId the question's internal id, all versions
+     * @return blocking exams by display id, empty when the question is free to delete
+     */
+    public List<ReferencingExam> findReferencingExams(Session session, long questionId) {
+        return session.createQuery("""
+                        select new server.db.projections.ReferencingExam(e.displayId, ev.name)
+                        from Exam e, ExamVersion ev
+                        where ev.examId = e.id
+                          and ev.versionNo = (
+                              select max(latest.versionNo) from ExamVersion latest
+                              where latest.examId = e.id)
+                          and exists (
+                              select 1 from ExamVersionQuestion evq, ExamVersion referencing
+                              where evq.id.examVersionId = referencing.id
+                                and referencing.examId = e.id
+                                and evq.questionId = :questionId)
+                        order by e.displayId
+                        """, ReferencingExam.class)
+                .setParameter("questionId", questionId)
+                .getResultList();
+    }
+
+    /**
+     * A question by display id, <b>excluding soft-deleted ones</b> (E6.3, E6.4).
+     *
+     * <p>Deliberately not {@link #findByDisplayId}, which does not filter {@code deleted_at}
+     * and must not start: the seed loader's idempotency check needs a soft-deleted question to
+     * still count as existing, or a reseed would allocate its display id to a different
+     * question. E6 needs the opposite answer to the same question, so it gets its own method
+     * rather than a flag. T-2.8 is the case that separates them.
+     *
+     * @param session   the current session
+     * @param displayId the 5-digit id
+     * @return the question, or empty when unknown or soft-deleted
+     */
+    public Optional<Question> findActiveByDisplayId(Session session, String displayId) {
+        return session.createQuery("""
+                        from Question
+                        where displayId = :displayId and deletedAt is null
+                        """, Question.class)
+                .setParameter("displayId", displayId)
+                .uniqueResultOptional();
+    }
+
+    // ---------- the browse query, assembled once and shared by page and count ----------
+
+    private static String bankFrom() {
+        return """
+                from Question q, QuestionVersion qv, Course c
+                """;
+    }
+
+    /**
+     * The WHERE shared by the page and the count.
+     *
+     * <p>Assembled rather than written as one block with {@code :topic is null or ...} clauses,
+     * because an unfiltered browse is the common case and those disjunctions defeat the index
+     * on every one of them. Each filter contributes a clause only when it is actually set.
+     */
+    private static String bankWhere(BankQuery query) {
+        StringBuilder where = new StringBuilder("""
+                where qv.questionId = q.id
+                  and c.code = q.courseCode
+                  and q.deletedAt is null
+                  and qv.versionNo = (
+                      select max(latest.versionNo) from QuestionVersion latest
+                      where latest.questionId = q.id)
+                """);
+        if (!query.allCourses()) {
+            where.append("  and q.courseCode in (:reachable)\n");
+        }
+        if (isSet(query.courseCode())) {
+            where.append("  and q.courseCode = :courseCode\n");
+        }
+        if (isSet(query.topic())) {
+            where.append("  and qv.topic = :topic\n");
+        }
+        if (query.difficulty() != null) {
+            where.append("  and qv.difficulty = :difficulty\n");
+        }
+        if (isSet(query.search())) {
+            where.append("  and lower(qv.text) like :search\n");
+        }
+        return where.toString();
+    }
+
+    private static void bindBank(org.hibernate.query.Query<?> query, BankQuery bank) {
+        if (!bank.allCourses()) {
+            query.setParameterList("reachable", bank.reachableCourses());
+        }
+        if (isSet(bank.courseCode())) {
+            query.setParameter("courseCode", bank.courseCode());
+        }
+        if (isSet(bank.topic())) {
+            query.setParameter("topic", bank.topic());
+        }
+        if (bank.difficulty() != null) {
+            query.setParameter("difficulty", bank.difficulty());
+        }
+        if (isSet(bank.search())) {
+            // Lowercased both sides rather than relying on the collation: H2 in MySQL mode does
+            // not reproduce utf8mb4_unicode_ci, so a case test that passed here and failed on
+            // MySQL would be exactly the drift the two-engine pair exists to catch.
+            query.setParameter("search",
+                    "%" + bank.search().trim().toLowerCase(java.util.Locale.ROOT) + "%");
+        }
+    }
+
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank();
     }
 }
