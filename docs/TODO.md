@@ -208,12 +208,12 @@ Client:
 ## E12 — Grading [B]
 
 - [ ] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade — *complete: AutoGrader (scoring rules) + GradingService (gradeability, idempotence) + RepositoryGradingReads (the reads, ForGrading sanctioned). 9 contract cases per engine. Not ticked only until it registers on AttemptFinalizedListener (E10/E11)*
-- [ ] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3)
+- [ ] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3) — *ApprovalService done: idempotent (counts, never re-stamps), per-grade ownership, refused list, and freezing ScoreStatistics into xam_executions.stats on completion — E12.4 → stored. 18 service tests + 4 repository contract cases per engine. Not ticked: the router handler*
 - [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22)
 - [ ] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` complete and tested against the seeded execution 4821 fixture: population σ, deciles, and pass rate (mark 55, all scored attempts in the denominator). Not ticked: **→ stored** still needs the frozen E12 contract and the service that writes `exam_executions.stats`*
 - [ ] E12.5 Grading queue screen: executions awaiting grading, per-execution student table (auto scores, status)
 - [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve
-- [ ] E12.7 Bulk approve with summary confirm
+- [ ] E12.7 Bulk approve with summary confirm — *covered by the same verb and service: ApproveRequest takes a list, so bulk is the same code path as single (E12.2). Not ticked: the confirm UI*
 - [ ] E12.8 Session + integration tests (auto-grade correctness, override w/o reason blocked, idempotent approve, stats values verified against hand-computed fixture)
 - [ ] E12.9 Acceptance pass vs T-8 ⚑
 

@@ -240,6 +240,69 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
     }
 
     @Test
+    @DisplayName("grades are fetched by id, and ids that do not exist simply do not appear")
+    void findsGradesByIds() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long mayasAttempt = persistAttempt(executionId, mayaId);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        List<Long> ids = inTx(session -> {
+            Grade a = new Grade(mayasAttempt, 88);
+            Grade b = new Grade(danasAttempt, 71);
+            session.persist(a);
+            session.persist(b);
+            session.flush();
+            return List.of(a.getId(), b.getId());
+        });
+
+        List<Grade> found = inTx(session ->
+                grades.findByIds(session, List.of(ids.get(0), ids.get(1), 999_999L)));
+
+        // The missing id is absent rather than an error — the caller reports it as refused.
+        assertThat(found).extracting(Grade::getId).containsExactly(ids.get(0), ids.get(1));
+    }
+
+    @Test
+    @DisplayName("asking for no ids returns nothing, not every grade")
+    void findsNoGradesForAnEmptyIdList() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long attemptId = persistAttempt(executionId, mayaId);
+        runInTx(session -> session.persist(new Grade(attemptId, 88)));
+
+        List<Grade> none = inTx(session -> grades.findByIds(session, List.of()));
+
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("every grade of an execution comes back, whatever its status")
+    void findsAllGradesForExecution() {
+        long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
+        long mayasAttempt = persistAttempt(executionId, mayaId);
+        long danasAttempt = persistAttempt(executionId, danaId);
+        runInTx(session -> {
+            session.persist(new Grade(mayasAttempt, 88));          // AUTO
+            session.persist(approvedGrade(danasAttempt));           // APPROVED
+        });
+
+        List<Grade> all = inTx(session -> grades.findAllForExecution(session, executionId));
+
+        // findAwaitingApproval would return one; completion detection needs both.
+        assertThat(all).hasSize(2);
+        assertThat(all).extracting(Grade::getAttemptId)
+                .containsExactly(mayasAttempt, danasAttempt);
+    }
+
+    @Test
+    @DisplayName("an execution nobody sat has no grades rather than failing")
+    void findsNoGradesForAnUngradedExecution() {
+        long executionId = persistExecution("AB12", ExecutionStatus.SCHEDULED);
+
+        List<Grade> none = inTx(session -> grades.findAllForExecution(session, executionId));
+
+        assertThat(none).isEmpty();
+    }
+
+    @Test
     @DisplayName("a student's grades are approved ones only — marking in progress publishes nothing")
     void approvedForStudentExcludesUnapproved() {
         long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
