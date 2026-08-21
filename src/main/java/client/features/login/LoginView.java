@@ -1,6 +1,11 @@
 package client.features.login;
 
+import client.core.ConnectPrefs;
 import client.core.NavParams;
+import client.core.Routes;
+import client.core.ServerEndpoint;
+import client.features.connect.ConnectFlow;
+import client.features.connect.ConnectView;
 import client.core.ScreenManager;
 import client.net.IClientConnection;
 import client.ui.anim.Animations;
@@ -18,6 +23,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressIndicator;
@@ -275,17 +281,40 @@ public final class LoginView extends AbstractScreen {
     }
 
     /** Chip + endpoint, so "wrong password" is never confused with "no server". */
+    /**
+     * The one line of connection user interface a signed-out user sees (E19.11).
+     *
+     * <p>The lead's ruling: with a pinned reachable server the first screen is
+     * Login, "carrying only a subtle status line". So this is a status line and a
+     * link, not a panel: which server, and a way to change it. Host and port live
+     * on the server console, not in a student's face.
+     *
+     * <p>The sentence is {@link ConnectFlow#statusLine}, so the name preferred
+     * over the address, and the fallback when neither is known, are decided in a
+     * tested class rather than here.
+     */
     private void renderConnection() {
         IClientConnection client = client();
         boolean connected = client != null && client.isConnectionOpen();
-        String endpoint = client == null ? "" : client.getHost() + ":" + client.getPort();
+        ServerEndpoint endpoint = connected
+                ? new ServerEndpoint(client.getHost(), client.getPort()) : null;
 
-        Label label = new Label(connected ? endpoint : "Not connected");
+        Label label = new Label(connected
+                ? ConnectFlow.statusLine(ConnectPrefs.userHome().pinnedName().orElse(null), endpoint)
+                : "Not connected");
         label.getStyleClass().addAll("small", "muted");
+
+        Hyperlink change = new Hyperlink(ConnectFlow.changeServerLabel());
+        change.getStyleClass().add("small");
+        change.setOnAction(e -> navigator().navigate(Routes.CONNECT.id(),
+                NavParams.of(ConnectView.PARAM_MANUAL, true)));
+
+        Label separator = new Label("·");
+        separator.getStyleClass().addAll("small", "faint");
 
         connectionRow.getChildren().setAll(
                 new StatusChip(ChipCatalog.forConnection(connected ? "CONNECTED" : "DISCONNECTED")),
-                label);
+                label, separator, change);
     }
 
     /**

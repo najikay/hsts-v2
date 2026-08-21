@@ -63,7 +63,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [ ] E3.3 SessionManager: login/logout/disconnect, user↔connection map, single-session enforcement (T-16) with tests
 - [ ] E3.4 Disconnect cleanup hooks (locks released, attempt marked connection-lost, session freed) with tests
 - [ ] E3.5 `Authorization` guards: requireRole, requireTeachesCourse, requireEnrolled, requireCoordinatorOf, requireSelf; `AuthorizationException` → central ERROR mapping; tests per guard
-- [ ] E3.6 Logback setup: colorized console (defense view) + rolling file + in-memory ring appender for console UI
+- [ ] E3.6 Logback setup: colorized console (defense view) + rolling file + in-memory ring appender for console UI — *ring appender done in E19.4 and wired in `logback.xml`; the colorized pattern and the rolling file are still outstanding*
 - [ ] E3.7 Structured log conventions: every request logged (user, verb, ms), every push, every rejection ⚑
 - [ ] E3.8 Graceful shutdown (close executions? no — persist state; notify clients; stop timers cleanly)
 - [ ] E3.9 Boot re-arm: on start, reschedule timers for live executions/attempts from DB (crash recovery) with test
@@ -286,22 +286,22 @@ Client:
 - [ ] E18.5 (done for the question editor; the other four compose LockAwareEditor when their screens land) Wire into: question editor, exam builder, bot sources, release schedule editor, grading review
 - [x] E18.6 Concurrency integration tests: two clients editing same entity (lock visible live), lock-expiry takeover, stale-write rejected ⚑
 - [x] E18.7 Disconnect releases locks (ties to E3.4) — test
-- [ ] E18.8 List-level lock visibility (Naji, 2026-08-20): LOCK_WATCH verb (watch without contending; EditLockService.watch already separable) + LOCKS_SNAPSHOT bulk query (entity type + ids → holders) so list screens can badge rows "Editing · <name>" live. Server half lands right after E10/E11; the UI chip ships with E6's rebuilt bank list (see E6 note)
+- [x] E18.8 List-level lock visibility (Naji, 2026-08-20): LOCK_WATCH verb (watch without contending; EditLockService.watch already separable) + LOCKS_SNAPSHOT bulk query (entity type + ids → holders) so list screens can badge rows "Editing · <name>" live. **Server half done** (both verbs, TEACHER/COORDINATOR gated, contract in Verb.java's lock section); the UI chip ships with E6's rebuilt bank list (see E6 note). `LOCKS_SNAPSHOT` answers `id → LockHolder` rather than a bare name, so a row can tell the holder's own lock from a colleague's by id
 
 ## E19 — Server console & network [L]
 
-- [ ] E19.1 NetworkDetector: enumerate candidate IPv4s, pick best (site-local, default-route heuristic), expose all
-- [ ] E19.2 Console UI: header with big `<ip>:<port>`, start/stop listener, port editor, status cards (DB pool, clients, memory, bot providers)
-- [ ] E19.3 Connected clients table (user, role, IP, connected-since) — live
-- [ ] E19.4 Log tail pane (ring buffer appender), level filter, pause/scroll
-- [ ] E19.5 Manual IP override + copy-to-clipboard; `--headless` mode verified
-- [ ] E19.6 Seed-data button (loads/reloads demo dataset with confirm)
-- [ ] E19.7 Console styled with the same design system (dark by default) ⚑
-- [ ] E19.8 Discovery responder (F13.3): UDP listener on its own port, reply {ip, port, name, fingerprint}; fingerprint generated on first boot + persisted; console shows it next to the address; console toggle on/off; malformed/flood packets ignored + logged (fuzz test) ⚑
-- [ ] E19.9 Fingerprint persistence + regeneration path (server reinstall) — documented behavior, test
-- [ ] E19.11 Connect screen demoted to fallback (Naji, 2026-08-20): with a pinned server the client auto-connects and the FIRST screen is Login, carrying only a subtle status line "Connected to <server name> · change server". The host/port editor appears only when discovery finds nothing, the pinned server is unreachable, or the user clicks "change server". Host and port belong on the server console, not in the user's face
-- [ ] E19.10 Client discovery (F13.4): broadcast + ~2s collect, picker UI (name · address · fingerprint), TOFU pinning of {address, fingerprint}, auto-connect to pinned server, mismatch → prominent warning dialog requiring explicit confirm; "nothing found" → manual entry with defaults ⚑
-- [ ] E19.11 Discovery tests: responder round-trip, timeout path, pin/mismatch state machine, isolation-network fallback (responder off) — all without real multicast in CI (loopback/injected transport seam)
+- [x] E19.1 NetworkDetector: enumerate candidate IPv4s, pick best (site-local, default-route heuristic), expose all — five ranked tiers incl. a virtual-adapter demotion (Hyper-V/VirtualBox/Docker/VPN), ranking is a pure function over injected interface data and fully unit-tested
+- [x] E19.2 Console UI: header with big `<ip>:<port>`, start/stop listener, port editor, status cards (DB pool, clients, memory, bot providers) — *port is set by `--port` on the command line and shown in the header, not editable in the window; changing it means rebinding the listener mid-demo, which the lead can rule on later*
+- [x] E19.3 Connected clients table (user, role, IP, connected-since) — live, off a new read-only `SessionManager.connectedClients()` snapshot plus a `SessionListener` repaint hook
+- [x] E19.4 Log tail pane (ring buffer appender), level filter, pause/scroll — 2000-line `RingBufferAppender` declared in `logback.xml` (capturing before ServerMain runs); pause freezes the view, never the capture
+- [x] E19.5 Manual IP override + copy-to-clipboard; `--headless` mode verified — override takes detected addresses or free text; `--headless` parsing is `ServerArgs`, tested, and the flag path reaches no JavaFX
+- [x] E19.6 Seed-data button (loads/reloads demo dataset with confirm) — two buttons; RESEED goes through a WarnConfirm showing SeedLoader's *own* prompt, result rendered from `SeedSummary.toText()`; LOAD_IF_MISSING never prompts
+- [x] E19.7 Console styled with the same design system (dark by default) ⚑ — same `hsts.css` token layer + accent-indigo over PrimerDark; asserted in the TestFX interaction test
+- [x] E19.8 Discovery responder (F13.3): UDP listener on its own port, reply {ip, port, name, fingerprint}; fingerprint generated on first boot + persisted; console shows it next to the address; console toggle on/off; malformed/flood packets ignored + logged (fuzz test) ⚑ — compact JSON (never Java serialization: this is the one socket strangers can write to); per-source rate limit so it cannot be used as an amplifier; 2000-case fuzz on the codec and 2000 more on the responder
+- [x] E19.9 Fingerprint persistence + regeneration path (server reinstall) — documented behavior, test — id lives in `server-id.properties` beside `server.properties`; an unwritable file degrades to a per-run id with one clear log line rather than refusing to boot
+- [x] E19.11 Connect screen demoted to fallback (Naji, 2026-08-20): with a pinned server the client auto-connects and the FIRST screen is Login, carrying only a subtle status line "Connected to <server name> · change server". The host/port editor appears only when discovery finds nothing, the pinned server is unreachable, or the user clicks "change server". Host and port belong on the server console, not in the user's face
+- [x] E19.10 Client discovery (F13.4): broadcast + ~2s collect, picker UI (name · address · fingerprint), TOFU pinning of {address, fingerprint}, auto-connect to pinned server, mismatch → prominent warning dialog requiring explicit confirm; "nothing found" → manual entry with defaults ⚑ — whole decision table is `ConnectFlow`, pure and exhaustively tested; pin keys are additive in `connect.properties`
+- [x] E19.11 Discovery tests: responder round-trip, timeout path, pin/mismatch state machine, isolation-network fallback (responder off) — all without real multicast in CI (loopback/injected transport seam) — *note: this is the second item numbered E19.11 in this list, the first being the UX ruling above; both are done.* Every rule runs on injected transports; one `DiscoveryLoopbackTest` uses real UDP on loopback and aborts cleanly where sockets are forbidden
 - [ ] E19.12 **[GATED — decide at M6, criteria in ADR-019]** TLS over OCSF: SSLServerSocket in vendored OCSF, self-signed cert generated on first boot, discovery ID becomes the cert's fingerprint (no UX change), client verifies pinned fingerprint against the presented cert; encrypts credentials in transit. ~2–3 days incl. keystore handling + demo-machine rehearsal. If not taken: phase-2 slide + cleartext-transit limitation stated in submission doc
 
 ## E20 — Packaging & deployment [L]

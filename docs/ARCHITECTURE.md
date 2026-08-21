@@ -50,7 +50,8 @@ src/main/java/
 │   │                        (E16 note: the bot landed in features/bot rather than a top-level
 │   │                        bot/ package — it is a feature like any other, and the layout rule
 │   │                        below is what keeps its isolation checkable)
-│   └── console/             server console UI + NetworkDetector
+│   ├── console/             server console UI + NetworkDetector (E19)
+│   └── discovery/           UDP discovery responder + ServerFingerprint (E19.8/E19.9)
 └── ocsf/                    vendored, untouched, excluded from coverage
 ```
 
@@ -183,7 +184,66 @@ Keys from env / `server.properties` (`bot.deepseek.key`, `bot.anthropic.key`); `
 
 ## 8. Server console & networking
 
-`ServerMain`: parse args (`--headless`, `--port`) → load config → Flyway migrate → detect LAN IPs (`NetworkInterface.getNetworkInterfaces()`, filter up/non-loopback/site-local IPv4; prefer the one with a default-route hint) → start OCSF listener → launch console UI unless headless. Console shows the big "connect clients to <ip>:<port>", live client table, log tail (in-memory ring buffer appender), start/stop, and health cards. Logging: SLF4J + Logback, console pattern colorized for the terminal demo, rolling file beside the JAR.
+`ServerMain`: parse args (`ServerArgs`: `--headless`, `--port`, `--discovery-port`, `--no-discovery`;
+a bare numeric argument is still the port, as the pre-E19 server accepted) → load config → Flyway
+migrate → construct `HSTSServer` (**that order is a rule**, see the class javadoc: the constructor
+opens the pool) → start the OCSF listener → load or generate this installation's discovery id →
+start the UDP responder → launch the console UI unless `--headless`. A migration failure is one
+sentence naming the next step (`StartupMessages`), then the trace.
+
+**Console (E19.1–E19.7, F13.1/F13.2).** A JavaFX window in the server JAR, dark by default and
+styled from the same `hsts.css` token layer as the client. It shows the big `<ip>:<port>` with
+copy-to-clipboard, the discovery id beside it, a manual address override (detected addresses plus
+free text), a start/stop listener button, four status cards (DB pool via a `SELECT 1` probe,
+connected clients, JVM heap, bot provider health read from `ProviderChain`'s bench memory), a live
+connected-clients table, a log tail over an in-memory ring buffer, and the seed buttons.
+
+The split is the point: **everything with a rule in it is FX-free and measured** — `NetworkDetector`
+(address ranking), `ConsoleModel` (header, override, button labels), `ConsoleSession` (what every
+button does and answers), `ConsoleHealth`/`HealthSnapshot` (cards), `ConsoleClients` (table rows),
+`LogTailModel`/`LogRingBuffer` (the pane). `ConsoleView`, `ConsoleTheme` and `ServerConsoleApp` are
+thin and excluded by name from the coverage gate, and are additionally driven by a real-input TestFX
+test.
+
+*Start/stop semantics:* stop closes the **listener**, not the process. Existing clients stay
+connected, timers keep running and exams in progress are unaffected; what stops is new connections
+being accepted. The console says so on screen.
+
+*Log tail:* a `RingBufferAppender` declared in `logback.xml` rather than attached from Java, so it
+is already capturing before the first line of `ServerMain` runs. Bounded at 2000 lines. Pause
+freezes the **view**, never the capture, so the evidence the operator paused to read is not the
+evidence pausing destroys.
+
+*Seed button (E19.6):* calls `SeedLoader.standard(factory).load(mode, confirmation)` and renders the
+returned `SeedSummary.toText()`. The prompt shown in the confirm dialog is the **loader's own**, so
+the console and the command line cannot describe the same destructive action differently.
+`LOAD_IF_MISSING` never prompts, because it destroys nothing.
+
+**Discovery (E19.8–E19.11, F13.3/F13.4).** A UDP responder on its own port (default 5556,
+configurable) answers a fixed magic request with a compact JSON `{name, ip, port, fingerprint}`.
+JSON rather than a serialized `Message` deliberately: this is the one socket unauthenticated
+strangers can write to, and Java deserialization of such a payload is not a risk worth taking.
+Everything that is not the magic string draws no reply at all, and replies are rate limited per
+source address, so the responder cannot be used as an amplifier. The fingerprint is a random UUID
+generated on first boot and persisted in `server-id.properties` beside `server.properties`.
+
+> **Honest security claim, and the defence wording:** the fingerprint provides **disambiguation and
+> change detection, not impersonation resistance.** It travels in cleartext to anyone who asks, so
+> anyone who has heard it can repeat it. What it genuinely buys is that two servers in one room are
+> told apart, and that a client which finds a *different* id at an address it used yesterday has
+> learned something real and stops to ask. Cryptographic binding means the id becoming a TLS
+> certificate fingerprint, which is E19.12's gated decision (ADR-019) and changes no UX.
+
+Client side: broadcast, collect for ~2s, then `ConnectFlow` decides. With a pinned server that
+answers with its own id, or with a pin and no answers at all (broadcast filtering is normal on
+school networks), the client connects silently and **the first screen is Login** carrying a subtle
+"Connected to &lt;server&gt; · change server" line (E19.11). The host/port editor appears only when
+nothing is pinned and nothing was found, when the pinned server could not be reached, or when the
+user clicks "change server". A pinned address answering with a different id raises a prominent
+confirm before any socket opens, and re-pins on accept. Pin keys in `connect.properties` are
+**additive**, so an older client file still loads.
+
+Logging: SLF4J + Logback, colorized console pattern for the terminal demo, plus the ring appender.
 
 ## 9. Build & packaging
 

@@ -25,3 +25,18 @@ bot.anthropic.key=
 #bot.anthropic.model=claude-opus-5
 #bot.timeout.seconds=20
 #bot.rate.per.minute=10
+
+# ---- Server console & discovery (E19, F13) ----
+# Neither is configured here. Both are command-line switches, because they are
+# decisions about how THIS run behaves rather than about this machine's setup:
+#
+#     --headless              run terminal-only, open no console window
+#     --port 5555             the OCSF port clients connect to
+#     --discovery-port 5556   the UDP port the discovery responder answers on
+#     --no-discovery          start with the discovery responder off
+#
+# This server's discovery id lives beside this file, in server-id.properties.
+# It is generated on first boot and kept, so clients recognise this installation
+# across restarts. Delete that file to make every pinned client ask for
+# confirmation once (see server.discovery.ServerFingerprint). The id provides
+# disambiguation and change detection, NOT impersonation resistance.

@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Baseline logging configuration (E0.4).
-  Console only for now; the rolling file appender and the in-memory ring
-  appender that feeds the server console UI arrive with E3.6.
+  Logging configuration (E0.4, completed in E3.6 / E19.4).
+
+  Two appenders, two audiences:
+
+    CONSOLE  the terminal stream the defence is run from (F13.1).
+    RING     the in-memory ring buffer the JavaFX server console tails (E19.4).
+
+  The rolling file appender E3.6 also asks for is deliberately still absent: it
+  would write a log directory on every test run of this single-module build, and
+  it belongs with the rest of E3.6 rather than smuggled in beside the ring buffer.
+
+  RING is declared HERE rather than attached from Java on purpose: an appender
+  added programmatically only starts collecting once that code runs, which would
+  be after config loading, after Flyway and after the pool comes up. Those are
+  exactly the lines an operator wants when a first boot goes wrong, so the
+  appender is configured with the framework and is already capturing before the
+  first line of ServerMain executes. The console finds it through
+  RingBufferAppender.buffer().
 -->
 <configuration>
 
@@ -11,6 +26,10 @@
             <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
+    </appender>
+
+    <appender name="RING" class="server.console.RingBufferAppender">
+        <capacity>2000</capacity>
     </appender>
 
     <!-- Our own code: debug-friendly during development -->
@@ -25,6 +44,7 @@
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="RING"/>
     </root>
 
 </configuration>

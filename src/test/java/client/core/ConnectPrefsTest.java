@@ -11,6 +11,7 @@ import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
  * {@link ConnectPrefs} — endpoint resolution, persistence and field validation
@@ -249,6 +250,126 @@ class ConnectPrefsTest {
             assertThatIllegalArgumentException().isThrownBy(() -> new ServerEndpoint("   ", 5555));
             assertThatIllegalArgumentException().isThrownBy(() -> new ServerEndpoint("h", 70000));
             assertThat(ServerEndpoint.LOCALHOST.display()).isEqualTo("localhost:5555");
+        }
+    }
+
+    @Nested
+    @DisplayName("trust-on-first-use pinning (E19.10, F13.4)")
+    class Pinning {
+
+        private static final String ID = "7f3a2b91-1111-2222-3333-444444444444";
+
+        @Test
+        @DisplayName("a fresh client trusts nobody")
+        void nothingPinnedAtFirst() {
+            assertThat(prefs.pinned()).isEmpty();
+            assertThat(prefs.pinnedName()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("pinning stores the address, the port, the id and the name")
+        void pinning() {
+            prefs.pin(new ServerEndpoint("192.168.1.42", 5555), ID, "Room 12 server");
+
+            assertThat(prefs.pinned()).hasValueSatisfying(pin -> {
+                assertThat(pin.endpoint().display()).isEqualTo("192.168.1.42:5555");
+                assertThat(pin.fingerprint())
+                        .as("the full id is stored; the short form is for eyes only")
+                        .isEqualTo(ID);
+            });
+            assertThat(prefs.pinnedName()).contains("Room 12 server");
+        }
+
+        @Test
+        @DisplayName("re-pinning replaces the previous trust, which is what confirming a change means")
+        void rePinning() {
+            prefs.pin(new ServerEndpoint("192.168.1.42", 5555), ID, "Old");
+            prefs.pin(new ServerEndpoint("192.168.1.42", 5555), "new-id", "New");
+
+            assertThat(prefs.pinned()).hasValueSatisfying(pin ->
+                    assertThat(pin.fingerprint()).isEqualTo("new-id"));
+            assertThat(prefs.pinnedName()).contains("New");
+        }
+
+        @Test
+        @DisplayName("a server with no name pins without one rather than storing a blank")
+        void pinningWithoutAName() {
+            prefs.pin(new ServerEndpoint("192.168.1.42", 5555), ID, "  ");
+
+            assertThat(prefs.pinnedName()).isEmpty();
+            assertThat(prefs.pinned()).isPresent();
+        }
+
+        @Test
+        @DisplayName("unpinning drops the trust and keeps the remembered address")
+        void unpinning() {
+            prefs.remember("192.168.1.42", 5555);
+            prefs.pin(new ServerEndpoint("192.168.1.42", 5555), ID, "Room 12 server");
+
+            prefs.unpin();
+
+            assertThat(prefs.pinned()).isEmpty();
+            assertThat(prefs.pinnedName()).isEmpty();
+            assertThat(prefs.lastUsed())
+                    .as("what to pre-fill and what to trust are two different facts")
+                    .isPresent();
+        }
+
+        @Test
+        @DisplayName("an unusable stored pin is forgotten rather than half-trusted")
+        void unusableStoredPin() {
+            Properties props = store.load();
+            props.setProperty(ConnectPrefs.KEY_PIN_HOST, "192.168.1.42");
+            props.setProperty(ConnectPrefs.KEY_PIN_PORT, "not-a-port");
+            props.setProperty(ConnectPrefs.KEY_PIN_FINGERPRINT, ID);
+            store.save(props);
+
+            assertThat(prefs.pinned()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a pin missing any of its parts is no pin")
+        void incompletePin() {
+            Properties props = store.load();
+            props.setProperty(ConnectPrefs.KEY_PIN_HOST, "192.168.1.42");
+            props.setProperty(ConnectPrefs.KEY_PIN_PORT, "5555");
+            store.save(props);
+            assertThat(prefs.pinned()).isEmpty();
+
+            props.setProperty(ConnectPrefs.KEY_PIN_FINGERPRINT, "   ");
+            store.save(props);
+            assertThat(prefs.pinned()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the pin keys are additive, so an older connect.properties still loads")
+        void fileCompatibility() {
+            // Exactly what a pre-E19 client wrote: two keys, nothing else.
+            Properties legacy = new Properties();
+            legacy.setProperty(ConnectPrefs.KEY_LAST_HOST, "192.168.1.42");
+            legacy.setProperty(ConnectPrefs.KEY_LAST_PORT, "5555");
+            store.save(legacy);
+
+            assertThat(prefs.lastUsed())
+                    .as("the remembered endpoint still resolves")
+                    .isPresent();
+            assertThat(prefs.pinned())
+                    .as("and the absent pin reads as \"never connected before\"")
+                    .isEmpty();
+
+            prefs.pin(new ServerEndpoint("192.168.1.42", 5555), ID, "Room 12 server");
+            assertThat(store.load().getProperty(ConnectPrefs.KEY_LAST_HOST))
+                    .as("pinning never rewrites the keys that were already there")
+                    .isEqualTo("192.168.1.42");
+        }
+
+        @Test
+        @DisplayName("arguments are required")
+        void required() {
+            assertThatNullPointerException()
+                    .isThrownBy(() -> prefs.pin(null, ID, "n"));
+            assertThatNullPointerException()
+                    .isThrownBy(() -> prefs.pin(new ServerEndpoint("h", 1), null, "n"));
         }
     }
 }

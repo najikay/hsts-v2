@@ -359,10 +359,29 @@
                         <exclude>client/core/AbstractScreenUI*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>client/net/HSTSClient*</exclude>
-                        <!-- legacy prototype, rewritten in E4/E6 -->
+                        <!-- Assembly glue: parses nothing, decides nothing. Every rule it
+                             applies is in a measured class beside it: ServerArgs (the
+                             headless / port switch parsing, tested), StartupMessages (the
+                             migration failure sentence, tested), ConsoleModel/ConsoleSession
+                             (every console decision) — and what remains here is the wiring
+                             that needs a real database, a real socket and a real toolkit. -->
                         <exclude>server/core/ServerMain*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>server/core/HSTSServer*</exclude>
+<!-- E19 server console: the three thin FX classes only, listed one by one.
+                             Every decision they render lives in a measured class beside them —
+                             ConsoleModel (the header, the address override, the button
+                             labels), ConsoleSession (what every button does and answers),
+                             ConsoleHealth + HealthSnapshot (the status cards), ConsoleClients
+                             (the table's rows), LogTailModel + LogRingBuffer (the log pane),
+                             NetworkDetector (the address ranking) — and the window is
+                             additionally driven by a real-input TestFX test
+                             (ServerConsoleInteractionTest). Never a wildcard: a single '*'
+                             crosses path separators in JaCoCo and would silently
+                             un-instrument the whole package. -->
+                        <exclude>server/console/ConsoleView*</exclude>
+                        <exclude>server/console/ConsoleTheme*</exclude>
+                        <exclude>server/console/ServerConsoleApp*</exclude>
                         <!-- legacy prototype pair only — retired in E6; all other server/db/** code
                              (E2 entities, repositories, DbBootstrap, allocators) IS measured -->
                         <exclude>server/db/QuestionDAO*</exclude>

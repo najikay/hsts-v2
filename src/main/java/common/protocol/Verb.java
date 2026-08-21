@@ -56,9 +56,19 @@ public enum Verb {
     NOTIFICATIONS_MARK_READ,
 
     // ===================== Edit locks (E18) ================================
-    // All three carry a {@code common.dto.lock.LockRequest} and answer with a
+    // The first four carry a {@code common.dto.lock.LockRequest} and answer with a
     // {@code LockResponse}. Acquiring also registers the caller as a watcher of
     // that entity, which is how {@link #PUSH_LOCK_CHANGED} finds its recipients.
+    //
+    // Every verb in this group is TEACHER or COORDINATOR only. Students never edit
+    // and never list what is being edited, and a student who could call
+    // {@link #LOCK_ACQUIRE} could pin an entity read-only for its TTL over and
+    // over (P-5 follow-up). The gate is the same one for all five so a reader does
+    // not have to check which ones are softer: none are.
+    //
+    // Identity is never on the wire. No payload in this group carries a user id,
+    // because a user id in one of them could only ever be somebody else's
+    // (ARCHITECTURE §3, security).
 
     /** Take (or take over) the advisory edit lock on one entity. */
     LOCK_ACQUIRE,
@@ -68,6 +78,57 @@ public enum Verb {
 
     /** Give the lock back and stop watching the entity. */
     LOCK_RELEASE,
+
+    /**
+     * Watch one entity's lock <b>without contending for it</b> (E18.8).
+     * Request payload: {@code LockRequest}; response: {@code LockResponse}
+     * describing the entity's current state.
+     *
+     * <p>The difference from {@link #LOCK_ACQUIRE} is the whole reason this verb
+     * exists: acquiring registers interest <em>and takes the lock</em>, which is
+     * exactly wrong for a list screen. A bank list showing forty rows would take
+     * forty locks and block forty colleagues by the act of being looked at. This
+     * registers the same interest and takes nothing, so the caller receives
+     * {@link #PUSH_LOCK_CHANGED} for that entity and the entity stays as free as
+     * it was.
+     *
+     * <p>The answer is a {@code LockResponse} with {@code granted = false} in
+     * every case, including when nobody holds the entity: a watcher is never a
+     * holder. {@code holder} is populated when somebody is editing and
+     * {@code null} when nobody is, which is the same shape a refusal and a
+     * release already use.
+     *
+     * <p>To stop watching, send {@link #LOCK_RELEASE} for the same entity: it
+     * drops the registration and, since the watcher holds nothing, changes no
+     * lock. Logging out or dropping the socket drops every registration anyway.
+     */
+    LOCK_WATCH,
+
+    /**
+     * Bulk query: who is currently editing each of these entities (E18.8).
+     * Request payload: {@code LocksSnapshotRequest} (one entity type plus the ids
+     * on screen); response: {@code LocksSnapshot} (id → {@code LockHolder}).
+     *
+     * <p>What a list screen needs on its first paint. Without it the "Editing ·
+     * &lt;name&gt;" chip would only appear on rows whose lock changed <em>after</em>
+     * the screen opened, because pushes carry news and not state: a question
+     * locked ten minutes ago raises nothing, so a freshly opened list would show
+     * it as free. One snapshot at load plus the pushes afterwards is the complete
+     * picture.
+     *
+     * <p>Only <b>live</b> holds are in the answer. Ids nobody is editing are
+     * absent from the map rather than mapped to null, and an id that does not
+     * exist at all is treated identically: this verb reports locks, and it is not
+     * an existence oracle for rows the caller may not be allowed to see.
+     *
+     * <p>Asking does <b>not</b> subscribe. A screen that wants live updates too
+     * sends {@link #LOCK_WATCH} per row it is showing; keeping the two separate is
+     * what lets a one-off refresh stay a one-off.
+     *
+     * <p>Client side: the bank-list chip that consumes both of these ships with
+     * E6's rebuilt bank list. The server half is deliberately ahead of it.
+     */
+    LOCKS_SNAPSHOT,
 
     // ===================== Take exam (E10) =================================
     // The draft wire contract: docs/contracts/EXAM_WIRE_CONTRACT.md. Payload

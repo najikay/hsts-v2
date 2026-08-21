@@ -71,6 +71,17 @@ public class HSTSServer extends AbstractServer {
     private final ScheduledExecutorService examTimers;
 
     /**
+     * The two collaborators the server console reads for its health cards
+     * (E19.2), captured here because {@link #defaultRouter} is where they are
+     * built and nothing else keeps a reference. Both are {@code null} on the
+     * bring-your-own-router constructor, and the console's probes report that
+     * honestly rather than by failing.
+     */
+    private SessionFactory sessionFactory;
+    private ProviderChain providerChain;
+    private UserDirectory userDirectory;
+
+    /**
      * Production wiring: session map + router + the auth, notify, lock and legacy
      * handlers, all reading through the database.
      *
@@ -136,14 +147,16 @@ public class HSTSServer extends AbstractServer {
      * before {@code AuthService} because the sign-in answer carries the user's
      * unread count (E17.5).
      */
-    private static MessageRouter defaultRouter(SessionManager sessions, PushGateway pushGateway,
-                                               ScheduledExecutorService sweeper,
-                                               ScheduledExecutorService examTimers) {
+    private MessageRouter defaultRouter(SessionManager sessions, PushGateway pushGateway,
+                                        ScheduledExecutorService sweeper,
+                                        ScheduledExecutorService examTimers) {
         MessageRouter router = new MessageRouter(sessions);
         // One factory for both seams: the Singleton is what owns the pool, and asking
         // for it twice would still be one pool but would read as if it were two.
         SessionFactory sessionFactory = HibernateUtil.sessionFactory();
         UserDirectory directory = new RepositoryUserDirectory(sessionFactory);
+        this.sessionFactory = sessionFactory;
+        this.userDirectory = directory;
 
         NotificationService notifications =
                 new NotificationService(new JpaNotificationStore(sessionFactory), pushGateway);
@@ -190,14 +203,15 @@ public class HSTSServer extends AbstractServer {
      * normally, and the log says why. A server that refused to start over a missing
      * bot key would be a worse failure than the one it was trying to prevent.
      */
-    private static void registerBotFeature(MessageRouter router, NotificationService notifications,
-                                           EditLockService locks, SessionFactory sessionFactory,
-                                           Clock clock, AttemptService attempts) {
+    private void registerBotFeature(MessageRouter router, NotificationService notifications,
+                                    EditLockService locks, SessionFactory sessionFactory,
+                                    Clock clock, AttemptService attempts) {
         BotConfig config = BotConfig.load();
         config.logSummary();
 
         BotStore botStore = new JpaBotStore(sessionFactory);
         ProviderChain chain = ProviderChain.of(config, clock);
+        this.providerChain = chain;
 
         new BotService(botStore, chain, new ContextBuilder(), attempts,
                 new AskRateLimiter(config.asksPerMinute(), clock), clock)
@@ -288,6 +302,35 @@ public class HSTSServer extends AbstractServer {
 
     public PushGateway pushGateway() {
         return pushGateway;
+    }
+
+    /**
+     * The live Hibernate factory, for the console's database health card (E19.2).
+     *
+     * @return the factory this server's handlers read through, or {@code null} on
+     *         a test-wired server that opened no pool
+     */
+    public SessionFactory sessionFactory() {
+        return sessionFactory;
+    }
+
+    /**
+     * The bot provider chain, for the console's provider health card (E19.2).
+     *
+     * @return the chain, or {@code null} on a test-wired server with no bot
+     */
+    public ProviderChain providerChain() {
+        return providerChain;
+    }
+
+    /**
+     * The user directory, for the console's client table (E19.3): the session map
+     * holds ids, and the table shows names.
+     *
+     * @return the directory, or {@code null} on a test-wired server
+     */
+    public UserDirectory userDirectory() {
+        return userDirectory;
     }
 
     // ===== OCSF callbacks =================================================

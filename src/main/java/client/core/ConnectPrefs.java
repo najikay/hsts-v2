@@ -39,6 +39,26 @@ public final class ConnectPrefs {
     /** Property key for the remembered port. */
     public static final String KEY_LAST_PORT = "connect.last.port";
 
+    /**
+     * Property key for the pinned server's host (E19.10).
+     *
+     * <p>Additive, like the two below: an older {@code connect.properties} has
+     * neither key and reads as "nothing pinned yet", which is the correct state
+     * for a client that has never seen a fingerprint. Nothing in this file is ever
+     * renamed or repurposed, so a client upgraded mid-term keeps its remembered
+     * endpoint.
+     */
+    public static final String KEY_PIN_HOST = "connect.pin.host";
+
+    /** Property key for the pinned server's port (E19.10). */
+    public static final String KEY_PIN_PORT = "connect.pin.port";
+
+    /** Property key for the pinned server's fingerprint, stored in full (E19.10). */
+    public static final String KEY_PIN_FINGERPRINT = "connect.pin.fingerprint";
+
+    /** Property key for the pinned server's friendly name, for the Login status line. */
+    public static final String KEY_PIN_NAME = "connect.pin.name";
+
     public static final int MIN_PORT = 1;
     public static final int MAX_PORT = 65535;
 
@@ -103,6 +123,86 @@ public final class ConnectPrefs {
         Properties props = store.load();
         props.remove(KEY_LAST_HOST);
         props.remove(KEY_LAST_PORT);
+        store.save(props);
+    }
+
+    // ------------------------------------------------------- pinning (E19.10)
+
+    /**
+     * The server this client trusts on sight (F13.4's trust on first use).
+     *
+     * @return the pin, empty when this client has never completed a connect or
+     *         when the stored pin is unusable. An unreadable pin is dropped
+     *         silently rather than repaired: the cost of forgetting it is one
+     *         confirmation dialog, and the cost of half-trusting it is worse
+     */
+    public Optional<ServerPin> pinned() {
+        Properties props = store.load();
+        String host = props.getProperty(KEY_PIN_HOST);
+        String port = props.getProperty(KEY_PIN_PORT);
+        String fingerprint = props.getProperty(KEY_PIN_FINGERPRINT);
+        if (host == null || port == null || fingerprint == null || fingerprint.isBlank()) {
+            return Optional.empty();
+        }
+        if (!isValid(host, port)) {
+            log.warn("Ignoring an unusable pinned server {}:{}", host, port);
+            return Optional.empty();
+        }
+        return Optional.of(new ServerPin(
+                new ServerEndpoint(host.trim(), Integer.parseInt(port.trim())), fingerprint));
+    }
+
+    /** @return the pinned server's friendly name, for the Login status line. */
+    public Optional<String> pinnedName() {
+        String name = store.load().getProperty(KEY_PIN_NAME);
+        return name == null || name.isBlank() ? Optional.empty() : Optional.of(name.trim());
+    }
+
+    /**
+     * Records a server as trusted, replacing any previous pin.
+     *
+     * <p>Call only after a socket actually opened, exactly like
+     * {@link #remember(ServerEndpoint)}: pinning a server that could not be
+     * reached would teach the client to trust an address that never worked, and
+     * would then raise a mismatch against it later.
+     *
+     * <p>Re-pinning on an accepted mismatch is the same call. That is the point of
+     * confirming: the user has said this machine is the right one now.
+     *
+     * @param endpoint    where it was reached
+     * @param fingerprint the id it announced
+     * @param name        its friendly name, may be {@code null}
+     */
+    public void pin(ServerEndpoint endpoint, String fingerprint, String name) {
+        Objects.requireNonNull(endpoint, "endpoint");
+        Objects.requireNonNull(fingerprint, "fingerprint");
+        Properties props = store.load();
+        props.setProperty(KEY_PIN_HOST, endpoint.host());
+        props.setProperty(KEY_PIN_PORT, Integer.toString(endpoint.port()));
+        props.setProperty(KEY_PIN_FINGERPRINT, fingerprint.trim());
+        if (name != null && !name.isBlank()) {
+            props.setProperty(KEY_PIN_NAME, name.trim());
+        } else {
+            props.remove(KEY_PIN_NAME);
+        }
+        store.save(props);
+        log.info("Pinned {} with id {}", endpoint.display(),
+                common.dto.discovery.Fingerprints.shortForm(fingerprint));
+    }
+
+    /**
+     * Forgets the pinned server ("change server", and the reset path).
+     *
+     * <p>Leaves the remembered endpoint alone: those are two different facts. The
+     * endpoint is what to pre-fill, the pin is what to trust, and a user changing
+     * servers still wants the old address offered as a starting point.
+     */
+    public void unpin() {
+        Properties props = store.load();
+        props.remove(KEY_PIN_HOST);
+        props.remove(KEY_PIN_PORT);
+        props.remove(KEY_PIN_FINGERPRINT);
+        props.remove(KEY_PIN_NAME);
         store.save(props);
     }
 

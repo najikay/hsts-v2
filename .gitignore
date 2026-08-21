@@ -14,4 +14,8 @@ logs/
 .env
 /server.properties
 /client.properties
+# This installation's discovery id (E19.9). Machine-local by definition: committing
+# it would give every clone of the repo the same identity, which is precisely the
+# collision the id exists to prevent.
+/server-id.properties
 *.local.properties

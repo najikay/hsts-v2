@@ -63,12 +63,34 @@ Edit the properties files to match your environment, then launch **server first,
 client second** (separate processes — the intended deployment model):
 
 ```bash
-# Terminal 1 — start the Fat Server
+# Terminal 1 — start the Fat Server (opens the server console window)
 java -jar target/hsts-server.jar
+
+# ...or terminal-only, exactly as it ran before E19:
+java -jar target/hsts-server.jar --headless
 
 # Terminal 2 — start the JavaFX client
 java -jar target/hsts-client.jar
 ```
+
+**Server switches (E19):**
+
+| Switch | Effect |
+|---|---|
+| `--headless` | run terminal-only, open no console window |
+| `--port 5555` | the OCSF port clients connect to (a bare number still works too) |
+| `--discovery-port 5556` | the UDP port the discovery responder answers on |
+| `--no-discovery` | start with the discovery responder off |
+
+The **server console** shows the address to point clients at, big enough to read from
+the back of a room, with the server's discovery id beside it. Start/stop the listener,
+watch connected clients and the live log, check the database and bot-provider health,
+and load or reload the demo dataset from there.
+
+The **client normally never asks for an address.** It broadcasts, finds the server and
+goes straight to Login with a "Connected to &lt;server&gt; · change server" line. The
+host/port form appears only when nothing is found, when the remembered server cannot be
+reached, or when you click "change server".
 
 ### Configuration
 

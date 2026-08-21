@@ -7,6 +7,8 @@ import common.dto.lock.LockHolder;
 import common.dto.lock.LockRequest;
 import common.dto.lock.LockResponse;
 import common.dto.lock.LockTiming;
+import common.dto.lock.LocksSnapshot;
+import common.dto.lock.LocksSnapshotRequest;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -22,7 +24,9 @@ import server.realtime.PushGateway;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -63,9 +67,14 @@ import java.util.concurrent.ConcurrentHashMap;
  *       sitting on a banner that has become a lie.</li>
  *   <li><b>Watchers are whoever asked.</b> Calling {@code LOCK_ACQUIRE}
  *       registers interest in that entity — granted or refused. That is the
- *       whole watch mechanism, and it needs no extra verb because a screen that
- *       cares about a lock is exactly a screen that tried to take it. The
- *       registration is dropped on release, on logout and on a dropped socket.</li>
+ *       usual watch mechanism, because a screen that cares about a lock is
+ *       usually a screen that tried to take it. The registration is dropped on
+ *       release, on logout and on a dropped socket.
+ *       <p>E18.8 added the one case that is not usual: a <em>list</em> screen
+ *       cares about forty locks and must take none of them, so {@link #watch}
+ *       is the same registration without the acquisition. It was always
+ *       separable, since acquire has called an internal watch on its first line
+ *       since E18.1; E18.8 only gave it a door.</li>
  *   <li><b>Renewing a lock you do not hold fails as a refusal, not an error.</b>
  *       A heartbeat that arrives after a takeover is an ordinary race, and the
  *       client turns the refusal into the "take over editing?" prompt.</li>
@@ -111,12 +120,14 @@ public class EditLockService {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** Registers the three lock verbs; all authenticated, none open. */
+    /** Registers the five lock verbs; all authenticated, none open. */
     public void registerOn(MessageRouter router) {
         Objects.requireNonNull(router, "router");
         router.register(Verb.LOCK_ACQUIRE, (caller, request) -> handle(caller, request, this::acquire));
         router.register(Verb.LOCK_RENEW, (caller, request) -> handle(caller, request, this::renew));
         router.register(Verb.LOCK_RELEASE, (caller, request) -> handle(caller, request, this::release));
+        router.register(Verb.LOCK_WATCH, (caller, request) -> handle(caller, request, this::watch));
+        router.register(Verb.LOCKS_SNAPSHOT, this::handleSnapshot);
     }
 
     /**
@@ -145,7 +156,7 @@ public class EditLockService {
      */
     public LockResponse acquire(long userId, EntityRef entity) {
         Objects.requireNonNull(entity, "entity");
-        watch(entity, userId);
+        addWatcher(entity, userId);
         Instant now = clock.instant();
         Instant expiry = now.plus(LockTiming.TTL);
 
@@ -248,6 +259,78 @@ public class EditLockService {
     }
 
     /**
+     * Registers interest in {@code entity} <b>without contending for it</b>
+     * (E18.8, {@code LOCK_WATCH}).
+     *
+     * <p>Everything {@link #acquire} does about watching, and nothing it does
+     * about holding. The caller starts receiving {@code PUSH_LOCK_CHANGED} for
+     * this entity and the entity's lock is left exactly as it was, which is the
+     * only behaviour a list screen can use: a bank list painting forty rows would,
+     * with acquire, take forty locks and put forty colleagues into read-only mode
+     * by the act of being looked at.
+     *
+     * <p>Watching is idempotent and raises no push. Nothing changed, so there is
+     * no news, and a screen that re-watches on every refresh must not produce a
+     * push storm.
+     *
+     * @return the entity's current state, never a grant: a watcher is not a
+     *         holder, so {@code granted} is {@code false} even when nobody holds
+     *         it and {@code holder} is {@code null} in exactly that case
+     */
+    public LockResponse watch(long userId, EntityRef entity) {
+        Objects.requireNonNull(entity, "entity");
+        addWatcher(entity, userId);
+        Held held = live(entity);
+        if (held == null) {
+            log.debug("User {} watches {} (free)", userId, entity);
+            return LockResponse.free(entity);
+        }
+        log.debug("User {} watches {} (held by {})", userId, entity, held.userId());
+        return LockResponse.refused(entity, holder(held.userId()), held.expiresAt());
+    }
+
+    /**
+     * Who is editing each of these entities, right now (E18.8,
+     * {@code LOCKS_SNAPSHOT}).
+     *
+     * <p>The first paint of a list screen. Pushes carry news, not state: a
+     * question locked ten minutes ago raises nothing when a colleague opens the
+     * bank, so a screen fed only by {@code PUSH_LOCK_CHANGED} would show it as
+     * free until somebody happened to touch it. One snapshot at load plus the
+     * pushes afterwards is the whole picture.
+     *
+     * <p>Only live holds are reported. An expired hold that the sweeper has not
+     * reached yet is not in the answer, because it is not true any more; the
+     * entry is left in the map for the sweeper rather than removed here, so a
+     * read stays a read.
+     *
+     * <p>Reporting does not subscribe. A screen that wants the chip to stay live
+     * calls {@link #watch} per row it is showing, and keeping the two apart is
+     * what lets a one-off refresh stay a one-off.
+     *
+     * @param entityType the kind of thing every id refers to
+     * @param entityIds  the ids on screen; unknown and free ids are simply absent
+     *                   from the answer
+     * @return the sparse map of id to holder
+     */
+    public LocksSnapshot snapshot(String entityType, Collection<Long> entityIds) {
+        Objects.requireNonNull(entityType, "entityType");
+        Objects.requireNonNull(entityIds, "entityIds");
+        Map<Long, LockHolder> held = new LinkedHashMap<>();
+        for (Long entityId : entityIds) {
+            if (entityId == null) {
+                continue;
+            }
+            Held current = live(new EntityRef(entityType, entityId));
+            if (current != null) {
+                held.put(entityId, holder(current.userId()));
+            }
+        }
+        log.debug("Snapshot of {} {} id(s): {} held", entityIds.size(), entityType, held.size());
+        return new LocksSnapshot(entityType, held);
+    }
+
+    /**
      * Drops every lock held by a user and every entity they were watching (E18.3).
      *
      * @return how many locks were released
@@ -302,11 +385,19 @@ public class EditLockService {
 
     /** @return who currently holds {@code entity}, if anyone and not expired. */
     public Optional<LockHolder> holderOf(EntityRef entity) {
+        Held held = live(entity);
+        return held == null ? Optional.empty() : Optional.of(holder(held.userId()));
+    }
+
+    /**
+     * The one place a read decides whether a stored hold still counts.
+     *
+     * @return the hold on {@code entity} when it exists and its TTL has not
+     *         passed, otherwise {@code null}
+     */
+    private Held live(EntityRef entity) {
         Held held = locks.get(entity);
-        if (held == null || held.hasExpired(clock.instant())) {
-            return Optional.empty();
-        }
-        return Optional.of(holder(held.userId()));
+        return held == null || held.hasExpired(clock.instant()) ? null : held;
     }
 
     /** @return {@code true} when this user holds a live lock on {@code entity}. */
@@ -326,7 +417,31 @@ public class EditLockService {
 
     // ===================== Handlers ======================================
 
-    /** Shared shape of all three verbs: same payload, same guard, different operation. */
+    /**
+     * {@code LOCKS_SNAPSHOT} (E18.8): a different payload from the other four, so
+     * it does not fit {@link #handle}'s shape, but the same role gate and the same
+     * refuse-rather-than-fail treatment of a payload that cannot be read.
+     *
+     * <p>An oversized request is a {@code VALIDATION} error rather than a silent
+     * truncation. Truncating would answer "nobody is editing rows 501 and up",
+     * which is a wrong answer dressed as a right one, and the caller would have no
+     * way to tell.
+     */
+    private Message handleSnapshot(CallerContext caller, Message request) {
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
+        if (!(request.getPayload() instanceof LocksSnapshotRequest query)) {
+            log.warn("{} with a {} payload", request.getVerb(), describe(request.getPayload()));
+            return Message.error(request, ErrorCode.VALIDATION, MALFORMED_REQUEST);
+        }
+        if (query.isOversized()) {
+            log.warn("Refused a locks snapshot of {} ids from user {} (max {})",
+                    query.entityIds().size(), caller.userId(), LocksSnapshotRequest.MAX_IDS);
+            return Message.error(request, ErrorCode.VALIDATION, LocksSnapshotRequest.TOO_MANY_IDS);
+        }
+        return Message.ok(request, snapshot(query.entityType(), query.entityIds()));
+    }
+
+    /** Shared shape of the four single-entity verbs: same payload, same guard, different operation. */
     private Message handle(CallerContext caller, Message request, Operation operation) {
         // Edit locks exist for people who edit. Students never hold one, and a
         // student who could would be able to pin an entity read-only for its TTL
@@ -351,7 +466,7 @@ public class EditLockService {
         log.debug("Session of user {} ended; {} lock(s) released", userId, released);
     }
 
-    private void watch(EntityRef entity, long userId) {
+    private void addWatcher(EntityRef entity, long userId) {
         watchers.computeIfAbsent(entity, key -> ConcurrentHashMap.newKeySet()).add(userId);
     }
 

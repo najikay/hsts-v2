@@ -189,6 +189,23 @@ public final class ProviderChain {
         return providers.stream().map(BotProvider::name).toList();
     }
 
+    /**
+     * The providers that could answer at all, in chain order (E19.2).
+     *
+     * <p>Read-only, and added for the server console's health card, which must
+     * distinguish the two ways a provider is not answering: benched after a
+     * failure (temporary, self-healing, worth showing amber) and missing its key
+     * (permanent until somebody edits {@code server.properties}, and not this
+     * card's news, because {@link BotConfig#logSummary()} already said so at boot).
+     * An unconfigured provider in a card reading "0 of 2 answering" would send an
+     * operator hunting a network fault that is really a blank line in a file.
+     *
+     * @return the names of the providers with what they need to be tried
+     */
+    public List<String> configuredProviderNames() {
+        return providers.stream().filter(BotProvider::isConfigured).map(BotProvider::name).toList();
+    }
+
     private boolean isBenched(String provider, Instant now) {
         Instant until = benched.get(provider);
         if (until == null) {
