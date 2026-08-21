@@ -225,30 +225,277 @@ class AuthorizationTest {
     }
 
     @Nested
-    @DisplayName("course-scoped guards (TODO(E2) stubs)")
+    @DisplayName("requireEnrolled, the last TODO(E2) stub")
     class CourseScoped {
 
+        // requireTeachesCourse left this class in E6 and requireCoordinatorOf in E8, each when
+        // its epic needed real data. requireEnrolled is E10's and stays here: a guard nothing
+        // calls yet, implemented anyway, is an untested guard shipped for somebody else's epic.
+
         @Test
-        @DisplayName("they fail closed instead of permitting, and say why")
-        void stubsRefuse() {
+        @DisplayName("it fails closed instead of permitting, and says why")
+        void stubRefuses() {
             CallerContext teacher = caller(1L, Role.TEACHER);
 
-            assertThatThrownBy(() -> Authorization.requireTeachesCourse(teacher, "11"))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("TODO(E2)")
-                    .hasMessageContaining("requireTeachesCourse");
             assertThatThrownBy(() -> Authorization.requireEnrolled(teacher, "11"))
                     .isInstanceOf(UnsupportedOperationException.class)
+                    .hasMessageContaining("TODO(E2)")
                     .hasMessageContaining("requireEnrolled");
         }
 
         @Test
-        @DisplayName("they still check the session first")
-        void stubsCheckTheSessionFirst() {
-            assertThatExceptionOfType(AuthorizationException.class)
-                    .isThrownBy(() -> Authorization.requireTeachesCourse(anonymous(), "11"));
+        @DisplayName("it still checks the session first")
+        void stubChecksTheSessionFirst() {
             assertThatExceptionOfType(AuthorizationException.class)
                     .isThrownBy(() -> Authorization.requireEnrolled(anonymous(), "11"));
+        }
+    }
+
+    /**
+     * The course-scoped guard E6 implemented, and the bank's half of S-5.
+     *
+     * <p>Two things have to hold and each is asserted failing on its own: the caller is staff,
+     * and the directory says she teaches <em>this</em> course. The second without the first is
+     * what would let a student with a stray {@code course_teachers} row write questions; the
+     * first without the second is what would let one teacher write into another's bank.
+     *
+     * <p>What is deliberately <b>not</b> tested here, because it is deliberately not this
+     * guard's job: a coordinator reaching a course she does not teach. Her bank scope is her
+     * coordinated subject (the lead's ruling of 2026-08-21), and that composition lives in
+     * {@code QuestionService}. A test asserting it here would be asserting that this guard means
+     * something wider than its name, which is exactly what it was designed not to mean.
+     */
+    @Nested
+    @DisplayName("requireTeachesCourse (implemented in E6)")
+    class TeachesCourse {
+
+        /** Dana teaches Algebra (11) and Calculus (12), and nothing else. */
+        private final Authorization.CourseTeachers directory =
+                (teacherId, courseCode) -> teacherId == 1L
+                        && ("11".equals(courseCode) || "12".equals(courseCode));
+
+        @AfterEach
+        void uninstall() {
+            Authorization.useCourseTeachers(null);
+        }
+
+        @Test
+        @DisplayName("passes for a teacher of the course")
+        void passesForHerOwnCourse() {
+            assertThatCode(() -> Authorization.requireTeachesCourse(
+                    caller(1L, Role.TEACHER), "11", directory)).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("refuses a teacher on a course she does not teach")
+        void refusesAnotherTeachersCourse() {
+            // S-5's whole point. She is a teacher, the course exists, and it is not hers.
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(1L, Role.TEACHER), "21", directory))
+                    .withMessageContaining("21");
+        }
+
+        @Test
+        @DisplayName("refuses a different teacher on a course that is not hers")
+        void theDirectoryIsAskedAboutTheCaller() {
+            // The id must reach the directory. A guard that looked the course up without the
+            // caller would pass every teacher for every taught course.
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(2L, Role.TEACHER), "11", directory));
+        }
+
+        @Test
+        @DisplayName("a coordinator who also teaches passes on her own course")
+        void coordinatorWhoTeachesIsStaff() {
+            // michal.sharon's shape: COORDINATOR by session role, and a course_teachers row.
+            // The role check must not be TEACHER-only or the dual-hat case breaks.
+            Authorization.CourseTeachers hers =
+                    (teacherId, courseCode) -> teacherId == 4L && "22".equals(courseCode);
+            assertThatCode(() -> Authorization.requireTeachesCourse(
+                    caller(4L, Role.COORDINATOR), "22", hers)).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("refuses a PRINCIPAL: F9.3 allows her literally zero mutating verbs")
+        void refusesThePrincipal() {
+            // The mutation the author did not plant, found by the audit. This guard fronts the
+            // three mutating bank verbs, and PRD F9.3 is absolute about the principal having
+            // none of them. Adding Role.PRINCIPAL to the requireRole list would break F9.3 and,
+            // before this test, would have left the whole class green.
+            Authorization.CourseTeachers lying = (teacherId, courseCode) -> true;
+            assertThatThrownBy(() -> Authorization.requireTeachesCourse(
+                    caller(7L, Role.PRINCIPAL), "11", lying))
+                    .isInstanceOf(AuthorizationException.class)
+                    .satisfies(thrown -> assertThat(((AuthorizationException) thrown).errorCode())
+                            .isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("the role check runs before the directory is ever asked")
+        void roleIsCheckedBeforeTheDirectory() {
+            // Ordering, pinned rather than commented. A directory consulted first would open a
+            // query on every probe by an unauthorized caller, and the previous version of this
+            // suite only asserted that *something* threw.
+            Authorization.CourseTeachers mustNotBeCalled = (teacherId, courseCode) -> {
+                throw new AssertionError("the directory was consulted before the role check");
+            };
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(9L, Role.STUDENT), "11", mustNotBeCalled));
+        }
+
+        @Test
+        @DisplayName("refuses a student outright, whatever the directory says")
+        void refusesAStudentEvenWithARow() {
+            // The role check runs first and independently. A directory that answered yes for a
+            // student must not be enough, because the two sources can disagree and the stored
+            // role is the one the session was built from.
+            Authorization.CourseTeachers lying = (teacherId, courseCode) -> true;
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(9L, Role.STUDENT), "11", lying));
+        }
+
+        @Test
+        @DisplayName("checks the session before anything else: anonymous is UNAUTHORIZED")
+        void anonymousIsUnauthorizedNotForbidden() {
+            // The CODE, not just the type. Getting these two backwards is what produces a client
+            // logout loop, which is why this file's other guards assert it and why the audit
+            // called its absence here an unjustified divergence from the reference shape.
+            assertThatThrownBy(() -> Authorization.requireTeachesCourse(
+                    anonymous(), "11", directory))
+                    .isInstanceOf(AuthorizationException.class)
+                    .satisfies(thrown -> assertThat(((AuthorizationException) thrown).errorCode())
+                            .isEqualTo(ErrorCode.UNAUTHORIZED));
+        }
+
+        @Test
+        @DisplayName("a missing course is a refusal, never a wildcard")
+        void blankCourseRefuses() {
+            for (String nothing : new String[] {null, "", "  "}) {
+                // The message assertion is what gives this teeth. Without it the whole blank
+                // branch could be deleted and the test would still pass, because a blank code
+                // also fails the directory lookup and throws the other refusal.
+                assertThatThrownBy(() -> Authorization.requireTeachesCourse(
+                        caller(1L, Role.TEACHER), nothing, directory))
+                        .as("course %s", nothing)
+                        .isInstanceOf(AuthorizationException.class)
+                        .hasMessageContaining("not linked to a course");
+            }
+        }
+
+        @Test
+        @DisplayName("a null directory refuses rather than throwing or permitting")
+        void nullDirectoryRefuses() {
+            assertThatThrownBy(() -> Authorization.requireTeachesCourse(
+                    caller(1L, Role.TEACHER), "11", (Authorization.CourseTeachers) null))
+                    .isInstanceOf(AuthorizationException.class)
+                    .satisfies(thrown -> assertThat(((AuthorizationException) thrown).errorCode())
+                            .isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("the default directory is UNWIRED, pinned at the field and not by luck")
+        void defaultIsUnwired() {
+            // unwiredRefuses only proves the current value refuses, and @AfterEach happens to
+            // reset it. This pins the initializer itself: change the field's default to a
+            // permissive lambda and this fails.
+            Authorization.CourseTeachers previous =
+                    Authorization.useCourseTeachers((teacherId, courseCode) -> true);
+            assertThat(previous).isSameAs(Authorization.CourseTeachers.UNWIRED);
+            assertThat(Authorization.CourseTeachers.UNWIRED.teaches(1L, "11")).isFalse();
+        }
+
+        @Test
+        @DisplayName("teachesCourse answers instead of throwing, for the NOT_FOUND paths")
+        void booleanSiblingAnswers() {
+            // Why it exists: on UPDATE and DELETE the service resolves the course from the
+            // stored question, so a FORBIDDEN naming that course is an existence oracle, which
+            // BANK_WIRE_CONTRACT §2 forbids. The service needs a way to ask without throwing.
+            assertThat(Authorization.teachesCourse(caller(1L, Role.TEACHER), "11", directory))
+                    .isTrue();
+            assertThat(Authorization.teachesCourse(caller(1L, Role.TEACHER), "21", directory))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("teachesCourse fails closed on every missing input")
+        void booleanSiblingFailsClosed() {
+            assertThat(Authorization.teachesCourse(anonymous(), "11", directory)).isFalse();
+            assertThat(Authorization.teachesCourse(null, "11", directory)).isFalse();
+            assertThat(Authorization.teachesCourse(caller(1L, Role.TEACHER), null, directory))
+                    .isFalse();
+            assertThat(Authorization.teachesCourse(caller(1L, Role.TEACHER), "  ", directory))
+                    .isFalse();
+            assertThat(Authorization.teachesCourse(caller(1L, Role.TEACHER), "11", null))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("a padded course code is stripped, so SQL and Java cannot disagree")
+        void paddedCourseCodeIsStripped() {
+            // courses.code2 is CHAR(2) under a PAD SPACE collation, so "11 " matches the row in
+            // SQL while failing Java equality against the reachable-set list the browse filters
+            // on. Two authorization answers for one input is the P-6 disease; stripping at the
+            // boundary is the cheap end of it.
+            assertThat(Authorization.teachesCourse(caller(1L, Role.TEACHER), " 11 ", directory))
+                    .isTrue();
+            assertThatCode(() -> Authorization.requireTeachesCourse(
+                    caller(1L, Role.TEACHER), " 11 ", directory)).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("UNWIRED refuses everyone, which is what an unassembled server must do")
+        void unwiredRefuses() {
+            // The two-argument form with nothing installed. This is the state a server is in
+            // between class-load and assembly, and the failure mode to avoid is a guard that
+            // waves callers through until somebody remembers to wire it.
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(1L, Role.TEACHER), "11"));
+        }
+
+        @Test
+        @DisplayName("the installed directory is what the two-argument form reads")
+        void installedDirectoryIsUsed() {
+            Authorization.useCourseTeachers(directory);
+
+            assertThatCode(() -> Authorization.requireTeachesCourse(
+                    caller(1L, Role.TEACHER), "12")).doesNotThrowAnyException();
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(1L, Role.TEACHER), "21"));
+        }
+
+        @Test
+        @DisplayName("installing returns the previous directory, so a test can put it back")
+        void installReturnsThePrevious() {
+            Authorization.CourseTeachers first = (teacherId, courseCode) -> true;
+            Authorization.CourseTeachers previous = Authorization.useCourseTeachers(first);
+            assertThat(Authorization.useCourseTeachers(previous)).isSameAs(first);
+        }
+
+        @Test
+        @DisplayName("installing null goes back to refusing, not to the last real directory")
+        void installingNullFailsClosed() {
+            Authorization.useCourseTeachers(directory);
+            Authorization.useCourseTeachers(null);
+
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireTeachesCourse(
+                            caller(1L, Role.TEACHER), "11"));
+        }
+
+        @Test
+        @DisplayName("the refusal says which course and what to do next (PRD §4.1)")
+        void refusalIsUseful() {
+            assertThatThrownBy(() -> Authorization.requireTeachesCourse(
+                    caller(1L, Role.TEACHER), "21", directory))
+                    .hasMessageContaining("21")
+                    .hasMessageContaining("Ask the coordinator")
+                    .hasMessageNotContaining("—");
         }
     }
 
