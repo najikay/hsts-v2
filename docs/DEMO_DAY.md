@@ -1,5 +1,7 @@
 # HSTS — demo day
 
+**Defense date: Wednesday 2026-08-27** (moved from 08-28, announced 08-21). Group: **12-1**, prefix `G12-1`.
+
 Everything that has to be true on the machines before the defence starts, in the order it has
 to be done. Written to be executed, not read: every step is a box, and a box is only ticked
 after the thing was actually observed on the machine it names.
@@ -33,24 +35,24 @@ one to plan the demo day around.
       `G<Num>`.** We requested 13 after splitting from group 12, and the requested number is not
       automatically the registered number. Wrong `<Num>` means the wrong zip name and the wrong JAR
       names on the graded artifact
-- [ ] The confirmed number is written down here, and every `G13` below is read as that number:
+- [ ] The confirmed number is written down here, and every `G12-1` below is read as that number:
       **confirmed group number: ______**
 
-`G13` is the example value throughout this document and the README. Nothing is hard-coded to it:
+`G12-1` is the example value throughout this document and the README. Nothing is hard-coded to it:
 the number is a command-line switch (`-Djar.prefix=`), so confirming it late costs one rebuild and
 one re-zip, and getting it wrong costs the cover of the submission.
 
 ### 1.1 The submission build is one line
 
 ```powershell
-.\mvnw -B -Djar.prefix=G13 clean package
+.\mvnw -B -Djar.prefix=G12-1 clean package
 ```
 
-Substitute the real group number for `G13`. It produces exactly two artifacts:
+Substitute the real group number for `G12-1`. It produces exactly two artifacts:
 
 ```
-target\G13_Server.jar
-target\G13_Client.jar
+target\G12-1_Server.jar
+target\G12-1_Client.jar
 ```
 
 Without the switch the same build produces `hsts-server.jar` / `hsts-client.jar`, which is what
@@ -82,8 +84,8 @@ Sanity check, on the build machine, that the JARs contain Windows natives:
 
 ```powershell
 # expect glass.dll / prism_d3d.dll and friends, NOT libglass.so
-jar tf target\G13_Client.jar | Select-String "\.dll$" | Select-Object -First 5
-jar tf target\G13_Server.jar | Select-String "\.dll$" | Select-Object -First 5
+jar tf target\G12-1_Client.jar | Select-String "\.dll$" | Select-Object -First 5
+jar tf target\G12-1_Server.jar | Select-String "\.dll$" | Select-Object -First 5
 ```
 
 - [ ] Both listings show `.dll` files (a Linux build shows `.so`, a macOS build `.dylib`)
@@ -112,8 +114,8 @@ history. Use a machine (or a fresh Windows user account) that has never built th
 Copy **four** files into one folder, e.g. `C:\HSTS\`:
 
 ```
-C:\HSTS\G13_Server.jar
-C:\HSTS\G13_Client.jar
+C:\HSTS\G12-1_Server.jar
+C:\HSTS\G12-1_Client.jar
 C:\HSTS\server.properties      (from target\, with this machine's MySQL password)
 C:\HSTS\client.properties      (from target\)
 ```
@@ -124,16 +126,16 @@ therefore the layout with the fewest ways to go wrong, and it is the layout to h
 
 ### 2.3 Verify
 
-- [ ] Double-click `G13_Server.jar`. The server console window opens within a few seconds
+- [ ] Double-click `G12-1_Server.jar`. The server console window opens within a few seconds
 - [ ] The console header shows an address of the form `192.168.x.y:5555` and an `ID xxxx-xxxx`
 - [ ] The log pane shows the Flyway and pool lines, ending with the listener started
-- [ ] Double-click `G13_Client.jar`. The client window opens and goes to **Login**, showing
+- [ ] Double-click `G12-1_Client.jar`. The client window opens and goes to **Login**, showing
       "Connected to &lt;server name&gt; · change server"
 - [ ] Sign in as `maya.levi` / `demo123` (the seed must be loaded, see §3)
 - [ ] Close both windows. Neither leaves a java.exe running (check Task Manager)
 
 If double-clicking does nothing at all, the association is wrong, not the JAR. Confirm with
-`java -jar C:\HSTS\G13_Server.jar` from a terminal before changing anything else.
+`java -jar C:\HSTS\G12-1_Server.jar` from a terminal before changing anything else.
 
 ---
 
@@ -180,7 +182,7 @@ Optional, and only if the study bot will be demonstrated: add the provider keys 
 
 ### 3.3 First start creates everything
 
-- [ ] Start the server (double-click, or `java -jar G13_Server.jar`)
+- [ ] Start the server (double-click, or `java -jar G12-1_Server.jar`)
 - [ ] The log shows Flyway migrating **V1 to V7** against `hsts_db`
 - [ ] It does **not** show "Unknown database" (the JDBC URL carries
       `createDatabaseIfNotExist=true`, so the first boot creates `hsts_db` itself)
@@ -210,8 +212,8 @@ time: one execution is "live right now", and a database seeded yesterday has no 
 Command-line equivalents, if the console is not up:
 
 ```powershell
-java -cp G13_Server.jar server.db.seed.SeedMain            # load what is missing
-java -cp G13_Server.jar server.db.seed.SeedMain --reseed   # empty and reload (asks first)
+java -cp G12-1_Server.jar server.db.seed.SeedMain            # load what is missing
+java -cp G12-1_Server.jar server.db.seed.SeedMain --reseed   # empty and reload (asks first)
 ```
 
 ---
@@ -362,11 +364,11 @@ because a JAR carries no version.
 - [ ] The group number was **confirmed in the course system**, not assumed (§1.0). Everything
       below carries it in its file name, so this is the first box for a reason
 - [ ] `git status` is clean, and the last commit is the one being demonstrated
-- [ ] `.\mvnw -B -Djar.prefix=G13 clean package` run **on Windows** (§1.2), from that commit
+- [ ] `.\mvnw -B -Djar.prefix=G12-1 clean package` run **on Windows** (§1.2), from that commit
 - [ ] Every copy of the JARs anywhere else (desktop, USB, downloads) deleted **before** copying
       the new ones out. Two files with the same name and different contents is the whole problem
 - [ ] The demo machines run the JARs copied out **after** that build
-- [ ] The submission zip `G13_Assignment3.zip` is assembled **LAST**, from those same two files
+- [ ] The submission zip `G12-1_Assignment3.zip` is assembled **LAST**, from those same two files
       plus the document, and its contents are listed once to confirm (E22.3)
 
 Order, and it is the order for a reason: **commit → clean package on Windows → copy out →

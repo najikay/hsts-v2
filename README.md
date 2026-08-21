@@ -72,11 +72,11 @@ file in `target/` is never overwritten by the examples.
 number is passed on the command line rather than committed:
 
 ```powershell
-.\mvnw -Djar.prefix=G13 package     # -> target\G13_Server.jar + target\G13_Client.jar
+.\mvnw -Djar.prefix=G12-1 package     # -> target\G12-1_Server.jar + target\G12-1_Client.jar
 ```
 
 Without the switch the build keeps the `hsts-server.jar` / `hsts-client.jar` names
-this README and every script use. Substitute the real group number for `G13`, and
+this README and every script use. Substitute the real group number for `G12-1`, and
 build the submission JARs **on Windows** (see §9, Platform note).
 
 Edit the properties files to match your environment, then launch **server first,
@@ -118,7 +118,7 @@ Both JARs look for their properties file in this order (E20.4):
 
 1. **beside the JAR** — the deployment layout, and the one that wins when both exist;
 2. **the working directory** — the same file name where the process was started, which
-   is what a shortcut or a `java -jar C:\hsts\G13_Server.jar` typed from elsewhere hits,
+   is what a shortcut or a `java -jar C:\hsts\G12-1_Server.jar` typed from elsewhere hits,
    and the only external candidate when running from the IDE;
 3. **bundled defaults** inside the JAR;
 4. **hard-coded fallbacks** (`root`/`root`, `localhost:5555`).
@@ -267,8 +267,8 @@ HSTS/
   - `hsts-client.jar` — `Main-Class = client.core.ClientLauncher`; includes JavaFX, excludes
     MySQL driver, Hibernate, Flyway, PDFBox, POI and the bot providers by allow-list.
   Both are plain (non-`Application`) entry points to satisfy JavaFX module restrictions in a shaded jar.
-- **JAR names (E20.1).** `-Djar.prefix=G13 package` switches both to `G13_Server.jar` /
-  `G13_Client.jar`; without it they keep the `hsts-server` / `hsts-client` names. The switch
+- **JAR names (E20.1).** `-Djar.prefix=G12-1 package` switches both to `G12-1_Server.jar` /
+  `G12-1_Client.jar`; without it they keep the `hsts-server` / `hsts-client` names. The switch
   activates a profile rather than editing a property, so the group number never lands in a commit.
 - **External configuration (E20.4).** Root-level `client.properties` and `server.properties` are
   copied into `target/` at package time so they sit beside the JARs out of the box; whichever of
