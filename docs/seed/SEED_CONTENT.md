@@ -520,11 +520,11 @@ exercises a full paper.
 | 10 omer.katz | 1 | 1 | 2 | 1 | 1 | 3 | 4 | **40** |
 | 14 daniel.shapira | 1 | 1 | 2 | 1 | 1 | 3 | 1 | **30** |
 
-**21010 is the most-missed question** — six of eight got it wrong — and **21001 nobody missed**.
+**21010 is the most-missed question** — five of eight got it wrong — and **21001 nobody missed**.
 That gives the per-question breakdown in the grading review (E12.6) something to actually show:
 a flat difficulty profile would make that screen look like it was not reading the data.
 
-`21011` is the only question whose correct answer is **4**, and five students picked something
+`21011` is the only question whose correct answer is **4**, and three students picked something
 else. Worth keeping when the answer key is next touched: it is the seed's clearest demonstration
 that the fourth option is a real answer and not decoration.
 
@@ -564,7 +564,22 @@ second half of that rule.
 
 ### 10.1 Sources (8)
 
-Text is abridged here for readability; the loader stores the full paragraph.
+**These are the complete sources, not extracts.** An earlier draft of this line claimed the
+loader stored longer text; it does not — `BotSection.java` carries these paragraphs verbatim, and
+no fuller version exists anywhere in the repository. The claim was wrong and is removed rather
+than quietly softened, because the next person to read it would have gone looking for material
+that was never written.
+
+**What that means for the bot demo, stated plainly:** the whole corpus is **546 words across
+eight sources**, roughly 68 words each. Per bot that is 133 words for Algebra, 104 for Calculus,
+160 for Java and 149 for Databases. A student asking the Java bot a question on stage is getting
+an answer grounded in about 160 words of course material plus the question bank (S-28), which
+will read as thin next to a real study aid.
+
+Nothing about the pipeline is wrong — the sources parse, the prompt assembles, the fallback
+chain works. It is the *volume* that is short, and it is short because these paragraphs were
+written to prove the schema rather than to answer questions. Expanding them is content work, not
+code, and it touches `BotSection.java` as well as this section since the two must not drift.
 
 **Source 1** · bot 1 · TEXT · `משוואות ליניאריות — סיכום`
 > משוואה ליניארית היא משוואה שבה המשתנה מופיע בחזקה ראשונה בלבד. הפתרון מתבצע על ידי בידוד המשתנה: מעבירים אגפים תוך שינוי סימן, מכנסים איברים דומים ולבסוף מחלקים במקדם. מערכת של שתי משוואות בשני נעלמים נפתרת בשיטת ההצבה או בשיטת החיבור והחיסור. אם שתי המשוואות מתארות את אותו ישר יש אינסוף פתרונות, ואם הן מתארות ישרים מקבילים אין פתרון כלל.
@@ -608,10 +623,16 @@ Without it the provider column is a constant and demonstrates nothing.
 | 8 | 3 | 12 noam.peretz | T−2d | `deepseek` | What does the JVM do when recursion goes too deep? | Each call takes a stack frame; when the thread stack is exhausted the JVM throws StackOverflowError. |
 
 Sessions cluster on bots 1 and 3, and both `omer.katz` and `noa.friedman` asked twice.
-That is deliberate: T-14.3 / S-34 shows the teacher an **anonymised** aggregate ("8
-questions this month, most-asked topic: Collections"), and a flat one-question-per-student
-spread would make that view look identical to the raw list, proving nothing about
-aggregation.
+That is deliberate: T-14.3 / S-34 shows the teacher an **anonymised** aggregate, and a flat
+one-question-per-student spread would make that view look identical to the raw list, proving
+nothing about aggregation.
+
+**The aggregate is per bot, never school-wide.** One bot per course (S-30) and a teacher sees
+only the courses she teaches, so the Java teacher's screen reads **"4 questions this month,
+most-asked topic: Collections"** — not 8. The distribution is 3 for Algebra, 1 for Calculus, 4
+for Java and 0 for Databases; 8 is the all-bots total and no screen in the product can show it.
+An earlier draft of this note used 8 as the example, which would have had someone building the
+E16 view to a number the specification forbids.
 
 Bot 4 (Databases) has **no sessions** — it has never been active.
 
@@ -621,9 +642,21 @@ Bot 4 (Databases) has **no sessions** — it has never been active.
 
 Enough that the notification centre is populated at login rather than empty (NFR-21).
 
-**`seed_id` is the stable identifier** (the D8 ruling): the loader keys idempotency on it, so a
-second load updates rather than duplicating, and every other document — acceptance cases, demo
-script, `SeedLoadedDbTest` — refers to a notification by `seed_id` rather than by row order.
+**`seed_id` is a naming handle, not a database column** (D8, corrected). `notifications` has no
+such column: the loader keys idempotency on **recipient + type + title**, which is unique across
+the eight rows below and is what a re-load actually matches on.
+
+The `seed_id` column stays because that composite key is useless in a sentence — an acceptance
+case, a demo script or a failing assertion needs to say *which* notification, and
+`N-EXEC-CLOSED-ALG` does that where "the row for user 1 with type EXECUTION_CLOSED and title
+'בחינה הסתיימה…'" does not. It is documentation vocabulary, and every id here maps to exactly one
+row.
+
+**The moment that stops being true is a real column.** The key holds only because no recipient
+gets two notifications of the same type with the same title. Seed a repeating notification —
+two grade publications to the same student, say — and the composite collapses; that is when
+`notifications` gains a `seed_id` column rather than when someone finds it tidier.
+
 The `#` column is presentation order only and carries no meaning.
 
 | seed_id | # | recipient | type | title | read |
