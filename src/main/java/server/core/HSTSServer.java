@@ -10,8 +10,14 @@ import org.slf4j.LoggerFactory;
 import server.db.HibernateUtil;
 import server.db.QuestionDAO;
 import server.db.Transactions;
+import server.db.repos.AttemptRepository;
 import server.db.repos.CourseRepository;
+import server.db.repos.ExamRepository;
+import server.db.repos.ExecutionRepository;
+import server.db.repos.GradeRepository;
+import server.db.repos.QuestionRepository;
 import server.db.repos.RepositoryUserDirectory;
+import server.db.repos.UserRepository;
 import server.features.approval.ApprovalService;
 import server.features.approval.JpaApprovalStore;
 import server.features.auth.AuthService;
@@ -34,11 +40,20 @@ import server.features.exam.ExtendService;
 import server.features.exam.JpaExamStore;
 import server.features.exam.MonitorService;
 import server.features.exam.TimerService;
+import server.features.grading.GradeReviewService;
+import server.features.grading.GradingHandlers;
+import server.features.grading.GradingOnSubmit;
+import server.features.grading.GradingReads;
+import server.features.grading.GradingService;
+import server.features.grading.OverrideService;
+import server.features.grading.RepositoryGradingReads;
 import server.features.locks.EditLockService;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
 import server.features.notify.NotificationStore;
 import server.features.results.JpaTeacherResultsStore;
+import server.features.results.ResultsHandlers;
+import server.features.results.ResultsService;
 import server.features.results.TeacherResultsService;
 import server.realtime.PushGateway;
 
@@ -183,8 +198,12 @@ public class HSTSServer extends AbstractServer {
                 .registerOn(router);
         new LegacyQuestionHandlers(new QuestionDAO()).registerOn(router);
 
+        // Grading first, because take-exam is assembled with the grader rather than the other
+        // way round: the seam points from submission to marking and never back.
+        AttemptFinalizedListener grader =
+                registerGradingFeature(router, notifications, sessionFactory, clock);
         AttemptService attempts = registerExamFeature(router, sessions, pushGateway, notifications,
-                sessionFactory, clock, examTimers);
+                sessionFactory, clock, examTimers, grader);
         registerBotFeature(router, notifications, locks, sessionFactory, clock, attempts);
         // Teacher results and statistics (E14). Reads only, so it depends on nothing above
         // it and nothing above it depends on it: the figures it serves were frozen when the
@@ -192,6 +211,63 @@ public class HSTSServer extends AbstractServer {
         new TeacherResultsService(new JpaTeacherResultsStore(sessionFactory)).registerOn(router);
         registerApprovalFeature(router, notifications, sessionFactory);
         return router;
+    }
+
+    /**
+     * Grading and student results (E12/E13), and the wire that makes the pipeline real.
+     *
+     * <p>Everything here is assembled from repositories rather than from a store interface,
+     * which is the pattern E12 was written to: the services take a session and hold no
+     * transaction of their own, so their rules are provable against mocks and the transaction
+     * boundary is drawn once, at the handlers.
+     *
+     * <p>Three things are registered and one is returned.
+     *
+     * <ul>
+     *   <li>{@link GradingHandlers} puts the three teacher verbs on the router behind one
+     *       shared authorization shape;</li>
+     *   <li>{@link ResultsHandlers} puts the student verb on, behind a deliberately different
+     *       one — the caller's id is the query, not a check;</li>
+     *   <li>{@link GradingOnSubmit} is <b>returned</b> rather than registered, because it is not
+     *       a verb. It is the {@link AttemptFinalizedListener} that take-exam calls when an
+     *       attempt closes, and handing it back is what replaces the no-op that has been
+     *       standing in for E12 since E10 shipped.</li>
+     * </ul>
+     *
+     * <p>The order matters exactly once: the returned listener has to exist before
+     * {@link #registerExamFeature} builds the {@link AttemptService} that will call it. Every
+     * other dependency here runs the same direction, so there is no backwards edge to close.
+     *
+     * @return the listener take-exam should notify when an attempt is finalised
+     */
+    private static AttemptFinalizedListener registerGradingFeature(MessageRouter router,
+                                                                   NotificationService notifications,
+                                                                   SessionFactory sessionFactory,
+                                                                   Clock clock) {
+        GradeRepository grades = new GradeRepository();
+        AttemptRepository attempts = new AttemptRepository();
+        ExecutionRepository executions = new ExecutionRepository();
+        ExamRepository exams = new ExamRepository();
+        QuestionRepository questions = new QuestionRepository();
+        UserRepository users = new UserRepository();
+
+        GradingReads reads = new RepositoryGradingReads(executions, exams, questions, attempts);
+        GradeReviewService reviews =
+                new GradeReviewService(grades, attempts, executions, reads, questions, users);
+
+        // Fully qualified because two different features have an ApprovalService: E8's
+        // approves exams, E12's approves grades. The import above is E8's, and picking the
+        // wrong one here would compile against a constructor that happens not to match rather
+        // than fail on the name — so the long form stays until one of them is renamed.
+        new GradingHandlers(sessionFactory,
+                new server.features.grading.ApprovalService(
+                        grades, attempts, executions, notifications, clock),
+                new OverrideService(reviews),
+                reviews).registerOn(router);
+
+        new ResultsHandlers(sessionFactory, new ResultsService(grades, users)).registerOn(router);
+
+        return new GradingOnSubmit(sessionFactory, new GradingService(reads, grades), attempts);
     }
 
     /**
@@ -297,12 +373,12 @@ public class HSTSServer extends AbstractServer {
     private static AttemptService registerExamFeature(MessageRouter router, SessionManager sessions,
                                             PushGateway pushGateway, NotificationService notifications,
                                             SessionFactory sessionFactory, Clock clock,
-                                            ScheduledExecutorService examTimers) {
+                                            ScheduledExecutorService examTimers,
+                                            AttemptFinalizedListener grader) {
         ExamStore examStore = new JpaExamStore(sessionFactory);
 
         AttemptService attempts = new AttemptService(examStore, clock,
-                TimerService.Scheduler.on(examTimers), pushGateway, notifications,
-                AttemptFinalizedListener.NO_OP);
+                TimerService.Scheduler.on(examTimers), pushGateway, notifications, grader);
         attempts.registerOn(router);
 
         MonitorService monitors = new MonitorService(examStore, attempts, pushGateway, clock);

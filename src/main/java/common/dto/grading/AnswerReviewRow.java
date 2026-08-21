@@ -24,7 +24,7 @@ import java.util.Objects;
  * {@code correct} is a plain {@code byte}: every question has a right answer.
  *
  * @param ordinal       position in the exam, 1-based, so a client never re-numbers a list
- * @param displayId     the question's six-digit display id, which is what a teacher discusses
+ * @param displayId     the question's five-digit display id (S-8), which is what a teacher discusses
  * @param questionText  the question as it was asked
  * @param answer1       first option
  * @param answer2       second option

@@ -216,21 +216,21 @@ Client:
 
 ## E12 — Grading [B]
 
-- [ ] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade — *complete: AutoGrader (scoring rules) + GradingService (gradeability, idempotence) + RepositoryGradingReads (the reads, ForGrading sanctioned). 9 contract cases per engine. Not ticked only until it registers on AttemptFinalizedListener (E10/E11)*
-- [ ] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3) — *ApprovalService done: idempotent (counts, never re-stamps), per-grade ownership, refused list, and freezing ScoreStatistics into xam_executions.stats on completion — E12.4 → stored. 18 service tests + 4 repository contract cases per engine. Not ticked: the router handler*
-- [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22)
-- [ ] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` complete and tested against the seeded execution 4821 fixture: population σ, deciles, and pass rate (mark 55, all scored attempts in the denominator). Not ticked: **→ stored** still needs the frozen E12 contract and the service that writes `exam_executions.stats`*
+- [x] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade — *complete, and now wired: `GradingOnSubmit` implements `AttemptFinalizedListener` and replaces the no-op in `HSTSServer`, so an attempt is marked the moment it closes. Auto-grading publishes nothing (C-3) — approval does*
+- [x] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3) — *`ApprovalService` + `GRADES_APPROVE` on the router behind `GradingHandlers`' shared teacher gate. Idempotent (counts, never re-stamps), per-grade ownership, refused list, freezes stats into `exam_executions.stats` on completion*
+- [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22) — *`OverrideService` + `GRADE_OVERRIDE` done: blank justification is VALIDATION before anything is read, out-of-range score likewise, an approved grade is CONFLICT, the auto score is kept beside the new one, and it answers with the refreshed `GradeReview`. Not ticked: the override dialog (E12.6's screen) and the comment-to-student box (S-22)*
+- [x] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` tested against the seeded execution 4821 fixture (population σ, deciles, pass mark 55), and **stored**: `ApprovalService` freezes it into `exam_executions.stats` in the approving transaction*
 - [ ] E12.5 Grading queue screen: executions awaiting grading, per-execution student table (auto scores, status)
-- [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve
+- [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve — *server side done: `GradeReviewService` assembles the marked paper and `GRADE_REVIEW_GET` serves it to the owning teacher. The ticks are re-run through `AutoGrader`, so a paper's marks and the score above them can never come from two different rules. Not ticked: the screen*
 - [ ] E12.7 Bulk approve with summary confirm — *covered by the same verb and service: ApproveRequest takes a list, so bulk is the same code path as single (E12.2). Not ticked: the confirm UI*
 - [ ] E12.8 Session + integration tests (auto-grade correctness, override w/o reason blocked, idempotent approve, stats values verified against hand-computed fixture)
 - [ ] E12.9 Acceptance pass vs T-8 ⚑
 
 ## E13 — Student results [B]
 
-- [ ] E13.1 ResultsService: student's own grades only (authorization test: requesting others fails) ⚑ — *ResultsService + two scoped GradeRepository reads done; ownership is the SQL filter, not a check. 10 service tests + 5 repository contract cases on both engines. Not ticked: the router handler is not wired yet*
+- [x] E13.1 ResultsService: student's own grades only (authorization test: requesting others fails) ⚑ — *ownership is the SQL filter, not a check. `MY_GRADES_GET` is on the router behind `ResultsHandlers`, whose gate is deliberately a different shape from the teacher one: no role check at all, because the session's id **is** the query*
 - [ ] E13.2 Checked-form DTO: questions, chosen vs correct, marks, comments — only for APPROVED grades
-- [ ] E13.3 My Grades screen: exam list with scores, status, date; empty-state — *MyGradesSession done: load/empty/error states, live refresh on GRADE_PUBLISHED, no refresh control; 14 tests against FakeClientConnection. Not ticked: the FXML screen, and StudentGradeRow cannot yet name its exam (see reports/member-b/PR6.md)*
+- [ ] E13.3 My Grades screen: exam list with scores, status, date; empty-state — *`MyGradesSession` and `MY_GRADES_GET` both done, and `StudentGradeRow` v1.1 now names its exam: every row carries `examName`/`courseCode`, read in bulk by `GradeRepository.findExamLabels`. Not ticked: the FXML screen*
 - [ ] E13.4 Checked form viewer: green/red marking, teacher comments, score breakdown
 - [ ] E13.5 Export/print view of the checked form (S-36) — printable layout
 - [ ] E13.6 GRADE_PUBLISHED push → notification + dashboard card refresh

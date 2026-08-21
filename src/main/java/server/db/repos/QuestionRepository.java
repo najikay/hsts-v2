@@ -262,6 +262,50 @@ public final class QuestionRepository {
     }
 
     /**
+     * The five-digit display ids of questions, by id (S-8).
+     *
+     * <p>The label staff quote when they talk about a question, which a marked paper has to
+     * show for a teacher and a student to be discussing the same row. It lives on
+     * {@code questions} while everything else a review needs lives on {@code question_versions},
+     * so it is one small read rather than a widened projection — the alternative was joining it
+     * into the grading read, which would have put a correctness-bearing query on the critical
+     * path of a screen that only wanted a label.
+     *
+     * <p><b>No suffix, because there is nothing to sanction.</b> A display id is not an answer,
+     * so this read is outside {@code CorrectnessLeakGuardTest}'s remit by construction and is
+     * safe on a student path as well as a teacher one.
+     *
+     * <p>Soft-deleted questions are included deliberately: a paper that was sat stays
+     * readable after its questions are retired from the bank, and a marked exam missing half
+     * its labels because of a later deletion would be a worse answer than the label itself.
+     *
+     * <p>Consumers: E12.6's {@code GRADE_REVIEW_GET} and E13.4's {@code CHECKED_FORM_GET},
+     * through {@code server.features.grading.GradeReviewService}.
+     *
+     * @param session     the current session
+     * @param questionIds the questions; an empty collection returns an empty map
+     * @return display id by question id; a question that does not exist is simply absent
+     */
+    public Map<Long, String> findDisplayIds(Session session, Collection<Long> questionIds) {
+        if (questionIds == null || questionIds.isEmpty()) {
+            // Same `in ()` reason as findVersionsForGrading.
+            return Map.of();
+        }
+        List<Object[]> rows = session.createQuery("""
+                        select q.id, q.displayId from Question q
+                        where q.id in (:ids)
+                        """, Object[].class)
+                .setParameter("ids", questionIds)
+                .getResultList();
+
+        Map<Long, String> byId = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            byId.put((Long) row[0], (String) row[1]);
+        }
+        return byId;
+    }
+
+    /**
      * The answer key of one whole exam version, in exam order (E8.4 ⚑ — F4.1).
      *
      * <p><b>Teacher-only, and named so.</b> A coordinator deciding whether to approve an exam
