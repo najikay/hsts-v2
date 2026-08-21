@@ -496,9 +496,11 @@ public enum Verb {
     // the {@code coordinators} table — {@code requireCoordinatorOf}, never
     // whoever the payload says (P-5). "One coordinator per subject" is the
     // primary key of that table, so the scoping question has exactly one answer.
-    // {@link #MY_APPROVALS_GET} is the single exception and the mirror image: it
-    // is any teacher's read of her own submissions, scoped to the caller in the
-    // query itself, like every other "mine" verb in the protocol.
+    // Two exceptions, both deliberate: {@link #MY_APPROVALS_GET} is any teacher's
+    // read of her own submissions, scoped to the caller in the query itself; and
+    // {@link #EXAM_PREVIEW_GET} also admits the version's own AUTHOR as a plain
+    // teacher, because a rejection reason is only actionable if she can re-read
+    // the exam it names (F4.2). Corrected 2026-08-21; the contract was always right.
     //
     // Two rules bind the group. The two decisions are optimistic-locked
     // compare-and-sets on {@code exam_versions.lock_version} AND guarded on

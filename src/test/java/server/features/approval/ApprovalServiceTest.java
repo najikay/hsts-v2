@@ -241,6 +241,17 @@ class ApprovalServiceTest {
         }
 
         @Test
+        @DisplayName("a plain teacher who neither authored nor coordinates is refused ⚑")
+        void notAnUninvolvedTeachers() {
+            // MICHAL teaches Databases and coordinates CS; CALCULUS_V1 is neither hers
+            // nor her subject's. The licence names two audiences and she is a third.
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.preview(caller(MICHAL, Role.TEACHER),
+                            request(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(CALCULUS_V1))))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
         @DisplayName("the version's own author may read it back, which is what makes a reason actionable")
         void theAuthorMayReadItBack() {
             Message response = service.preview(caller(DANA, Role.TEACHER),

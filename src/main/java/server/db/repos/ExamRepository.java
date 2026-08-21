@@ -249,8 +249,11 @@ public final class ExamRepository {
      * <p>Note this write bypasses the entity's {@code @Version}, as any bulk update does.
      * That is correct here and nowhere else in this feature: superseding is the system acting
      * on rows nobody is looking at, so there is no reader whose view could go stale, and a
-     * coordinator who <em>was</em> looking at one of them is caught by the compare-and-set on
-     * her own decision instead.
+     * coordinator who <em>was</em> looking at one of them is refused by the status guard on
+     * her own decision instead: this bulk update leaves {@code lock_version} untouched, so her
+     * optimistic token still matches, and it is the PENDING status check that stops a stale
+     * approve (corrected 2026-08-21; the safety is a cross-file dependency and E7's
+     * {@code submitForApproval} is this method's first production caller).
      *
      * <p>Consumer: E8.2's supersede entry point, called by E7's submit.
      *
