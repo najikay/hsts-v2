@@ -341,3 +341,80 @@ moment a topic is typed rather than picked, which is the same ruling as above.
 
 **The size clamp and `requireTeachesCourse` live nowhere yet.** Both are the service layer's, which
 this PR does not contain. Named here so §2 of the contract is not read as satisfied.
+
+## 14. Rulings received, and what changed in this PR because of them
+
+All five answered 2026-08-21, all as drawn. Recorded here because two of the answers improve on
+the questions:
+
+- **§7.2, the principal and the answer key.** I framed it as a judgement call priced at an hour.
+  It is not: **spec §7.3.1** gives her read-only access to all data *as entered*, and the correct
+  answer is entered data. An argument from the specification outranks an argument from reversal
+  cost, and the contract now says so.
+- **§7.4, the legacy pair.** My sequencing preference held, but the ruling closes the hole I had
+  merely flagged: the two legacy types go on the guard's allow-list with a **dated
+  `LEGACY, RETIREMENT SCHEDULED`** comment naming the follow-up's whole scope, so the guard is
+  never silent about them. "A named, dated exception is honest; silence was the problem." The
+  entry lands with `BankWireLeakGuardTest`, which needs the DTOs.
+
+Also in this PR per ruling §7.1: `docs/TODO.md` E6.6 reworded from `GET_QUESTION_IMAGE` to
+`QUESTION_IMAGE_GET`, with the reason recorded inline.
+
+**The contract stays DRAFT.** Freeze is conditioned on the handlers existing against it, which is
+the next PR.
+
+## 15. Definition of Done
+
+- [x] **Cold auditor run AFTER the code was written, findings acted on.** Five real defects in a
+      green suite; §13. This is the box PR 1 did not tick and should not have been opened without,
+      and it is now a gate in the pre-PR checklist rather than something remembered
+- [x] Matches ARCHITECTURE §5 and the PRD ids named (F2.4, F2.5, F9.3, S-5, C-8, ADR-016)
+- [x] Unit + repo tests on **both engines**; every MySQL leaf ran with a real timing
+- [x] Coverage not lower than `main`: bundle **98.34%**, `QuestionValidator` / `BankMessages` /
+      `BankQuery` / both projections at **100%**
+- [x] Migrations unchanged by this PR
+- [x] No secrets; nothing outside scope; `Authorization.java` and `common/**` untouched
+- [x] `docs/TODO.md` — E6.6 reworded per ruling §7.1. **No box ticked:** E6.4 and E6.5 have their
+      repository layer here and their service layer in the next PR, so neither is honestly done
+- [ ] CI green — filled in after the run
+
+## 16. The four side catches, one line each
+
+Listed compactly here so acceptance cases can cite them by number rather than quoting §13.
+
+| # | Defect | Where it would have shown |
+|---|---|---|
+| C-1 | Free-text bank search treated `%` and `_` as LIKE wildcards. Searching `100%` matched every stem containing `100`; searching `_` matched everything | T-2.6, the moment a teacher types a symbol into the search box |
+| C-2 | `deleteBlocked` discarded the exam display id, so two exams sharing a name printed "2 exams use it: Algebra Midterm, Algebra Midterm" | T-2.7's dialog, on any course that reuses an exam name across terms |
+| C-3 | `hebrewIsNotDestroyed` asserted nothing: both strings were unpointed, so deleting the mark-stripping would not have failed it | nowhere visible. A test reading as coverage without being any |
+| C-4 | An empty blocker list rendered "0 exams use it: ." | unreachable today; the invariant that prevents it lives in a service that does not exist yet |
+
+**On C-1, the precise sentence, because the inflated one is worse.** It was **injection-shaped but
+not injection**: the value was a bound parameter throughout, so the query's structure was never
+reachable and no attacker could alter it. What went wrong is that user input was read as **LIKE's
+own mini-language rather than as data**, so a teacher typing `%` silently changed what her filter
+meant. Worth stating exactly, because this line may reach the submission document, and "we shipped
+an injection bug" is both false and a worse trade than the truth.
+
+## 17. Adjudication: the coordinator lookups, mine and E8's
+
+Flagged before E8 landed, on the suspicion that we had both written the same query. **We had not**,
+and the check is worth recording since the ruling was that `CourseRepository` is mine and I pick
+the survivor.
+
+| method | asks |
+|---|---|
+| `coordinates(teacherId, subjectCode)` (E8) | does she coordinate *this* subject? A yes/no guard |
+| `findCoordinatorOf(subjectCode)` (E8) | who approves here? Reverse lookup for E8.2's notification |
+| `findSubjectOf(courseCode)` (E8) | which subject is this course in? |
+| `findCoordinatedCourseCodes(coordinatorId)` (E6) | which courses does she reach? Forward expansion |
+
+**The test applied: can either be built from the other?** Mine from `coordinates` would need one
+query per subject instead of one join, so it is not a wrapper. `coordinates` from mine does not
+work at all, since mine returns courses and the guard needs a subject. Four distinct questions,
+**all four kept, nothing deleted or renamed.**
+
+What they do share is the coordinator-to-subject relationship, so a rule change touches all four.
+Cross-references added in both directions rather than left for whoever finds out. Note that mine
+handles a coordinator of two subjects and E8's per-subject guard is unaffected by that case, which
+is the one place the two shapes could have diverged quietly.

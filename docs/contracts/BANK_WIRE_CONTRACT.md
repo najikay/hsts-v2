@@ -1,16 +1,19 @@
 # E6 question bank wire contract — DRAFT
 
-**Status: DRAFT, 2026-08-21.** Member A drafts, the lead freezes with rulings on review
-(his ruling of 2026-08-21). Nothing here is binding until this header says FROZEN.
+**Status: DRAFT, 2026-08-21. All five open rulings answered; freeze pending the handlers.**
+The lead's condition, verbatim: "Freeze happens on the PR review once E6's handlers exist against
+it." So this stays DRAFT through the service PR and is not binding until this header says FROZEN.
 Same additive-only terms as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) once it is.
 
 Package: `common/dto/bank` (all types `Serializable` records, wire-safe, no entity types).
 Verbs group under `Question bank (E6)` in `common/protocol/Verb.java`.
 Handlers: `server.features.bank.QuestionService`.
 
-**Open rulings are collected in §7.** They are the reason this is a draft rather than a
-proposal I built against silently. **§9 records what a red-team pass changed before you read
-this**, because several of the corrections are decisions rather than typo fixes.
+**All five rulings are answered, and §7 keeps them with their reasoning** rather than deleting the
+questions, because why the contract says what it says is worth more later than a tidy document is
+now. **§9 records what a pre-build red team changed**, and **§13 of the PR report records what a
+post-implementation one changed after this was first reviewed** — several of those are decisions
+rather than typo fixes.
 
 ---
 
@@ -54,7 +57,12 @@ already holds the legacy `Question` and `QuestionUpdate` (§7.4). `Question.answ
 answer key, and it is invisible to the scan twice over: `answer` matches nothing in
 `CorrectnessNames`, and `Question` is a mutable class rather than a record. So for as long as the
 legacy pair lives in this package, "the build says so" is false about the only types in it that
-already carry a key. See §7.4, which is now a sequencing question rather than a tidiness one.
+already carry a key.
+
+**Ruled 2026-08-21, and the ruling closes that hole rather than accepting it (§7.4):** the two
+legacy types go on the allow-list with a dated `LEGACY, RETIREMENT SCHEDULED` comment naming the
+follow-up's whole scope. A named, dated exception is honest; silence was the problem. When the
+retirement PR lands the allow-list shrinks by two, and that diff is the proof.
 
 ## 2. Roles and scope
 
@@ -280,35 +288,57 @@ than trusted from a declared type. Never travels in the list or the detail;
 `BAD_REQUEST` is deliberately unused here: a malformed payload answers `VALIDATION`, matching
 `EXAM_WIRE_CONTRACT`.
 
-## 7. Open rulings for the lead
+## 7. Rulings, all five answered 2026-08-21
 
-1. **Verb naming.** I propose `QUESTION_IMAGE_GET`, matching the noun-first convention of
-   `NOTIFICATIONS_GET`, `LOCKS_SNAPSHOT` and `BOT_MANAGER_GET`. **TODO E6.6 literally names it
-   `GET_QUESTION_IMAGE`**, which matches the two legacy verbs instead. Your call; I would rather
-   the convention won and the TODO was reworded.
+Answered by the lead in full. Kept here rather than deleted, because the reasoning is the record
+of why the contract says what it says, and two of the answers are better arguments than the
+questions were.
 
-2. **Does the principal see the answer key?** I have drawn it so she does: one `QuestionDetail`
-   type, staff-only, principal included. The argument for keeping it from her is that the key's
-   only purpose here is authoring and she cannot author. The argument against is that a second
-   keyless projection is real code for a distinction whose threat model is students, not staff.
-   **Reversal cost if you want her excluded: one extra record plus one allow-list entry, about an
-   hour**, and it is cheaper now than after the screens are built.
+1. **Verb naming: `QUESTION_IMAGE_GET`.** "Convention wins. The TODO predates the convention and
+   loses to it." `docs/TODO.md` E6.6 reworded in this PR.
 
-3. **Coordinator scope, §2.** I have ruled it "every course in the subject she coordinates",
-   because the alternative shows a starred demo account an empty bank. The reachable alternative
-   is "courses she teaches, union courses in her subject", which is the same set for
-   `michal.sharon` and differs for nobody in the seed. Flagging because it is an authorization
-   semantic and yours to overrule, not because I think it is close.
+2. **The principal SEES the answer key.** One `QuestionDetail`, staff-only, principal included, as
+   drawn in §4. **And this is not the judgement call I framed it as:** spec §7.3.1 gives her
+   read-only access to all data *as entered*, and the correct answer is entered data. F9.3's
+   zero-mutating-verbs is her real boundary; the threat model was always students. Recorded because
+   an argument from the specification outranks the cost-of-reversal argument I offered.
 
-4. **The legacy retirement is now a sequencing question, not a tidiness one.** `common/dto/bank`
-   already holds `Question` and `QuestionUpdate`, and `Question.answer` is an answer key the new
-   guard cannot see (§1). So E6 ships a guard that is green and silent about the one type in its
-   own package that already carries a key. Either the legacy pair is retired **inside** E6, or §1's
-   exclusion stands as written and we say so out loud. I still prefer a separate PR after E6 for
-   the review reasons, but this is no longer purely my call: it changes what the guard proves.
+3. **Coordinator scope: every course in her coordinated subject**, exactly as §2 draws it. The
+   red-team finding is the argument, in his words: a starred demo account opening an empty bank
+   "would have been a defense-day disaster". The union alternative "adds nothing for anyone in the
+   seed" and is dropped.
 
-5. **Truncating the list stem server-side.** I propose it, because forty full stems is the payload
-   that makes a bank browse feel slow. The length is a constant.
+4. **The legacy pair is retired in its own PR, and the guard does not stay silent meanwhile.**
+   Sequencing preference upheld: retirement lands right after E6 merges and before hardening on
+   the 26th. But `common/dto/bank`'s `Question` and `QuestionUpdate` go on the leak guard's
+   explicit allow-list with **a dated comment naming them LEGACY, RETIREMENT SCHEDULED**, and
+   naming the follow-up's whole scope: `LegacyQuestionHandlers`, `QuestionDAO`, the legacy screen
+   and the E18.4 guarded-update flow all retire together.
+
+   His reasoning, which is stronger than my flag was: *"a named, dated exception is honest; silence
+   was the problem. When the retirement PR lands, the allow-list shrinks by two and that diff is
+   the proof."* The entry lands with `BankWireLeakGuardTest`, which needs the DTOs.
+
+5. **Server-side stem truncation approved**, the constant documented, and the detail verb carries
+   the full stem.
+
+**Still open, and it is a freeze condition rather than a ruling:** the contract stays DRAFT until
+E6's handlers exist against it. The lead's words: "Freeze happens on the PR review once E6's
+handlers exist against it."
+
+### 7.6 One question raised after the rulings, not yet answered
+
+**The topic filter cannot be driven by any UI as specified.** `topic` is exact equality on free
+text a teacher typed at create time, and no query returns the distinct topics of a course, so
+E6.11 cannot populate a picker and a typed topic misses on any spacing or spelling difference.
+PRD F2.4 lists topic beside course and difficulty, which are both closed sets.
+
+Two ways out, and it is a product call rather than a defect: either topic becomes a lookup fed by
+a new `findDistinctTopics` query and the filter stays exact, or F2.4's topic filter becomes a text
+match like the stem search. Related: `topic` is currently compared raw while `search` is
+lowercased, so on MySQL `topic = 'Equations'` matches `'equations'` and on H2 it does not. That
+asymmetry becomes visible the moment a topic is typed rather than picked, which is the same
+decision.
 
 ## 8. What is deliberately absent
 
@@ -351,5 +381,6 @@ returned fifteen findings; these are the ones that changed the contract rather t
 | "no student-reachable path" | qualified | the study bot reads the bank. The claim was false as an absolute |
 | `size` on `BankPage` | `pageSize` | `NotificationsPage.size()` already means "rows returned" |
 
-Two findings are **not** fixed here and are §7.4 and the `requireTeachesCourse` note in §2: both
-are decisions rather than corrections.
+Two findings were **not** fixed in that pass because they were decisions rather than corrections:
+the legacy-pair sequencing and the `requireTeachesCourse` note in §2. Both are now settled, the
+first by ruling §7.4 and the second by the lead opening `Authorization.java` to E6.
