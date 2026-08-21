@@ -202,19 +202,35 @@ cannot diverge:
 - text non-blank, at most 4000 characters
 - exactly 4 answers, each non-blank and at most 500 characters (`a1..a4 VARCHAR(500)`)
 - `correctAnswer` in 1..4
-- the 4 answers pairwise distinct, compared after **trim, whitespace-collapse, case folding and
-  accent folding**
+- the 4 answers pairwise distinct under `QuestionValidator.sameAnswer`, which folds **at least
+  as much as `utf8mb4_unicode_ci` does** (below)
 - topic non-blank, at most 100 characters (`topic VARCHAR(100)`)
 - difficulty present
 
-**The length rules and the accent rule are not padding, they are the difference between a message
-and a stack trace.** Without lengths, a pasted paragraph in an answer box becomes a data-truncation
-`SQLException` and the teacher sees `INTERNAL`. And the accent rule exists because
-`utf8mb4_unicode_ci` is accent-insensitive: `ck_question_versions_distinct` rejects
-`resume`/`résumé` as duplicates, so a validator that folds only case is **weaker than the
-constraint it claims to backstop** and hands the same case to the database to reject rudely. The
-service rule must be at least as strict as the CHECK in every dimension, or the CHECK is not a
-backstop but a second, worse error path.
+**The length rules and the distinctness rule are not padding, they are the difference between a
+message and a stack trace.** Without lengths, a pasted paragraph in an answer box becomes a
+data-truncation `SQLException` and the teacher sees `INTERNAL`.
+
+**And the distinctness comparison has to be stricter than ADR-016's literal words**, because
+`ck_question_versions_distinct` compares under `utf8mb4_unicode_ci`. Measured against the running
+database rather than assumed, MySQL calls all of these one answer:
+
+```
+resume / résumé      Strasse / Straße      oeuvre / œuvre
+file / ﬁle           A / Ａ                τέλος / τέλοσ
+שלום / שָׁלוֹם  (Hebrew, unpointed vs pointed)
+```
+
+Any pair the service accepts and the constraint rejects arrives as a raw constraint violation and
+a generic error, which is the outcome naming the field was meant to replace. So the rule is
+one-directional by design: **never accept a pair the database will reject.** Being stricter than
+the collation is safe, because the worst case is a teacher told two confusingly similar answers
+are too similar. Being looser is the case with a stack trace in it.
+
+Exact equivalence with MySQL's UCA table is **not** claimed and is not achievable in Java; the two
+are separate implementations. The implementation is NFKD, strip combining marks, upper-then-lower
+(which folds Greek final sigma), then a `Collator` at primary strength (which folds the ß and œ
+expansions that no normalisation performs).
 
 Each failure answers `VALIDATION` with **a message naming the offending field**, because T-2.2
 tries three bad saves in a row and expects three different sentences. All copy lives in

@@ -242,3 +242,102 @@ change and a wide blast radius, so it wants to be its own PR and probably not th
 | New tests | **50** — 21 H2, 24 MySQL (21 shared + 3 collation-only), 5 pure unit |
 | Both leaves | ran with real timings, neither skipped |
 | `BankQuery`, `BankQuestionSummary`, `ReferencingExam` | **100%** instructions |
+
+## 13. The post-implementation audit, and what it cost me to have skipped it once
+
+Run against the whole E6 body of code after everything was green, with one instruction: find where
+the query and its test agree with each other and both differ from the requirement. That is the
+failure class no amount of my own testing reaches, because I wrote both halves.
+
+**Fifteen findings. Five were real defects in shipped-quality code that passed 3464 tests.**
+
+### 13.1 The distinctness rule was looser than the constraint it claimed to backstop
+
+The one worth the whole exercise. `comparisonKey` folded canonically (NFD) and its javadoc claimed
+equivalence with `utf8mb4_unicode_ci`. **It matched on two cases out of seven.**
+
+Measured against the running database, not argued:
+
+| pair | MySQL `utf8mb4_unicode_ci` | old rule |
+|---|---|---|
+| `resume` / `résumé` | equal | equal |
+| `Strasse` / `Straße` | **equal** | different |
+| `oeuvre` / `œuvre` | **equal** | different |
+| `file` / `ﬁle` | **equal** | different |
+| `A` / `Ａ` | **equal** | different |
+| `τέλος` / `τέλοσ` | **equal** | different |
+| `שלום` / `שָׁלוֹם` | equal | equal |
+
+Every mismatch runs in the dangerous direction: **service accepts, database rejects.** The teacher
+gets a raw constraint violation and a generic `INTERNAL`, which is precisely the outcome the
+named-field message exists to replace. My test covered only the diacritic subset, which NFD does
+handle, so the code and the test agreed and both differed from the requirement.
+
+`sameAnswer` now does NFKD, strips combining marks, folds case with an upper-then-lower round trip
+(which is what folds Greek final sigma, since `toLowerCase` leaves ς alone), then collates at
+primary strength (which is what folds the ß and œ **expansions** that no normalisation performs).
+All seven pass, and six deliberately-distinct pairs stay distinct.
+
+**And the claim is now honest.** Exact equivalence with MySQL's UCA table is not achievable in Java
+and is no longer asserted. The rule is one-directional by design: never accept what the database
+will reject, and over-folding is the safe error.
+
+### 13.2 A test that could not fail on the defect it claimed to pin
+
+`emptyScopeMatchesNothing` — including the plant I reported in §10. `findBankPage` returns early
+when the scope is empty, so `bankWhere` is **never reached** with an empty list. My planted attack
+only failed because I had removed the short-circuit at the same time; with it in place, the WHERE
+clause could be gutted and the test would stay green.
+
+`scopeSurvivesWithoutTheShortCircuit` now covers it: a non-empty scope matching no questions does
+reach the WHERE, so it fails if the course predicate is skipped or widened. §10 above overstated
+what the original test proved, and is left standing with this correction rather than quietly
+rewritten.
+
+### 13.3 Free-text search treated LIKE wildcards as wildcards
+
+Searching `100%` matched every stem containing `100`; searching `_` matched everything. Not an
+injection risk, since the value is a bound parameter, but the one filter a teacher composes herself
+is the one that can contain those characters. Now escaped with `escape '!'`, with a test covering
+`%`, `_` and the escape character itself.
+
+### 13.4 `deleteBlocked` threw away the display id the projection exists to carry
+
+It took `List<String>` of names, so two exams called "Algebra Midterm" in different terms produce
+**"2 exams use it: Algebra Midterm, Algebra Midterm"** — reintroducing one layer up the exact defect
+D24's per-exam de-duplication was built to remove. My test passed two differently-named exams, so
+the case was unreachable. Now takes `List<ReferencingExam>` and renders "101101 Algebra Midterm".
+
+### 13.5 A Hebrew test that asserted nothing
+
+`hebrewIsNotDestroyed` used unpointed strings on both sides, so deleting the mark-stripping
+entirely would not have failed it. Replaced with a pointed-versus-unpointed pair, plus its
+converse so the consonants still have to matter.
+
+Also fixed: `deleteBlocked(List.of())` produced "0 exams use it: ." — unreachable today, one `if`.
+
+### 13.6 What it confirmed rather than found
+
+Worth recording because these were the parts I was least sure of. `findReferencingExams` is
+correct on every edge it was asked about, and structurally so: `uq_exam_versions_no` makes the
+latest-version join yield exactly one row per exam, and `fk_evq_question_version`'s composite key
+makes a mismatched denormalised `questionId` unwritable. `countBank` has exact row parity with
+`findBankPage`. `order by q.displayId` is a total order because of `uq_questions_display_id`.
+`bankWhere` and `bindBank` do not disagree on any input. The length rules err in the safe
+direction, because `String.length()` in UTF-16 units is always at least MySQL's character count.
+
+### 13.7 Three findings deferred, with reasons
+
+**The topic filter has no way to be driven.** It is exact equality on free text a teacher typed,
+and there is no `findDistinctTopics`, so E6.11 cannot populate a dropdown and a typed topic misses
+on any spacing difference. PRD F2.4 lists topic beside course and difficulty, which are closed
+sets. That is a **feature gap, not a code defect**, and it wants your ruling: either topic becomes
+a lookup fed by a new query, or F2.4's topic filter is a text match rather than a picker.
+
+**`topic` is compared raw while `search` is lowercased**, so on MySQL `topic = 'Equations'` matches
+`'equations'` and on H2 it does not. Invisible today because both sides of the test are
+byte-identical and the client will send back a topic it read from the server. It becomes real the
+moment a topic is typed rather than picked, which is the same ruling as above.
+
+**The size clamp and `requireTeachesCourse` live nowhere yet.** Both are the service layer's, which
+this PR does not contain. Named here so §2 of the contract is not read as satisfied.

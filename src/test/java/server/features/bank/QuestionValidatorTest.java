@@ -3,6 +3,8 @@ package server.features.bank;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import server.db.entities.Difficulty;
 import server.features.bank.QuestionValidator.Fields;
 import server.features.bank.QuestionValidator.Violation;
@@ -366,50 +368,85 @@ class QuestionValidatorTest {
     }
 
     @Nested
-    @DisplayName("the comparison key, shared with the client (E6.11)")
-    class ComparisonKey {
+    @DisplayName("sameAnswer, the rule shared with the client (E6.11)")
+    class SameAnswer {
 
         @Test
-        @DisplayName("trims, collapses and folds case")
+        @DisplayName("trims, collapses whitespace and folds case")
         void normalises() {
-            assertThat(QuestionValidator.comparisonKey("  Paris  ")).isEqualTo("paris");
-            assertThat(QuestionValidator.comparisonKey("New  York")).isEqualTo("new york");
-            assertThat(QuestionValidator.comparisonKey("A\tB\nC")).isEqualTo("a b c");
-            assertThat(QuestionValidator.comparisonKey("PARIS")).isEqualTo("paris");
+            assertThat(QuestionValidator.sameAnswer("  Paris  ", "Paris")).isTrue();
+            assertThat(QuestionValidator.sameAnswer("New  York", "New York")).isTrue();
+            assertThat(QuestionValidator.sameAnswer("A\tB\nC", "a b c")).isTrue();
+            assertThat(QuestionValidator.sameAnswer("PARIS", "paris")).isTrue();
+        }
+
+        /**
+         * Every pair MySQL calls equal under {@code utf8mb4_unicode_ci}.
+         *
+         * <p>Not guessed. Each was run against the running database as
+         * {@code 'x' = CONVERT('y' USING utf8mb4) COLLATE utf8mb4_unicode_ci} and returned 1.
+         * The service rule has to agree on all of them, because any pair it accepts and
+         * {@code ck_question_versions_distinct} rejects becomes a raw constraint violation and a
+         * generic internal error, which is the outcome naming the field was meant to replace.
+         *
+         * <p>The previous implementation folded canonically (NFD) and matched only the first
+         * two of these. Its own javadoc claimed equivalence with the collation, and its own test
+         * covered only the diacritic cases, so the code and the test agreed and both differed
+         * from the requirement.
+         */
+        @ParameterizedTest(name = "MySQL says equal: {0} / {1}")
+        @CsvSource({
+                "resume, résumé",
+                "Ångström, angstrom",
+                "Strasse, Straße",
+                "oeuvre, œuvre",
+                "file, ﬁle",
+                "A, Ａ",
+                "τέλος, τέλοσ",
+                "שלום, שָׁלוֹם"
+        })
+        void foldsEverythingTheCollationFolds(String first, String second) {
+            assertThat(QuestionValidator.sameAnswer(first, second))
+                    .as("%s / %s are one answer to MySQL", first, second)
+                    .isTrue();
+
+            // And the whole question is refused, not merely the pair reported equal.
+            assertThat(QuestionValidator.validate(
+                    withAnswers(java.util.Arrays.asList(first, second, "Madrid", "Rome"))))
+                    .isPresent();
+        }
+
+        @ParameterizedTest(name = "must stay distinct: {0} / {1}")
+        @CsvSource({
+                "2x + 1, 2x - 1",
+                "yes, yes!",
+                "Paris, London",
+                "פריז, לונדון",
+                "10, 100",
+                "a, b"
+        })
+        void keepsRealDifferences(String first, String second) {
+            // The failure mode of over-folding: rejecting a legal question. Punctuation, sign
+            // and digits separate genuine answers, and a teacher whose four options differ only
+            // by a minus sign is writing a perfectly good algebra question.
+            assertThat(QuestionValidator.sameAnswer(first, second)).isFalse();
         }
 
         @Test
-        @DisplayName("folds accents, matching utf8mb4_unicode_ci rather than ADR-016's letter")
-        void foldsAccents() {
-            assertThat(QuestionValidator.comparisonKey("résumé")).isEqualTo("resume");
-            assertThat(QuestionValidator.comparisonKey("Ångström")).isEqualTo("angstrom");
+        @DisplayName("Hebrew niqqud is folded but the consonants are not")
+        void hebrewNiqqudIsFoldedWithoutLosingLetters() {
+            // The half the old test missed: it asserted on unpointed strings only, so deleting
+            // the mark-stripping entirely would not have failed it.
+            assertThat(QuestionValidator.sameAnswer("שלום", "שָׁלוֹם")).isTrue();
+            // ...and the letters still carry meaning, or every Hebrew answer would collide.
+            assertThat(QuestionValidator.sameAnswer("שלום", "שלוט")).isFalse();
         }
 
         @Test
-        @DisplayName("Hebrew survives folding, letters intact")
-        void hebrewIsNotDestroyed() {
-            // NFD plus combining-mark stripping removes niqqud, which is the point: the collation
-            // treats pointed and unpointed spellings of a word as one. What must NOT happen is
-            // the consonants going with them.
-            assertThat(QuestionValidator.comparisonKey("פריז")).isEqualTo("פריז");
-            assertThat(QuestionValidator.comparisonKey("  לונדון  ")).isEqualTo("לונדון");
-        }
-
-        @Test
-        @DisplayName("null is the empty key, not a crash")
-        void nullIsEmpty() {
-            assertThat(QuestionValidator.comparisonKey(null)).isEmpty();
-        }
-
-        @Test
-        @DisplayName("it does not destroy meaning the way the bot's grouping key does")
-        void keepsMeaningfulDifferences() {
-            // The stated reason this is not TextNormaliser.groupingKey. Punctuation and digits
-            // separate real answers; a key that dropped them would reject legal questions.
-            assertThat(QuestionValidator.comparisonKey("2x + 1"))
-                    .isNotEqualTo(QuestionValidator.comparisonKey("2x - 1"));
-            assertThat(QuestionValidator.comparisonKey("yes!"))
-                    .isNotEqualTo(QuestionValidator.comparisonKey("yes"));
+        @DisplayName("null is not a crash, and two nulls are the same nothing")
+        void nullIsHandled() {
+            assertThat(QuestionValidator.sameAnswer(null, "")).isTrue();
+            assertThat(QuestionValidator.sameAnswer(null, "Paris")).isFalse();
         }
     }
 }

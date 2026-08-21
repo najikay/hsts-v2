@@ -438,7 +438,10 @@ public final class QuestionRepository {
             where.append("  and qv.difficulty = :difficulty\n");
         }
         if (isSet(query.search())) {
-            where.append("  and lower(qv.text) like :search\n");
+            // escape '!' so a teacher searching for '100%' or '_' gets those characters rather
+            // than LIKE wildcards. '!' rather than a backslash, which HQL string literals and
+            // the JDBC driver would each want their own escaping of.
+            where.append("  and lower(qv.text) like :search escape '!'\n");
         }
         return where.toString();
     }
@@ -461,8 +464,28 @@ public final class QuestionRepository {
             // not reproduce utf8mb4_unicode_ci, so a case test that passed here and failed on
             // MySQL would be exactly the drift the two-engine pair exists to catch.
             query.setParameter("search",
-                    "%" + bank.search().trim().toLowerCase(java.util.Locale.ROOT) + "%");
+                    "%" + likeLiteral(bank.search().trim().toLowerCase(java.util.Locale.ROOT))
+                            + "%");
         }
+    }
+
+    /**
+     * Escapes the LIKE wildcards in text a teacher typed.
+     *
+     * <p>Free text is the one filter she composes herself (F2.4), so it is the one that can
+     * contain {@code %} or {@code _}. Unescaped, searching {@code 100%} matches every stem
+     * containing {@code 100}, and searching {@code _} matches everything. Not an injection
+     * risk, since the value is a bound parameter either way; a correctness one.
+     *
+     * <p>The escape character itself goes first, or escaping would corrupt a search for it.
+     *
+     * @param search the lowercased, trimmed search text
+     * @return the same text as a LIKE literal, for use with {@code escape '!'}
+     */
+    private static String likeLiteral(String search) {
+        return search.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
     }
 
     private static boolean isSet(String value) {

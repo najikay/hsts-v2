@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import server.db.projections.ReferencingExam;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -35,6 +37,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class BankMessagesTest {
 
+    private static final ReferencingExam MIDTERM =
+            new ReferencingExam("101101", "Algebra Midterm");
+    private static final ReferencingExam FINAL =
+            new ReferencingExam("101102", "Algebra Final");
+
     /** Every public String constant on the catalogue, found by scanning rather than by list. */
     static List<String> allMessages() {
         List<String> messages = new ArrayList<>();
@@ -58,8 +65,9 @@ class BankMessagesTest {
                 BankMessages.answerBlank(2),
                 BankMessages.answersDuplicated(1, 3),
                 BankMessages.lockedBy("Dana Cohen"),
-                BankMessages.deleteBlocked(List.of("Algebra Midterm")),
-                BankMessages.deleteBlocked(List.of("Algebra Midterm", "Algebra Final")),
+                BankMessages.deleteBlocked(List.of(MIDTERM)),
+                BankMessages.deleteBlocked(List.of(MIDTERM, FINAL)),
+                BankMessages.deleteBlocked(List.of()),
                 BankMessages.textTooLong(4000),
                 BankMessages.answerTooLong(2, 500),
                 BankMessages.topicTooLong(100));
@@ -147,16 +155,41 @@ class BankMessagesTest {
     @Test
     @DisplayName("a blocked delete names the exams, singular and plural (T-2.7)")
     void blockedDeleteNamesTheExams() {
-        assertThat(BankMessages.deleteBlocked(List.of("Algebra Midterm")))
+        assertThat(BankMessages.deleteBlocked(List.of(MIDTERM)))
                 .contains("Algebra Midterm")
+                .contains("101101")
                 .contains("that exam");
 
-        String many = BankMessages.deleteBlocked(List.of("Algebra Midterm", "Algebra Final"));
+        String many = BankMessages.deleteBlocked(List.of(MIDTERM, FINAL));
         assertThat(many)
                 .contains("Algebra Midterm")
                 .contains("Algebra Final")
                 .contains("2 exams")
                 .contains("those exams");
+    }
+
+    @Test
+    @DisplayName("two exams sharing a name are still told apart, by id (T-2.7)")
+    void sameNamedExamsAreDistinguishable() {
+        // The audit's finding. findReferencingExams de-duplicates per exam so the dialog cannot
+        // say "Algebra Midterm, Algebra Midterm" for one exam pinned in two versions. Two
+        // genuinely different exams that share a name across terms would have reintroduced the
+        // same unreadable sentence one layer up, because the old signature took names only.
+        String message = BankMessages.deleteBlocked(List.of(
+                new ReferencingExam("101101", "Algebra Midterm"),
+                new ReferencingExam("101102", "Algebra Midterm")));
+
+        assertThat(message).contains("101101").contains("101102");
+    }
+
+    @Test
+    @DisplayName("an empty blocker list does not produce '0 exams use it: .'")
+    void emptyBlockerListIsStillASentence() {
+        // Unreachable while deleted=false implies a non-empty list, but that invariant lives in
+        // a service that does not exist yet, and the guard is one line.
+        assertThat(BankMessages.deleteBlocked(List.of()))
+                .doesNotContain("0 exams")
+                .doesNotContain(": .");
     }
 
     @Test

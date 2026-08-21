@@ -101,18 +101,33 @@ abstract class BankBrowseContract extends RepositoryTestBase {
         version(id, 1, "algebra question", "משוואות", Difficulty.EASY, null);
         BankQuery nothing = BankQuery.scopedTo(List.of(), null, null, null, null);
 
-        // The trap this pins, watched failing before it was trusted: a scope predicate that is
-        // skipped when the list is empty. That is the natural-looking way to "handle" the case,
-        // and it hands every question in the school to a caller entitled to none. Planted, and
-        // this assertion caught it with "Expecting empty but was: [BankQuestionSummary[...]]".
-        //
-        // Not what an earlier comment here claimed. Hibernate 6 expands an empty `in ()` into a
-        // false predicate on both engines, so the short-circuit in BankQuery is an optimisation
-        // and nothing more. The doesNotThrow below still earns its line: it caught a version
-        // where the WHERE and the parameter binding disagreed about whether the clause existed.
+        // Hibernate 6 expands an empty `in ()` into a false predicate on both engines, so this
+        // does not throw and the short-circuit in BankQuery is an optimisation, nothing more.
         assertThatCode(() -> browse(nothing)).doesNotThrowAnyException();
         assertThat(browse(nothing)).isEmpty();
         assertThat(countOf(nothing)).isZero();
+    }
+
+    @Test
+    @DisplayName("scope is applied by the query itself, not only by the short-circuit above it")
+    void scopeSurvivesWithoutTheShortCircuit() {
+        version(question(COURSE_ALGEBRA, (short) 1), 1, "algebra", "משוואות",
+                Difficulty.EASY, null);
+        version(question(COURSE_JAVA, (short) 1), 1, "java", "Recursion", Difficulty.HARD, null);
+
+        // Why this exists, found by the post-implementation audit: findBankPage returns early
+        // when the scope is empty, so emptyScopeMatchesNothing never reaches the WHERE clause
+        // and cannot fail on a scope predicate that has been dropped. The safety property was
+        // untested by the test that claimed to pin it.
+        //
+        // A non-empty scope that matches nothing does reach the WHERE, so this is the case that
+        // fails if the course predicate is ever skipped or widened. A caller scoped to a course
+        // with no questions must see nothing, never everything.
+        BankQuery emptyCourse = BankQuery.scopedTo(List.of(COURSE_DATABASES), null, null,
+                null, null);
+
+        assertThat(browse(emptyCourse)).isEmpty();
+        assertThat(countOf(emptyCourse)).isZero();
     }
 
     @Test
@@ -170,6 +185,36 @@ abstract class BankBrowseContract extends RepositoryTestBase {
         assertThat(browse(search("ROOT"))).hasSize(1);
         assertThat(browse(search("  the  "))).hasSize(1);
         assertThat(browse(search("branch"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("LIKE wildcards a teacher types are literal text, not wildcards")
+    void searchEscapesLikeMetacharacters() {
+        // Free text is the one filter she composes herself (F2.4), so it is the one that can
+        // contain % or _. Unescaped, "100%" matches every stem containing 100 and "_" matches
+        // everything, which reads as a broken filter rather than as a bug.
+        long percent = question(COURSE_ALGEBRA, (short) 1);
+        version(percent, 1, "what is 100% of 40", "משוואות", Difficulty.EASY, null);
+        long plain = question(COURSE_ALGEBRA, (short) 2);
+        version(plain, 1, "what is 100 divided by 4", "משוואות", Difficulty.EASY, null);
+        long underscore = question(COURSE_ALGEBRA, (short) 3);
+        version(underscore, 1, "the variable my_total holds it", "משוואות",
+                Difficulty.EASY, null);
+
+        // '%' is a literal: matches the one stem containing it, not both stems containing 100.
+        assertThat(browse(search("100%"))).extracting(BankQuestionSummary::text)
+                .containsExactly("what is 100% of 40");
+
+        // '_' is a literal: matches the one stem containing it, not all three.
+        assertThat(browse(search("my_total"))).extracting(BankQuestionSummary::text)
+                .containsExactly("the variable my_total holds it");
+
+        // A bare '_' would match every non-empty stem if it were a wildcard.
+        assertThat(browse(search("_"))).extracting(BankQuestionSummary::text)
+                .containsExactly("the variable my_total holds it");
+
+        // And the escape character itself is searchable, which is why it is doubled first.
+        assertThat(browse(search("!"))).isEmpty();
     }
 
     @Test
