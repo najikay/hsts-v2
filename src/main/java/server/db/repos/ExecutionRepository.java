@@ -7,6 +7,7 @@ import server.db.entities.ExecutionStatus;
 import server.db.entities.Participation;
 import server.db.projections.ExecutionContext;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -208,6 +209,82 @@ public final class ExecutionRepository {
      * @param session the current session
      * @return execution ids with at least one {@code IN_PROGRESS} attempt
      */
+    /**
+     * Every sitting of every exam one teacher wrote (E14.1 — F9.2, S-35).
+     *
+     * <p>The read that makes S-35 true rather than promised: the join runs
+     * {@code exam_executions → exam_versions → exams} and filters on {@code exams.author}, so
+     * an execution released by a colleague is returned to the exam's author, and an execution
+     * of somebody else's exam is not returned at all. The caller's id is the only parameter;
+     * there is no variant of this query that takes an exam id from a payload.
+     *
+     * <p><b>Cancelled executions are excluded.</b> A run that was called off was never sat, has
+     * no results, and would render as an empty table a teacher has to interpret (H15.2 ⚑). The
+     * three remaining states are all legitimate answers: scheduled and live executions appear
+     * with no statistics and the screen says so.
+     *
+     * <p>Reuses {@link ExecutionContext} rather than defining a second projection: the picker
+     * needs the exam name, the course, the code, the window and the state, which is exactly
+     * what E10 already assembled. The {@code examName} is the released version's name, so a
+     * sitting is labelled with what the students saw even after the exam is renamed.
+     *
+     * <p>Consumer: E14.1's {@code RESULTS_EXAMS_GET}.
+     *
+     * @param session  the current session
+     * @param authorId the teacher who wrote the exams, always the authenticated caller
+     * @return her exams' sittings, most recently opened first; empty when there are none
+     */
+    public List<ExecutionContext> findContextsByExamAuthor(Session session, long authorId) {
+        return session.createQuery("""
+                        select new server.db.projections.ExecutionContext(
+                            ex.id, ex.examVersionId, e.id, e.courseCode, c.name, v.name,
+                            v.durationMinutes, v.studentText, ex.code, ex.status,
+                            ex.openAt, ex.closeAt, ex.extraMinutes, ex.createdBy, e.authorId)
+                        from ExamExecution ex, ExamVersion v, Exam e, Course c
+                        where v.id = ex.examVersionId
+                          and e.id = v.examId
+                          and c.code = e.courseCode
+                          and e.authorId = :authorId
+                          and ex.status <> :cancelled
+                        order by ex.openAt desc, ex.id desc
+                        """, ExecutionContext.class)
+                .setParameter("authorId", authorId)
+                .setParameter("cancelled", ExecutionStatus.CANCELLED)
+                .getResultList();
+    }
+
+    /**
+     * Which of these executions have their statistics frozen (E14.1 — F8.5).
+     *
+     * <p>{@code exam_executions.stats} is written once, when the last grade of an execution is
+     * approved. The results picker needs to know which rows have it without loading the JSON
+     * of every execution a teacher ever ran, and the answer is a column null-check: one query
+     * for the whole list rather than one per row.
+     *
+     * <p>Deliberately not inferred from "graded == participants": grading being finished and
+     * approval having completed are different events, and a picker that promised a histogram
+     * it could not draw would be worse than one that says grading is not finished.
+     *
+     * <p>Consumer: E14.1's {@code RESULTS_EXAMS_GET}.
+     *
+     * @param session      the current session
+     * @param executionIds the executions to ask about
+     * @return the ids that carry frozen statistics; empty when {@code executionIds} is empty
+     */
+    public List<Long> findIdsWithStatistics(Session session, Collection<Long> executionIds) {
+        if (executionIds == null || executionIds.isEmpty()) {
+            // An `in ()` is a syntax error on one engine and a full scan on the other;
+            // neither is the right answer to "none of them".
+            return List.of();
+        }
+        return session.createQuery("""
+                        select ex.id from ExamExecution ex
+                        where ex.id in (:executionIds) and ex.stats is not null
+                        """, Long.class)
+                .setParameterList("executionIds", executionIds)
+                .getResultList();
+    }
+
     public List<Long> findExecutionIdsWithLiveAttempts(Session session) {
         return session.createQuery("""
                         select distinct a.executionId from ExamAttempt a where a.status = :status

@@ -373,4 +373,44 @@ public final class AttemptRepository {
         }
         return false;
     }
+
+    /**
+     * How many students sat each of these executions, in one query (E14.1 — F9.2).
+     *
+     * <p>The list half of the "counted, never accumulated" rule (§5, ADR-016): the teacher's
+     * results screen shows a participant count on every sitting she has ever run, and asking
+     * per row would be one query per execution on the screen's first paint. Grouping once is
+     * the same trade {@link #countAnsweredByAttempt} makes for the live monitor.
+     *
+     * <p>An execution nobody joined is <b>absent from the map</b> rather than present with a
+     * zero, exactly as the answered counts are: the caller reads it with
+     * {@code getOrDefault(id, 0)} and an absent key and a zero mean the same thing, so there is
+     * only one way to say it.
+     *
+     * <p>Consumer: E14.1's {@code RESULTS_EXAMS_GET}.
+     *
+     * @param session      the current session
+     * @param executionIds the executions to count
+     * @return execution id → attempts started; empty when {@code executionIds} is empty
+     */
+    public Map<Long, Integer> countAttemptsByExecution(Session session,
+                                                       java.util.Collection<Long> executionIds) {
+        if (executionIds == null || executionIds.isEmpty()) {
+            // An `in ()` is a syntax error on one engine and a full scan on the other.
+            return Map.of();
+        }
+        List<Object[]> rows = session.createQuery("""
+                        select a.executionId, count(a)
+                        from ExamAttempt a
+                        where a.executionId in (:executionIds)
+                        group by a.executionId
+                        """, Object[].class)
+                .setParameterList("executionIds", executionIds)
+                .getResultList();
+        Map<Long, Integer> counts = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            counts.put(((Number) row[0]).longValue(), ((Number) row[1]).intValue());
+        }
+        return counts;
+    }
 }

@@ -46,6 +46,9 @@ public final class NotificationPresenter {
             case APPROVAL_REQUESTED -> Icons.APPROVALS;
             case APPROVAL_APPROVED -> Icons.CHECK;
             case APPROVAL_REJECTED -> Icons.ERROR;
+            // A newer version replaced one in the queue (E8.2). The exams icon rather than a
+            // warning: nothing is wrong, the coordinator's list simply changed underneath her.
+            case APPROVAL_SUPERSEDED -> Icons.EXAMS;
             case GRADE_PUBLISHED -> Icons.GRADING;
             case TIME_EXTENDED -> Icons.CLOCK;
             case BOT_SOURCE_CHANGED -> Icons.BOT;

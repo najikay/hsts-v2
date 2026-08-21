@@ -92,9 +92,47 @@ public final class Routes {
      */
     public static final Route BOT_MANAGER = Route.shell("bot.manager", "Bot manager", "Study bot");
 
+    /**
+     * The coordinator's approval queue (E8, F4.1). Coordinators only.
+     *
+     * <p>The id matches {@code NotificationCatalog.ROUTE_APPROVALS}, so the "an exam is
+     * waiting for your approval" notification is clickable straight into it.
+     */
+    public static final Route APPROVALS = Route.shell("approvals", "Approvals", "Approvals");
+
+    /**
+     * One exam version opened for review (E8.4 ⚑, F4.1).
+     *
+     * <p>Not on any rail: it is a view of one exam, and a rail item that needed an exam
+     * chosen first would be a dead end. Reached from the queue, and from an approval
+     * notification, both of which carry the version id as a nav parameter.
+     */
+    public static final Route EXAM_PREVIEW = Route.shell("approvals.preview", "Exam preview");
+
+    /**
+     * The teacher's own exams and what became of them (E8.6, F4.2).
+     *
+     * <p>The id matches {@code NotificationCatalog.ROUTE_EXAMS}, which is where the "your
+     * exam was sent back" notification navigates: F4.2 requires the reason to be visible on
+     * the exam and not only in a bell, so the notification has to land somewhere real.
+     *
+     * <p><b>E8 ships the approval-status half of this screen only.</b> E7 owns the exam
+     * builder and list and replaces the screen behind this id when it lands; the id is E7's
+     * either way, which is why it is spelled the way E7's rail item already spells it.
+     */
+    public static final Route EXAMS = Route.shell("exams", "My exams", "Exams");
+
     /** The teacher's anonymised bot usage view (E16, F12.11, S-34). */
     public static final Route BOT_ANALYTICS =
             Route.shell("bot.analytics", "Bot activity", "Bot activity");
+
+    /**
+     * Results and statistics for every exam the teacher wrote (E14, F9.2, S-35).
+     *
+     * <p>The id matches {@code RoleNav.ROUTE_RESULTS}, which is the rail item that has been
+     * reserving this slot since E5.4.
+     */
+    public static final Route RESULTS = Route.shell("results", "Results", "Results");
 
     private Routes() {
     }
@@ -122,7 +160,8 @@ public final class Routes {
     public static List<Route> all() {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR,
-                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS);
+                APPROVALS, EXAM_PREVIEW, EXAMS,
+                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

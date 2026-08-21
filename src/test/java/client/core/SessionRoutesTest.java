@@ -87,19 +87,32 @@ class SessionRoutesTest {
     class PerRole {
 
         @Test
-        @DisplayName("a teacher gets home, settings, the bank, the monitor and the bot screens")
+        @DisplayName("a teacher gets home, settings, the bank, the monitor, the bot, results and her exams")
         void teacher() {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS,
-                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS);
+                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
+                            Routes.RESULTS, Routes.EXAMS);
         }
 
         @Test
-        @DisplayName("a coordinator gets the same, from her own dashboard")
+        @DisplayName("a coordinator gets the same plus the approvals pair (E8)")
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS,
-                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS);
+                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
+                            Routes.RESULTS, Routes.EXAMS, Routes.APPROVALS, Routes.EXAM_PREVIEW);
+        }
+
+        @Test
+        @DisplayName("only a coordinator is offered the approvals screens (PRD §3)")
+        void approvalsAreCoordinatorOnly() {
+            assertThat(SessionRoutes.routesFor(Role.TEACHER))
+                    .doesNotContain(Routes.APPROVALS, Routes.EXAM_PREVIEW);
+            assertThat(SessionRoutes.routesFor(Role.STUDENT))
+                    .doesNotContain(Routes.APPROVALS, Routes.EXAM_PREVIEW, Routes.EXAMS);
+            assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
+                    .doesNotContain(Routes.APPROVALS, Routes.EXAM_PREVIEW, Routes.EXAMS);
         }
 
         @Test

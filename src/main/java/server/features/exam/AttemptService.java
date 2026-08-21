@@ -69,8 +69,11 @@ import java.util.Set;
  * <h2>Rule two: no correctness on a student's wire</h2>
  *
  * <p>Papers are read through the no-correctness projection and mapped by
- * {@link #toWire(TakeExamQuestion)} into {@link ExamQuestion}, which has no field for an
- * answer key. Neither type can carry one, so no handler here can leak one by assembly.
+ * {@link ExamPaper#toWire(TakeExamQuestion)} into {@link ExamQuestion}, which has no field
+ * for an answer key. Neither type can carry one, so no handler here can leak one by
+ * assembly. That mapper is a class of its own because E8's approval preview builds its
+ * paper with the same one: a coordinator reviewing an exam sees literally what a student
+ * would be served, rather than a second rendering written to the same specification.
  *
  * <h2>The race, and who wins it</h2>
  *
@@ -913,9 +916,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
 
     /** Builds the whole paper as it stands, for a start or a resume. */
     private AttemptForm formFor(ExamData data, ExecutionContext ctx, AttemptRecord attempt, Instant now) {
-        List<ExamQuestion> questions = data.questionsOf(ctx.examVersionId()).stream()
-                .map(AttemptService::toWire)
-                .toList();
+        List<ExamQuestion> questions = ExamPaper.toWire(data.questionsOf(ctx.examVersionId()));
         List<SavedAnswer> answers = data.answersOf(attempt.attemptId()).stream()
                 .filter(AnswerRow::isAnswered)
                 .map(row -> new SavedAnswer(row.questionVersionId(), row.selected()))
@@ -997,19 +998,6 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
             case SUBMITTED -> AttemptState.SUBMITTED;
             case TIMED_OUT -> AttemptState.TIMED_OUT;
         };
-    }
-
-    /**
-     * The one mapping from a stored question to a student's wire (F6.6 ⚑).
-     *
-     * <p>Both sides of it are types with no field for a correct answer, so this method
-     * could not leak one even by trying. That is the whole v1 fix in one signature.
-     */
-    private static ExamQuestion toWire(TakeExamQuestion question) {
-        return new ExamQuestion(question.questionVersionId(), question.displayId(),
-                question.ordinal(), question.points(), question.text(),
-                question.answer1(), question.answer2(), question.answer3(), question.answer4(),
-                question.image());
     }
 
 }

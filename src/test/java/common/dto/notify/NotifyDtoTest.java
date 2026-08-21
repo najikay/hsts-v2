@@ -214,12 +214,19 @@ class NotifyDtoTest {
     }
 
     @Test
-    @DisplayName("the eight PRD emit points all have a type")
-    void theEightTypesExist() {
+    @DisplayName("every emit point the product has still has a type, spelled as it was")
+    void theTypesExist() {
+        // Spelled out rather than counted, because the type is stored as its name() in
+        // notifications.type: adding one is a visible edit here, and renaming one would
+        // orphan every row already written. E8 added APPROVAL_SUPERSEDED (E8.2), which is
+        // its own constant rather than a second APPROVAL_REQUESTED because the
+        // coordinator's reaction differs: a request is work arriving, a supersede is work
+        // she may have half-read disappearing from her queue.
         assertThat(NotificationType.values()).containsExactlyInAnyOrder(
                 NotificationType.APPROVAL_REQUESTED,
                 NotificationType.APPROVAL_APPROVED,
                 NotificationType.APPROVAL_REJECTED,
+                NotificationType.APPROVAL_SUPERSEDED,
                 NotificationType.GRADE_PUBLISHED,
                 NotificationType.TIME_EXTENDED,
                 NotificationType.BOT_SOURCE_CHANGED,

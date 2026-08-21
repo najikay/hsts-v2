@@ -330,6 +330,29 @@
                         <exclude>client/features/exam/ExamDoneView*</exclude>
                         <exclude>client/features/exam/AnswerGridView*</exclude>
                         <exclude>client/features/exam/ExecutionMonitorView*</exclude>
+                        <exclude>client/features/exam/QuestionCardView*</exclude>
+<!-- E8 approval workflow: the three thin FX screens plus the one dialog that
+                             needs an input and so could not reuse WarnConfirm. Every decision
+                             they render lives in a measured logic class beside them —
+                             ApprovalQueueSession, ExamPreviewSession, MyApprovalsSession,
+                             ApprovalCopy — and the reject rule itself is in
+                             common.dto.approval.ExamRejectRequest, which both tiers run and
+                             which is covered. The screens are additionally driven by a
+                             real-input TestFX test (ApprovalInteractionTest) covering queue →
+                             preview → reject with a typed reason, and the preview rendering a
+                             question with its four options. QuestionCardView is excluded on
+                             the same terms as the other exam views it was extracted from.
+                             Never a wildcard: a single '*' crosses path separators in JaCoCo
+                             and would silently un-instrument the whole feature. -->
+                        <exclude>client/features/approval/ApprovalQueueView*</exclude>
+                        <exclude>client/features/approval/ExamPreviewView*</exclude>
+                        <exclude>client/features/approval/MyApprovalsView*</exclude>
+                        <exclude>client/features/approval/RejectDialog*</exclude>
+<!-- E14 teacher results: the one thin FX view. Every decision it renders is
+                             made in TeacherResultsSession (selection, the T-10 toggle, the
+                             print layout, the StatChartData mapping) or in ResultsCopy (the
+                             six stat cards and every sentence), and both are measured. -->
+                        <exclude>client/features/results/TeacherResultsView*</exclude>
 <!-- E16 study bot: the four screens plus the three FX-only widgets they draw
      with. Every decision these render is made in BotChatModel, the four session
      classes and BotCopy, all of which are covered. Listed one by one, never a

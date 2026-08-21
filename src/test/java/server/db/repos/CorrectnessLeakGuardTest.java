@@ -195,13 +195,21 @@ class CorrectnessLeakGuardTest {
 
         // This list is the inventory of every read that hands back an answer key, and it is
         // spelled out rather than counted so that adding one is a visible edit here — the same
-        // deliberateness the suffix list itself is designed for. Two authoring reads (E2.12) and
-        // one grading read (E12.1).
+        // deliberateness the suffix list itself is designed for. Three authoring reads (E2.12
+        // plus E8.4's approval preview) and one grading read (E12.1).
+        //
+        // findAnswerKeyForAuthoring joined the list in E8: a coordinator deciding whether to
+        // approve an exam has to be able to check that its answers are right, which is
+        // authoring work on somebody else's exam rather than a fourth audience. It is reached
+        // by EXAM_PREVIEW_GET only, behind requireRole(COORDINATOR) plus requireCoordinatorOf
+        // on the exam's subject or the version's own author, and ApprovalServiceTest proves
+        // both refusals.
         assertThat(keyBearingReads)
                 .as("every key-bearing read is accounted for, and each names its audience")
                 .containsExactlyInAnyOrder(
                         "findVersionForAuthoring",
                         "findLatestVersionForAuthoring",
+                        "findAnswerKeyForAuthoring",
                         "findVersionsForGrading");
         assertThat(keyBearingReads).allMatch(CorrectnessLeakGuardTest::isSanctioned);
     }
