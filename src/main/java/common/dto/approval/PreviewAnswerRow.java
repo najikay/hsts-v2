@@ -8,9 +8,10 @@ import java.util.Objects;
  * F4.1).
  *
  * <p><b>This record carries an answer key, and it is the only one in this package that
- * does.</b> It reaches a coordinator through {@code EXAM_PREVIEW_GET} and nobody else: that
- * verb is {@code requireRole(COORDINATOR)} plus {@code requireCoordinatorOf} on the exam's
- * subject, or the version's own author. Approving an exam without being able to check its
+ * does.</b> It travels only on {@code EXAM_PREVIEW_GET}: {@code requireRole(TEACHER, COORDINATOR)},
+ * then either the caller authored the version or {@code requireCoordinatorOf} passes on the
+ * exam's subject. So its audience is the deciding coordinator and the version's own author,
+ * and nobody else (wording corrected 2026-08-21 to match the code). Approving an exam without being able to check its
  * answer key is approving a document, not an exam, so the key is part of the job here in
  * exactly the way it is part of authoring.
  *

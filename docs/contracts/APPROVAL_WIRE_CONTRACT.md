@@ -1,6 +1,15 @@
-# E8 approval wire contract — DRAFT v1
+# E8 approval wire contract — FROZEN v1
 
-**Status: DRAFT, written 2026-08-21 with the E8 implementation. For the lead to freeze.**
+**Status: frozen 2026-08-21** after lead review (independent verify at merge; audit corrections applied in db50995).
+
+**Lead rulings at freeze:**
+1. The fifth verb, `MY_APPROVALS_GET`, is approved and RETIRES INTO E7's exam list when that screen absorbs route id `exams` — documented in the E8 report and binding on E7.
+2. `PreviewAnswerRow` stays a separate type from `AnswerReviewRow`: a preview key and a marked paper are different documents with different audiences.
+3. The preview's audience is the deciding coordinator OR the version's own author (F4.2 actionability) — the wording corrected 2026-08-21 across guard licence, Verb header and javadoc after Member A's rule-5 pass; the plain-teacher negative test pins the third role out.
+4. The `versionSubmitted` three-in-one hook (supersede + notify + request notice) is approved; E7's `submitForApproval` calls it and emits nothing of its own. A stale coordinator is refused by the STATUS guard, not her lock token — a cross-file dependency named in both javadocs.
+5. Scope errors answer `NOT_FOUND` via the boolean-sibling pattern (the author's own §4.1 self-catch); `FORBIDDEN` never names a course on UPDATE/DELETE paths.
+6. **Phase-2 note (V8, declined for 2026-08-27):** `exam_versions` carries no `rejected_by`/`approved_by`/`approved_at`; WHO decided is derivable (one coordinator per subject, PK-enforced) and the self-approval record is the SELF-APPROVAL log line (case 4.6). The additive nullable columns Member A proposed are the correct phase-2 fix once coordinator reassignment enters scope.
+7. The ord fix (#22): answer-key rows are numbered by the STORED position, never by counting; the gapped-ord contract case is the guard.
 Once frozen the same rule as the other three applies: additive changes only (new optional fields,
 new verbs); nothing renamed, retyped or removed without a lead decision recorded here.
 

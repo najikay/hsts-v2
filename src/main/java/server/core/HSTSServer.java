@@ -215,6 +215,11 @@ public class HSTSServer extends AbstractServer {
         Authorization.useSubjectCoordinators((teacherId, subjectCode) ->
                 Transactions.inTx(sessionFactory,
                         session -> courses.coordinates(session, teacherId, subjectCode)));
+        // E6's write gate (requireTeachesCourse) resolves through the same repository,
+        // wired beside its sibling so the two course-scoped guards read as a pair.
+        Authorization.useCourseTeachers((teacherId, courseCode) ->
+                Transactions.inTx(sessionFactory,
+                        session -> courses.teaches(session, teacherId, courseCode)));
 
         new ApprovalService(new JpaApprovalStore(sessionFactory), notifications)
                 .registerOn(router);

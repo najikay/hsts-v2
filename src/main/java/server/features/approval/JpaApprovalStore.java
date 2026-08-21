@@ -103,12 +103,26 @@ public final class JpaApprovalStore implements ApprovalStore {
         @Override
         public List<PreviewAnswerRow> answerKeyOf(long examVersionId) {
             List<QuestionVersion> pinned = questions.findAnswerKeyForAuthoring(session, examVersionId);
+            Map<Long, Integer> positions = questions.findPinnedPositions(session, examVersionId);
+
+            // The position comes from the join row, never from a counter over this list. Being in
+            // exam order makes a counter LOOK right, and it is right only while the stored
+            // positions happen to be contiguous and start at 1. V3 constrains `ord` as UNIQUE and
+            // >= 1 and nothing more, so an exam with a gap put "Q3" beside a paper whose Q3 was a
+            // different question, on the one screen whose whole purpose is checking the answers.
+            // Latent until something removes a question from a version; E7's builder is that thing.
             List<PreviewAnswerRow> key = new ArrayList<>(pinned.size());
-            int ordinal = 1;
             for (QuestionVersion version : pinned) {
-                // The read is already in exam order, so the ordinal is the position rather
-                // than a second column to keep in step with it.
-                key.add(new PreviewAnswerRow(version.getId(), ordinal++, version.getCorrectAnswer()));
+                Integer ordinal = positions.get(version.getId());
+                if (ordinal == null) {
+                    // Unreachable while the composite FK holds, which is why this throws rather
+                    // than falling back to a counter: a silent fallback would restore the defect
+                    // under another name the first time the two reads disagreed.
+                    throw new IllegalStateException(
+                            "question version " + version.getId() + " is on the answer key of exam "
+                                    + "version " + examVersionId + " but has no pinned position");
+                }
+                key.add(new PreviewAnswerRow(version.getId(), ordinal, version.getCorrectAnswer()));
             }
             return List.copyOf(key);
         }

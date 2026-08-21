@@ -201,9 +201,11 @@ class CorrectnessLeakGuardTest {
         // findAnswerKeyForAuthoring joined the list in E8: a coordinator deciding whether to
         // approve an exam has to be able to check that its answers are right, which is
         // authoring work on somebody else's exam rather than a fourth audience. It is reached
-        // by EXAM_PREVIEW_GET only, behind requireRole(COORDINATOR) plus requireCoordinatorOf
-        // on the exam's subject or the version's own author, and ApprovalServiceTest proves
-        // both refusals.
+        // by EXAM_PREVIEW_GET only, behind requireRole(TEACHER, COORDINATOR), then either the
+        // caller authored the version or requireCoordinatorOf passes on its subject
+        // (licence corrected 2026-08-21, Member A's rule-5 pass: the earlier wording was
+        // narrower than the code). ApprovalServiceTest proves every refusal, including the
+        // plain teacher who neither authored nor coordinates.
         assertThat(keyBearingReads)
                 .as("every key-bearing read is accounted for, and each names its audience")
                 .containsExactlyInAnyOrder(
