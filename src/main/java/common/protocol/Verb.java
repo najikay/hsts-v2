@@ -198,6 +198,22 @@ public enum Verb {
      */
     ATTEMPT_SUBMIT,
 
+    /**
+     * Report that the exam window lost and regained focus during a live attempt
+     * (E11.7 — F7.1b). Request payload: {@code AttentionReport}; response: OK
+     * with no payload.
+     * <p>Additive to the frozen E10/E11 contract. Carries no attempt id and no
+     * student id: the server resolves the caller's own {@code IN_PROGRESS}
+     * attempt through {@code AttemptRegistry}, on the same P-5 rule as every
+     * other student verb. A report from a student with no live attempt answers
+     * OK and does nothing — the attempt may have expired mid-absence, which is
+     * normal rather than an error.
+     * <p><b>Signal, not verdict.</b> There is no auto-penalty, no student-facing
+     * UI and no correctness anywhere near this verb; it adds one calm line to the
+     * teacher's monitor row and stops there.
+     */
+    ATTEMPT_ATTENTION,
+
     // ===================== Extension & monitoring (E11) ====================
     // Teacher verbs: {@code requireRole(TEACHER, COORDINATOR)} PLUS ownership
     // resolved from the repositories — the caller must be the execution's

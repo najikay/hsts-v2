@@ -28,6 +28,10 @@ import java.time.Instant;
  * @param questionCount   the paper's length
  * @param actualMinutes   recorded solving time once finished, else {@code null} (S-19)
  * @param integrity       the C-4 flag, or {@code null} when nothing fired
+ * @param attention       the E11.7 attention summary, or {@code null} when her window never
+ *                        lost focus. Additive to the frozen contract, and nullable precisely
+ *                        so that "no reports" and "an old client that sends none" render the
+ *                        same: as nothing at all, rather than as a reassuring zero
  */
 public record MonitorRow(long studentId,
                          String studentName,
@@ -38,7 +42,8 @@ public record MonitorRow(long studentId,
                          int answeredCount,
                          int questionCount,
                          Integer actualMinutes,
-                         IntegrityFlag integrity) implements Serializable {
+                         IntegrityFlag integrity,
+                         AttentionSummary attention) implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -48,9 +53,32 @@ public record MonitorRow(long studentId,
         remainingMillis = Math.max(0, remainingMillis);
     }
 
+    /**
+     * The pre-E11.7 ten-argument shape, for a caller that has no attention data.
+     *
+     * <p>Kept because the attention field is an <b>additive</b> amendment to a frozen
+     * contract: every existing construction site means "nothing to report here", and forcing
+     * each of them to write a literal {@code null} would make the amendment look like a
+     * breaking change in the diff.
+     */
+    public MonitorRow(long studentId, String studentName, AttemptState state, Instant startedAt,
+                      Instant endedAt, long remainingMillis, int answeredCount, int questionCount,
+                      Integer actualMinutes, IntegrityFlag integrity) {
+        this(studentId, studentName, state, startedAt, endedAt, remainingMillis, answeredCount,
+                questionCount, actualMinutes, integrity, null);
+    }
+
     /** @return {@code true} when this student tripped the C-4 net (F6.8). */
     public boolean isFlagged() {
         return integrity != null;
+    }
+
+    /**
+     * @return {@code true} when her exam window left focus at least once (F7.1b). A signal for
+     *         the teacher to weigh, never a verdict the software has reached
+     */
+    public boolean hasAttentionEvents() {
+        return attention != null && attention.count() > 0;
     }
 
     /** @return the progress line for the row, "7/20". */

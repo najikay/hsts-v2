@@ -84,6 +84,17 @@ class VerbTest {
     }
 
     @Test
+    @DisplayName("ATTEMPT_ATTENTION exists, spelled as the contract's additive amendment spells it")
+    void attentionVerbExists() {
+        // E11.7 / F7.1b, added under the freeze's additive-only rule. Same valueOf spelling
+        // check as the seven above: it travels by name between two shipped JARs.
+        assertThat(Verb.valueOf("ATTEMPT_ATTENTION")).isEqualTo(Verb.ATTEMPT_ATTENTION);
+        assertThat(Verb.ATTEMPT_ATTENTION.isPush())
+                .as("it is a request the student's client sends, not a push")
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("exactly seven push verbs are defined (adding one is a deliberate act)")
     void pushVerbCount() {
         assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(7);

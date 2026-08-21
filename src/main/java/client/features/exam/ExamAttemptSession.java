@@ -7,6 +7,7 @@ import client.net.RequestDispatcher;
 import common.dto.exam.AttemptForm;
 import common.dto.exam.AttemptOutcome;
 import common.dto.exam.AttemptResumeRequest;
+import common.dto.exam.AttentionReport;
 import common.dto.exam.SaveAnswerRequest;
 import common.dto.exam.SaveAnswerResult;
 import common.dto.exam.SubmitAttemptRequest;
@@ -64,6 +65,14 @@ import java.util.function.Consumer;
  *       the Time Up takeover. There is no confirmation because it has already happened
  *       (F6.4), and no way back because {@link AttemptModel#finish} is one-way.</li>
  * </ul>
+ *
+ * <h2>Attention events (E11.7 — F7.1b)</h2>
+ *
+ * <p>This class owns the <em>reporting</em> half: it holds an {@link AttentionTracker}, starts
+ * it with a live paper, stops it the moment the attempt finishes however it finished, and
+ * sends one {@code ATTEMPT_ATTENTION} per absence that survives the flicker threshold. The
+ * view owns only the other half — forwarding the window's focus property in. Nothing about
+ * this is visible to the student, by rule.
  */
 public final class ExamAttemptSession {
 
@@ -83,6 +92,7 @@ public final class ExamAttemptSession {
     private final ClientEventBus eventBus;
     private final AttemptModel model;
     private final DelayedRunner delayed;
+    private final AttentionTracker attention;
 
     private final Map<Long, Integer> dirty = new LinkedHashMap<>();
     private final List<Consumer<TimerExtended>> extensionListeners = new ArrayList<>();
@@ -101,15 +111,37 @@ public final class ExamAttemptSession {
      */
     public ExamAttemptSession(RequestDispatcher dispatcher, ClientEventBus eventBus,
                               AttemptModel model, DelayedRunner delayed) {
+        this(dispatcher, eventBus, model, delayed, AttentionTracker.systemClock());
+    }
+
+    /**
+     * @param attention the E11.7 focus watcher; inject a fake-clock one in tests. It is a
+     *                  constructor argument rather than something the view owns because the
+     *                  <em>reporting</em> half belongs here — the view knows about a
+     *                  {@code Stage}, this class knows about the wire
+     */
+    public ExamAttemptSession(RequestDispatcher dispatcher, ClientEventBus eventBus,
+                              AttemptModel model, DelayedRunner delayed,
+                              AttentionTracker attention) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.model = Objects.requireNonNull(model, "model");
         this.delayed = Objects.requireNonNull(delayed, "delayed");
+        this.attention = Objects.requireNonNull(attention, "attention");
+        this.attention.onAbsence(this::reportAttention);
     }
 
     /** @return the state this session maintains. */
     public AttemptModel model() {
         return model;
+    }
+
+    /**
+     * @return the focus watcher (E11.7). {@code TakeExamView} forwards the exam window's
+     *         {@code focusedProperty} into it; nothing else in the client touches it
+     */
+    public AttentionTracker attention() {
+        return attention;
     }
 
     // ===================== Lifecycle =====================================
@@ -133,8 +165,13 @@ public final class ExamAttemptSession {
             started = true;
         }
         model.apply(form);
+        // Watching begins with the live paper and never with a finished one: an attempt that
+        // is already over cannot accrue attention events (E11.7).
         if (model.isFinished()) {
+            attention.stop();
             model.outcome().ifPresent(this::notifyFinished);
+        } else {
+            attention.start();
         }
     }
 
@@ -146,6 +183,7 @@ public final class ExamAttemptSession {
         }
         dirty.clear();
         flushScheduled = false;
+        attention.stop();
         model.clear();
     }
 
@@ -281,6 +319,11 @@ public final class ExamAttemptSession {
                     if (wasLive && model.isFinished()) {
                         // She was away when her time ran out. This is E10.14's other door.
                         model.outcome().ifPresent(this::notifyFinished);
+                    } else if (!model.isFinished() && !attention.isTracking()) {
+                        // Back on a live paper after a dropped socket: watch again (E11.7).
+                        // Only when it had stopped, so a resume mid-absence does not silently
+                        // discard the absence it is in the middle of.
+                        attention.start();
                     }
                     return null;
                 });
@@ -393,7 +436,36 @@ public final class ExamAttemptSession {
         model.setSaveState(SaveState.FAILED);
     }
 
+    /**
+     * Sends one {@code ATTEMPT_ATTENTION} report (E11.7 — F7.1b).
+     *
+     * <p>Fire and forget, and deliberately unretried. The server answers OK whether or not
+     * she still has a live attempt, so there is nothing to branch on; and an absence that was
+     * lost to a dropped socket is one signal missing from a row that already carries the
+     * others, which is a far smaller problem than a client that queues focus events and
+     * replays them minutes later against whatever attempt is live by then.
+     *
+     * @param awayMillis how long the window was unfocused
+     */
+    void reportAttention(long awayMillis) {
+        if (awayMillis <= 0) {
+            return;
+        }
+        dispatcher.send(Verb.ATTEMPT_ATTENTION, new AttentionReport(awayMillis))
+                .handle((response, failure) -> {
+                    if (failure != null) {
+                        log.debug("Attention report not delivered: {}", failure.toString());
+                    } else if (response.isError()) {
+                        log.debug("Attention report refused: {}", response.getErrorCode());
+                    }
+                    return null;
+                });
+    }
+
     private void notifyFinished(AttemptOutcome outcome) {
+        // Whatever ended it — her submit, the timer, a resume that found it overdue — the
+        // paper is closed and the focus watcher goes quiet.
+        attention.stop();
         for (Consumer<AttemptOutcome> listener : List.copyOf(finishListeners)) {
             listener.accept(outcome);
         }

@@ -207,7 +207,11 @@ public final class MonitorService implements MonitorPublisher {
         }
         return new MonitorRow(row.studentId(), row.studentName(), toWire(row.status()),
                 row.startedAt(), row.endedAt(), remaining, answered, questionCount,
-                row.actualMinutes(), tracker.flagOf(row.attemptId()).orElse(null));
+                row.actualMinutes(), tracker.flagOf(row.attemptId()).orElse(null),
+                // E11.7: read from the registry on every snapshot, never accumulated here.
+                // Present after a resume and after the attempt closes, for the same reason the
+                // C-4 flag is: the teacher opening the monitor afterwards must still see it.
+                tracker.attentionOf(row.attemptId()).orElse(null));
     }
 
     private static AttemptState toWire(AttemptStatus status) {

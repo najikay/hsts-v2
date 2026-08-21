@@ -241,6 +241,75 @@ The four entry refusals ride on four distinct codes so a client can branch witho
 text; the sentences themselves live in `server.features.exam.ExamMessages` and are checked by one
 test against the PRD §4.1 copy rules.
 
+## Additive amendments
+
+Everything below was added **after** the 2026-08-20 freeze, under its additive-only rule: no
+verb renamed, no payload component removed or reordered, no semantics changed for any existing
+field. A client built against v1 of this contract still works against a server that implements
+the amendments, and vice versa — that is the test each amendment has to pass to be allowed in.
+
+### A1 — `ATTEMPT_ATTENTION` (E11.7 / F7.1b, added 2026-08-21, lead)
+
+| Verb | Caller | Request payload | OK payload |
+|---|---|---|---|
+| `ATTEMPT_ATTENTION` | student | `AttentionReport` | *(none)* |
+
+**What it is.** While an attempt is `IN_PROGRESS`, the student's client watches the exam
+window's focus (`Stage.focusedProperty`). An absence is **debounced at 500 ms** — anything
+shorter is window-manager flicker, not a student leaving — and is reported **on refocus**, as
+one message carrying the away duration. Nothing is sent on blur, because an absence has no
+duration until it has ended.
+
+**Payloads.**
+- `AttentionReport(long awayMillis)` — clamped at 0. **No attempt id and no student id**, on
+  the same scope rule as every other student verb: the server resolves the caller's own live
+  attempt through `AttemptRegistry`, so no client can report an absence for anybody else.
+- `AttentionSummary(int count, long totalAwayMillis, Instant lastAt)` — the server's running
+  total per attempt. `label()` is the teacher-facing sentence,
+  "Left the exam view 3 times · 40s total".
+
+**Semantics.**
+1. **No live attempt answers `OK` and does nothing.** She can be away when her time runs out,
+   so the refocus that ends the absence arrives after the server has already force-submitted
+   her. That is the normal shape of the race, not an error, and a `CONFLICT` here would make a
+   correct client log failures during every exam.
+2. **Accumulating, not first-wins** (the opposite of `IntegrityFlag`): one 40-second absence
+   and eight five-second ones are different situations, and the teacher acts on the
+   difference.
+3. Summaries live in `AttemptRegistry` beside the C-4 flags, on the same terms — they survive
+   a resume and outlive the attempt, and they are cleared with the registry.
+4. Every report **pushes a whole `PUSH_MONITOR_UPDATED` snapshot** to the watching teachers,
+   like every other monitor change. No new push verb; the count stays at seven.
+5. **No notification is raised and nothing is pushed to the student.** F7.1b forbids any
+   student-facing UI and any auto-penalty; this verb has exactly one visible consequence, a
+   secondary line on one monitor row.
+
+**Error codes.** `VALIDATION` malformed payload · `UNAUTHORIZED` no session. Nothing else: the
+"no live attempt" case is an OK by design.
+
+**Honest limit, stated for the defence.** Detection runs on the student's own machine, so this
+is a deterrent and a visibility aid, not a control — the same framing as the discovery
+fingerprints. The monitor's tooltip says so to the teacher rather than leaving it in a
+document she will not read.
+
+### A2 — `MonitorRow.attention` (E11.7 / F7.1b, added 2026-08-21, lead)
+
+`MonitorRow` gains an eleventh component, **appended last**:
+
+```
+MonitorRow(long studentId, String studentName, AttemptState state, Instant startedAt,
+           Instant endedAt, long remainingMillis, int answeredCount, int questionCount,
+           Integer actualMinutes, IntegrityFlag integrity, AttentionSummary attention)
+```
+
+`attention` is **nullable**, and null is the normal value: a student whose window never left
+focus carries nothing rather than a reassuring zero, and so does a row built by any code that
+predates the amendment. The pre-E11.7 ten-argument constructor is kept for exactly that
+reason, so every existing construction site keeps compiling and keeps meaning what it meant.
+
+The row still carries **no answers and no scores**. Nothing here is correctness, and the E10.2
+wire leak guard scans this package unchanged.
+
 ## What is deliberately absent
 
 - **No `student_id` anywhere in a request.** See the scope rule above.

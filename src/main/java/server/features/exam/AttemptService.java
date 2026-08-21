@@ -2,6 +2,8 @@ package server.features.exam;
 
 import common.dto.exam.AttemptForm;
 import common.dto.exam.AttemptOutcome;
+import common.dto.exam.AttentionReport;
+import common.dto.exam.AttentionSummary;
 import common.dto.exam.AttemptResumeRequest;
 import common.dto.exam.AttemptStartRequest;
 import common.dto.exam.AttemptState;
@@ -124,7 +126,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
         this.timers = new TimerService(clock, Objects.requireNonNull(scheduler, "scheduler"), this::expire);
     }
 
-    /** Registers the five student verbs; all authenticated, none open. */
+    /** Registers the six student verbs; all authenticated, none open. */
     public void registerOn(MessageRouter router) {
         Objects.requireNonNull(router, "router");
         router.register(Verb.EXAM_JOIN, this::join);
@@ -132,6 +134,8 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
         router.register(Verb.ATTEMPT_RESUME, this::resume);
         router.register(Verb.ANSWER_SAVE, this::saveAnswer);
         router.register(Verb.ATTEMPT_SUBMIT, this::submit);
+        // E11.7, additive to the frozen contract: one number, one monitor line, no verdict.
+        router.register(Verb.ATTEMPT_ATTENTION, this::attention);
     }
 
     /**
@@ -604,6 +608,49 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
         return Message.ok(request, outcome.outcome());
     }
 
+    // ===================== ATTEMPT_ATTENTION =============================
+
+    /**
+     * Records that a student's exam window was away and came back (E11.7 ⚑ — F7.1b).
+     *
+     * <p>Additive to the frozen E10/E11 contract, and deliberately the smallest verb in it:
+     * one number in, an accumulated summary on the teacher's monitor row out, and nothing
+     * else. No notification, no auto-penalty, and no student-facing consequence anywhere —
+     * the student is never told that this was sent, because F7.1b makes it a signal for the
+     * teacher rather than a warning shot at the student.
+     *
+     * <p><b>No live attempt is an OK, not an error.</b> A student can be away when her time
+     * runs out; the refocus that ends the absence then arrives after the server has already
+     * force-submitted her. That is the normal shape of the race, not a client bug, and
+     * answering {@code CONFLICT} would make a correct client log errors during every exam.
+     *
+     * <p>The attempt is resolved from {@link AttemptRegistry} by the caller's own id. Nothing
+     * in the payload identifies anybody, so no student can report an absence for another
+     * (P-5), and no client can inflate somebody else's count.
+     */
+    Message attention(CallerContext caller, Message request) {
+        Authorization.requireAuthenticated(caller);
+        if (!(request.getPayload() instanceof AttentionReport report)) {
+            return Message.error(request, ErrorCode.VALIDATION, ExamMessages.MALFORMED_REQUEST);
+        }
+        List<ActiveAttempt> sittings = registry.activeAttemptsFor(caller.userId());
+        if (sittings.isEmpty()) {
+            log.debug("Attention report from user {} with no live attempt; ignored",
+                    caller.userId());
+            return Message.ok(request, null);
+        }
+        Instant now = clock.instant();
+        for (ActiveAttempt sitting : sittings) {
+            AttentionSummary summary =
+                    registry.recordAttention(sitting.attemptId(), report.awayMillis(), now);
+            log.info("Attempt {} attention event: {} absence(s), {} ms away in total",
+                    sitting.attemptId(), summary.count(), summary.totalAwayMillis());
+            // Every monitor change is a whole pushed snapshot, like every other one (E11.2).
+            monitor.executionChanged(sitting.executionId());
+        }
+        return Message.ok(request, null);
+    }
+
     // ===================== Expiry (the timer's callback) =================
 
     /**
@@ -703,6 +750,11 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
     @Override
     public Optional<IntegrityFlag> flagOf(long attemptId) {
         return registry.flagOf(attemptId);
+    }
+
+    @Override
+    public Optional<AttentionSummary> attentionOf(long attemptId) {
+        return registry.attentionOf(attemptId);
     }
 
     @Override

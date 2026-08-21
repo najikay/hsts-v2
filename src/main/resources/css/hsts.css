@@ -1121,6 +1121,19 @@
    intent, and the copy and the colour both leave the judgement to the teacher. */
 .integrity-flag { -fx-font-size: 11px; -fx-padding: 3px 9px; }
 
+/* The E11.7 attention signal (F7.1b). Quieter than the integrity flag on
+   purpose, and NEVER in the danger palette: C-4 is a rule the student was
+   warned about and crossed, while a window losing focus has a dozen benign
+   causes the server cannot tell apart. It is neutral, secondary, and sits
+   below the row's own text weight so a glance reads it as context rather
+   than as an accusation. */
+.attention-chip {
+    -fx-font-size: 11px;
+    -fx-padding: 3px 9px;
+    -fx-opacity: 0.85;
+}
+.attention-chip:hover { -fx-opacity: 1; }
+
 /* ---- The study bot (E16.12 - E16.15) ---- */
 
 .bot-chat, .bot-manager, .bot-history, .bot-analytics { -fx-background-color: -hsts-bg; }
@@ -1204,3 +1217,99 @@
     -fx-opacity: 0.85;
 }
 .activity-bar:hover { -fx-opacity: 1; }
+
+/* ============================================================
+   Score histogram · E14.3 (F9.2)
+   ------------------------------------------------------------
+   The component F9.2 calls a first-class view, and the one v1
+   got wrong. Three rules shape it.
+
+   1. The bars are the accent; the OVERLAYS ARE NEVER SEMANTIC.
+      On the Rose palette -hsts-accent sits close to
+      -hsts-danger, so a mean marker drawn in a semantic colour
+      would read as an alarm about the class rather than as a
+      statistic. Markers and the sigma band use the neutral ink
+      tokens (-hsts-text, -hsts-muted, -hsts-border) in every
+      palette, which is also why they stay legible when the bars
+      change colour underneath them.
+   2. Mean and median are told apart by SHAPE, not by colour:
+      the mean is dashed, the median is solid. Two vertical lines
+      distinguished only by hue are unreadable to a colour-blind
+      teacher and unprintable in the F9.4 report.
+   3. Radii and widths are literals, like everywhere else in this
+      file: JavaFX looked-up values (-name) resolve for colours
+      only, so a size token would die at style time.
+   ============================================================ */
+
+.hsts-stat-chart { -fx-padding: 4px 0 0 0; }
+
+.hsts-stat-chart .chart-heading  { -fx-padding: 0 0 2px 0; }
+.hsts-stat-chart .chart-caption  { -fx-padding: 2px 0 0 2px; }
+
+/* The plot surface itself carries no fill: it sits on whatever card hosts it,
+   so the chart drops into a results screen, the gallery and a dialog unchanged. */
+.stat-chart-plot { -fx-background-color: transparent; }
+
+/* Bars. The only accented thing on the chart, and the reason a palette switch
+   repaints it with no Java involved. Slightly transparent so the sigma band
+   stays readable behind the tall ones. */
+.stat-bar {
+    -fx-fill: -hsts-accent;
+    -fx-opacity: 0.88;
+    -fx-arc-width: 5px;
+    -fx-arc-height: 5px;
+}
+.stat-bar:hover { -fx-opacity: 1; }
+/* An empty decile still gets a bar, so the gap is visibly a gap rather than a
+   missing category; it simply has no height to draw. */
+.stat-bar.empty-bucket { -fx-opacity: 0.35; }
+
+/* The +-1 sigma band, behind everything. Neutral, and faint enough that the
+   bars remain the figure and the band remains the ground. */
+.sigma-band {
+    -fx-fill: -hsts-muted;
+    -fx-opacity: 0.10;
+}
+
+/* Mean (dashed) and median (solid) — see rule 2 above. */
+.stat-marker {
+    -fx-stroke-width: 1.5px;
+    -fx-stroke-line-cap: butt;
+}
+.stat-marker.mean {
+    -fx-stroke: -hsts-muted;
+    -fx-stroke-dash-array: 5 4;
+}
+.stat-marker.median { -fx-stroke: -hsts-text; }
+
+.marker-label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-muted;
+}
+.marker-label.median { -fx-text-fill: -hsts-text; }
+
+/* Grid, baseline and axis text. The baseline is heavier than the gridlines
+   because zero is not just another tick: it is the promise the axis is honest. */
+.chart-gridline {
+    -fx-stroke: -hsts-border;
+    -fx-stroke-width: 1px;
+    -fx-opacity: 0.55;
+}
+.chart-baseline {
+    -fx-stroke: -hsts-border;
+    -fx-stroke-width: 1.5px;
+}
+.tick-label, .bucket-label {
+    -fx-font-size: 10px;
+    -fx-text-fill: -hsts-faint;
+}
+
+/* The count / percent toggle reuses .hsts-segmented wholesale; only the
+   placement differs. */
+.hsts-stat-chart .stat-chart-scale { -fx-padding: 2px; }
+.hsts-stat-chart .stat-chart-scale .toggle-button { -fx-padding: 3px 10px; -fx-font-size: 12px; }
+
+/* Empty and insufficient states sit in the same box as the plot, so the card
+   never changes height when results arrive. */
+.stat-chart-body { -fx-alignment: center; }

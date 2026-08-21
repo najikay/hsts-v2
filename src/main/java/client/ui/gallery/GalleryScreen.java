@@ -14,10 +14,13 @@ import client.ui.components.ProgressOverlay;
 import client.ui.components.ReconnectBanner;
 import client.ui.components.RoleBadge;
 import client.ui.components.Skeletons;
+import client.ui.components.StatChart;
 import client.ui.components.StatusChip;
 import client.ui.components.ToastStack;
 import client.ui.components.WarnConfirm;
 import client.ui.components.logic.CountdownLogic;
+import client.ui.components.logic.StatChartData;
+import client.ui.components.logic.StatChartLogic;
 import client.ui.components.logic.ValidationState;
 import client.ui.screen.AbstractScreen;
 import client.ui.shell.Initials;
@@ -80,6 +83,7 @@ public final class GalleryScreen extends AbstractScreen {
                 section("Role badges", badgesSection()),
                 section("Form fields & validation", formSection()),
                 section("Countdown timer (E4.18)", countdownSection()),
+                section("Score histogram (E14.3 · F9.2)", statChartSection()),
                 section("Empty states", emptySection()),
                 section("Skeleton loaders", skeletonSection()),
                 section("Data table", tableSection()),
@@ -250,6 +254,52 @@ public final class GalleryScreen extends AbstractScreen {
         VBox box = new VBox(6, caption(label), widget);
         box.setAlignment(Pos.TOP_LEFT);
         return box;
+    }
+
+    /**
+     * The E14.3 histogram, on the seeded execution 1 and in both of its non-chart states.
+     *
+     * <p>The distribution is the frozen one from {@code docs/seed/SEED_CONTENT.md} §9.1 —
+     * final scores 45, 55, 60, 70, 75, 85, 90, 100, giving mean 72.5, median 72.5, population
+     * σ 17.5 over 8 participants. Hard-coded rather than computed, deliberately: the gallery
+     * is the place a reviewer checks the chart against the seed table by eye, and a chart that
+     * derived the numbers could only ever agree with itself.
+     *
+     * <p>Flipping mode and palette with this section on screen is the palette sanity check:
+     * the bars must follow the accent and the markers must stay neutral ink, which is the
+     * specific regression the Rose palette can cause.
+     */
+    private Node statChartSection() {
+        StatChartData seeded = StatChartData.of(
+                List.of(0, 0, 0, 0, 1, 1, 1, 2, 1, 2), 72.5, 72.5, 17.5, 8);
+
+        StatChart chart = new StatChart();
+        chart.setHeading("Algebra Midterm · execution 4821");
+        chart.setData(seeded);
+        chart.bindTheme(theme);
+        chart.setPrefHeight(300);
+
+        StatChart empty = new StatChart();
+        empty.setData(StatChartData.empty());
+        empty.setPrefSize(340, 220);
+
+        StatChart insufficient = new StatChart();
+        insufficient.setData(StatChartData.of(
+                List.of(0, 0, 0, 0, 0, 0, 0, 1, 0, 0), 75, 75, 0, 1));
+        insufficient.setPrefSize(340, 220);
+
+        Button replay = Buttons.secondary("Replay entrance");
+        replay.setOnAction(e -> chart.setData(seeded));
+        Button counts = Buttons.styled("Show counts", Buttons.GHOST);
+        counts.setOnAction(e -> chart.setScale(StatChartLogic.Scale.COUNT));
+        Button percent = Buttons.styled("Show percent", Buttons.GHOST);
+        percent.setOnAction(e -> chart.setScale(StatChartLogic.Scale.PERCENT));
+
+        HBox states = new HBox(24, empty, insufficient);
+        states.setAlignment(Pos.TOP_LEFT);
+
+        return new VBox(14, chart, flow(replay, counts, percent),
+                caption("Empty (nobody graded yet) and insufficient (one result)"), states);
     }
 
     private Node emptySection() {

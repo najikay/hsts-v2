@@ -118,6 +118,10 @@ class UiSmokeTest extends ApplicationTest {
         assertThat(lookupOne(scene, ".hsts-chip")).isNotNull();
         assertThat(lookupOne(scene, ".hsts-countdown")).isNotNull();
         assertThat(lookupOne(scene, ".hsts-rail")).isNotNull();
+        // E14.3's histogram, including the bars: a chart that constructed but painted
+        // nothing would still pass a lookup on the container alone.
+        assertThat(lookupOne(scene, ".hsts-stat-chart")).isNotNull();
+        assertThat(scene.getRoot().lookupAll(".stat-bar")).isNotEmpty();
     }
 
     @Test

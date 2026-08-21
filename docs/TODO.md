@@ -201,7 +201,7 @@ Client:
 - [x] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
 - [x] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
 - [x] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
-- [ ] E11.7 **[in progress, L, 2026-08-21]** Attention events (F7.1b): client reports exam-window focus loss during IN_PROGRESS (debounced, resumes counted); server extends the monitor row flags (reuse IntegrityFlag shape); live push to watching teachers; no student-facing UI; tests incl. flicker debounce and the flag surviving resume. Build with the post-manual-test polish round
+- [x] E11.7 **[L, done 2026-08-21]** Attention events (F7.1b): FX-free `AttentionTracker` (500 ms flicker debounce, reported on refocus, silent after finalisation); new `ATTEMPT_ATTENTION` verb resolving the caller's own live attempt; `AttentionSummary` accumulated in `AttemptRegistry` beside the C-4 flags (survives resume, outlives the attempt); pushed as a whole monitor snapshot; neutral secondary chip on the teacher's row; no student-facing UI anywhere. Contract amendments A1/A2 in EXAM_WIRE_CONTRACT.md
 - [x] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
 - [ ] E11.6 Acceptance pass vs T-7 ⚑
 
@@ -232,8 +232,8 @@ Client:
 
 - [ ] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
 - [ ] E14.2 Results screen: exam → execution picker → student table (sortable) + stat cards (avg · median · std · min/max · pass rate · participants)
-- [ ] E14.3 **[REASSIGNED to L, 2026-08-21 — in progress]** StatChart component (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance, theme/palette-aware colors, empty & insufficient-data states ⚑
-- [ ] E14.3b Wire StatChart into teacher results; visual QA against seed data distribution ⚑
+- [x] E14.3 **[L, done 2026-08-21]** StatChart component (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance (≤246 ms), theme/palette-aware colors, empty & insufficient-data states ⚑ — `StatChartData` + FX-free `StatChartLogic` (zero-based axis with headroom, honest ruler shared by bars and markers) + thin `StatChart` view, gallery section on the seeded execution-1 distribution, documented CSS block in hsts.css
+- [ ] E14.3b **[B]** Wire StatChart into teacher results; visual QA against seed data distribution ⚑ — *the component is done and gallery-verified; what remains is the screen wiring. Build the input with `StatChartData.of(deciles, mean, median, stddev, count)` straight from the execution's stored stats, and do not recompute σ (population divisor, F8.5). See docs/reports/lead/E14.3-E11.7.md*
 - [ ] E14.4 Table/histogram toggle (T-10 note), export/print-friendly layout
 - [ ] E14.5 Session tests + acceptance pass vs T-10 ⚑
 

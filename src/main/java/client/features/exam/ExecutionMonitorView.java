@@ -158,9 +158,10 @@ public final class ExecutionMonitorView extends AbstractScreen {
         remaining.getStyleClass().addAll("mono", "small");
         remaining.setMinWidth(70);
 
-        HBox line = new HBox(12, name, status, progress, Buttons.spacer(), remaining);
+        HBox line = new HBox(12);
         line.setAlignment(Pos.CENTER_LEFT);
         line.getStyleClass().add("monitor-row");
+        line.getChildren().addAll(name, status, progress);
 
         if (row.isFlagged()) {
             Label flag = new Label(row.integrity().label());
@@ -168,9 +169,37 @@ public final class ExecutionMonitorView extends AbstractScreen {
             flag.setTooltip(new Tooltip("Opened another course's study bot at "
                     + ExamClock.localTime(row.integrity().at())
                     + ". The server cannot know why; this is for you to judge."));
-            line.getChildren().add(4, flag);
+            line.getChildren().add(flag);
         }
+        if (row.hasAttentionEvents()) {
+            line.getChildren().add(attentionChip(row));
+        }
+
+        line.getChildren().addAll(Buttons.spacer(), remaining);
         return line;
+    }
+
+    /**
+     * The E11.7 attention signal (F7.1b).
+     *
+     * <p><b>Neutral, never danger.</b> The integrity flag beside it is amber because C-4 is a
+     * rule the student was warned about and chose to cross; this is not a rule at all. A
+     * window losing focus has a dozen benign causes — a notification, a screen reader, an
+     * invigilator handing over a form — and the server cannot tell any of them from a browser.
+     * Colouring it as an alarm would make the software accuse somebody it has no grounds to
+     * accuse, which is exactly what F7.1b's "signal, not verdict" forbids.
+     *
+     * <p>The tooltip says the limit out loud, so a teacher acting on this knows what it is
+     * worth: it is detected on the student's own machine.
+     */
+    private static Label attentionChip(MonitorRow row) {
+        Label chip = new Label(row.attention().label());
+        chip.getStyleClass().addAll("hsts-chip", "neutral", "attention-chip");
+        chip.setTooltip(new Tooltip("Her exam window last lost focus at "
+                + ExamClock.localTime(row.attention().lastAt())
+                + ". Benign reasons are common and this is detected on her own machine, "
+                + "so it is something to weigh, not a finding."));
+        return chip;
     }
 
     // ===================== The one action ================================

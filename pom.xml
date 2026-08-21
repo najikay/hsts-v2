@@ -354,6 +354,7 @@
                         <exclude>client/ui/components/ReconnectBanner*</exclude>
                         <exclude>client/ui/components/RoleBadge*</exclude>
                         <exclude>client/ui/components/Skeletons*</exclude>
+                        <exclude>client/ui/components/StatChart*</exclude>
                         <exclude>client/ui/components/StatusChip*</exclude>
                         <exclude>client/ui/components/ToastStack*</exclude>
                         <exclude>client/ui/components/WarnConfirm*</exclude>

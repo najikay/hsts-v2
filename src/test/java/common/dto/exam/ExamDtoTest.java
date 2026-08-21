@@ -466,6 +466,72 @@ class ExamDtoTest {
         void monitorRequest() throws Exception {
             assertThat(roundTrip(new MonitorRequest(5001)).executionId()).isEqualTo(5001);
         }
+
+        // ---- E11.7 attention events (F7.1b), additive to the frozen contract ----
+
+        @Test
+        @DisplayName("an attention report carries one number and clamps a negative one")
+        void attentionReportRoundTrips() throws Exception {
+            assertThat(roundTrip(new AttentionReport(12_000)).awayMillis()).isEqualTo(12_000);
+            assertThat(new AttentionReport(-1).awayMillis())
+                    .as("a negative absence is a broken clock, not a shorter absence")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("an attention summary reads as an observation, and pluralises properly")
+        void attentionSummaryWording() throws Exception {
+            AttentionSummary summary = roundTrip(new AttentionSummary(3, 40_000, NOW));
+
+            assertThat(summary.label()).isEqualTo("Left the exam view 3 times · 40s total");
+            assertThat(summary.lastAt()).isEqualTo(NOW);
+            assertThat(new AttentionSummary(1, 12_000, NOW).label())
+                    .as("never 1 times, which reads as a bug in the software")
+                    .isEqualTo("Left the exam view once · 12s total");
+        }
+
+        @Test
+        @DisplayName("attention summaries add up, keeping the latest time")
+        void attentionSummaryAccumulates() {
+            AttentionSummary summary = new AttentionSummary(1, 12_000, NOW)
+                    .plus(20_000, ENDS)
+                    .plus(-5, null);
+
+            assertThat(summary.count()).isEqualTo(3);
+            assertThat(summary.totalAwayMillis())
+                    .as("a negative duration contributes nothing rather than subtracting")
+                    .isEqualTo(32_000);
+            assertThat(summary.lastAt())
+                    .as("a null time leaves the previous one standing")
+                    .isEqualTo(ENDS);
+        }
+
+        @Test
+        @DisplayName("away time is seconds up to a minute, then minutes and seconds")
+        void attentionDurationFormatting() {
+            assertThat(AttentionSummary.formatAway(0)).isEqualTo("0s");
+            assertThat(AttentionSummary.formatAway(-9)).isEqualTo("0s");
+            assertThat(AttentionSummary.formatAway(40_000)).isEqualTo("40s");
+            assertThat(AttentionSummary.formatAway(59_999)).isEqualTo("59s");
+            assertThat(AttentionSummary.formatAway(60_000)).isEqualTo("1m 00s");
+            assertThat(AttentionSummary.formatAway(125_000)).isEqualTo("2m 05s");
+        }
+
+        @Test
+        @DisplayName("a monitor row carries the summary across the wire, and null means nothing to report")
+        void monitorRowCarriesAttention() throws Exception {
+            MonitorRow watched = roundTrip(new MonitorRow(2001, "Maya Levi",
+                    AttemptState.IN_PROGRESS, NOW, null, 1000, 3, 20, null, null,
+                    new AttentionSummary(2, 40_000, NOW)));
+
+            assertThat(watched.hasAttentionEvents()).isTrue();
+            assertThat(watched.attention().count()).isEqualTo(2);
+
+            assertThat(plainRow().attention())
+                    .as("the pre-E11.7 shape still compiles and reports nothing")
+                    .isNull();
+            assertThat(plainRow().hasAttentionEvents()).isFalse();
+        }
     }
 
     // ===================== Fixture =======================================

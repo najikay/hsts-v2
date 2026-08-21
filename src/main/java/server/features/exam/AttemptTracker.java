@@ -118,6 +118,22 @@ public interface AttemptTracker {
     Optional<IntegrityFlag> flagOf(long attemptId);
 
     /**
+     * The E11.7 attention summary for an attempt (F7.1b).
+     *
+     * <p>Defaulted to empty rather than added as an abstract method, because this seam's other
+     * implementor is the study bot's test double and the bot has no business knowing whether a
+     * student's window lost focus. An implementation that does not track attention answers
+     * "nothing to report", which is the same thing the monitor renders for a student who never
+     * left her window.
+     *
+     * @param attemptId an attempt
+     * @return how many times her window lost focus and for how long, or empty
+     */
+    default Optional<common.dto.exam.AttentionSummary> attentionOf(long attemptId) {
+        return Optional.empty();
+    }
+
+    /**
      * Subscribes to sittings starting and ending.
      *
      * @param listener the subscriber; never removed, because the only subscriber is a

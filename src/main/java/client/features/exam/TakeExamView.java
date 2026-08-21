@@ -58,6 +58,10 @@ public final class TakeExamView extends AbstractScreen {
     private ExamEntryView entryView;
     private ExamFormView formView;
 
+    /** The window whose focus is currently being watched (E11.7), or {@code null}. */
+    private javafx.stage.Window watchedWindow;
+    private javafx.beans.value.ChangeListener<Boolean> focusWatch;
+
     @Override
     protected Parent build() {
         entry = new ExamEntrySession(dispatcher())
@@ -90,6 +94,7 @@ public final class TakeExamView extends AbstractScreen {
         // including "you have already handed this one in" (F6.7), so there is no local
         // memory of finished exams to go stale.
         done.reset();
+        unwatchFocus();
         attempt.stop();
         entry.reset();
         content.setCenter(entryView);
@@ -106,6 +111,7 @@ public final class TakeExamView extends AbstractScreen {
         // Stops the countdown and unsubscribes from the bus. The attempt keeps running on
         // the server, which is the whole point: leaving the screen is not leaving the exam.
         formView.countdown().stop();
+        unwatchFocus();
         attempt.stop();
     }
 
@@ -133,7 +139,43 @@ public final class TakeExamView extends AbstractScreen {
         content.setCenter(formView);
         formView.refresh();
         formView.startCountdown();
+        watchFocus();
         model.outcome().ifPresent(done::show);
+    }
+
+    /**
+     * Starts watching the exam window's focus (E11.7 — F7.1b).
+     *
+     * <p>The <b>window's</b> focus and not the scene's: what F7.1b is about is the student
+     * leaving the exam for something else on her machine, and a JavaFX Scene has no notion of
+     * that. {@code Stage.focusedProperty} is the only signal the toolkit offers that
+     * corresponds to it, and its honest limit — it runs on her own computer, so it is a
+     * deterrent and a visibility aid rather than a control — is stated in the PRD and in the
+     * wire contract rather than hidden here.
+     *
+     * <p>Attached when the paper takes over, and only then: the code and identity screens are
+     * not the exam. Detached on every exit, so a listener cannot outlive the attempt on the
+     * long-lived {@code Stage} the whole app shares.
+     */
+    private void watchFocus() {
+        unwatchFocus();
+        if (root.getScene() == null || root.getScene().getWindow() == null) {
+            // A screen that has not been shown yet, or a test harness with no window. Nothing
+            // to watch, and nothing broken: the attempt itself does not depend on this.
+            return;
+        }
+        watchedWindow = root.getScene().getWindow();
+        focusWatch = (observable, was, focused) -> attempt.attention().focusChanged(focused);
+        watchedWindow.focusedProperty().addListener(focusWatch);
+    }
+
+    /** Stops watching. Called on finalisation, on leaving, and before re-attaching. */
+    private void unwatchFocus() {
+        if (watchedWindow != null && focusWatch != null) {
+            watchedWindow.focusedProperty().removeListener(focusWatch);
+        }
+        watchedWindow = null;
+        focusWatch = null;
     }
 
     /**
@@ -182,12 +224,14 @@ public final class TakeExamView extends AbstractScreen {
     private void showEnding(AttemptOutcome outcome) {
         formView.countdown().stop();
         formView.refresh();
+        unwatchFocus();
         done.show(outcome);
     }
 
     /** The single action on the takeover: leave, and do not come back to this paper. */
     private void leave() {
         done.reset();
+        unwatchFocus();
         attempt.stop();
         entry.reset();
         content.setCenter(entryView);

@@ -554,6 +554,65 @@ class ExamAttemptSessionTest {
         }
     }
 
+    @Nested
+    @DisplayName("attention events (E11.7 — F7.1b)")
+    class Attention {
+
+        @Test
+        @DisplayName("a live paper starts the focus watcher; a finished one never does")
+        void watcherFollowsTheAttempt() {
+            session.start(EXECUTION, liveForm(List.of()));
+            assertThat(session.attention().isTracking()).isTrue();
+
+            session.stop();
+            assertThat(session.attention().isTracking()).isFalse();
+
+            session.start(EXECUTION, finishedForm(AttemptState.TIMED_OUT));
+            assertThat(session.attention().isTracking())
+                    .as("a paper that is already over cannot accrue attention events")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("an absence becomes exactly one ATTEMPT_ATTENTION carrying its duration ⚑")
+        void absenceIsReportedOnTheWire() {
+            connection.replyOk(Verb.ATTEMPT_ATTENTION, null);
+            session.start(EXECUTION, liveForm(List.of()));
+
+            session.reportAttention(12_000);
+
+            List<Message> reports = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.ATTEMPT_ATTENTION)
+                    .toList();
+            assertThat(reports).hasSize(1);
+            assertThat(reports.get(0).getPayload())
+                    .isEqualTo(new common.dto.exam.AttentionReport(12_000));
+        }
+
+        @Test
+        @DisplayName("a zero or negative duration is never sent")
+        void nothingIsSentForANonAbsence() {
+            session.start(EXECUTION, liveForm(List.of()));
+
+            session.reportAttention(0);
+            session.reportAttention(-5);
+
+            assertThat(connection.sentMessages())
+                    .noneMatch(message -> message.getVerb() == Verb.ATTEMPT_ATTENTION);
+        }
+
+        @Test
+        @DisplayName("a force-submit stops the watcher, so the takeover cannot report anything")
+        void forceSubmitStopsTheWatcher() {
+            session.start(EXECUTION, liveForm(List.of()));
+
+            connection.pushToClient(Verb.PUSH_FORCE_SUBMITTED, outcome(AttemptState.TIMED_OUT));
+
+            assertThat(endings).hasSize(1);
+            assertThat(session.attention().isTracking()).isFalse();
+        }
+    }
+
     // ===================== Fixture =======================================
 
     private static ExamHeader header() {

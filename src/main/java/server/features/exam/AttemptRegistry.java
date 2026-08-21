@@ -1,5 +1,6 @@
 package server.features.exam;
 
+import common.dto.exam.AttentionSummary;
 import common.dto.exam.IntegrityFlag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +36,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * and the teacher opening the monitor after everyone has submitted must still see who
  * tripped it. They are evicted only when the execution's monitor stops being interesting,
  * which for a server that restarts between exam days is "at restart".
+ *
+ * <p>E11.7's attention summaries live in a third map on exactly the same terms, and for the
+ * same reason: they are monitor state, not exam state. Nothing about a grade, a submission or
+ * a deadline is decided from either of them.
  */
 public final class AttemptRegistry {
 
@@ -43,6 +48,7 @@ public final class AttemptRegistry {
     private final Map<Long, ActiveAttempt> byAttempt = new ConcurrentHashMap<>();
     private final Map<Long, Set<Long>> byStudent = new ConcurrentHashMap<>();
     private final Map<Long, IntegrityFlag> flags = new ConcurrentHashMap<>();
+    private final Map<Long, AttentionSummary> attention = new ConcurrentHashMap<>();
     private final List<AttemptTracker.Listener> listeners = new ArrayList<>();
 
     // ===================== Lifecycle =====================================
@@ -178,9 +184,52 @@ public final class AttemptRegistry {
         return flags.size();
     }
 
-    /** Drops every flag. Used when a monitor's execution is closed and archived. */
+    /**
+     * Drops every flag <b>and</b> every attention summary.
+     *
+     * <p>Used when a monitor's execution is closed and archived. The two are cleared together
+     * because they are the same kind of thing — in-memory monitor state that outlives the
+     * attempt and dies with the registry — and leaving one of them behind would mean a row
+     * that still carried half its history after the other half was dropped.
+     */
     public void clearFlags() {
         flags.clear();
+        attention.clear();
+    }
+
+    // ===================== Attention events (E11.7) ======================
+
+    /**
+     * Records one reported absence against an attempt (F7.1b).
+     *
+     * <p>Accumulating rather than first-wins, which is the opposite of {@link #flag}, and the
+     * difference is what the teacher acts on. An integrity flag answers "when did this start";
+     * an attention summary answers "how often, and how long in total" — a single 40-second
+     * absence and eight five-second ones are different situations, and a first-wins record
+     * would render them identically.
+     *
+     * <p>Survives a resume, like the flags: the summary is keyed by attempt, and a student who
+     * reconnects is still sitting the same one.
+     *
+     * @param attemptId  the attempt
+     * @param awayMillis how long the window was unfocused; negatives contribute nothing
+     * @param at         when the absence ended
+     * @return the summary as it now stands
+     */
+    public AttentionSummary recordAttention(long attemptId, long awayMillis, Instant at) {
+        return attention.compute(attemptId, (key, current) -> current == null
+                ? new AttentionSummary(1, Math.max(0, awayMillis), at)
+                : current.plus(awayMillis, at));
+    }
+
+    /** @return the attention summary for this attempt, or empty when nothing was reported. */
+    public Optional<AttentionSummary> attentionOf(long attemptId) {
+        return Optional.ofNullable(attention.get(attemptId));
+    }
+
+    /** @return how many attempts carry an attention summary. */
+    public int attentionCount() {
+        return attention.size();
     }
 
     private void fire(java.util.function.Consumer<AttemptTracker.Listener> event) {

@@ -13,6 +13,7 @@ import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
 import common.dto.exam.AttemptState;
+import common.dto.exam.AttentionSummary;
 import common.dto.exam.ExecutionMonitor;
 import common.dto.exam.IntegrityFlag;
 import common.dto.exam.MonitorCounts;
@@ -144,6 +145,52 @@ class ExecutionMonitorInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("the attention summary renders as a calm secondary chip, never as danger (F7.1b) ⚑")
+    void attentionSummaryIsRendered() {
+        ScreenManager manager = signIn(snapshot(true, 3, 1, 0));
+        openMonitor(manager);
+
+        Scene scene = manager.scene();
+        Set<Node> chips = scene.getRoot().lookupAll(".attention-chip");
+        assertThat(chips)
+                .as("only the one student whose window left focus carries it")
+                .hasSize(1);
+        assertThat(labelTexts(scene))
+                .as("the copy is an observation, not an accusation")
+                .contains("Left the exam view 2 times · 40s total");
+
+        Node chip = chips.iterator().next();
+        assertThat(chip.getStyleClass())
+                .as("a signal is styled neutrally; C-4's flag is the one that is allowed to warn")
+                .contains("neutral")
+                .doesNotContain("danger", "warn");
+    }
+
+    @Test
+    @DisplayName("a pushed snapshot updates the attention chip without a refresh (NFR-18)")
+    void attentionChipFollowsPushes() {
+        ScreenManager manager = signIn(snapshot(true, 3, 1, 0));
+        FakeClientConnection connection = (FakeClientConnection) manager.getClient();
+        openMonitor(manager);
+
+        interact(() -> connection.pushToClient(Verb.PUSH_MONITOR_UPDATED,
+                snapshotWithAttention(new AttentionSummary(5, 95_000, NOW))));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(manager.scene()))
+                .contains("Left the exam view 5 times · 1m 35s total");
+    }
+
+    @Test
+    @DisplayName("a student who never left her window carries no chip at all, not a zero")
+    void noAttentionMeansNoChip() {
+        ScreenManager manager = signIn(snapshotWithAttention(null));
+        openMonitor(manager);
+
+        assertThat(manager.scene().getRoot().lookupAll(".attention-chip")).isEmpty();
+    }
+
+    @Test
     @DisplayName("an execution nobody has joined shows its empty state, not an empty screen")
     void emptyExecutionHasAnEmptyState() {
         ScreenManager manager = signIn(new ExecutionMonitor(EXECUTION, "Java Midterm", "21",
@@ -231,7 +278,9 @@ class ExecutionMonitorInteractionTest extends ApplicationTest {
     private static ExecutionMonitor snapshot(boolean live, int started, int finished, int timedOut) {
         List<MonitorRow> rows = List.of(
                 new MonitorRow(2001, "Maya Levi", AttemptState.IN_PROGRESS, NOW, null,
-                        Duration.ofMinutes(25).toMillis(), 2, 3, null, null),
+                        Duration.ofMinutes(25).toMillis(), 2, 3, null, null,
+                        // E11.7: one student's window left focus twice, for 40 seconds in all.
+                        new AttentionSummary(2, 40_000, NOW)),
                 new MonitorRow(2002, "Noam Bar", AttemptState.SUBMITTED, NOW,
                         NOW.plus(Duration.ofMinutes(20)), 0, 3, 3, 20, null),
                 new MonitorRow(2003, "Ori Katz", AttemptState.IN_PROGRESS, NOW, null,
@@ -240,5 +289,14 @@ class ExecutionMonitorInteractionTest extends ApplicationTest {
         return new ExecutionMonitor(EXECUTION, "Java Midterm", "21", "4B7Q", live, NOW,
                 NOW.plus(Duration.ofHours(2)), 0, 45,
                 new MonitorCounts(started, finished, timedOut), rows);
+    }
+
+    /** One live student, with or without an attention summary on her row. */
+    private static ExecutionMonitor snapshotWithAttention(AttentionSummary attention) {
+        List<MonitorRow> rows = List.of(new MonitorRow(2001, "Maya Levi",
+                AttemptState.IN_PROGRESS, NOW, null, Duration.ofMinutes(25).toMillis(),
+                2, 3, null, null, attention));
+        return new ExecutionMonitor(EXECUTION, "Java Midterm", "21", "4B7Q", true, NOW,
+                NOW.plus(Duration.ofHours(2)), 0, 45, new MonitorCounts(1, 0, 0), rows);
     }
 }
