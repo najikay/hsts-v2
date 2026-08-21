@@ -148,3 +148,15 @@ stripping combining marks must remove niqqud without taking the consonants with 
 assume four non-null answers; without that, distinctness would need its own null handling and would
 report "two answers are the same" for a question that has two answers. A test asserts that a
 question with everything wrong reports the missing text rather than a consequence of it.
+
+## 7. Definition of Done
+
+- [x] Matches ARCHITECTURE §5 and the PRD ids named in the task (F2.1, F2.2, C-8, ADR-016)
+- [x] Unit tests; **coverage not lower than `main`** — bundle 98.33% against `main`'s 98.32%, and
+      `QuestionValidator` is at 100%, which is E6.7's own bar rather than the gate's
+- [x] Migrations unchanged by this PR
+- [x] No secrets; no dummy-credential changes in resources
+- [x] `docs/TODO.md` — **E6.7 ticked**. E6.2 deliberately left unticked: the rules exist and are
+      tested, but "server-side validation with precise error messages" means reachable by a
+      caller, and the handler waits on §7's rulings
+- [x] CI green — run 32484647276, conclusion success
