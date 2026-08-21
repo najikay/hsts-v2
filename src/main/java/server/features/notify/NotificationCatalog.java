@@ -116,6 +116,32 @@ public final class NotificationCatalog {
     }
 
     /**
+     * A newer version replaced one that was still in the queue (E8.2).
+     *
+     * <p>Goes to the <b>coordinator</b>, not to the author: the author is the
+     * person who just resubmitted, and telling somebody what they have this
+     * second done is the noise that makes people stop reading their bell. The
+     * coordinator is the one whose queue changed underneath her, possibly
+     * mid-read, and a row that vanishes without a word is a mystery state.
+     *
+     * <p>The reference points at the <em>new</em> version, because the old one is
+     * no longer actionable and the whole point of the message is that there is
+     * something newer to look at.
+     *
+     * @param examName         the exam's name
+     * @param authorName       who resubmitted it
+     * @param newExamVersionId the version that replaced the old one, to open on click
+     */
+    public static Draft approvalSuperseded(String examName, String authorName,
+                                           long newExamVersionId) {
+        return new Draft(NotificationType.APPROVAL_SUPERSEDED,
+                "A newer version replaced one in your queue",
+                authorName + " submitted a newer version of " + examName
+                        + ". The earlier one was sent back automatically.",
+                NavRef.to(ROUTE_APPROVALS, newExamVersionId));
+    }
+
+    /**
      * Finishes a sentence made of somebody's free text.
      *
      * <p>The rejection reason is typed by a coordinator in a text area, and most

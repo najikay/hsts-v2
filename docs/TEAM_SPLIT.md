@@ -45,8 +45,7 @@ E21 hardening is everyone (each attacks the others' features); E23 stretch assig
 Compressed plan: features done Aug 23-24 · integration + lead's manual passes Aug 24-25 ·
 hardening Aug 26 · submission zip + two-machine rehearsal + DEFENSE Aug 27. Because of the lost
 day, **E14.3 (StatChart) moved to the lead** (it is shared design-system work; B keeps E14 and
-wires the finished component), and the lead also runs E11.7. The E8 absorption offer to A stays
-open through Aug 24.
+wires the finished component), and the lead also runs E11.7. **E8 and E14 were taken by the lead on Aug 21** (the offers converted to decisions when the lead lane finished early); A keeps E6, E7, E9; B keeps E12, E13, E15 and the SeedArithmeticTest port. Defense note: the cross-walkthroughs (E22.4) cover both reassigned epics so every member can still speak to them.
 
 | Milestone | L | A | B |
 |---|---|---|---|

@@ -151,16 +151,25 @@ Client:
 - [ ] E7.16 Session tests + integration test (manual + auto + infeasible + Σ≠100 + versioning)
 - [ ] E7.17 Acceptance pass vs T-3 with [L] ⚑
 
-## E8 — Approval workflow [A]
+## E8 — Approval workflow [L, taken from A 2026-08-21 for the compressed endgame]
 
-- [ ] E8.1 ApprovalService: pending queue per coordinator's subject; approve/reject(reason required); state transitions guarded; self-approval allowed but logged (F4.3, acceptance case 4.6)
-- [ ] E8.2 Invalidate pending request if a newer version is submitted; coordinator notified
-- [ ] E8.3 Approval queue screen (coordinator): list + badges, open preview
-- [ ] E8.4 **Exam preview screen: renders the exam exactly with the student form component (reuse E10 form, read-only) + teacher-only notes side panel** — fixes v1 "coordinator couldn't see the exam" ⚑
-- [ ] E8.5 Approve flow (confirm) / Reject flow (reason dialog, required, min length)
-- [ ] E8.6 Teacher-side: rejection reason visible on exam + notification deep-links to it
-- [ ] E8.7 Session + integration tests (approve, reject w/o reason blocked, stale version)
+- [x] E8.1 ApprovalService: pending queue per coordinator's subject; approve/reject(reason required); state transitions guarded; self-approval allowed but logged (F4.3, acceptance case 4.6)
+- [x] E8.2 Invalidate pending request if a newer version is submitted; coordinator notified
+- [x] E8.3 Approval queue screen (coordinator): list + badges, open preview
+- [x] E8.4 **Exam preview screen: renders the exam exactly with the student form component (reuse E10 form, read-only) + teacher-only notes side panel** — fixes v1 "coordinator couldn't see the exam" ⚑
+- [x] E8.5 Approve flow (confirm) / Reject flow (reason dialog, required, min length)
+- [x] E8.6 Teacher-side: rejection reason visible on exam + notification deep-links to it
+- [x] E8.7 Session + integration tests (approve, reject w/o reason blocked, stale version)
 - [ ] E8.8 Acceptance pass vs T-4 ⚑
+
+> **E8 notes (2026-08-21).** Wire contract: `docs/contracts/APPROVAL_WIRE_CONTRACT.md` (DRAFT, for
+> the lead to freeze). Report: `docs/reports/lead/E8.md`.
+> Two things E7 has to pick up: (a) `ExamService.submitForApproval` calls
+> `ApprovalService.versionSubmitted(examVersionId)` and emits **no** notification of its own — that
+> hook does the supersede *and* the APPROVAL_REQUESTED; (b) E7's exam list replaces
+> `MyApprovalsView` at route id `exams` and absorbs `MY_APPROVALS_GET`.
+> `Authorization.requireCoordinatorOf` is no longer a stub: E8 implemented it against the
+> `coordinators` table. `requireTeachesCourse` and `requireEnrolled` are still fail-closed stubs.
 
 ## E9 — Release manager [A]
 
@@ -227,15 +236,15 @@ Client:
 - [ ] E13.6 GRADE_PUBLISHED push → notification + dashboard card refresh
 - [ ] E13.7 Session tests + acceptance pass vs T-9 ⚑
 
-## E14 — Teacher results & statistics [B]
+## E14 — Teacher results & statistics [L, taken from B 2026-08-21 for the compressed endgame; B keeps E12/E13/E15]
 *Ownership note (2026-08-19): hardening items H14.* and H15.* in ACCEPTANCE_TESTS.md moved out of B's scope with the sprint re-plan; whoever executes E14/E15 picks them up. H14.4 (population-σ divisor test) and H15.2 (CANCELLED excluded from reports) are defense-critical.*
 
-- [ ] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
-- [ ] E14.2 Results screen: exam → execution picker → student table (sortable) + stat cards (avg · median · std · min/max · pass rate · participants)
+- [x] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
+- [x] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35) — *`RESULTS_EXAMS_GET` + `RESULTS_EXECUTION_GET` on `TeacherResultsService`, scoped on `exams.author` in the query (a colleague's sitting of her exam is hers; a non-author gets `NOT_FOUND` indistinguishable from an unknown id). Statistics are read from `exam_executions.stats`, never recomputed. Draft contract: docs/contracts/RESULTS_WIRE_CONTRACT.md*
 - [x] E14.3 **[L, done 2026-08-21]** StatChart component (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance (≤246 ms), theme/palette-aware colors, empty & insufficient-data states ⚑ — `StatChartData` + FX-free `StatChartLogic` (zero-based axis with headroom, honest ruler shared by bars and markers) + thin `StatChart` view, gallery section on the seeded execution-1 distribution, documented CSS block in hsts.css
-- [ ] E14.3b **[B]** Wire StatChart into teacher results; visual QA against seed data distribution ⚑ — *the component is done and gallery-verified; what remains is the screen wiring. Build the input with `StatChartData.of(deciles, mean, median, stddev, count)` straight from the execution's stored stats, and do not recompute σ (population divisor, F8.5). See docs/reports/lead/E14.3-E11.7.md*
-- [ ] E14.4 Table/histogram toggle (T-10 note), export/print-friendly layout
-- [ ] E14.5 Session tests + acceptance pass vs T-10 ⚑
+- [x] E14.3b **[B]** Wire StatChart into teacher results; visual QA against seed data distribution ⚑ — *the component is done and gallery-verified; what remains is the screen wiring. Build the input with `StatChartData.of(deciles, mean, median, stddev, count)` straight from the execution's stored stats, and do not recompute σ (population divisor, F8.5). See docs/reports/lead/E14.3-E11.7.md*
+- [x] E14.4 Table/histogram toggle (T-10 note), export/print-friendly layout
+- [x] E14.3b **[B]** Wire StatChart into teacher results; visual QA against seed data distribution ⚑ — *wired: `TeacherResultsSession.chartData()` is the whole mapping, `StatChartData.of(deciles, mean, median, stddev, count)` straight from the stored stats, σ untouched (population divisor, F8.5), and an execution with no statistics becomes `StatChartData.empty()` rather than a zero-filled record. Visual QA against the seeded 4821 distribution is pinned by `TeacherResultsInteractionTest` (bars drawn, both toggles clicked) plus the caption assertion in `TeacherResultsSessionTest`*
 
 ## E15 — Principal & reports [B]
 

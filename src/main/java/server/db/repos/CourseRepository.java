@@ -109,6 +109,99 @@ public final class CourseRepository {
     }
 
     /**
+     * Whether this teacher coordinates this subject (E8.1 — F4.1, S-1).
+     *
+     * <p>The half of every approval verb that the role gate cannot answer:
+     * {@code requireRole(COORDINATOR)} says "a coordinator", this says "the coordinator
+     * <em>of this subject</em>", and the two together are what stops the Mathematics
+     * coordinator approving a Computer Science exam. It is the sibling of {@link #teaches}
+     * one level up the tree — a subject owns courses, a course owns exams — and it is
+     * deliberately the narrow question for the same reason: a coordinator who also teaches a
+     * course in somebody else's subject is emphatically not that subject's coordinator.
+     *
+     * <p>The {@code coordinators} primary key is the subject alone (§5), so a subject has at
+     * most one row here and this can never be ambiguous. That is also why a
+     * {@code teacher → subjects} read is not enough on its own: the useful direction for a
+     * guard is "may this person act on this subject", and asking the wide question and
+     * filtering afterwards is how the wrong answer eventually gets used.
+     *
+     * <p>Consumers: {@code Authorization.requireCoordinatorOf}, through the directory the
+     * server installs at assembly, and E8's approval service on every mutation.
+     *
+     * @param session     the current session
+     * @param teacherId   the caller, from the session and never from a payload
+     * @param subjectCode the 2-character subject code
+     * @return {@code true} when there is a {@code coordinators} row binding the two
+     */
+    public boolean coordinates(Session session, long teacherId, String subjectCode) {
+        if (subjectCode == null || subjectCode.isBlank()) {
+            return false;
+        }
+        return session.createQuery("""
+                        select count(co) from Coordinator co
+                        where co.teacherId = :teacherId and co.subjectCode = :subjectCode
+                        """, Long.class)
+                .setParameter("teacherId", teacherId)
+                .setParameter("subjectCode", subjectCode)
+                .getSingleResult() > 0;
+    }
+
+    /**
+     * Who coordinates this subject (E8.2 — S-1, F4).
+     *
+     * <p>The recipient of every "an exam is waiting for you" notification. It is a single
+     * {@code Optional} rather than a list because the {@code coordinators} primary key is the
+     * subject alone (§5): one coordinator per subject is enforced by the schema, so a method
+     * returning a list here would be asserting a looseness the table does not have, and the
+     * first caller to loop over it would be writing a loop that can only ever run once.
+     *
+     * <p>Empty is a real answer, not an error: a subject can exist before anybody is made its
+     * coordinator. The caller warns rather than throws, because a submission nobody can
+     * approve is an administrative gap to fix, not a reason to fail the teacher's submit.
+     *
+     * <p>Consumer: E8.2's submit hook, notifying the coordinator.
+     *
+     * @param session     the current session
+     * @param subjectCode the 2-character subject code
+     * @return the coordinating teacher's user id, or empty when the subject has none
+     */
+    public Optional<Long> findCoordinatorOf(Session session, String subjectCode) {
+        if (subjectCode == null || subjectCode.isBlank()) {
+            return Optional.empty();
+        }
+        return session.createQuery("""
+                        select co.teacherId from Coordinator co
+                        where co.subjectCode = :subjectCode
+                        """, Long.class)
+                .setParameter("subjectCode", subjectCode)
+                .uniqueResultOptional();
+    }
+
+    /**
+     * The subject a course belongs to (E8.1).
+     *
+     * <p>One column, because that is the whole question an approval guard asks: an exam
+     * names a course, a coordinator owns a subject, and this is the edge between them.
+     * Loading the {@code Course} row to read two characters is the sort of thing that is
+     * invisible until it is inside a queue render.
+     *
+     * <p>Consumer: E8's approval service, resolving the subject of the exam being decided.
+     *
+     * @param session    the current session
+     * @param courseCode the 2-character course code
+     * @return its subject code, or empty when there is no such course
+     */
+    public Optional<String> findSubjectOf(Session session, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return Optional.empty();
+        }
+        return session.createQuery(
+                        "select c.subjectCode from Course c where c.code = :courseCode", String.class)
+                .setParameter("courseCode", courseCode)
+                .uniqueResultOptional();
+    }
+
+    /**
      * The other teachers of a course (E16.9 — F12.3).
      *
      * <p>Who a "the study bot sources changed" notification goes to. Excludes the

@@ -260,6 +260,42 @@ public final class QuestionRepository {
     }
 
     /**
+     * The answer key of one whole exam version, in exam order (E8.4 ⚑ — F4.1).
+     *
+     * <p><b>Teacher-only, and named so.</b> A coordinator deciding whether to approve an exam
+     * has to be able to check that its answers are right; approving a paper whose key you
+     * cannot see is approving a document, not an exam. That is authoring work — nobody has
+     * sat this paper and there is nothing to grade — so it takes the {@code ForAuthoring}
+     * suffix E2.12 established rather than a fourth sanctioned name, and
+     * {@code CorrectnessLeakGuardTest} keeps that honest.
+     *
+     * <p>By exam version rather than by a collection of ids, which is what distinguishes it
+     * from {@link #findVersionsForGrading}: that one is handed the ids an attempt was sat on
+     * and returns them in no particular order, because a grader pairs by id. This one is
+     * asked "what is on this paper" and answers in {@code ordinal} order, because a side
+     * panel is rendered in exam order and a caller that had to sort it would be re-deriving
+     * the paper's order from something other than the paper.
+     *
+     * <p>Consumer: E8's exam preview, through {@code server.features.approval.ApprovalStore}.
+     * Nothing student-facing may call it, and nothing does: the student's paper comes from
+     * {@link #findForTakeExam}, whose projection has nowhere to put a key.
+     *
+     * @param session       the current session
+     * @param examVersionId the exam version being reviewed
+     * @return the pinned question versions, <b>answer key included</b>, in exam order
+     */
+    public List<QuestionVersion> findAnswerKeyForAuthoring(Session session, long examVersionId) {
+        return session.createQuery("""
+                        select qv from ExamVersionQuestion evq, QuestionVersion qv
+                        where evq.id.examVersionId = :examVersionId
+                          and qv.id = evq.id.questionVersionId
+                        order by evq.ordinal
+                        """, QuestionVersion.class)
+                .setParameter("examVersionId", examVersionId)
+                .getResultList();
+    }
+
+    /**
      * The newest version of a question, correct answer included.
      *
      * <p><b>Teacher-only.</b> Consumer: E6 editing, which creates version n+1 from the

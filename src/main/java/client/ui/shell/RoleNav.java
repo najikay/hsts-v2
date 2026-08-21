@@ -29,9 +29,12 @@ import java.util.Objects;
  */
 public final class RoleNav {
 
-    /** Route ids of screens that arrive in later epics; declared once, here. */
-    static final String ROUTE_EXAMS = "exams";
-    static final String ROUTE_APPROVALS = "approvals";
+    /**
+     * Route ids of screens that arrive in later epics; declared once, here.
+     *
+     * <p>{@code exams} and {@code approvals} left this list in E8: both now have a
+     * {@link Routes} constant of their own, which is what an enabled item points at.
+     */
     static final String ROUTE_RELEASES = "releases";
     static final String ROUTE_MONITOR = "monitor";
     static final String ROUTE_GRADING = "grading";
@@ -70,14 +73,25 @@ public final class RoleNav {
         items.add(dashboard(role));
         // The legacy bank screen still works over the DAO, so this one is live.
         items.add(NavItem.of(Routes.QUESTIONS.id(), "Question Bank", Icons.BANK));
-        items.add(soon(ROUTE_EXAMS, "Exams", Icons.EXAMS, 7));
+        // Live since E8, but only half of it: this screen shows where each submitted exam
+        // stands and what a coordinator said about it (F4.2), which is the surface a
+        // rejection notification has to land on. E7 replaces it with the exam builder and
+        // list at the same route id, so the tooltip says what is here today rather than
+        // letting the label over-promise.
+        items.add(NavItem.of(Routes.EXAMS.id(), "Exams", Icons.EXAMS)
+                .withTooltip("Where your submitted exams stand. The exam builder arrives with E7."));
         if (coordinator) {
-            items.add(soon(ROUTE_APPROVALS, "Approvals", Icons.APPROVALS, 8));
+            // Live since E8. The one item that separates a coordinator's rail from a
+            // teacher's (PRD §3).
+            items.add(NavItem.of(Routes.APPROVALS.id(), "Approvals", Icons.APPROVALS));
         }
         items.add(soon(ROUTE_RELEASES, "Releases", Icons.RELEASE, 9));
         items.add(soon(ROUTE_MONITOR, "Live Monitor", Icons.MONITOR, 11));
         items.add(soon(ROUTE_GRADING, "Grading", Icons.GRADING, 12));
-        items.add(soon(ROUTE_RESULTS, "Results", Icons.RESULTS, 14));
+        // Live since E14. The rail item has reserved this slot since E5.4 and its id is
+        // still ROUTE_RESULTS: Routes.RESULTS was declared with the same string, so
+        // enabling the feature was a swap here rather than a rename anywhere.
+        items.add(NavItem.of(Routes.RESULTS.id(), "Results", Icons.RESULTS));
         // Live since E16. A teacher's Study Bot is the manager screen; the
         // analytics view is reached from inside it, because it is a view of one
         // bot and a rail item that needed a course chosen first would be a dead end.

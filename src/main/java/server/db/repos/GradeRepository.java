@@ -3,9 +3,12 @@ package server.db.repos;
 import org.hibernate.Session;
 import server.db.entities.Grade;
 import server.db.entities.GradeStatus;
+import server.db.projections.StudentResultRow;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Reads over {@code grades} (E2.11). */
@@ -162,6 +165,87 @@ public final class GradeRepository {
                         """, Grade.class)
                 .setParameter("executionId", executionId)
                 .setParameter("status", GradeStatus.AUTO)
+                .getResultList();
+    }
+
+    /**
+     * How many grade rows exist behind each of these executions (E14.1 — F9.2).
+     *
+     * <p>What turns the results picker into a progress list: a sitting with eight participants
+     * and six grades is visibly still being marked, and the teacher learns that before opening
+     * it. Grouped for the same reason {@code AttemptRepository.countAttemptsByExecution} is —
+     * one query for a whole screen rather than one per row.
+     *
+     * <p>Counts every grade, approved or not. "How much marking has happened" is the question;
+     * how much of it has been signed off is {@code approvedCount}'s job in the grading queue,
+     * and conflating them would make an execution look unmarked while a teacher was reviewing
+     * it.
+     *
+     * <p>An execution with no grades is absent from the map rather than present with a zero.
+     *
+     * <p>Consumer: E14.1's {@code RESULTS_EXAMS_GET}.
+     *
+     * @param session      the current session
+     * @param executionIds the executions to count
+     * @return execution id → grade rows; empty when {@code executionIds} is empty
+     */
+    public Map<Long, Integer> countGradesByExecution(Session session,
+                                                     Collection<Long> executionIds) {
+        if (executionIds == null || executionIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> rows = session.createQuery("""
+                        select a.executionId, count(g)
+                        from Grade g, ExamAttempt a
+                        where g.attemptId = a.id
+                          and a.executionId in (:executionIds)
+                        group by a.executionId
+                        """, Object[].class)
+                .setParameterList("executionIds", executionIds)
+                .getResultList();
+        Map<Long, Integer> counts = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            counts.put(((Number) row[0]).longValue(), ((Number) row[1]).intValue());
+        }
+        return counts;
+    }
+
+    /**
+     * Every marked student in one execution, by name (E14.1 — F9.2, T-10).
+     *
+     * <p>The teacher's results table, in one read: the grade, the attempt's recorded solving
+     * time and the student's name, which is what the table shows and what neither
+     * {@link #findAwaitingApproval} nor {@code AttemptRepository.findRows} supplies on its own.
+     *
+     * <p><b>This read is not scoped to a teacher, and must not be.</b> Authorship is settled
+     * one step earlier, on the execution ({@code ExecutionRepository.findContext} against
+     * {@code exams.author}), because that is where the fact lives; a second filter here would
+     * be a check that looks like scoping while depending on a caller passing the right id.
+     * The service refuses before it ever reaches this method.
+     *
+     * <p>Ordered by student name, then grade id, so the table is stable across refreshes and a
+     * teacher scanning for one student scans alphabetically. Carries no answers and no
+     * correctness data, so it needs no sanctioned correctness suffix (E2.12).
+     *
+     * <p>Consumer: E14.1's {@code RESULTS_EXECUTION_GET}.
+     *
+     * @param session     the current session
+     * @param executionId the execution
+     * @return one row per grade, by student name; empty when nothing has been marked
+     */
+    public List<StudentResultRow> findResultRows(Session session, long executionId) {
+        return session.createQuery("""
+                        select new server.db.projections.StudentResultRow(
+                            g.id, a.studentId, u.fullName, g.autoScore, g.finalScore,
+                            g.status, g.overrideReason, g.teacherComment, g.approvedAt,
+                            a.actualMinutes)
+                        from Grade g, ExamAttempt a, User u
+                        where g.attemptId = a.id
+                          and u.id = a.studentId
+                          and a.executionId = :executionId
+                        order by u.fullName, g.id
+                        """, StudentResultRow.class)
+                .setParameter("executionId", executionId)
                 .getResultList();
     }
 }

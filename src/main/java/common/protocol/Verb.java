@@ -313,6 +313,124 @@ public enum Verb {
      */
     CHECKED_FORM_GET,
 
+    // ===================== Exam approval (E8) ==============================
+    // The draft wire contract: docs/contracts/APPROVAL_WIRE_CONTRACT.md. Payload
+    // types live in {@code common.dto.approval}; the handlers are
+    // {@code server.features.approval.ApprovalService}.
+    //
+    // Every verb here is COORDINATOR-gated PLUS subject ownership resolved from
+    // the {@code coordinators} table — {@code requireCoordinatorOf}, never
+    // whoever the payload says (P-5). "One coordinator per subject" is the
+    // primary key of that table, so the scoping question has exactly one answer.
+    // {@link #MY_APPROVALS_GET} is the single exception and the mirror image: it
+    // is any teacher's read of her own submissions, scoped to the caller in the
+    // query itself, like every other "mine" verb in the protocol.
+    //
+    // Two rules bind the group. The two decisions are optimistic-locked
+    // compare-and-sets on {@code exam_versions.lock_version} AND guarded on
+    // {@code status}, so a decision taken against a row that has moved is
+    // refused rather than applied. And {@link #EXAM_PREVIEW_GET} is the one
+    // verb in the product that hands an answer key to somebody who is not
+    // grading and did not write the question — because approving an exam you
+    // cannot check is approving a document, not an exam.
+
+    /**
+     * The versions waiting on this coordinator's decision (F4.1).
+     * Caller: coordinator. Request payload: {@code null} — which subjects those
+     * are is resolved from the session, not from a field. Response:
+     * {@code ApprovalQueue}, scoped to her coordinated subjects <em>in the SQL</em>.
+     * A coordinator who coordinates nothing gets an empty queue that says so,
+     * which is a different empty state from "nothing is waiting".
+     */
+    APPROVALS_QUEUE_GET,
+
+    /**
+     * One exam version opened for review (F4.1 ⚑ — the v1 fix).
+     * Caller: the subject's coordinator, or the version's own author. Request
+     * payload: {@code ExamPreviewRequest}; response: {@code ExamPreview}.
+     *
+     * <p>The response carries the paper as {@code List<ExamQuestion>} — the
+     * <b>student's</b> wire type, from the same no-correctness projection a real
+     * attempt is built from — plus a fenced {@code TeacherOnlyBlock} holding the
+     * teacher notes, the author's name and the answer key. Two audiences in one
+     * message, with the wall between them visible in the types.
+     */
+    EXAM_PREVIEW_GET,
+
+    /**
+     * Approve one version (F4.2).
+     * Caller: the subject's coordinator. Request payload:
+     * {@code ExamApproveRequest}; response: {@code ApprovalDecision}.
+     * {@code PENDING → APPROVED}, guarded on both the status and the
+     * {@code lock_version} the caller was looking at: a stale decision answers
+     * {@code CONFLICT} with a sentence telling her to open it again. The author
+     * is notified. A coordinator approving her <em>own</em> exam succeeds by
+     * design (F4.3) and is recorded in the server log.
+     */
+    EXAM_APPROVE,
+
+    /**
+     * Send one version back, with a reason (F4.2).
+     * Caller: the subject's coordinator. Request payload:
+     * {@code ExamRejectRequest}; response: {@code ApprovalDecision}.
+     * The reason is required and is refused with {@code VALIDATION} when it is
+     * missing or shorter than {@code ExamRejectRequest.MIN_REASON_LENGTH}
+     * characters after trimming: a rejection the author cannot act on is the one
+     * message this feature must never send. Same status-and-lock guard as
+     * {@link #EXAM_APPROVE}; the reason is stored on the version and delivered to
+     * the author as a notification that deep-links to it.
+     */
+    EXAM_REJECT,
+
+    /**
+     * The calling teacher's own submitted versions, with their outcomes (F4.2).
+     * Caller: any teacher or coordinator, scoped to herself. Request payload:
+     * {@code null}; response: {@code MyApprovals} — the "visible on the exam"
+     * half of F4.2, which a dismissed notification cannot provide.
+     *
+     * <p>Deliberately the narrow approval-status read and not an exam list: E7
+     * owns the exam list and its verb, and this one retires into it.
+     */
+    MY_APPROVALS_GET,
+
+    // ============= Teacher results & statistics (E14) ======================
+    // The draft wire contract: docs/contracts/RESULTS_WIRE_CONTRACT.md. Payload
+    // types live in {@code common.dto.results}; the handlers are
+    // {@code server.features.results.TeacherResultsService}.
+    //
+    // Both verbs are {@code requireRole(TEACHER, COORDINATOR)} PLUS authorship:
+    // the scope is every exam the caller WROTE, resolved from the exam's recorded
+    // author, even when the sitting was released by another teacher (S-35). The
+    // scoping is in the query rather than in a check afterwards, and a caller who
+    // did not write the exam gets {@code NOT_FOUND} — the same answer an id that
+    // never existed gets, so neither verb can be used to discover that an
+    // execution exists.
+    //
+    // Statistics travel as they were frozen (F8.5): population sigma, pass mark
+    // 55. Nothing on this path recomputes them.
+
+    /**
+     * Every exam the calling teacher wrote, each with its sittings.
+     * Caller: teacher (or coordinator). Request payload: {@code null} — whose
+     * exams these are is resolved from the session, not from a field.
+     * Response: {@code TeacherResults}. Cancelled executions are excluded
+     * (H15.2); an exam that was never released comes back with an empty list
+     * rather than being dropped.
+     */
+    RESULTS_EXAMS_GET,
+
+    /**
+     * One execution's results: the header, a row per marked student, and the
+     * frozen statistics.
+     * Caller: teacher. Request payload: {@code ExecutionResultsRequest};
+     * response: {@code ExecutionResults}. Rows are
+     * {@code StudentGradeRow} on the teacher path, so the override justification
+     * is present. An execution whose grading is unfinished answers OK with its
+     * rows and no statistics — that is a state the screen renders calmly, not an
+     * error.
+     */
+    RESULTS_EXECUTION_GET,
+
     // ===================== Study bot (E16) =================================
     // The draft wire contract: docs/contracts/BOT_WIRE_CONTRACT.md. Payload types
     // live in {@code common.dto.bot}; the handlers are

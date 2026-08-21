@@ -63,6 +63,23 @@ class VerbTest {
     }
 
     @Test
+    @DisplayName("the five approval verbs exist, spelled as the draft contract spells them")
+    void approvalVerbsExist() {
+        // docs/contracts/APPROVAL_WIRE_CONTRACT.md. Same reasoning as the two checks below:
+        // a verb travels by name between two separately-shipped JARs, so valueOf is the
+        // spelling assertion — referring to the constant would survive a rename.
+        assertThat(Verb.values()).contains(
+                Verb.APPROVALS_QUEUE_GET, Verb.EXAM_PREVIEW_GET,
+                Verb.EXAM_APPROVE, Verb.EXAM_REJECT, Verb.MY_APPROVALS_GET);
+
+        assertThat(Verb.valueOf("APPROVALS_QUEUE_GET")).isEqualTo(Verb.APPROVALS_QUEUE_GET);
+        assertThat(Verb.valueOf("EXAM_PREVIEW_GET")).isEqualTo(Verb.EXAM_PREVIEW_GET);
+        assertThat(Verb.valueOf("EXAM_APPROVE")).isEqualTo(Verb.EXAM_APPROVE);
+        assertThat(Verb.valueOf("EXAM_REJECT")).isEqualTo(Verb.EXAM_REJECT);
+        assertThat(Verb.valueOf("MY_APPROVALS_GET")).isEqualTo(Verb.MY_APPROVALS_GET);
+    }
+
+    @Test
     @DisplayName("the seven take-exam and monitoring verbs exist, spelled as the contract spells them")
     void examVerbsExist() {
         // docs/contracts/EXAM_WIRE_CONTRACT.md. Same reasoning as the grading check above:

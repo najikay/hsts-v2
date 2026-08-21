@@ -29,6 +29,18 @@ public enum NotificationType {
     /** A coordinator rejected an exam version, with a reason (→ its author). */
     APPROVAL_REJECTED,
 
+    /**
+     * A newer version arrived and replaced one that was still waiting
+     * (→ the subject coordinator, E8.2).
+     *
+     * <p>Its own constant rather than a second {@code APPROVAL_REQUESTED},
+     * because the coordinator's reaction differs: a request is work arriving,
+     * this is work she may have half-read disappearing from her queue. A queue
+     * row that vanishes with no explanation is exactly the mystery state PRD
+     * §4.1 forbids.
+     */
+    APPROVAL_SUPERSEDED,
+
     /** A grade was approved and published (→ the student). */
     GRADE_PUBLISHED,
 

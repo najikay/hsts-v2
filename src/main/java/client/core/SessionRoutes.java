@@ -1,5 +1,8 @@
 package client.core;
 
+import client.features.approval.ApprovalQueueView;
+import client.features.approval.ExamPreviewView;
+import client.features.approval.MyApprovalsView;
 import client.features.bank.QuestionsView;
 import client.features.bot.BotAnalyticsView;
 import client.features.bot.BotChatView;
@@ -11,6 +14,7 @@ import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
 import client.features.home.TeacherHomeView;
+import client.features.results.TeacherResultsView;
 import client.features.settings.SettingsView;
 import client.ui.screen.AbstractScreen;
 import client.ui.screen.ScreenFactory;
@@ -70,6 +74,22 @@ public final class SessionRoutes {
             // rail item that needed a course chosen first would be a dead end.
             routes.add(Routes.BOT_MANAGER);
             routes.add(Routes.BOT_ANALYTICS);
+            // Results and statistics (E14). Offered to both teaching roles; the server
+            // scopes every answer to the exams the caller wrote (S-35), so this list
+            // decides what is offered and never what is permitted.
+            routes.add(Routes.RESULTS);
+            // E8.6's teacher side. Every teacher gets it, coordinators included: it is the
+            // surface F4.2's "the reason is visible on the exam" needs, and it is where the
+            // rejection notification's reference points.
+            routes.add(Routes.EXAMS);
+        }
+        if (role == Role.COORDINATOR) {
+            // Approvals is the one item that separates a coordinator's rail from a
+            // teacher's (PRD §3). The preview is registered with it rather than on its own
+            // rail item: it is a view of one exam, reached from the queue or from a
+            // notification, and the server re-checks the subject on every request.
+            routes.add(Routes.APPROVALS);
+            routes.add(Routes.EXAM_PREVIEW);
         }
         if (role == Role.STUDENT) {
             // Taking an exam is a student's, and only a student's (E10). A teacher who
@@ -121,6 +141,15 @@ public final class SessionRoutes {
         if (Routes.QUESTIONS.id().equals(route.id())) {
             return QuestionsView::new;
         }
+        if (Routes.APPROVALS.id().equals(route.id())) {
+            return ApprovalQueueView::new;
+        }
+        if (Routes.EXAM_PREVIEW.id().equals(route.id())) {
+            return ExamPreviewView::new;
+        }
+        if (Routes.EXAMS.id().equals(route.id())) {
+            return MyApprovalsView::new;
+        }
         if (Routes.TAKE_EXAM.id().equals(route.id())) {
             return TakeExamView::new;
         }
@@ -138,6 +167,9 @@ public final class SessionRoutes {
         }
         if (Routes.BOT_ANALYTICS.id().equals(route.id())) {
             return BotAnalyticsView::new;
+        }
+        if (Routes.RESULTS.id().equals(route.id())) {
+            return TeacherResultsView::new;
         }
         return homeBuilder(role);
     }

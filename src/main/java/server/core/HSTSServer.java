@@ -9,7 +9,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.db.HibernateUtil;
 import server.db.QuestionDAO;
+import server.db.Transactions;
+import server.db.repos.CourseRepository;
 import server.db.repos.RepositoryUserDirectory;
+import server.features.approval.ApprovalService;
+import server.features.approval.JpaApprovalStore;
 import server.features.auth.AuthService;
 import server.features.auth.UserDirectory;
 import server.features.auth.UserRecord;
@@ -34,6 +38,8 @@ import server.features.locks.EditLockService;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
 import server.features.notify.NotificationStore;
+import server.features.results.JpaTeacherResultsStore;
+import server.features.results.TeacherResultsService;
 import server.realtime.PushGateway;
 
 import java.time.Clock;
@@ -180,7 +186,38 @@ public class HSTSServer extends AbstractServer {
         AttemptService attempts = registerExamFeature(router, sessions, pushGateway, notifications,
                 sessionFactory, clock, examTimers);
         registerBotFeature(router, notifications, locks, sessionFactory, clock, attempts);
+        // Teacher results and statistics (E14). Reads only, so it depends on nothing above
+        // it and nothing above it depends on it: the figures it serves were frozen when the
+        // grades were approved (F8.5) and it recomputes none of them.
+        new TeacherResultsService(new JpaTeacherResultsStore(sessionFactory)).registerOn(router);
+        registerApprovalFeature(router, notifications, sessionFactory);
         return router;
+    }
+
+    /**
+     * Exam approval (E8) and the guard it finally implements.
+     *
+     * <p>Two lines, and the second one is the interesting half.
+     * {@code Authorization.requireCoordinatorOf} was declared in E3.5 and left failing closed
+     * until the repositories arrived; this is where it is given the {@code coordinators} table
+     * it was waiting for. Installed once, here, because that guard is static by design and
+     * every other call site in the product should be able to use it without threading a
+     * repository through five constructors.
+     *
+     * <p>{@link ApprovalService} itself does <b>not</b> use the installed directory: it holds
+     * a transaction of its own on every verb and reads the binding through that, so its rules
+     * stay testable with a two-line lambda and never depend on process-wide state. The
+     * installation is for everybody else.
+     */
+    private void registerApprovalFeature(MessageRouter router, NotificationService notifications,
+                                         SessionFactory sessionFactory) {
+        CourseRepository courses = new CourseRepository();
+        Authorization.useSubjectCoordinators((teacherId, subjectCode) ->
+                Transactions.inTx(sessionFactory,
+                        session -> courses.coordinates(session, teacherId, subjectCode)));
+
+        new ApprovalService(new JpaApprovalStore(sessionFactory), notifications)
+                .registerOn(router);
     }
 
     /**

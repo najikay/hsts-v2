@@ -3,6 +3,7 @@ package server.core;
 import common.dto.auth.Role;
 import common.protocol.ErrorCode;
 import ocsf.server.ConnectionToClient;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -239,9 +240,6 @@ class AuthorizationTest {
             assertThatThrownBy(() -> Authorization.requireEnrolled(teacher, "11"))
                     .isInstanceOf(UnsupportedOperationException.class)
                     .hasMessageContaining("requireEnrolled");
-            assertThatThrownBy(() -> Authorization.requireCoordinatorOf(teacher, "01"))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("requireCoordinatorOf");
         }
 
         @Test
@@ -251,8 +249,122 @@ class AuthorizationTest {
                     .isThrownBy(() -> Authorization.requireTeachesCourse(anonymous(), "11"));
             assertThatExceptionOfType(AuthorizationException.class)
                     .isThrownBy(() -> Authorization.requireEnrolled(anonymous(), "11"));
+        }
+    }
+
+    /**
+     * The one course-scoped guard that is no longer a stub (E8).
+     *
+     * <p>Two things have to hold for it to pass, and each of them is asserted failing on its
+     * own: the caller is a {@code COORDINATOR}, and the directory says she coordinates
+     * <em>this</em> subject. The second without the first is what would let a plain teacher
+     * with a coordinators row approve; the first without the second is what would let the
+     * Mathematics coordinator approve a Computer Science exam.
+     */
+    @Nested
+    @DisplayName("requireCoordinatorOf (implemented in E8)")
+    class CoordinatorOf {
+
+        /** Rina coordinates Mathematics (10) and nothing else. */
+        private final Authorization.SubjectCoordinators directory =
+                (teacherId, subjectCode) -> teacherId == 3L && "10".equals(subjectCode);
+
+        @AfterEach
+        void uninstall() {
+            Authorization.useSubjectCoordinators(null);
+        }
+
+        @Test
+        @DisplayName("passes for the coordinator of that subject")
+        void passesForHerOwnSubject() {
+            assertThatCode(() -> Authorization.requireCoordinatorOf(
+                    caller(3L, Role.COORDINATOR), "10", directory))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("refuses another subject with FORBIDDEN, naming the subject and the next step")
+        void refusesAnotherSubject() {
             assertThatExceptionOfType(AuthorizationException.class)
-                    .isThrownBy(() -> Authorization.requireCoordinatorOf(anonymous(), "01"));
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.COORDINATOR), "20", directory))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN))
+                    .withMessageContaining("20")
+                    .withMessageContaining("Ask that subject's coordinator");
+        }
+
+        @Test
+        @DisplayName("a teacher who is not a coordinator is refused before the directory is asked")
+        void refusesAPlainTeacher() {
+            Authorization.SubjectCoordinators wouldSayYes = (teacherId, subjectCode) -> true;
+
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.TEACHER), "10", wouldSayYes))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN))
+                    .withMessageContaining("COORDINATOR");
+        }
+
+        @Test
+        @DisplayName("an anonymous caller is UNAUTHORIZED, not FORBIDDEN")
+        void anonymousIsUnauthorized() {
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(anonymous(), "10", directory))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.UNAUTHORIZED));
+        }
+
+        @Test
+        @DisplayName("a missing subject refuses rather than acting as a wildcard")
+        void blankSubjectRefuses() {
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.COORDINATOR), "  ", directory))
+                    .withMessageContaining("not linked to a subject");
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.COORDINATOR), null, directory));
+        }
+
+        @Test
+        @DisplayName("a null directory refuses: a guard that cannot check has not checked")
+        void nullDirectoryRefuses() {
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.COORDINATOR), "10", null))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("with nothing installed the two-argument form still fails closed")
+        void unwiredFailsClosed() {
+            Authorization.useSubjectCoordinators(null);
+
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.COORDINATOR), "10"))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("once installed, the two-argument form reads it, and hands the old one back")
+        void installedDirectoryIsUsed() {
+            Authorization.SubjectCoordinators previous =
+                    Authorization.useSubjectCoordinators(directory);
+
+            assertThatCode(() -> Authorization.requireCoordinatorOf(
+                    caller(3L, Role.COORDINATOR), "10")).doesNotThrowAnyException();
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> Authorization.requireCoordinatorOf(
+                            caller(3L, Role.COORDINATOR), "20"));
+            assertThat(previous)
+                    .as("returned so a test can put back what it displaced")
+                    .isSameAs(Authorization.SubjectCoordinators.UNWIRED);
+        }
+
+        @Test
+        @DisplayName("the unwired default is the answer 'no', for every question")
+        void unwiredDefaultSaysNo() {
+            assertThat(Authorization.SubjectCoordinators.UNWIRED.coordinates(3L, "10")).isFalse();
         }
     }
 

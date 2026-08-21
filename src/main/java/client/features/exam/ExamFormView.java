@@ -8,19 +8,14 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
-import java.io.ByteArrayInputStream;
 import java.util.Objects;
 
 /**
@@ -38,6 +33,14 @@ import java.util.Objects;
  * always visible, it colours answered and blank differently, and clicking a chip jumps
  * there. It is also literally the same chip list the submit dialog shows (F6.9), built
  * from the same {@link AttemptModel#chips()}, so the two cannot disagree.
+ *
+ * <h2>One card class, shared with the coordinator's preview</h2>
+ *
+ * <p>Each question is drawn by {@link QuestionCardView}, which is also what E8.4's approval
+ * preview draws with, read-only, over the same {@code ExamQuestion}. That is deliberate: F4.1
+ * asks for a coordinator to see the exam exactly as a student will, and a second card written
+ * to the same specification would look identical on the day it was written and drift
+ * afterwards. Sharing the class makes the guarantee structural.
  *
  * <h2>The countdown is a display</h2>
  *
@@ -68,16 +71,7 @@ public final class ExamFormView extends BorderPane {
 
     /** Which question's card is currently built, so a repaint does not rebuild it. */
     private long renderedQuestionVersionId = -1;
-    private java.util.List<RadioButton> renderedOptions = java.util.List.of();
-
-    /**
-     * True while the view is writing the model's state onto the radio buttons.
-     *
-     * <p>{@code setSelected} fires the same listener a click does, so without this a
-     * repaint would look exactly like the student picking the option she already had, and
-     * every clock re-sync would send a redundant write.
-     */
-    private boolean applyingModel;
+    private QuestionCardView renderedCard;
 
     /**
      * @param model     the state to render
@@ -172,32 +166,20 @@ public final class ExamFormView extends BorderPane {
             empty.setWrapText(true);
             questionHost.getChildren().setAll(empty);
             renderedQuestionVersionId = -1;
-            renderedOptions = java.util.List.of();
+            renderedCard = null;
             return;
         }
         ExamQuestion question = current.get();
         if (question.questionVersionId() != renderedQuestionVersionId) {
-            questionHost.getChildren().setAll(questionCard(question));
+            renderedCard = new QuestionCardView(question, model.questionCount())
+                    .onSelect(option -> onSelect.accept(question.questionVersionId(), option));
+            questionHost.getChildren().setAll(renderedCard);
             renderedQuestionVersionId = question.questionVersionId();
         }
-        applySelection(question);
-    }
-
-    /** Writes the model's answer and the paper's liveness onto the built radio buttons. */
-    private void applySelection(ExamQuestion question) {
-        int chosen = model.answerFor(question.questionVersionId()).orElse(0);
-        applyingModel = true;
-        try {
-            for (int index = 0; index < renderedOptions.size(); index++) {
-                RadioButton radio = renderedOptions.get(index);
-                radio.setSelected(index + 1 == chosen);
-                // The takeover locks the paper. The server would refuse a late answer
-                // anyway; a form that still responds to clicks is the v1 screen.
-                radio.setDisable(!model.isLive());
-            }
-        } finally {
-            applyingModel = false;
-        }
+        // The takeover locks the paper. The card owns that, so the same component behaves
+        // identically here and in the coordinator's read-only preview (E8.4).
+        renderedCard.applyState(model.answerFor(question.questionVersionId()).orElse(0),
+                model.isLive());
     }
 
     private void renderNavigation() {
@@ -205,74 +187,6 @@ public final class ExamFormView extends BorderPane {
         next.setDisable(model.currentIndex() >= model.questionCount() - 1);
         submit.setDisable(!model.isLive());
         navigator.setDisable(model.questionCount() == 0);
-    }
-
-    private VBox questionCard(ExamQuestion question) {
-        Label position = new Label("Question " + question.ordinal() + " of " + model.questionCount());
-        position.getStyleClass().addAll("small", "muted");
-
-        Label worth = new Label(question.points() + " points");
-        worth.getStyleClass().addAll("small", "faint");
-
-        HBox meta = new HBox(10, position, Buttons.spacer(), worth);
-        meta.setAlignment(Pos.CENTER_LEFT);
-
-        Label stem = new Label(question.text());
-        stem.getStyleClass().add("question-text");
-        stem.setWrapText(true);
-
-        VBox card = new VBox(12, meta, stem);
-        card.getStyleClass().addAll("hsts-card", "question-card");
-
-        if (question.hasImage()) {
-            card.getChildren().add(illustration(question));
-        }
-        card.getChildren().add(options(question));
-        return card;
-    }
-
-    /**
-     * Renders the optional illustration (F2.1).
-     *
-     * <p>Decoded defensively: a corrupt or truncated image in the bank must not blank the
-     * question a student is trying to answer. If it will not decode she still sees the stem
-     * and the options, which is the part she is being marked on.
-     */
-    private ImageView illustration(ExamQuestion question) {
-        ImageView view = new ImageView();
-        view.setPreserveRatio(true);
-        view.setFitWidth(520);
-        view.getStyleClass().add("question-image");
-        try {
-            view.setImage(new Image(new ByteArrayInputStream(question.image())));
-        } catch (RuntimeException e) {
-            show(view, false);
-        }
-        return view;
-    }
-
-    private VBox options(ExamQuestion question) {
-        ToggleGroup group = new ToggleGroup();
-        VBox box = new VBox(8);
-        box.getStyleClass().add("question-options");
-        java.util.List<RadioButton> radios = new java.util.ArrayList<>(ExamQuestion.OPTION_COUNT);
-
-        for (int option = 1; option <= ExamQuestion.OPTION_COUNT; option++) {
-            RadioButton radio = new RadioButton(question.option(option));
-            radio.getStyleClass().add("question-option");
-            radio.setWrapText(true);
-            radio.setToggleGroup(group);
-            radio.setUserData(option);
-            radios.add(radio);
-            box.getChildren().add(radio);
-        }
-        group.selectedToggleProperty().addListener((obs, old, picked) -> {
-            if (picked != null && !applyingModel) {
-                onSelect.accept(question.questionVersionId(), (int) picked.getUserData());
-            }
-        });
-        renderedOptions = java.util.List.copyOf(radios);
-        return box;
     }
 
     // ===================== Layout ========================================

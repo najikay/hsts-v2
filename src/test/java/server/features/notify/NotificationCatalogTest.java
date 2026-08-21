@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * reason the catalog exists at all. Three things are checked over the whole set
  * at once, so a sentence added in a later epic cannot quietly break them:
  * <b>no em dashes</b>, <b>every emit point has a type and a destination</b>, and
- * <b>every one of the eight PRD types is covered</b>.
+ * <b>every one of the types is covered</b> — the last one enumerates the enum rather than a
+ * number, so a constant added in a later epic fails here until it has a sentence.
  */
 class NotificationCatalogTest {
 
@@ -28,6 +29,7 @@ class NotificationCatalogTest {
             NotificationCatalog.approvalApproved("Algebra Midterm", "Rina Barak", 55L),
             NotificationCatalog.approvalRejected("Algebra Midterm", "Rina Barak",
                     "Question 4 has two correct answers", 55L),
+            NotificationCatalog.approvalSuperseded("Algebra Midterm", "Dana Cohen", 56L),
             NotificationCatalog.gradePublished("Algebra Midterm", 7L),
             NotificationCatalog.timeExtended("Algebra Midterm", 10, 3L),
             NotificationCatalog.releaseOpeningSoon("Algebra Midterm", 15, 3L),
@@ -70,13 +72,30 @@ class NotificationCatalogTest {
     }
 
     @Test
-    @DisplayName("all eight PRD emit points are covered")
+    @DisplayName("every emit point in the vocabulary is covered")
     void everyTypeHasASentence() {
         Set<NotificationType> covered = ALL.stream()
                 .map(NotificationCatalog.Draft::type)
                 .collect(Collectors.toCollection(() -> EnumSet.noneOf(NotificationType.class)));
 
         assertThat(covered).containsExactlyInAnyOrderElementsOf(EnumSet.allOf(NotificationType.class));
+    }
+
+    @Test
+    @DisplayName("the supersede notice explains a queue row that vanished (E8.2)")
+    void supersedeExplainsItself() {
+        NotificationCatalog.Draft draft =
+                NotificationCatalog.approvalSuperseded("Algebra Midterm", "Dana Cohen", 56L);
+
+        assertThat(draft.type()).isEqualTo(NotificationType.APPROVAL_SUPERSEDED);
+        assertThat(draft.body())
+                .contains("Dana Cohen")
+                .contains("Algebra Midterm")
+                .contains("sent back automatically");
+        assertThat(draft.ref().route())
+                .as("it points at the newer version, which is the one still worth opening")
+                .isEqualTo(NotificationCatalog.ROUTE_APPROVALS);
+        assertThat(draft.ref().entityId()).isEqualTo(56L);
     }
 
     @Test

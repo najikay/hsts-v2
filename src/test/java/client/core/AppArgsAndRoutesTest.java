@@ -171,14 +171,16 @@ class AppArgsAndRoutesTest {
         @Test
         void declaresEveryRouteThisBuildHas() {
             // E5 added Login and the four role dashboards; E10/E11 added take-exam and the
-            // live monitor; E16 added the study bot's four screens. Per-role registration
-            // and the role→home mapping are covered in SessionRoutesTest.
+            // live monitor; E16 added the study bot's four screens; E14 added results; E8 added the approval
+            // queue, the exam preview and the teacher's own approval-status list. Per-role
+            // registration and the role→home mapping are covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
                             "home.student", "home.principal", "settings", "questions",
                             "attempt", "monitor",
-                            "bot.chat", "bot.history", "bot.manager", "bot.analytics");
+                            "approvals", "approvals.preview", "exams",
+                            "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results");
         }
 
         @Test
@@ -191,6 +193,11 @@ class AppArgsAndRoutesTest {
             assertThat(Routes.MONITOR.id()).isEqualTo("monitor");
             // E16's "study bot sources changed" notification navigates here.
             assertThat(Routes.BOT_MANAGER.id()).isEqualTo("bot.manager");
+            // E8's three approval notifications. The rejected one is the load-bearing case:
+            // F4.2 wants the reason visible on the exam, so a route id that did not match
+            // would silently turn "open your exam" into a row that does nothing.
+            assertThat(Routes.APPROVALS.id()).isEqualTo("approvals");
+            assertThat(Routes.EXAMS.id()).isEqualTo("exams");
         }
 
         @Test

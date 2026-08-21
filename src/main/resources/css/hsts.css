@@ -1313,3 +1313,77 @@
 /* Empty and insufficient states sit in the same box as the plot, so the card
    never changes height when results arrive. */
 .stat-chart-body { -fx-alignment: center; }
+
+/* ==========================================================================
+   E8 — Exam approval (F4)
+   ========================================================================== */
+
+.approval-queue, .exam-preview, .my-approvals { -fx-background-color: -hsts-bg; }
+
+/* The F4.3 badge. Neutral, and deliberately so: a coordinator MAY approve her
+   own exam, so this is information rather than a warning. Colouring it amber
+   would make the software disapprove of something the specification allows. */
+.self-authored { -fx-font-size: 11px; -fx-padding: 3px 9px; }
+
+/* ---- The preview (E8.4) ---- */
+
+/* The left pane is the student's paper and must look like it: no extra chrome,
+   the same card and option styling the take-exam screen uses, because they are
+   literally the same component. Nothing is added here on purpose. */
+.preview-paper { -fx-spacing: 16px; }
+
+/* The right pane is everything a student never sees, and it is visually a
+   different surface for exactly that reason: one glance has to be enough to
+   tell which half of the screen is which. */
+.teacher-only-panel {
+    -fx-spacing: 12px;
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+    -fx-border-radius: 12px;
+    -fx-background-radius: 12px;
+}
+
+.answer-key-list { -fx-padding: 2px 0 0 0; }
+.answer-key-row  { -fx-text-fill: -hsts-muted; }
+
+/* The one mark that is allowed onto the student's own card: which option is
+   right. A left rule and a soft tint rather than a fill, so the option still
+   reads as the option a student would see, with a note on it. */
+.question-option.answer-key {
+    -fx-background-color: -hsts-ok-soft;
+    -fx-border-color: -hsts-ok transparent transparent transparent;
+    -fx-border-width: 0 0 0 3px;
+    -fx-font-weight: bold;
+}
+
+.preview-footer {
+    -fx-background-color: -hsts-surface;
+    -fx-border-color: -hsts-border transparent transparent transparent;
+    -fx-border-width: 1px 0 0 0;
+}
+
+/* ---- The reject dialog (E8.5) ---- */
+
+/* Wider than WarnConfirm's text-only body, because a reason people can act on
+   does not fit on one line and a box that forces one produces "no". */
+.reject-dialog .reject-reason {
+    -fx-pref-row-count: 4;
+    -fx-font-size: 14px;
+}
+.reject-counter { -fx-padding: 0 0 0 2px; }
+
+/* ---- The author's side (E8.6) ---- */
+
+/* The reason panel is the F4.2 surface: the rejection has to be readable after
+   the notification is gone. Danger-tinted because it is the one thing on the
+   screen that needs acting on, and quoted so it reads as somebody's words. */
+.rejected-panel {
+    -fx-spacing: 8px;
+    -fx-background-color: -hsts-danger-soft;
+    -fx-border-color: -hsts-danger;
+    -fx-border-width: 0 0 0 3px;
+    -fx-border-radius: 0;
+    -fx-background-radius: 10px;
+}
+.rejection-reason { -fx-text-fill: -hsts-text; }
