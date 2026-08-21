@@ -83,8 +83,10 @@ public record QuestionDetail(String displayId5,
         Objects.requireNonNull(courseCode, "courseCode");
         Objects.requireNonNull(text, "text");
         Objects.requireNonNull(difficulty, "difficulty");
-        // List.copyOf yields an immutable, Serializable list - safe on the wire.
-        answers = answers == null ? List.of() : List.copyOf(answers);
+        // Required outbound field (the one section-4 constrains by prose): a null here is a
+        // server-side mapper bug and must surface AT BUILD TIME on the server, not as an empty
+        // editor on a client (corrected 2026-08-21, Member A's contract read, finding 5).
+        answers = List.copyOf(java.util.Objects.requireNonNull(answers, "answers"));
     }
 
     /** @return whether this is the newest version, i.e. the one an edit would branch from. */

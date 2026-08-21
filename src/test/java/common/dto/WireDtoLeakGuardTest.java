@@ -53,11 +53,6 @@ class WireDtoLeakGuardTest {
                     "bank inbound: the teacher STATING the key while authoring (F2.1) - inbound licence"),
             Map.entry("QuestionEdit.correctAnswer",
                     "bank inbound: same authoring licence as QuestionDraft"),
-            Map.entry("Question.answer",
-                    "LEGACY - retirement PR scheduled after E6 merges; BankWireLeakGuardTest carries "
-                    + "the dated entry that fails the build when retirement lands"),
-            Map.entry("QuestionUpdate.expectedAnswer",
-                    "LEGACY - same retirement entry as Question.answer"),
             Map.entry("TeacherOnlyBlock.answerKey",
                     "approval: the teacher-only half of the preview, same audience and gate as "
                             + "PreviewAnswerRow (EXAM_PREVIEW_GET: deciding coordinator or the "
@@ -89,11 +84,12 @@ class WireDtoLeakGuardTest {
                 .flatMap(r -> Stream.of(r.getRecordComponents())
                         .map(c -> r.getSimpleName() + "." + c.getName()))
                 .toList();
-        // Question/QuestionUpdate are classes, not records; their licence entries are kept
-        // because THIS scan walks records while the bank guard walks the legacy pair - the
-        // entries document one story in one place. Everything else must exist as a component.
+        // The legacy pair's licences live ONLY in BankWireLeakGuardTest's dated entry - the
+        // one guard whose predicate actually sees them, and the one whose removal has teeth.
+        // Entries here that no predicate would consult were deleted 2026-08-21 (Member A's
+        // finding 3: a licence that grants nothing is documentation wearing a guard's clothes;
+        // and the old comment claiming QuestionUpdate is not a record was simply false).
         assertThat(LICENSED.keySet().stream()
-                .filter(k -> !k.startsWith("Question.") && !k.startsWith("QuestionUpdate."))
                 .filter(k -> !present.contains(k)))
                 .as("licences for components that no longer exist must be deleted with them")
                 .isEmpty();
@@ -108,6 +104,10 @@ class WireDtoLeakGuardTest {
         // and the honest negatives that must never trip:
         assertThat(suggestsCorrectness("answer1")).isFalse();
         assertThat(suggestsCorrectness("chosen")).isFalse();
+        assertThat(suggestsCorrectness("answerNo")).isTrue();
+        assertThat(suggestsCorrectness("key")).isTrue();
+        assertThat(suggestsCorrectness("versionNo")).isFalse();
+        assertThat(suggestsCorrectness("latestVersionNo")).isFalse();
     }
 
     /** Mirrors CorrectnessNames' widened predicate; kept private so drift here fails visibly. */
@@ -116,8 +116,13 @@ class WireDtoLeakGuardTest {
         if (n.matches("answer[1-4]")) {
             return false;
         }
-        return n.contains("correct") || n.contains("rightanswer")
-                || n.contains("solution") || n.contains("answerindex") || n.contains("answerkey");
+        // EXACT mirror of server.db.repos.CorrectnessNames (asserted by mirrorAgreement below;
+        // corrected 2026-08-21 after Member A found the net weaker than the thing it nets:
+        // "answerno" and the bare "key" were missing while versionNo-family components are live
+        // in the bank package).
+        return n.equals("key") || n.contains("correct") || n.contains("iscorrect")
+                || n.contains("answerkey") || n.contains("answerindex") || n.contains("answerno")
+                || n.contains("rightanswer") || n.contains("solution");
     }
 
     private static List<Class<?>> recordsUnder(Path root) {

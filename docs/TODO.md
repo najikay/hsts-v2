@@ -325,6 +325,7 @@ Client:
 - [ ] E20.6 DB setup path for a fresh machine: install MySQL → run server → Flyway + seed → done (documented, timed) — **instructions ready, manual execution pending**: `docs/DEMO_DAY.md` §3, with a budget/measured table and the startup-failure sentences mapped to fixes. Budgets are estimates until the first rehearsal fills the measured column
 
 ## E21 — Hardening & test completion [all, coordinated by L]
+- [ ] E21.0b (build nit, 2026-08-21): TestDatabases.REPO_SCHEMA is hardcoded (hsts_e2_repo_test) while its migration sibling honors HSTS_TEST_SCHEMA - three phantom failures under parallel builds so far. Two-line fix: env-override it the same way (Member A's file, rule-5 style)
 - [ ] E21.0 (build nit, 2026-08-21): a surefire fork lingers 30s after the suite since E19/E20 ("kill self fork JVM ... elapsed 30 seconds after System.exit(0)") - some test leaves a non-daemon thread (suspect: console TestFX or discovery loopback). Find and close it; costs 30s per build and could flake CI
 
 - [ ] E21.1 Execute the full PRD §6 edge-case catalog as a tracked checklist — every line gets a test or a manual-verified note
