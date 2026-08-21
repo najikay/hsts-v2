@@ -119,8 +119,8 @@ deciding it myself.
 
 Its case: `CourseRepository` ships the other expression of the same rule as a set union —
 `findTaughtCourseCodes` ∪ `findCoordinatedCourseCodes`, whose javadoc says "the service unions
-them". **Those two are in PR #19 and not yet on `main`**, so they will not be in this diff; the
-hazard is real either way, because both PRs land before any handler does. So the codebase now holds a per-course guard *and* a reachable-set union that must
+them". **Those two arrived on `main` with PR #19** (`da81814`), merged shortly after this branch
+was cut, so they are on `main` but not in this diff. So the codebase now holds a per-course guard *and* a reachable-set union that must
 agree and are checked against each other nowhere. §2 of the contract names that hazard exactly:
 *"routing scope through an ad-hoc service check while a declared guard sits unimplemented is how
 two answers to one question get shipped."* Landing the guard does not close that. **It doubles it.**
@@ -174,7 +174,7 @@ No database work in this PR, so no two-engine pair: the guard is pure logic over
 - [x] `docs/TODO.md` — **no box ticked.** `requireTeachesCourse` is not itself an E6 task; it is
       the guard E6.1 through E6.6 will call, and ticking anything before the handlers exist would
       be claiming something a reviewer could disprove
-- [ ] CI green — filled in after the run
+- [x] CI green — run 32498831126, conclusion success
 
 ## 9. Next
 
