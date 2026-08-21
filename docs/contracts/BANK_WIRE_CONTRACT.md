@@ -70,22 +70,39 @@ retirement PR lands the allow-list shrinks by two, and that diff is the proof.
   `Authorization.requireRole(TEACHER, COORDINATOR)` on the **three mutating verbs**
   (`QUESTION_CREATE`, `QUESTION_UPDATE`, `QUESTION_DELETE`); the **four read verbs** add
   `PRINCIPAL` (F9.3: read-only bank browse, literally zero mutating verbs authorized for the role).
+  The role gate is the coarse half; the scope guards below are the half that matters.
 
-- **Scope is per role, and a coordinator's is NOT "courses I teach".** This is the correction that
-  matters most in §9:
+- **There are TWO scopes, not one, because the specification splits them** (lead's ruling,
+  2026-08-21). Reading the bank and writing into it are different questions with different answers,
+  and collapsing them was the flaw in every earlier draft of this section:
 
-  | Role | Reaches |
-  |---|---|
-  | TEACHER | questions in courses she teaches (`course_teachers`), S-5 |
-  | COORDINATOR | questions in every course of the subject she coordinates |
-  | PRINCIPAL | every course, read-only (F9.3) |
+  | Role | May READ | May WRITE |
+  |---|---|---|
+  | TEACHER | courses she teaches | courses she teaches |
+  | COORDINATOR | every course of her coordinated subject | **only courses she also teaches** |
+  | PRINCIPAL | every course (F9.3) | nothing, ever (F9.3) |
 
-  A coordinator scoped by `course_teachers` would show `rina.barak` an **empty bank**. She holds a
-  `coordinators` row for subject 10 and zero `course_teachers` rows, deliberately, so that an
-  implementation deriving coordinator-ness from the wrong table fails
-  (`FacultySection` javadoc, roster decision 2026-08-20). She is also a starred account in
-  `DEMO_ACCOUNTS.md` and the approver in acceptance scenario 4, and F4.1 requires her to preview
-  exams built from questions she must therefore be able to read.
+  **Reading is visibility; writing is authoring, and the sources differ.** Spec §3 and F2.1 say a
+  teacher creates questions *only for courses she teaches* — that is the write rule and it admits
+  no coordinator exception. §7.3's wider scope was always about reads: a coordinator previews and
+  approves exams built from a bank she must therefore be able to see, which is F4.1 and F4.2's
+  need, not an authoring licence.
+
+  So a coordinator who does not teach a course **may read its bank and may not add to it.** The
+  read scope is `requireBankRead` and its boolean sibling `reachesCourse`; the write scope is
+  `requireTeachesCourse` and its sibling `teachesCourse`. §3 names which applies to each verb and
+  whether it throws or answers.
+
+  **Why the read half cannot be narrowed.** `rina.barak` holds a `coordinators` row for subject 10
+  and **zero `course_teachers` rows**, deliberately, so that an implementation deriving
+  coordinator-ness from the wrong table fails (`FacultySection` javadoc, roster decision
+  2026-08-20). She is a starred account in `DEMO_ACCOUNTS.md` and the approver in acceptance
+  scenario 4. Scoping reads by teaching would show her an empty bank.
+
+  **And what the write half costs her, stated rather than discovered:** she cannot create, edit or
+  delete a question in any course she does not teach, which under the seed's roster is all of them.
+  That is correct — she is the approver, not an author — and nothing in the demo needs her to
+  write. If a demo script ever has her adding a question, this table is why it fails.
 
 - **Scope is enforced server-side, never by the filter.** `BANK_LIST` intersects any course filter
   with the caller's reachable set rather than trusting it. `QUESTION_GET` on a question outside
@@ -100,23 +117,52 @@ retirement PR lands the allow-list shrinks by two, and that diff is the proof.
 - **No payload carries a caller id.** Authorship is `CallerContext.userId()`, so a question cannot
   be created in somebody else's name.
 
-- **`Authorization.requireTeachesCourse` exists and throws.** It is a frozen signature with a
-  `TODO(E2)` body that fails closed (`Authorization.java`). **E6 implements it**, backed by
-  `CourseRepository`, and it becomes the one place the table above is expressed. Routing scope
-  through an ad-hoc service check while a declared guard sits unimplemented is how two answers to
-  one question get shipped.
+- **Both guards live in `Authorization`, not in the service.** `requireTeachesCourse` landed with
+  PR #20; `requireBankRead` lands with the handlers. Between them they are the only place the
+  table above is expressed. Routing scope through an ad-hoc service check instead is how two
+  answers to one question get shipped, which is the hazard the audit correctly named even though
+  its proposed fix was the wrong one (§7.7).
 
 ## 3. Verbs
 
-| Verb | Caller | Request payload | OK payload |
-|---|---|---|---|
-| `BANK_LIST` | teacher, coordinator, principal | `BankListRequest` | `BankPage` |
-| `QUESTION_GET` | teacher, coordinator, principal | `QuestionRequest` | `QuestionDetail` |
-| `QUESTION_VERSIONS` | teacher, coordinator, principal | `QuestionRequest` | `VersionHistory` |
-| `QUESTION_IMAGE_GET` | teacher, coordinator, principal | `QuestionImageRequest` | `QuestionImage` |
-| `QUESTION_CREATE` | teacher, coordinator | `QuestionDraft` | `QuestionDetail` |
-| `QUESTION_UPDATE` | teacher, coordinator | `QuestionEdit` | `QuestionDetail` (the new version) |
-| `QUESTION_DELETE` | teacher, coordinator | `QuestionDeleteRequest` | `DeleteOutcome` |
+| Verb | Caller | **How scope applies** | Request payload | OK payload |
+|---|---|---|---|---|
+| `BANK_LIST` | teacher, coordinator, principal | **filter**: the reachable set | `BankListRequest` | `BankPage` |
+| `QUESTION_GET` | teacher, coordinator, principal | `reachesCourse` → `NOT_FOUND` | `QuestionRequest` | `QuestionDetail` |
+| `QUESTION_VERSIONS` | teacher, coordinator, principal | `reachesCourse` → `NOT_FOUND` | `QuestionRequest` | `VersionHistory` |
+| `QUESTION_IMAGE_GET` | teacher, coordinator, principal | `reachesCourse` → `NOT_FOUND` | `QuestionImageRequest` | `QuestionImage` |
+| `QUESTION_CREATE` | teacher, coordinator | `requireTeachesCourse` (throws) | `QuestionDraft` | `QuestionDetail` |
+| `QUESTION_UPDATE` | teacher, coordinator | `teachesCourse` → `NOT_FOUND` | `QuestionEdit` | `QuestionDetail` (the new version) |
+| `QUESTION_DELETE` | teacher, coordinator | `teachesCourse` → `NOT_FOUND` | `QuestionDeleteRequest` | `DeleteOutcome` |
+
+**The column is the point of the split.** Handlers compose nothing: the verb determines which
+scope applies and how, and **a handler using the wrong one is visibly wrong in review** against
+this table. That is what the two-guard shape buys over one composed guard deciding internally,
+where the same mistake is invisible.
+
+**Only `QUESTION_CREATE` throws, and the reason is the existence oracle again.** It is the one verb
+where the caller *supplies* the course, so a `FORBIDDEN` naming it tells her nothing she did not
+already know. Every other scoped verb resolves the course from a **stored** question, where naming
+it would tell a caller probing ids both that the question exists and which course it belongs to.
+Those use the boolean forms and answer `NOT_FOUND` themselves, per §2. This contract has already
+been wrong about that once (§9), and the correction is why the boolean siblings exist at all.
+
+**`BANK_LIST` is a filter, not a guard, and this table said otherwise until it was corrected.**
+There is no single course for a guard to check: the browse intersects the caller's reachable set
+with whatever she filtered by. An earlier version of this column named `requireBankRead` on that
+row, which is a rule no handler could implement.
+
+**One reachable set, computed once per request.** The union
+(`findTaughtCourseCodes` ∪ `findCoordinatedCourseCodes`) serves both the `BANK_LIST` filter and the
+three single-question reads, so the guard and the list can never disagree about what a caller
+reaches. Two expressions of one rule checked against each other nowhere is §2's hazard; sharing the
+query is how it is avoided rather than restated.
+
+**The guard takes a lookup, never an answer.** `requireBankRead` and `reachesCourse` receive a
+`ReachableCourses` directory (`userId → Set<String>`), not a pre-computed set, for the reason
+`CourseTeachers` does: a guard handed the answer cannot tell whether the caller computed it
+correctly, and a handler passing the wrong set would pass the guard. The service memoizes per
+request, so "one query" holds without the guard giving up its integrity.
 
 No pushes. The bank list's live "being edited by" badges are **not** a bank concern: they ride
 E18.8's existing `LOCK_WATCH` / `LOCKS_SNAPSHOT` / `PUSH_LOCK_CHANGED`, and the client merges lock
@@ -203,6 +249,24 @@ Difficulty = EASY | MEDIUM | HARD
 ```
 
 ## 5. Rules the handlers enforce
+
+**Scope, before anything else**, per §3's column: the reachable set filters `BANK_LIST`, the
+boolean forms answer `NOT_FOUND` on the four verbs that resolve a course from a stored question,
+and `requireTeachesCourse` throws on `QUESTION_CREATE` alone. Neither guard is composed inside the
+other and no handler decides between them: the verb determines which applies, and the table is the
+record.
+
+**One normalisation, applied at the boundary.** Course codes are `strip()`ped before any scope
+comparison, never `trim()`ped. The two are different functions — `trim()` cuts only characters at
+or below U+0020 — and `courses.code2` is `CHAR(2)` under a PAD SPACE collation, so a code carrying
+a Unicode space matches the row in SQL while failing Java equality against the reachable set. The
+handlers strip regardless of what any DTO does, because two normalisations of one value is the same
+"two answers to one question" this contract keeps having to close.
+
+**Each guard's javadoc names the other and states the split's source**, so they read as two answers
+to two questions rather than two answers to one. `requireTeachesCourse` cites spec §3 and F2.1,
+authoring. `requireBankRead` cites §7.3 and F4.1/F4.2, visibility. A reader who finds one and not
+the other is one link from the reason both exist.
 
 **Validation (C-8, ADR-016, F2.1).** `QuestionValidator` is shared by create and edit, so the two
 cannot diverge:
@@ -339,6 +403,26 @@ match like the stem search. Related: `topic` is currently compared raw while `se
 lowercased, so on MySQL `topic = 'Equations'` matches `'equations'` and on H2 it does not. That
 asymmetry becomes visible the moment a topic is typed rather than picked, which is the same
 decision.
+
+### 7.7 The sixth ruling, which arrived after the other five: two scopes, not one
+
+Raised as an objection by the post-implementation audit of `requireTeachesCourse` (PR #20 §6),
+which argued the narrow guard *doubled* the "two answers to one question" hazard rather than
+closing it, and proposed one composed `requireBankScope`.
+
+**Ruled 2026-08-21, and the ruling is better than either the objection or my original shape.** The
+audit was right that the hazard was real and wrong about the fix. Replacing the narrow guard would
+have merged two rules the specification keeps apart: spec §3 and F2.1 make authoring
+teaching-scoped with no coordinator exception, while §7.3's wider scope was always about reads.
+
+So: `requireBankRead` is the union guard implementing §7.3, `requireTeachesCourse` survives
+unaltered as the write gate implementing F2.1, and **handlers compose nothing**. §2's table and
+§3's guard column are the two places this landed.
+
+**What I had wrong**, recorded because the shape of the error is worth more than the correction:
+my §2 gave a coordinator one undifferentiated scope, which silently granted her authoring rights
+in every course of her subject. Nobody would have noticed until a coordinator wrote a question
+into a colleague's bank and it was nobody's job to explain how.
 
 ## 8. What is deliberately absent
 
