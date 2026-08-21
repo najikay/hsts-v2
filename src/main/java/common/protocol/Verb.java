@@ -38,6 +38,180 @@ public enum Verb {
     /** Persist an edited question. Request payload: {@code Question}. */
     UPDATE_QUESTION,
 
+    // ===================== Question bank (E6) ==============================
+    // The draft wire contract: docs/contracts/BANK_WIRE_CONTRACT.md, with the
+    // lead's rulings of 2026-08-21 applied. Payload types live in
+    // {@code common.dto.bank}; the handlers are
+    // {@code server.features.bank.QuestionService}.
+    //
+    // EVERY verb here is staff-only, and the split is three mutating against four
+    // read. The three that write are requireRole(TEACHER, COORDINATOR); the four
+    // that read add PRINCIPAL, who gets a read-only bank browse (F9.3) and
+    // literally zero mutating verbs.
+    //
+    // SCOPE IS PER ROLE AND IS RESOLVED SERVER-SIDE, NEVER FROM THE PAYLOAD:
+    //   TEACHER     - questions in the courses she teaches (course_teachers), S-5
+    //   COORDINATOR - questions in EVERY course of the subject she coordinates.
+    //                 Not "courses I teach": rina.barak holds a coordinators row
+    //                 for subject 10 and zero course_teachers rows, deliberately,
+    //                 so an implementation deriving coordinator-ness from the
+    //                 wrong table shows a starred demo account an empty bank
+    //                 (roster decision 2026-08-20, lead's ruling 2026-08-21)
+    //   PRINCIPAL   - every course, read-only (F9.3)
+    // BANK_LIST intersects any course filter with that set rather than trusting
+    // it, and a question outside it answers NOT_FOUND on every read verb.
+    //
+    // NOT_FOUND is the only answer for anything the caller cannot reach: unknown,
+    // soft-deleted and out-of-scope are one answer, indistinguishable on purpose.
+    // FORBIDDEN is for the ROLE check alone and never for scope, so a caller who
+    // may not use a verb at all learns nothing about which questions exist (P-5).
+    //
+    // No payload carries a caller id - authorship is the session - and no payload
+    // carries a lock field: the "being edited by" badges on a bank list ride
+    // E18.8's LOCK_WATCH / LOCKS_SNAPSHOT / PUSH_LOCK_CHANGED and are merged onto
+    // rows client-side (F10.0). There are no pushes in this group.
+
+    /**
+     * One page of the question bank, filtered (E6.5 — F2.6).
+     * Caller: teacher, coordinator, principal. Request payload:
+     * {@code BankListRequest}; response: {@code BankPage}.
+     *
+     * <p>Every filter is optional. {@code courseCode} narrows the caller's own
+     * reachable set and never widens it: it is <b>intersected</b> server-side with
+     * the courses her role reaches, so naming somebody else's course answers an
+     * empty page rather than its contents. The client's filter dropdown is fed by
+     * {@code COURSES_FOR_USER}, which is E4's verb and not this contract's.
+     *
+     * <p>{@code BankQuestionRow} carries no answers at all and no image bytes, and
+     * its stem is truncated server-side (lead's ruling): the list is the payload a
+     * bank browse feels, and the one that ends up in a shared screenshot. The key
+     * is fetched a question at a time by {@link #QUESTION_GET}. {@code size} is
+     * clamped to 1..100 rather than refused, because an out-of-range page size is
+     * a client bug and not something a teacher can act on.
+     */
+    BANK_LIST,
+
+    /**
+     * One question opened, answer key included (E6.1/E6.3 — F2.1).
+     * Caller: teacher, coordinator, principal. Request payload:
+     * {@code QuestionRequest}; response: {@code QuestionDetail}.
+     *
+     * <p><b>The verb that hands out the answer key, and the reason the bank has a
+     * leak guard of its own.</b> A teacher authoring a question is looking at
+     * which answer is right because that is what authoring is, so this wire
+     * carries correctness where {@link #EXAM_JOIN}'s deliberately cannot. The
+     * safety property is "no key on a path a student can reach", enforced by the
+     * staff-only gate here and by
+     * {@code server.db.repos.BankWireLeakGuardTest} scanning
+     * {@code common.dto.bank} for anything key-bearing that is not licensed.
+     *
+     * <p>The <b>principal receives the same type</b> (lead's ruling of
+     * 2026-08-21): one detail record for every staff reader, rather than a second
+     * keyless projection for a distinction whose threat model is students and not
+     * staff. Her limit is F9.3, which is expressed by the three mutating verbs not
+     * accepting her role at all.
+     *
+     * <p>Out of scope, soft-deleted and never-existed all answer {@code NOT_FOUND}.
+     */
+    QUESTION_GET,
+
+    /**
+     * Every version a question has ever had, newest first (E6.3 — F2.3, C-2).
+     * Caller: teacher, coordinator, principal. Request payload:
+     * {@code QuestionRequest}; response: {@code VersionHistory}.
+     *
+     * <p>Editing writes a new version rather than mutating one, so this is the
+     * whole life of the question and includes the current version rather than only
+     * the superseded ones. That is what keeps an exam pinned to v1 explicable a
+     * year later. The rows are {@code QuestionVersionDetail} and they carry the
+     * key on the same licence as {@link #QUESTION_GET}: a history that hid which
+     * answer used to be right would be a diff a teacher cannot read.
+     */
+    QUESTION_VERSIONS,
+
+    /**
+     * One version's illustration, fetched lazily (E6.6 — F2.4).
+     * Caller: teacher, coordinator, principal. Request payload:
+     * {@code QuestionImageRequest}; response: {@code QuestionImage}.
+     *
+     * <p>Named noun-first to match {@link #NOTIFICATIONS_GET},
+     * {@link #LOCKS_SNAPSHOT} and {@link #BOT_MANAGER_GET} rather than the two
+     * legacy verbs above (lead's ruling of 2026-08-21; TODO E6.6 was reworded to
+     * match).
+     *
+     * <p><b>Addressed by version, not by question</b>, because versions are
+     * immutable and a picture belongs to the wording it was uploaded with. Neither
+     * the list nor the detail ever carries bytes, so forty rows cost no image
+     * traffic and one picture crosses the wire when somebody opens it (NFR-18).
+     * {@code contentType} is re-sniffed from the leading bytes on read: there is no
+     * content-type column, and a nullable one that can disagree with its own blob
+     * is worse than a derivation that cannot.
+     */
+    QUESTION_IMAGE_GET,
+
+    /**
+     * Add a question to the bank (E6.1 — F2.1/F2.2).
+     * Caller: teacher or coordinator. Request payload: {@code QuestionDraft};
+     * response: {@code QuestionDetail}, the version just written.
+     *
+     * <p>The draft carries no display id, because the server allocates the 5-digit
+     * serial (S-8), and no author id, because authorship is the caller's session
+     * and a question must not be creatable in somebody else's name (P-5).
+     *
+     * <p>Validation is {@code QuestionValidator}, shared with
+     * {@link #QUESTION_UPDATE} so the two cannot diverge, and each failure answers
+     * {@code VALIDATION} with a message naming the offending field: a teacher
+     * fixing three bad saves in a row needs three different sentences. The rules
+     * are at least as strict as the database CHECK in every dimension, accent
+     * folding included, because {@code utf8mb4_unicode_ci} is accent-insensitive
+     * and a validator that folds only case would hand its own backstop a case to
+     * reject rudely.
+     */
+    QUESTION_CREATE,
+
+    /**
+     * Edit a question, which writes the next version (E6.3 — F2.1/F2.3, ADR-011).
+     * Caller: teacher or coordinator. Request payload: {@code QuestionEdit};
+     * response: {@code QuestionDetail} for the <b>new</b> version.
+     *
+     * <p>Version n is never mutated: exams pinned to it keep it, wording and key
+     * and picture. The stale-editor race is caught by {@code baseVersionNo}
+     * disagreeing with the current latest, which answers {@code CONFLICT},
+     * backed underneath by {@code uq_question_versions_no}. There is deliberately
+     * no {@code lockVersion} beside it: {@code questions} is the identity row and
+     * inserting a version does not dirty it, so an echoed token would match
+     * forever, and shipping an inert token next to a working one is how the
+     * working one stops being trusted.
+     *
+     * <p>{@code imageAction} is KEEP, REPLACE or REMOVE rather than a nullable
+     * blob, because a null image is ambiguous between "unchanged" and "cleared"
+     * and F2.1's editor has an explicit remove button. KEEP copies the blob onto
+     * the new version, which is the honest cost of immutable versions and the
+     * reason {@link #QUESTION_IMAGE_GET} is addressed by version.
+     */
+    QUESTION_UPDATE,
+
+    /**
+     * Remove a question from the bank, or explain why not (E6.4 — F2.5, T-2.7).
+     * Caller: teacher or coordinator. Request payload:
+     * {@code QuestionDeleteRequest}; response: {@code DeleteOutcome}.
+     *
+     * <p>Blocked while any exam version references any version of the question,
+     * and the refusal is an {@code OK} carrying {@code deleted = false} and the
+     * blocking exams by display id and name, not an error code: a question in use
+     * is information the teacher can act on, not a fault she committed. The list
+     * is de-duplicated <b>by exam</b> rather than by exam version, so an exam
+     * pinning the question in two of its own versions is named once.
+     *
+     * <p>Otherwise soft: {@code deleted_at} is stamped, the question leaves every
+     * listing, the version history survives so marked papers stay explicable, and
+     * the serial is never reused (T-2.8). The verb is named DELETE because that is
+     * what the teacher is doing, not what the row does. It carries the same
+     * {@code baseVersionNo} an edit does, so a delete racing an edit is a
+     * {@code CONFLICT} rather than a coin toss.
+     */
+    QUESTION_DELETE,
+
     // ===================== Notifications (E17) =============================
 
     /**

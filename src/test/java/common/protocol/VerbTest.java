@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -109,6 +112,55 @@ class VerbTest {
         assertThat(Verb.ATTEMPT_ATTENTION.isPush())
                 .as("it is a request the student's client sends, not a push")
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("the seven bank verbs exist, spelled as the contract's rulings spell them")
+    void bankVerbsExist() {
+        // docs/contracts/BANK_WIRE_CONTRACT.md plus the lead's rulings of 2026-08-21. Same
+        // reasoning as the checks above: a verb travels by name between two separately-shipped
+        // JARs, so valueOf is the spelling assertion — referring to the constant would survive
+        // a rename.
+        assertThat(Verb.values()).contains(
+                Verb.BANK_LIST, Verb.QUESTION_GET, Verb.QUESTION_VERSIONS,
+                Verb.QUESTION_IMAGE_GET, Verb.QUESTION_CREATE, Verb.QUESTION_UPDATE,
+                Verb.QUESTION_DELETE);
+
+        assertThat(Verb.valueOf("BANK_LIST")).isEqualTo(Verb.BANK_LIST);
+        assertThat(Verb.valueOf("QUESTION_GET")).isEqualTo(Verb.QUESTION_GET);
+        assertThat(Verb.valueOf("QUESTION_VERSIONS")).isEqualTo(Verb.QUESTION_VERSIONS);
+        assertThat(Verb.valueOf("QUESTION_IMAGE_GET")).isEqualTo(Verb.QUESTION_IMAGE_GET);
+        assertThat(Verb.valueOf("QUESTION_CREATE")).isEqualTo(Verb.QUESTION_CREATE);
+        assertThat(Verb.valueOf("QUESTION_UPDATE")).isEqualTo(Verb.QUESTION_UPDATE);
+        assertThat(Verb.valueOf("QUESTION_DELETE")).isEqualTo(Verb.QUESTION_DELETE);
+    }
+
+    @Test
+    @DisplayName("the image verb is noun-first, and the legacy bank verbs are untouched beside it")
+    void bankVerbNamingIsTheRuledOne() {
+        // Lead's ruling of 2026-08-21: the noun-first convention wins over TODO E6.6's
+        // GET_QUESTION_IMAGE, which matched the two legacy verbs instead. Asserting the
+        // rejected spelling is absent is what stops it being reintroduced by a handler author
+        // reading the older TODO.
+        assertThat(Verb.QUESTION_IMAGE_GET.name()).isEqualTo("QUESTION_IMAGE_GET");
+        assertThat(Arrays.stream(Verb.values()).map(Verb::name))
+                .doesNotContain("GET_QUESTION_IMAGE");
+
+        // The legacy prototype pair keeps working verbatim through protocol v2, and is a
+        // different verb from E6's QUESTION_UPDATE despite the similar spelling.
+        assertThat(Verb.UPDATE_QUESTION).isNotEqualTo(Verb.QUESTION_UPDATE);
+        assertThat(Verb.valueOf("GET_ALL_QUESTIONS")).isEqualTo(Verb.GET_ALL_QUESTIONS);
+    }
+
+    @Test
+    @DisplayName("no bank verb is a push: the bank has none, by contract")
+    void noBankVerbIsAPush() {
+        // The live "being edited by" badges on a bank list ride E18.8's push, not a bank one
+        // (F10.0). If a PUSH_QUESTION_* ever appears, two sources of lock truth exist.
+        assertThat(List.of(Verb.BANK_LIST, Verb.QUESTION_GET, Verb.QUESTION_VERSIONS,
+                        Verb.QUESTION_IMAGE_GET, Verb.QUESTION_CREATE, Verb.QUESTION_UPDATE,
+                        Verb.QUESTION_DELETE))
+                .allSatisfy(verb -> assertThat(verb.isPush()).isFalse());
     }
 
     @Test
