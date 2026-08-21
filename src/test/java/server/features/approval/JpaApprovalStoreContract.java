@@ -130,7 +130,7 @@ abstract class JpaApprovalStoreContract extends RepositoryTestBase {
         assertThat(paper.get(0).answer1()).isEqualTo("1, 6");
         assertThat(key).hasSize(3);
         assertThat(key).extracting(PreviewAnswerRow::ordinal)
-                .as("numbered by exam position, because the read is already in exam order")
+                .as("numbered by the STORED position, which here happens to be 1, 2, 3")
                 .containsExactly(1, 2, 3);
         assertThat(key).extracting(PreviewAnswerRow::correctOption)
                 .containsExactly((byte) 1, (byte) 2, (byte) 3);
@@ -138,6 +138,39 @@ abstract class JpaApprovalStoreContract extends RepositoryTestBase {
                 .as("and pairs with the student's paper by id")
                 .containsExactlyElementsOf(
                         paper.stream().map(TakeExamQuestion::questionVersionId).toList());
+    }
+
+    @Test
+    @DisplayName("the key is numbered by the stored position, not by counting the rows ⚑")
+    void keyIsNumberedByStoredPositionNotByCounting() {
+        // The case the rule-5 pass found, and the one no existing fixture could expose. V3
+        // constrains `ord` as UNIQUE and >= 1 and nothing more: not contiguous, not starting at
+        // 1. A counter over the result list agrees with the stored positions only while an exam
+        // happens to be tidy, and every fixture in this suite was tidy.
+        //
+        // What it costs when they diverge: the coordinator's key panel says "Q3 · option 2"
+        // beside a paper whose Q3 is a different question, on the one screen whose entire purpose
+        // is checking that the answers are right. She approves having checked the wrong ones.
+        //
+        // Latent on main until something removes a question from a version. E7's builder is that
+        // thing, which is why this fixture is written to what E7 will actually emit.
+        long versionId = gappedVersion(9);
+
+        List<PreviewAnswerRow> key = store().inTx(data -> data.answerKeyOf(versionId));
+
+        assertThat(key).extracting(PreviewAnswerRow::ordinal)
+                .as("the stored positions, gaps and all")
+                .containsExactly(2, 5, 9);
+
+        // And the pairing still holds: each position belongs to its own question, not to the
+        // row that happened to be at that place in the list.
+        List<TakeExamQuestion> paper = store().inTx(data -> data.questionsOf(versionId));
+        assertThat(key).extracting(PreviewAnswerRow::questionVersionId)
+                .containsExactlyElementsOf(
+                        paper.stream().map(TakeExamQuestion::questionVersionId).toList());
+        assertThat(paper).extracting(TakeExamQuestion::ordinal)
+                .as("the paper shows the same positions the key does")
+                .containsExactly(2, 5, 9);
     }
 
     @Test
@@ -266,6 +299,37 @@ abstract class JpaApprovalStoreContract extends RepositoryTestBase {
             session.flush();
             return version.getId();
         });
+    }
+
+    /**
+     * An exam version whose questions sit at positions 2, 5 and 9.
+     *
+     * <p>Deliberately not contiguous and deliberately not starting at 1, which the schema permits
+     * and which E7's builder will produce the first time a teacher removes a question from a
+     * draft. Every other fixture here is tidy, and tidy fixtures are why the counter bug survived.
+     */
+    private long gappedVersion(int serial) {
+        long versionId = emptyVersion(serial);
+        runInTx(session -> {
+            int[] positions = {2, 5, 9};
+            for (int index = 0; index < positions.length; index++) {
+                short questionSerial = (short) (50 + index);
+                Question question = new Question(COURSE_ALGEBRA, questionSerial,
+                        COURSE_ALGEBRA + String.format("%03d", questionSerial));
+                session.persist(question);
+                session.flush();
+
+                QuestionVersion qv = new QuestionVersion(question.getId(), 1,
+                        "שאלה " + questionSerial, "1, 6", "2, 3", "-2, -3", "0, 5",
+                        (byte) (index + 1), "פונקציות", Difficulty.EASY, null, danaId, WHEN);
+                session.persist(qv);
+                session.flush();
+
+                session.persist(new ExamVersionQuestion(
+                        versionId, qv.getId(), question.getId(), 30, positions[index]));
+            }
+        });
+        return versionId;
     }
 
     /** A second pending version of the same exam, as a resubmission produces. */
