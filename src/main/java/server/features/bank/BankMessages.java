@@ -39,6 +39,18 @@ public final class BankMessages {
             "That request did not arrive in a form the server could read. Please try again.";
 
     /**
+     * A draft arrived with no course on it (E6.1).
+     *
+     * <p>{@code VALIDATION} rather than the authorization refusal that used to answer this.
+     * A draft with no course is a malformed payload, and section 6 gives malformed payloads
+     * {@code VALIDATION} with the field named. The guard's own no-course sentence is written
+     * for an edit and says the question "cannot be changed", which is the wrong verb and the
+     * wrong screen for a teacher who has not saved anything yet.
+     */
+    public static final String COURSE_REQUIRED =
+            "Pick the course this question belongs to before saving it.";
+
+    /**
      * The caller does not teach the course she is writing into (S-5, F2.1).
      *
      * <p>Deliberately does not name the course's teachers. A teacher who is not on a course has
@@ -186,4 +198,19 @@ public final class BankMessages {
     public static final String IMAGE_WRONG_TYPE =
             "Illustrations must be PNG or JPEG images, and the file you attached is neither, "
                     + "whatever its name ends with. Save it as a PNG and attach it again.";
+
+    /**
+     * An edit asked to replace the illustration and carried no file (E6.3, E6.10).
+     *
+     * <p>Refused rather than treated as a removal, which is what silently happened before.
+     * Section 4 gives {@code ImageAction} three states precisely so that clearing a picture is
+     * never implicit: a null image is ambiguous between "unchanged" and "cleared", and REPLACE
+     * with nothing would quietly resolve that ambiguity the destructive way. The teacher whose
+     * file picker returned nothing gets a sentence instead of a question that lost its diagram
+     * in every exam built from the new version.
+     */
+    public static final String IMAGE_REPLACE_WITHOUT_FILE =
+            "You chose to replace the illustration but no file arrived. Attach the new image "
+                    + "and save again, or use Remove if you meant to take the picture off the "
+                    + "question.";
 }

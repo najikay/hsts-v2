@@ -7,7 +7,11 @@ Same additive-only terms as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) once 
 
 Package: `common/dto/bank` (all types `Serializable` records, wire-safe, no entity types).
 Verbs group under `Question bank (E6)` in `common/protocol/Verb.java`.
-Handlers: `server.features.bank.QuestionService`.
+Handlers: `server.features.bank.BankHandlers` (the three write verbs), over
+`server.features.bank.QuestionService`. The read verbs get their own handler class beside it,
+deliberately not the same one: §3 makes the verb-to-guard mapping what a reviewer checks, and two
+sets of verbs carrying two different guards in one class is how the wrong one eventually gets
+called.
 
 **All five rulings are answered, and §7 keeps them with their reasoning** rather than deleting the
 questions, because why the contract says what it says is worth more later than a tidy document is
@@ -89,9 +93,16 @@ retirement PR lands the allow-list shrinks by two, and that diff is the proof.
   need, not an authoring licence.
 
   So a coordinator who does not teach a course **may read its bank and may not add to it.** The
-  read scope is `requireBankRead` and its boolean sibling `reachesCourse`; the write scope is
-  `requireTeachesCourse` and its sibling `teachesCourse`. §3 names which applies to each verb and
-  whether it throws or answers.
+  read scope is `reachesCourse`; the write scope is `requireTeachesCourse` and its boolean sibling
+  `teachesCourse`. §3 names which applies to each verb and whether it throws or answers.
+
+  **The read scope has a boolean form only, and that is not an omission.** §7.7's ruling named the
+  union guard `requireBankRead`, a throwing form matching its write-side sibling. §3's table then
+  gave the throwing form no verb to serve: all three scoped reads resolve their course from a
+  *stored* question, where throwing a `FORBIDDEN` that names the course is the existence oracle §2
+  forbids, and `BANK_LIST` is a filter rather than a guard. A throwing guard with no caller is a
+  licence for a future handler to use the wrong one, so it was not written. The ruling's substance
+  — two scopes, never composed — is unchanged and is what shipped.
 
   **Why the read half cannot be narrowed.** `rina.barak` holds a `coordinators` row for subject 10
   and **zero `course_teachers` rows**, deliberately, so that an implementation deriving
@@ -118,7 +129,7 @@ retirement PR lands the allow-list shrinks by two, and that diff is the proof.
   be created in somebody else's name.
 
 - **Both guards live in `Authorization`, not in the service.** `requireTeachesCourse` landed with
-  PR #20; `requireBankRead` lands with the handlers. Between them they are the only place the
+  PR #20; `reachesCourse` landed with PR #24. Between them they are the only place the
   table above is expressed. Routing scope through an ad-hoc service check instead is how two
   answers to one question get shipped, which is the hazard the audit correctly named even though
   its proposed fix was the wrong one (§7.7).
@@ -158,7 +169,7 @@ three single-question reads, so the guard and the list can never disagree about 
 reaches. Two expressions of one rule checked against each other nowhere is §2's hazard; sharing the
 query is how it is avoided rather than restated.
 
-**The guard takes a lookup, never an answer.** `requireBankRead` and `reachesCourse` receive a
+**The guard takes a lookup, never an answer.** `reachesCourse` receives a
 `ReachableCourses` directory (`userId → Set<String>`), not a pre-computed set, for the reason
 `CourseTeachers` does: a guard handed the answer cannot tell whether the caller computed it
 correctly, and a handler passing the wrong set would pass the guard. The service memoizes per
@@ -265,7 +276,7 @@ handlers strip regardless of what any DTO does, because two normalisations of on
 
 **Each guard's javadoc names the other and states the split's source**, so they read as two answers
 to two questions rather than two answers to one. `requireTeachesCourse` cites spec §3 and F2.1,
-authoring. `requireBankRead` cites §7.3 and F4.1/F4.2, visibility. A reader who finds one and not
+authoring. `reachesCourse` cites §7.3 and F4.1/F4.2, visibility. A reader who finds one and not
 the other is one link from the reason both exist.
 
 **Validation (C-8, ADR-016, F2.1).** `QuestionValidator` is shared by create and edit, so the two
@@ -418,6 +429,14 @@ teaching-scoped with no coordinator exception, while §7.3's wider scope was alw
 So: `requireBankRead` is the union guard implementing §7.3, `requireTeachesCourse` survives
 unaltered as the write gate implementing F2.1, and **handlers compose nothing**. §2's table and
 §3's guard column are the two places this landed.
+
+**Implemented as `reachesCourse`, the boolean form, in PR #24**, and the ruling above is left as it
+was made rather than rewritten around what shipped. The substance is untouched: two scopes, one per
+verb, composed nowhere. Only the throwing form went unwritten, because §3's table left it with no
+verb to serve once `BANK_LIST` was corrected from a guard to a filter and the three stored-question
+reads were corrected to answer `NOT_FOUND` themselves. Recorded here so a reader who finds the name
+in this ruling and not in `Authorization` learns why in the same paragraph rather than assuming the
+guard was forgotten.
 
 **What I had wrong**, recorded because the shape of the error is worth more than the correction:
 my §2 gave a coordinator one undifferentiated scope, which silently granted her authoring rights
