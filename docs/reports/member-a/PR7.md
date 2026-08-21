@@ -148,11 +148,16 @@ wire-contract freeze.** Your call, and it changes what I build next either way.
 | | |
 |---|---|
 | Build | `./mvnw clean verify`, JDK 21, `HSTS_REQUIRE_MYSQL=true` → **BUILD SUCCESS** |
-| Tests | **3868**, 0 failures, 0 errors, **0 skipped** |
-| Coverage gate | met; bundle **98.30%**, unchanged from the merged baseline |
+| Tests | **3796**, 0 failures, 0 errors, **0 skipped** |
+| Coverage gate | met; bundle **98.29%** |
 | `Authorization` | **100%** instructions, 187 covered, 0 missed |
-| Both engines | 20 MySQL leaves ran with real timings |
+| Both engines | 19 MySQL leaves ran with real timings |
 | Staleness | nothing under `src` newer than the log |
+
+**Measured on this branch, which is the point.** The first run was done on the branch carrying
+PR #19 and reported 3868 tests, 20 MySQL leaves and 98.30% — different tree, different numbers.
+This PR is `main` plus the guard, so those figures did not belong in it. Caught before publishing
+rather than after, which is the only reason it is a footnote instead of a correction.
 
 No database work in this PR, so no two-engine pair: the guard is pure logic over a lambda, and
 `CourseRepository.teaches` behind it already has H2 and MySQL coverage from E2.
