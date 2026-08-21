@@ -117,9 +117,10 @@ Three, before trusting any of it:
 The audit disagrees with the narrow-guard decision, and the argument is good enough that I am not
 deciding it myself.
 
-Its case: `CourseRepository` **already** ships the other expression of the same rule, as a set
-union — `findTaughtCourseCodes` ∪ `findCoordinatedCourseCodes`, whose javadoc says "the service
-unions them". So the codebase now holds a per-course guard *and* a reachable-set union that must
+Its case: `CourseRepository` ships the other expression of the same rule as a set union —
+`findTaughtCourseCodes` ∪ `findCoordinatedCourseCodes`, whose javadoc says "the service unions
+them". **Those two are in PR #19 and not yet on `main`**, so they will not be in this diff; the
+hazard is real either way, because both PRs land before any handler does. So the codebase now holds a per-course guard *and* a reachable-set union that must
 agree and are checked against each other nowhere. §2 of the contract names that hazard exactly:
 *"routing scope through an ad-hoc service check while a declared guard sits unimplemented is how
 two answers to one question get shipped."* Landing the guard does not close that. **It doubles it.**
