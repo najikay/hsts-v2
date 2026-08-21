@@ -89,7 +89,7 @@ the map.
 - [x] Migrations unchanged
 - [x] No secrets; scope limited to two named files of yours, annotated
 - [x] `docs/TODO.md` — no box ticked; this is a defect fix, not a task
-- [ ] CI green — filled in after the run
+- [x] CI green — run 32507219135, conclusion success
 
 ## 7. Note
 
