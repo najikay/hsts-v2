@@ -116,7 +116,7 @@ Server:
 - [ ] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
 - [ ] E6.5 Browse/filter query (course/topic/difficulty/text) + pagination
 - [ ] E6.6 Image handling: size/type limits (≤2MB, png/jpg), stored in question_versions, `GET_QUESTION_IMAGE` lazy fetch verb
-- [ ] E6.7 QuestionValidator (Strategy, shared by add/edit) unit-tested to 100%
+- [x] E6.7 QuestionValidator (Strategy, shared by add/edit) unit-tested to 100%
 - [ ] E6.8 Verbs + DTOs (list item, detail, editor payload, version history) — frozen with [L]
 Client:
 - [ ] E6.9 Bank screen: master list (DataTable, filters, search) + detail pane with image lazy-load
