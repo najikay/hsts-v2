@@ -160,3 +160,261 @@ question with everything wrong reports the missing text rather than a consequenc
       tested, but "server-side validation with precise error messages" means reachable by a
       caller, and the handler waits on §7's rulings
 - [x] CI green — run 32484647276, conclusion success
+
+---
+
+# E6 PR 2 — the bank's two missing queries (E6.4, E6.5)
+
+**Appended to this report rather than filed separately**, because it is the same epic and the
+same reviewer pass. The PR is separate; this section is what changed after PR 1's commit.
+
+## 8. What is in it
+
+Nothing in the codebase could answer either question the bank screen has to ask.
+
+**E6.5, the browse.** `QuestionRepository.findBankPage` plus `countBank`, returning a new
+`BankQuestionSummary` projection: latest version per question, soft-deleted excluded, scoped
+server-side, filterable by course, topic, difficulty and free text, paged and deterministically
+ordered.
+
+**E6.4, the blocked delete.** `findReferencingExams`, returning `ReferencingExam` (exam display
+id and name), which is what T-2.7's dialog must list or the teacher has no next move.
+
+**Scope resolution.** `CourseRepository.findTaughtCourseCodes` and `findCoordinatedCourseCodes`,
+which is where §7.3's ruling actually lands in code.
+
+**`findActiveByDisplayId`**, the `deleted_at`-filtered lookup E6 needs and the seed loader must
+not have.
+
+## 9. Decisions taken
+
+| # | Decision | Why | Reversal |
+|---|---|---|---|
+| D17 | **`hasImage` is computed with `case when image is null`, never by selecting the blob** | `question_versions.image` is a `MEDIUMBLOB` holding up to 2MB. A projection that selected it would move up to 80MB to render forty rows of text. This is the difference between a list and an outage | none |
+| D18 | **The browse returns the full stem; truncation is a service concern** | §7.5 is still an open ruling. Truncating in SQL means a query change if you prefer the wire to carry everything; truncating above means a constant | none |
+| D19 | **`BankQuery` is a record with `allCourses` and `reachableCourses` as separate fields** | six parameters of which four are adjacent nullable strings is the shape METHOD flagged in PR 2b. More importantly, **empty scope and unrestricted scope must never be one state**, and a nullable list would make them one | one record |
+| D20 | **Scope and filter are separate concepts in that record** | scope is authorization and comes from the role; `courseCode` is a filter and comes from the client. A filter naming an unreachable course is not a refusal, it simply intersects to nothing, which keeps the client's filter list a convenience rather than a boundary | none |
+| D21 | **The WHERE is assembled, not written as one block of `:topic is null or ...`** | an unfiltered browse is the common case, and those disjunctions defeat the index on every filter at once | one method |
+| D22 | **Search lowercases both sides in the query rather than leaning on the collation** | H2 does not reproduce `utf8mb4_unicode_ci`, so a collation-dependent search would behave differently on the two engines and the H2 leaf would certify something untrue. The MySQL leaf asserts the result on the engine that ships | none |
+| D23 | **A new contract pair (`BankBrowseContract`) rather than more tests on `BankRepositoryContract`** | that class holds E2.11's authoring reads; this needs a different fixture entirely. Mixing them makes both harder to read | file move |
+| D24 | **The blocking query collapses to the exam and takes its name from the latest version** | `exam_version_questions` is keyed on the version, and seed exam `101101` pins `11005` in both of its versions | none |
+
+## 10. Three guards, planted and watched failing
+
+Per the rule that a test not seen to fail is decoration.
+
+**The de-duplication.** Replaced the collapse with the obvious join. Two tests fired:
+`oneRowPerExamNotPerVersion` with **"Expected size: 1 but was: 2"**, which is literally T-2.7's
+"Algebra Midterm, Algebra Midterm", and `nameComesFromTheLatestVersion` with "expected Current
+Name but was Old Name".
+
+**The scope predicate.** Made the WHERE skip the course clause when the reachable list is empty,
+which is the natural-looking way to "handle" that case. `emptyScopeMatchesNothing` caught it:
+**"Expecting empty but was: [BankQuestionSummary[displayId=11001, ...]]"** — every question in
+the school handed to a caller entitled to none.
+
+**And one claim of mine that the planting proved wrong.** I had written, in a javadoc and a test
+comment, that the empty-scope short-circuit prevented a crash because `in ()` is invalid HQL.
+It does not: Hibernate 6 expands an empty list into a false predicate on **both** engines, and
+removing the short-circuit leaves every test green. The guard is an optimisation and is now
+documented as one. The load-bearing property was somewhere else entirely, in the WHERE clause,
+which is where the real attack landed. Recorded because a comment asserting a safety property
+that is not there is worse than no comment: the next person trusts it.
+
+## 11. One divergence worth your ruling, not mine to fix
+
+**`RepositoryTestBase`'s roster predates the pure-coordinator decision.** The shared fixture has
+`rina` teaching Calculus and coordinating Maths; the seed made her a coordinator who teaches
+**nothing** on 2026-08-20, which is exactly the shape that caused PR 1's empty-bank finding.
+
+So the fixture every repository contract inherits cannot express the case that just bit us. I did
+**not** change it: it is shared by nine contracts and a roster change there ripples into other
+people's tests. `pureCoordinatorReachesHerSubject` builds its own coordinator instead, and says
+why in a comment.
+
+Worth deciding whether the shared fixture should track the seed's roster. If yes it is a small
+change and a wide blast radius, so it wants to be its own PR and probably not this week.
+
+## 12. Verification
+
+| | |
+|---|---|
+| New tests | **50** — 21 H2, 24 MySQL (21 shared + 3 collation-only), 5 pure unit |
+| Both leaves | ran with real timings, neither skipped |
+| `BankQuery`, `BankQuestionSummary`, `ReferencingExam` | **100%** instructions |
+
+## 13. The post-implementation audit, and what it cost me to have skipped it once
+
+Run against the whole E6 body of code after everything was green, with one instruction: find where
+the query and its test agree with each other and both differ from the requirement. That is the
+failure class no amount of my own testing reaches, because I wrote both halves.
+
+**Fifteen findings. Five were real defects in shipped-quality code that passed 3464 tests.**
+
+### 13.1 The distinctness rule was looser than the constraint it claimed to backstop
+
+The one worth the whole exercise. `comparisonKey` folded canonically (NFD) and its javadoc claimed
+equivalence with `utf8mb4_unicode_ci`. **It matched on two cases out of seven.**
+
+Measured against the running database, not argued:
+
+| pair | MySQL `utf8mb4_unicode_ci` | old rule |
+|---|---|---|
+| `resume` / `résumé` | equal | equal |
+| `Strasse` / `Straße` | **equal** | different |
+| `oeuvre` / `œuvre` | **equal** | different |
+| `file` / `ﬁle` | **equal** | different |
+| `A` / `Ａ` | **equal** | different |
+| `τέλος` / `τέλοσ` | **equal** | different |
+| `שלום` / `שָׁלוֹם` | equal | equal |
+
+Every mismatch runs in the dangerous direction: **service accepts, database rejects.** The teacher
+gets a raw constraint violation and a generic `INTERNAL`, which is precisely the outcome the
+named-field message exists to replace. My test covered only the diacritic subset, which NFD does
+handle, so the code and the test agreed and both differed from the requirement.
+
+`sameAnswer` now does NFKD, strips combining marks, folds case with an upper-then-lower round trip
+(which is what folds Greek final sigma, since `toLowerCase` leaves ς alone), then collates at
+primary strength (which is what folds the ß and œ **expansions** that no normalisation performs).
+All seven pass, and six deliberately-distinct pairs stay distinct.
+
+**And the claim is now honest.** Exact equivalence with MySQL's UCA table is not achievable in Java
+and is no longer asserted. The rule is one-directional by design: never accept what the database
+will reject, and over-folding is the safe error.
+
+### 13.2 A test that could not fail on the defect it claimed to pin
+
+`emptyScopeMatchesNothing` — including the plant I reported in §10. `findBankPage` returns early
+when the scope is empty, so `bankWhere` is **never reached** with an empty list. My planted attack
+only failed because I had removed the short-circuit at the same time; with it in place, the WHERE
+clause could be gutted and the test would stay green.
+
+`scopeSurvivesWithoutTheShortCircuit` now covers it: a non-empty scope matching no questions does
+reach the WHERE, so it fails if the course predicate is skipped or widened. §10 above overstated
+what the original test proved, and is left standing with this correction rather than quietly
+rewritten.
+
+### 13.3 Free-text search treated LIKE wildcards as wildcards
+
+Searching `100%` matched every stem containing `100`; searching `_` matched everything. Not an
+injection risk, since the value is a bound parameter, but the one filter a teacher composes herself
+is the one that can contain those characters. Now escaped with `escape '!'`, with a test covering
+`%`, `_` and the escape character itself.
+
+### 13.4 `deleteBlocked` threw away the display id the projection exists to carry
+
+It took `List<String>` of names, so two exams called "Algebra Midterm" in different terms produce
+**"2 exams use it: Algebra Midterm, Algebra Midterm"** — reintroducing one layer up the exact defect
+D24's per-exam de-duplication was built to remove. My test passed two differently-named exams, so
+the case was unreachable. Now takes `List<ReferencingExam>` and renders "101101 Algebra Midterm".
+
+### 13.5 A Hebrew test that asserted nothing
+
+`hebrewIsNotDestroyed` used unpointed strings on both sides, so deleting the mark-stripping
+entirely would not have failed it. Replaced with a pointed-versus-unpointed pair, plus its
+converse so the consonants still have to matter.
+
+Also fixed: `deleteBlocked(List.of())` produced "0 exams use it: ." — unreachable today, one `if`.
+
+### 13.6 What it confirmed rather than found
+
+Worth recording because these were the parts I was least sure of. `findReferencingExams` is
+correct on every edge it was asked about, and structurally so: `uq_exam_versions_no` makes the
+latest-version join yield exactly one row per exam, and `fk_evq_question_version`'s composite key
+makes a mismatched denormalised `questionId` unwritable. `countBank` has exact row parity with
+`findBankPage`. `order by q.displayId` is a total order because of `uq_questions_display_id`.
+`bankWhere` and `bindBank` do not disagree on any input. The length rules err in the safe
+direction, because `String.length()` in UTF-16 units is always at least MySQL's character count.
+
+### 13.7 Three findings deferred, with reasons
+
+**The topic filter has no way to be driven.** It is exact equality on free text a teacher typed,
+and there is no `findDistinctTopics`, so E6.11 cannot populate a dropdown and a typed topic misses
+on any spacing difference. PRD F2.4 lists topic beside course and difficulty, which are closed
+sets. That is a **feature gap, not a code defect**, and it wants your ruling: either topic becomes
+a lookup fed by a new query, or F2.4's topic filter is a text match rather than a picker.
+
+**`topic` is compared raw while `search` is lowercased**, so on MySQL `topic = 'Equations'` matches
+`'equations'` and on H2 it does not. Invisible today because both sides of the test are
+byte-identical and the client will send back a topic it read from the server. It becomes real the
+moment a topic is typed rather than picked, which is the same ruling as above.
+
+**The size clamp and `requireTeachesCourse` live nowhere yet.** Both are the service layer's, which
+this PR does not contain. Named here so §2 of the contract is not read as satisfied.
+
+## 14. Rulings received, and what changed in this PR because of them
+
+All five answered 2026-08-21, all as drawn. Recorded here because two of the answers improve on
+the questions:
+
+- **§7.2, the principal and the answer key.** I framed it as a judgement call priced at an hour.
+  It is not: **spec §7.3.1** gives her read-only access to all data *as entered*, and the correct
+  answer is entered data. An argument from the specification outranks an argument from reversal
+  cost, and the contract now says so.
+- **§7.4, the legacy pair.** My sequencing preference held, but the ruling closes the hole I had
+  merely flagged: the two legacy types go on the guard's allow-list with a **dated
+  `LEGACY, RETIREMENT SCHEDULED`** comment naming the follow-up's whole scope, so the guard is
+  never silent about them. "A named, dated exception is honest; silence was the problem." The
+  entry lands with `BankWireLeakGuardTest`, which needs the DTOs.
+
+Also in this PR per ruling §7.1: `docs/TODO.md` E6.6 reworded from `GET_QUESTION_IMAGE` to
+`QUESTION_IMAGE_GET`, with the reason recorded inline.
+
+**The contract stays DRAFT.** Freeze is conditioned on the handlers existing against it, which is
+the next PR.
+
+## 15. Definition of Done
+
+- [x] **Cold auditor run AFTER the code was written, findings acted on.** Five real defects in a
+      green suite; §13. This is the box PR 1 did not tick and should not have been opened without,
+      and it is now a gate in the pre-PR checklist rather than something remembered
+- [x] Matches ARCHITECTURE §5 and the PRD ids named (F2.4, F2.5, F9.3, S-5, C-8, ADR-016)
+- [x] Unit + repo tests on **both engines**; every MySQL leaf ran with a real timing
+- [x] Coverage not lower than `main`: bundle **98.34%**, `QuestionValidator` / `BankMessages` /
+      `BankQuery` / both projections at **100%**
+- [x] Migrations unchanged by this PR
+- [x] No secrets; nothing outside scope; `Authorization.java` and `common/**` untouched
+- [x] `docs/TODO.md` — E6.6 reworded per ruling §7.1. **No box ticked:** E6.4 and E6.5 have their
+      repository layer here and their service layer in the next PR, so neither is honestly done
+- [ ] CI green — filled in after the run
+
+## 16. The four side catches, one line each
+
+Listed compactly here so acceptance cases can cite them by number rather than quoting §13.
+
+| # | Defect | Where it would have shown |
+|---|---|---|
+| C-1 | Free-text bank search treated `%` and `_` as LIKE wildcards. Searching `100%` matched every stem containing `100`; searching `_` matched everything | T-2.6, the moment a teacher types a symbol into the search box |
+| C-2 | `deleteBlocked` discarded the exam display id, so two exams sharing a name printed "2 exams use it: Algebra Midterm, Algebra Midterm" | T-2.7's dialog, on any course that reuses an exam name across terms |
+| C-3 | `hebrewIsNotDestroyed` asserted nothing: both strings were unpointed, so deleting the mark-stripping would not have failed it | nowhere visible. A test reading as coverage without being any |
+| C-4 | An empty blocker list rendered "0 exams use it: ." | unreachable today; the invariant that prevents it lives in a service that does not exist yet |
+
+**On C-1, the precise sentence, because the inflated one is worse.** It was **injection-shaped but
+not injection**: the value was a bound parameter throughout, so the query's structure was never
+reachable and no attacker could alter it. What went wrong is that user input was read as **LIKE's
+own mini-language rather than as data**, so a teacher typing `%` silently changed what her filter
+meant. Worth stating exactly, because this line may reach the submission document, and "we shipped
+an injection bug" is both false and a worse trade than the truth.
+
+## 17. Adjudication: the coordinator lookups, mine and E8's
+
+Flagged before E8 landed, on the suspicion that we had both written the same query. **We had not**,
+and the check is worth recording since the ruling was that `CourseRepository` is mine and I pick
+the survivor.
+
+| method | asks |
+|---|---|
+| `coordinates(teacherId, subjectCode)` (E8) | does she coordinate *this* subject? A yes/no guard |
+| `findCoordinatorOf(subjectCode)` (E8) | who approves here? Reverse lookup for E8.2's notification |
+| `findSubjectOf(courseCode)` (E8) | which subject is this course in? |
+| `findCoordinatedCourseCodes(coordinatorId)` (E6) | which courses does she reach? Forward expansion |
+
+**The test applied: can either be built from the other?** Mine from `coordinates` would need one
+query per subject instead of one join, so it is not a wrapper. `coordinates` from mine does not
+work at all, since mine returns courses and the guard needs a subject. Four distinct questions,
+**all four kept, nothing deleted or renamed.**
+
+What they do share is the coordinator-to-subject relationship, so a rule change touches all four.
+Cross-references added in both directions rather than left for whoever finds out. Note that mine
+handles a coordinator of two subjects and E8's per-subject guard is unaffected by that case, which
+is the one place the two shapes could have diverged quietly.

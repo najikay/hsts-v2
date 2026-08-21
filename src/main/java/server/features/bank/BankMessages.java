@@ -1,6 +1,9 @@
 package server.features.bank;
 
+import server.db.projections.ReferencingExam;
+
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Every sentence the question bank sends a human (Logic tier, E6.2 - PRD §4.1).
@@ -143,13 +146,28 @@ public final class BankMessages {
      *
      * <p>Names the exams, which is the whole requirement. A teacher told only "cannot delete" has
      * no route forward; told which exams, she can go and change them.
+     *
+     * <p><b>Takes {@link ReferencingExam}, not a list of names.</b> An earlier signature took
+     * names alone and threw the display id away, which reintroduced one layer up the exact defect
+     * the per-exam de-duplication in {@code findReferencingExams} was built to remove: two exams
+     * called "Algebra Midterm" in different terms produce "2 exams use it: Algebra Midterm,
+     * Algebra Midterm". The id is also what she sees on her own exam list, so it is how she finds
+     * the thing she has been told to go and change.
      */
-    public static String deleteBlocked(List<String> examNames) {
-        String list = String.join(", ", examNames);
-        return examNames.size() == 1
+    public static String deleteBlocked(List<ReferencingExam> exams) {
+        if (exams.isEmpty()) {
+            // Unreachable while DeleteOutcome.deleted=false implies a non-empty list, but that
+            // invariant lives in a service, and "0 exams use it: ." is a sentence no teacher
+            // should ever be shown by a guard that was one line away.
+            return "This question cannot be deleted right now. Reload the bank and try again.";
+        }
+        String list = exams.stream()
+                .map(exam -> exam.displayId() + " " + exam.name())
+                .collect(Collectors.joining(", "));
+        return exams.size() == 1
                 ? "This question cannot be deleted because the exam " + list + " uses it. Remove "
                         + "it from that exam first."
-                : "This question cannot be deleted because " + examNames.size() + " exams use it: "
+                : "This question cannot be deleted because " + exams.size() + " exams use it: "
                         + list + ". Remove it from those exams first.";
     }
 

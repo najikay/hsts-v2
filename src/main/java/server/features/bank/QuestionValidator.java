@@ -2,6 +2,7 @@ package server.features.bank;
 
 import server.db.entities.Difficulty;
 
+import java.text.Collator;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
@@ -35,8 +36,11 @@ import java.util.Optional;
  * <h2>Comparing answers: ADR-016's rule, and why it is not the bot's</h2>
  *
  * <p>ADR-016 says the four answers must be pairwise distinct, compared after trimming and
- * collapsing whitespace, case-insensitively. {@link #comparisonKey} is that rule and only that
- * rule.
+ * collapsing whitespace, case-insensitively. {@link #sameAnswer} is that rule <em>and more</em>,
+ * deliberately: the storage constraint compares under {@code utf8mb4_unicode_ci}, which folds
+ * far more than case, so a rule matching only ADR-016's literal words is looser than the
+ * constraint it is supposed to make unreachable. See {@link #sameAnswer} for what that costs and
+ * for the cases measured against the real database.
  *
  * <p>It is not {@code TextNormaliser.groupingKey}, which exists in the bot feature and looks
  * similar. That one is documented as needing to "destroy quite a lot" of meaning, because it
@@ -153,37 +157,84 @@ public final class QuestionValidator {
     }
 
     /**
-     * ADR-016's notion of "the same answer": trimmed, whitespace collapsed, case folded, accent
-     * folded.
+     * A collator at primary strength: differences of case, accent and script variant only.
      *
-     * <p>Exposed rather than private because the E6.11 editor validates live while typing and
-     * must reach the same verdict as the server. Two implementations of one rule is the drift
-     * this method exists to prevent.
-     *
-     * <h2>Why accents are folded, which ADR-016 does not say</h2>
-     *
-     * <p>Because the storage backstop already folds them and this rule has to be at least as
-     * strict as the thing it claims to back up. {@code question_versions} is
-     * {@code utf8mb4_unicode_ci}, which is accent-insensitive as well as case-insensitive, so
-     * {@code ck_question_versions_distinct} rejects {@code resume} beside {@code résumé}. A
-     * validator folding only case would pass that question, hand it to the insert, and turn a
-     * sentence naming the field into a raw constraint violation and a generic error.
-     *
-     * <p>The relationship the contract claims - service rule strict, CHECK a backstop - is only
-     * true if it holds in <em>every</em> dimension. It did not, in exactly one.
-     *
-     * @param answer one answer as typed
-     * @return the key two answers share when ADR-016 calls them identical
+     * <p>{@link Collator} is not thread safe, and this runs on request threads, so each gets
+     * its own.
      */
-    public static String comparisonKey(String answer) {
+    private static final ThreadLocal<Collator> PRIMARY = ThreadLocal.withInitial(() -> {
+        Collator collator = Collator.getInstance(Locale.ROOT);
+        collator.setStrength(Collator.PRIMARY);
+        return collator;
+    });
+
+    /**
+     * ADR-016's notion of "the same answer".
+     *
+     * <p>Exposed rather than private because the E6.11 editor validates duplicates live while
+     * typing and must reach the same verdict as the server. Two implementations of one rule is
+     * the drift this method exists to prevent.
+     *
+     * <h2>Why this is stricter than ADR-016's literal words</h2>
+     *
+     * <p>ADR-016 says "trimming and whitespace collapse, case-insensitive". That is not enough,
+     * because {@code question_versions} is {@code utf8mb4_unicode_ci} and
+     * {@code ck_question_versions_distinct} compares under it. Verified against the running
+     * database rather than assumed, MySQL calls all of these <b>equal</b>:
+     *
+     * <pre>
+     *   resume / résumé      Strasse / Straße      oeuvre / œuvre
+     *   file / &#xfb01;le         A / &#xff21;                 &#x3c4;&#x3ad;&#x3bb;&#x3bf;&#x3c2; / &#x3c4;&#x3ad;&#x3bb;&#x3bf;&#x3c3;
+     *   &#x5e9;&#x5dc;&#x5d5;&#x5dd; / &#x5e9;&#x5b8;&#x5c1;&#x5dc;&#x5d5;&#x5b9;&#x5dd;   (Hebrew, unpointed vs pointed)
+     * </pre>
+     *
+     * <p>Any pair the service accepts and the constraint rejects becomes a raw
+     * {@code SQLIntegrityConstraintViolationException} and a generic internal error, which is
+     * exactly the outcome naming the field was meant to replace. <b>The rule must therefore be
+     * at least as strict as the collation, in every dimension.</b>
+     *
+     * <h2>What it does, and the honest limit</h2>
+     *
+     * <p>Four steps, because no single one covers the table above:
+     * <ol>
+     *   <li><b>NFKD</b>, not NFD: compatibility decomposition is what folds the &#xfb01; ligature and
+     *       fullwidth &#xff21;. Canonical decomposition leaves both alone;</li>
+     *   <li><b>strip combining marks</b>: accents, and Hebrew niqqud;</li>
+     *   <li><b>upper then lower</b>: folds Greek final sigma to medial, which
+     *       {@code toLowerCase} alone does not, since &#x3c2; is already lower case;</li>
+     *   <li><b>collate at primary strength</b>: catches the <em>expansions</em> no normalisation
+     *       performs, &#xdf; to ss and &#x153; to oe.</li>
+     * </ol>
+     *
+     * <p><b>This is not exact equivalence with MySQL's UCA table and does not claim to be.</b>
+     * Java's collation data and MySQL's are separate implementations and will differ at some
+     * edge nobody here has found. The design goal is one-directional: never accept a pair the
+     * database will reject. Being <em>stricter</em> than the database is safe, because the worst
+     * case is a teacher told two confusingly similar answers are too similar. Being looser is
+     * the failure that has a stack trace in it.
+     *
+     * @param first  one answer as typed
+     * @param second another
+     * @return whether ADR-016 and the storage constraint would call them the same answer
+     */
+    public static boolean sameAnswer(String first, String second) {
+        return PRIMARY.get().compare(foldedForm(first), foldedForm(second)) == 0;
+    }
+
+    /**
+     * The three normalisation steps that run before collation.
+     *
+     * @param answer one answer as typed, possibly null
+     * @return the folded form, never null
+     */
+    private static String foldedForm(String answer) {
         if (answer == null) {
             return "";
         }
-        String folded = Normalizer.normalize(answer, Normalizer.Form.NFD)
-                // Combining marks only. Decomposing first turns 'é' into 'e' plus an accent,
-                // so this strips the accent and keeps the letter.
+        String stripped = Normalizer.normalize(answer, Normalizer.Form.NFKD)
                 .replaceAll("\\p{M}+", "");
-        return folded.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+        String cased = stripped.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
+        return cased.trim().replaceAll("\\s+", " ");
     }
 
     // ===================== The rules ======================================
@@ -260,7 +311,7 @@ public final class QuestionValidator {
         List<String> answers = fields.answers();
         for (int i = 0; i < answers.size(); i++) {
             for (int j = i + 1; j < answers.size(); j++) {
-                if (comparisonKey(answers.get(i)).equals(comparisonKey(answers.get(j)))) {
+                if (sameAnswer(answers.get(i), answers.get(j))) {
                     return Optional.of(new Violation(answerField(j),
                             BankMessages.answersDuplicated(i + 1, j + 1)));
                 }

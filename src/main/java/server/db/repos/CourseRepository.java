@@ -128,6 +128,11 @@ public final class CourseRepository {
      * <p>Consumers: {@code Authorization.requireCoordinatorOf}, through the directory the
      * server installs at assembly, and E8's approval service on every mutation.
      *
+     * <p>See {@link #findCoordinatedCourseCodes}, which asks the other direction of the same
+     * relationship for E6's bank scope. The two were written independently on 2026-08-21 and
+     * checked against each other afterwards rather than left to drift; that javadoc carries the
+     * reasoning for keeping both.
+     *
      * @param session     the current session
      * @param teacherId   the caller, from the session and never from a payload
      * @param subjectCode the 2-character subject code
@@ -251,6 +256,74 @@ public final class CourseRepository {
                         "select c.name from Course c where c.code = :courseCode", String.class)
                 .setParameter("courseCode", courseCode)
                 .uniqueResultOptional();
+    }
+
+    // ===================== E6 bank scope ==================================
+
+    /**
+     * The course codes a teacher may author in (E6 - S-5).
+     *
+     * <p>{@link #findForUser} cannot serve this: it merges taught courses with <em>enrolled</em>
+     * ones, because a home screen shows both. Authoring scope must not, or a teacher who is also
+     * enrolled somewhere could write questions into that course's bank.
+     *
+     * <p>Consumer: E6.5's {@code BANK_LIST} and E6.1's create.
+     *
+     * @param session   the current session
+     * @param teacherId the caller
+     * @return her course codes, sorted, possibly empty
+     */
+    public List<String> findTaughtCourseCodes(Session session, long teacherId) {
+        return session.createQuery("""
+                        select ct.id.courseCode from CourseTeacher ct
+                        where ct.id.teacherId = :userId
+                        order by ct.id.courseCode
+                        """, String.class)
+                .setParameter("userId", teacherId)
+                .getResultList();
+    }
+
+    /**
+     * The course codes a coordinator reaches: every course of every subject she coordinates.
+     *
+     * <h2>Why this is not "the courses she teaches"</h2>
+     *
+     * <p>Because a coordinator need not teach anything. {@code rina.barak} holds a
+     * {@code coordinators} row for subject 10 and <b>zero {@code course_teachers} rows</b>,
+     * deliberately, so that an implementation deriving coordinator-ness from the wrong table
+     * fails (see {@code FacultySection}, roster decision 2026-08-20). Scoping her bank by
+     * teaching would show one of the five starred demo accounts an empty question bank, while
+     * F4.1 requires her to preview exams built from those very questions.
+     *
+     * <p>A dual-hat coordinator who also teaches, like {@code michal.sharon}, reaches her
+     * subject's courses through this method and her taught ones through
+     * {@link #findTaughtCourseCodes}; for her the two sets coincide. The service unions them
+     * rather than choosing, so neither hat can take something away.
+     *
+     * <p><b>Sibling of {@link #coordinates}, and deliberately not a duplicate of it.</b> Both
+     * encode the coordinator-to-subject relationship, and they were written the same afternoon by
+     * two people who could not see each other's branch, so the overlap was checked rather than
+     * assumed. {@link #coordinates} is a <em>guard</em>: may this person act on this subject, one
+     * subject, yes or no. This is an <em>expansion</em>: which courses does she reach, all of them,
+     * in one join. Building this from that would cost one query per subject; building that from
+     * this does not work at all, since a guard needs a subject and this returns courses. Both
+     * survive. A change to how coordination is stored touches both, which is why they name each
+     * other.
+     *
+     * <p>Consumer: E6.5's {@code BANK_LIST}. Ruled by the lead 2026-08-21, BANK_WIRE_CONTRACT §7.3.
+     *
+     * @param session       the current session
+     * @param coordinatorId the caller
+     * @return the course codes, sorted, possibly empty
+     */
+    public List<String> findCoordinatedCourseCodes(Session session, long coordinatorId) {
+        return session.createQuery("""
+                        select c.code from Course c, Coordinator co
+                        where co.subjectCode = c.subjectCode and co.teacherId = :userId
+                        order by c.code
+                        """, String.class)
+                .setParameter("userId", coordinatorId)
+                .getResultList();
     }
 
     private static List<CourseSummary> query(Session session, String hql, long userId) {
