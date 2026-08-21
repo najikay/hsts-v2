@@ -29,6 +29,19 @@ password below.
 
 **Password for every seeded user: `demo123`**
 
+> ⚠ **These accounts do not exist until the seed has been loaded.** The server authenticates
+> against the `users` table, so on a freshly migrated database every login below fails with
+> F1.1's deliberately generic message — **indistinguishable from a wrong password, by design**.
+> If a correct password is being refused, load the seed before suspecting the credentials:
+>
+> ```
+> java -cp hsts-server.jar server.db.seed.SeedMain
+> ```
+>
+> That was defect **B-1**, found in acceptance case 1.1: the message is doing exactly what F1.1
+> requires by not revealing whether the account exists, which is also why nothing on screen can
+> tell you the seed is missing.
+
 The seed hashes it with BCrypt at load, once per user, so the eighteen stored hashes all differ.
 Verification goes through the real `BCrypt.verifyer()` path (F1.1, S-38).
 

@@ -40,6 +40,10 @@ public final class SeedDataset {
                 new EnrollmentsSection(),
                 new QuestionBankSection(),
                 new ExamsSection(),
+                new ExecutionsSection(),
+                new AttemptsSection(),
+                new GradesSection(),
+                new BotSection(),
                 new NotificationsSection());
     }
 }

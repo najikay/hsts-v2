@@ -48,7 +48,7 @@ class SeedDocumentTest {
         assertThat(document.questions()).hasSize(40);
         assertThat(document.exams()).hasSize(6);
         assertThat(document.examTexts()).hasSize(6);
-        assertThat(document.grades()).hasSize(8);
+        assertThat(document.grades(1)).hasSize(8);
         assertThat(document.notifications()).hasSize(8);
     }
 
@@ -172,7 +172,7 @@ class SeedDocumentTest {
         // omer.katz timed out with four questions never reached. Absent from attempt_answers
         // and answered-wrongly are different things, and his is the only attempt that
         // distinguishes them, which makes it H12.4's fixture.
-        List<SeedDocument.SelectionRow> selections = real().selections();
+        List<SeedDocument.SelectionRow> selections = real().selections(1);
 
         assertThat(selections).hasSize(56);
 
@@ -188,7 +188,7 @@ class SeedDocumentTest {
     @Test
     @DisplayName("every other student answered all seven")
     void onlyTheTimedOutAttemptHasAbsentRows() {
-        assertThat(real().selections())
+        assertThat(real().selections(1))
                 .filteredOn(row -> !row.answered())
                 .extracting(SeedDocument.SelectionRow::student)
                 .containsOnly("omer.katz");
@@ -233,6 +233,112 @@ class SeedDocumentTest {
         assertThat(yael.auto()).isEqualTo(45);
         assertThat(yael.finalScore()).isEqualTo(55);
         assertThat(omer.attemptStatus()).isEqualTo("TIMED_OUT");
+    }
+
+    // ------------------------------------------------- sections 9 and 10
+
+    @Test
+    @DisplayName("the four executions parse, including which exam version each releases")
+    void executionsParse() {
+        List<SeedDocument.ExecutionRow> executions = real().executions();
+
+        assertThat(executions).hasSize(4);
+        assertThat(executions).extracting(SeedDocument.ExecutionRow::code)
+                .containsExactly("4821", "7390", "5164", "2075");
+        assertThat(executions).extracting(SeedDocument.ExecutionRow::status)
+                .containsExactly("CLOSED", "CLOSED", "SCHEDULED", "LIVE");
+
+        // Executions 1 and 4 release the SAME exam version. That is S-2, and it is why
+        // exam_executions carries no participation counters: two releases of one version must
+        // not contaminate each other's numbers.
+        assertThat(executions.get(0).exam()).isEqualTo(1);
+        assertThat(executions.get(0).examVersion()).isEqualTo(2);
+        assertThat(executions.get(3).exam()).isEqualTo(1);
+        assertThat(executions.get(3).examVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("execution 2's grades have no final score, and that is not zero")
+    void gradesAwaitingApprovalHaveNoFinalScore() {
+        // §9.2 writes a dash: nothing has been approved, so there is no final score. A parser
+        // returning 0 would make eight students look like they had all failed.
+        List<SeedDocument.GradeRow> awaiting = real().grades(2);
+
+        assertThat(awaiting).hasSize(8);
+        assertThat(awaiting).allSatisfy(row -> assertThat(row.finalScore()).isNull());
+        assertThat(awaiting).extracting(SeedDocument.GradeRow::auto)
+                .containsExactly(100, 85, 75, 70, 60, 55, 40, 30);
+
+        // §9.1's are approved and every one carries a final score.
+        assertThat(real().grades(1)).allSatisfy(row ->
+                assertThat(row.finalScore()).isNotNull());
+    }
+
+    @Test
+    @DisplayName("execution 2's grid has no absent rows: nobody timed out")
+    void executionTwoSelectionsAreComplete() {
+        // The contrast that makes omer.katz's four dashes in §9.1.1 meaningful. If both grids
+        // were full, absent-versus-wrong would have no fixture at all.
+        List<SeedDocument.SelectionRow> selections = real().selections(2);
+
+        assertThat(selections).hasSize(56);
+        assertThat(selections).allMatch(SeedDocument.SelectionRow::answered);
+    }
+
+    @Test
+    @DisplayName("the four bots parse, and bot 4's reason does not flip its flag")
+    void botsParse() {
+        List<SeedDocument.BotRow> bots = real().bots();
+
+        assertThat(bots).hasSize(4);
+        assertThat(bots).extracting(SeedDocument.BotRow::course)
+                .containsExactly("11", "12", "21", "22");
+        // Bot 4's cell reads "**no** - inactive, for the S-31 refusal demo". The explanation
+        // is longer than the value and must not change what the value means.
+        assertThat(bots).extracting(SeedDocument.BotRow::active)
+                .containsExactly(true, true, true, false);
+    }
+
+    @Test
+    @DisplayName("all eight sources parse with a real body")
+    void botSourcesParse() {
+        // These are the longest hand-transcribed strings in the seed, so an unparsed source
+        // would mean the one place a slip is most likely goes unchecked.
+        List<SeedDocument.BotSourceRow> sources = real().botSources();
+
+        assertThat(sources).hasSize(8);
+        assertThat(sources).extracting(SeedDocument.BotSourceRow::bot)
+                .containsExactly(1, 1, 2, 2, 3, 3, 4, 4);
+        assertThat(sources).allSatisfy(row -> {
+            assertThat(row.title()).isNotBlank();
+            assertThat(row.body().length())
+                    .as("source %d body", row.number()).isGreaterThan(100);
+        });
+    }
+
+    @Test
+    @DisplayName("the source type labels contradict section 10's own ruling, and this records it")
+    void sourceLabelsContradictTheRuling() {
+        // §10's preamble: "all eight seeded sources are type = TEXT". Five labels say
+        // otherwise. Both are legal enum values, so a mechanical transcription would store
+        // five wrong types and nothing would fail. Pinned here so the contradiction is a
+        // stated fact rather than something the next reader rediscovers.
+        assertThat(real().botSources()).extracting(SeedDocument.BotSourceRow::type)
+                .containsExactly("TEXT", "PDF", "TEXT", "PDF", "DOCX", "PDF", "TEXT", "PDF");
+    }
+
+    @Test
+    @DisplayName("the eight sessions parse, one provider among them being anthropic")
+    void botSessionsParse() {
+        List<SeedDocument.BotSessionRow> sessions = real().botSessions();
+
+        assertThat(sessions).hasSize(8);
+        // Exactly one anthropic row: without it the provider column is a constant and the
+        // ADR-009 fallback chain demonstrates nothing.
+        assertThat(sessions).filteredOn(row -> row.provider().equals("anthropic")).hasSize(1);
+        assertThat(sessions).filteredOn(row -> row.provider().equals("deepseek")).hasSize(7);
+        // Bot 4 is inactive, so S-31 forbids any session on it.
+        assertThat(sessions).extracting(SeedDocument.BotSessionRow::bot).doesNotContain(4);
     }
 
     // ------------------------------ the three that fooled the throwaway script
@@ -397,14 +503,14 @@ class SeedDocumentTest {
 
     /** @return one student's seven selections in question order, a dash for the absent ones */
     private static List<String> selectionsOf(String student) {
-        return real().selections().stream()
+        return real().selections(1).stream()
                 .filter(row -> row.student().equals(student))
                 .map(row -> row.answered() ? String.valueOf(row.selected()) : "-")
                 .toList();
     }
 
     private static SeedDocument.GradeRow grade(String student) {
-        return real().grades().stream()
+        return real().grades(1).stream()
                 .filter(row -> row.student().equals(student))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no grade for " + student));

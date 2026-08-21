@@ -308,6 +308,341 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     }
 
     @Test
+    @DisplayName("every question version is authored by the teacher section 7's rule names")
+    void questionAuthorsFollowTheRule() {
+        // D9, stated in §7 as a rule rather than a column. The expectation is derived from §4's
+        // teacher table the same way the document derives it, so a roster change moves both
+        // together instead of leaving a hardcoded list behind.
+        //
+        // The row this exists for is 21003 v2: Java is the only co-taught course, so it is the
+        // single version the co-teacher clause resolves to, and it is the one the loader had
+        // wrong until this check existed.
+        List<List<Object>> loaded = rows("""
+                select q.displayId, qv.versionNo, u.username
+                from QuestionVersion qv, Question q, User u
+                where q.id = qv.questionId and u.id = qv.createdBy
+                """);
+
+        assertThat(loaded).hasSize(43);
+
+        loaded.forEach(row -> {
+            String displayId = (String) row.get(0);
+            int versionNo = (Integer) row.get(1);
+            assertThat(row.get(2))
+                    .as("%s v%d: §7's rule names %s", displayId, versionNo,
+                            DOCUMENT.expectedQuestionAuthor(displayId, versionNo))
+                    .isEqualTo(DOCUMENT.expectedQuestionAuthor(displayId, versionNo));
+        });
+    }
+
+    @Test
+    @DisplayName("the co-teacher clause resolves to exactly one row, and it is 21003 v2")
+    void theCoTeacherClauseHasExactlyOneRow() {
+        // If this ever finds none, the second clause of D9 has stopped being demonstrable and
+        // T-2.2's "a version history shows two names" quietly reverts to one.
+        List<List<Object>> byCoTeacher = rows("""
+                select q.displayId, qv.versionNo
+                from QuestionVersion qv, Question q, User u
+                where q.id = qv.questionId and u.id = qv.createdBy
+                  and u.username = 'tamar.shani'
+                """);
+
+        assertThat(byCoTeacher).hasSize(1);
+        assertThat(byCoTeacher.get(0)).containsExactly("21003", 2);
+    }
+
+    @Test
+    @DisplayName("executions match the document on code, exam version and status")
+    void executionsMatch() {
+        // Windows are deliberately absent: they resolve from the load anchor, and asserting
+        // them here would re-implement SeedTimes and prove only that two copies of one
+        // calculation agree. SeedTimesTest pins the resolution.
+        Map<Integer, String> examByNumber = DOCUMENT.exams().stream()
+                .collect(Collectors.toMap(SeedDocument.ExamRow::number,
+                        SeedDocument.ExamRow::displayId));
+
+        assertThat(rows("""
+                select x.code, e.displayId, ev.versionNo, cast(x.status as string)
+                from ExamExecution x, ExamVersion ev, Exam e
+                where ev.id = x.examVersionId and e.id = ev.examId
+                """))
+                .containsExactlyInAnyOrderElementsOf(DOCUMENT.executions().stream()
+                        .map(row -> List.<Object>of(row.code(), examByNumber.get(row.exam()),
+                                row.examVersion(), row.status()))
+                        .toList());
+    }
+
+    @Test
+    @DisplayName("the execution windows have the shapes the document gives them")
+    void executionWindowsHaveTheRightShape() {
+        // The windows themselves resolve from the load anchor, so asserting the instants would
+        // re-implement SeedTimes. Their *shapes* are still the document's decisions and were
+        // guarded by nothing until a cold read pointed that out. A future edit changing a
+        // duration or making the live window one-sided now fails here.
+        Map<String, List<Object>> byCode = inTx(session -> session.createQuery("""
+                        select x.code, x.openAt, x.closeAt
+                        from ExamExecution x
+                        """, Object[].class).getResultList()).stream()
+                .collect(Collectors.toMap(row -> (String) row[0], List::of));
+
+        assertThat(minutesBetween(byCode.get("4821"))).as("§9: T-14d 09:00 to 11:00").isEqualTo(120);
+        assertThat(minutesBetween(byCode.get("7390"))).as("§9: T-3d 10:00 to 11:30").isEqualTo(90);
+        assertThat(minutesBetween(byCode.get("5164"))).as("§9: T+0 14:00 to 16:00").isEqualTo(120);
+
+        // Execution 4 is the S-2 proof and the take-exam demo's target: it has to straddle the
+        // anchor, not merely be two hours long, or "live right now" stops being true.
+        List<Object> live = byCode.get("2075");
+        assertThat(minutesBetween(live)).as("§9: T-1h to T+1h").isEqualTo(120);
+        assertThat((java.time.Instant) live.get(1)).isBefore(ANCHOR);
+        assertThat((java.time.Instant) live.get(2)).isAfter(ANCHOR);
+    }
+
+    private static long minutesBetween(List<Object> execution) {
+        return java.time.Duration.between(
+                (java.time.Instant) execution.get(1),
+                (java.time.Instant) execution.get(2)).toMinutes();
+    }
+
+    @Test
+    @DisplayName("every attempt matches the document on student, status and solving time")
+    void attemptsMatch() {
+        for (int execution : List.of(1, 2)) {
+            String code = execution == 1 ? "4821" : "7390";
+            assertThat(rows("""
+                    select u.username, cast(a.status as string), a.actualMinutes
+                    from ExamAttempt a, ExamExecution x, User u
+                    where x.id = a.executionId and u.id = a.studentId and x.code = '%s'
+                    """.formatted(code)))
+                    .as("execution %d attempts", execution)
+                    .containsExactlyInAnyOrderElementsOf(DOCUMENT.grades(execution).stream()
+                            .map(row -> List.<Object>of(row.student(), row.attemptStatus(),
+                                    row.solvingMinutes()))
+                            .toList());
+        }
+    }
+
+    @Test
+    @DisplayName("saved answers match the document, and an unreached question has no row at all")
+    void savedAnswersMatch() {
+        // The distinction this exists for: omer.katz reached three of seven, so four questions
+        // are ABSENT from attempt_answers rather than present with a null. A loader that wrote
+        // nulls would satisfy every count and destroy H12.4's fixture.
+        for (int execution : List.of(1, 2)) {
+            String code = execution == 1 ? "4821" : "7390";
+
+            List<List<Object>> loaded = rows("""
+                    select u.username, q.displayId, aa.selected
+                    from AttemptAnswer aa, ExamAttempt a, ExamExecution x, User u,
+                         QuestionVersion qv, Question q
+                    where a.id = aa.id.attemptId and x.id = a.executionId
+                      and u.id = a.studentId and qv.id = aa.id.questionVersionId
+                      and q.id = qv.questionId and x.code = '%s'
+                    """.formatted(code));
+
+            List<List<Object>> expected = DOCUMENT.selections(execution).stream()
+                    .filter(SeedDocument.SelectionRow::answered)
+                    .map(row -> List.<Object>of(row.student(), row.question(), row.selected()))
+                    .toList();
+
+            assertThat(loaded).as("execution %d answers", execution)
+                    .containsExactlyInAnyOrderElementsOf(expected);
+        }
+
+        long absent = DOCUMENT.selections(1).stream()
+                .filter(row -> !row.answered())
+                .count();
+        assertThat(absent).as("the document must still record four unreached questions")
+                .isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("grades match the document, and only the approved execution carries finals")
+    void gradesMatch() {
+        for (int execution : List.of(1, 2)) {
+            String code = execution == 1 ? "4821" : "7390";
+
+            assertThat(rows("""
+                    select u.username, g.autoScore, g.finalScore, cast(g.status as string)
+                    from Grade g, ExamAttempt a, ExamExecution x, User u
+                    where a.id = g.attemptId and x.id = a.executionId
+                      and u.id = a.studentId and x.code = '%s'
+                    """.formatted(code)))
+                    .as("execution %d grades", execution)
+                    .containsExactlyInAnyOrderElementsOf(DOCUMENT.grades(execution).stream()
+                            .map(row -> {
+                                List<Object> values = new ArrayList<>();
+                                values.add(row.student());
+                                values.add(row.auto());
+                                values.add(row.finalScore());
+                                values.add(execution == 1 ? "APPROVED" : "AUTO");
+                                return java.util.Collections.unmodifiableList(values);
+                            })
+                            .toList());
+        }
+    }
+
+    @Test
+    @DisplayName("the one override raises the final score and never touches the auto score")
+    void theOverrideKeepsWhatTheMachineComputed() {
+        // S-23. 45 is a fail and 55 is a pass, so this row alone moves execution 1's pass rate
+        // from 6/8 to the 7/8 frozen in its statistics. Writing 55 into auto_score would give
+        // the same pass rate from data that no longer records a teacher intervening.
+        List<List<Object>> override = rows("""
+                select g.autoScore, g.finalScore, u.username
+                from Grade g, ExamAttempt a, User u
+                where a.id = g.attemptId and u.id = a.studentId
+                  and g.overrideReason is not null
+                """);
+
+        assertThat(override).hasSize(1);
+        assertThat(override.get(0)).containsExactly(45, 55, "yael.azulay");
+    }
+
+    @Test
+    @DisplayName("bots match the document, and the inactive one has no sessions")
+    void botsMatch() {
+        assertThat(rows("select b.courseCode, b.active from Bot b"))
+                .containsExactlyInAnyOrderElementsOf(DOCUMENT.bots().stream()
+                        .map(row -> List.<Object>of(row.course(), row.active()))
+                        .toList());
+
+        DOCUMENT.bots().forEach(bot -> {
+            String loadedName = inTx(session -> session.createQuery(
+                            "select b.name from Bot b where b.courseCode = :course", String.class)
+                    .setParameter("course", bot.course()).getSingleResult());
+            assertThat(SeedDocument.followsHouseRule(bot.name(), loadedName))
+                    .as("bot on course %s: document has '%s', database has '%s'",
+                            bot.course(), bot.name(), loadedName)
+                    .isTrue();
+        });
+
+        // S-31's second half needs an inactive bot that nobody has used.
+        assertThat(rows("""
+                select b.courseCode from Bot b, BotSession s
+                where s.botId = b.id and b.active = false
+                """)).as("an inactive bot must have no sessions").isEmpty();
+    }
+
+    @Test
+    @DisplayName("every source body matches the document, and all eight load as TEXT")
+    void botSourcesMatch() {
+        // The eight bodies are the longest hand-transcribed text in the seed, about 3400
+        // characters of Hebrew and English. This is the check that makes typing them safe.
+        for (SeedDocument.BotSourceRow source : DOCUMENT.botSources()) {
+            List<List<Object>> loaded = rows("""
+                    select s.title, s.extractedText, cast(s.type as string)
+                    from BotSource s, Bot b
+                    where b.id = s.botId and b.courseCode = '%s'
+                    """.formatted(DOCUMENT.bots().get(source.bot() - 1).course()));
+
+            assertThat(loaded).as("bot %d sources", source.bot()).isNotEmpty();
+
+            List<List<Object>> matching = loaded.stream()
+                    .filter(row -> SeedDocument.followsHouseRule(
+                            source.title(), (String) row.get(0)))
+                    .toList();
+
+            assertThat(matching)
+                    .as("source %d: no loaded row has title '%s'",
+                            source.number(), source.title())
+                    .hasSize(1);
+            assertThat(SeedDocument.followsHouseRule(source.body(), (String) matching.get(0).get(1)))
+                    .as("source %d body differs from the document", source.number())
+                    .isTrue();
+            // The ruling beats the label: §10 says all eight seed as TEXT, and five labels
+            // disagree. Both are legal enum values, so nothing but this would catch it.
+            assertThat(matching.get(0).get(2))
+                    .as("source %d must load as TEXT whatever its label reads", source.number())
+                    .isEqualTo("TEXT");
+        }
+    }
+
+    @Test
+    @DisplayName("sessions and messages match the document and were dual-written")
+    void botSessionsMatch() {
+        // ARCHITECTURE §5 requires bot_messages to be the normalised copy of the JSON
+        // transcript, written together. E16's JpaBotStore.appendExchange is one method for
+        // exactly that reason, and the seed produces the same shape rather than its own.
+        for (SeedDocument.BotSessionRow expected : DOCUMENT.botSessions()) {
+            // The bot is joined in, not just the student and provider. An earlier version
+            // selected on username and provider alone, so BotSessionRow.bot() was parsed and
+            // never used and a session attached to the wrong bot would have passed. Found by a
+            // cold read, not by the suite: every session happened to be right.
+            String course = DOCUMENT.bots().get(expected.bot() - 1).course();
+
+            List<List<Object>> loaded = rows("""
+                    select m.question, m.answer, m.provider, u.username
+                    from BotMessage m, User u, Bot b
+                    where u.id = m.studentId and b.id = m.botId
+                      and u.username = '%s' and m.provider = '%s' and b.courseCode = '%s'
+                    """.formatted(expected.student(), expected.provider(), course));
+
+            List<List<Object>> matching = loaded.stream()
+                    .filter(row -> SeedDocument.followsHouseRule(
+                            expected.question(), (String) row.get(0)))
+                    .toList();
+
+            assertThat(matching)
+                    .as("session %d: no message from %s matches '%s'",
+                            expected.number(), expected.student(), expected.question())
+                    .hasSize(1);
+            assertThat(SeedDocument.followsHouseRule(expected.answer(), (String) matching.get(0).get(1)))
+                    .as("session %d answer differs from the document", expected.number())
+                    .isTrue();
+        }
+
+        assertThat(count("bot_sessions"))
+                .as("one session per message, dual-written")
+                .isEqualTo(count("bot_messages"));
+    }
+
+    @Test
+    @DisplayName("every transcript carries the student turn then the bot turn")
+    void transcriptsMatchWhatTheProductWrites() {
+        // The shape E16 produces: two turns per exchange, roles "student" then "bot". A seed
+        // whose transcripts differed structurally would make the history screen look right on
+        // live data and wrong on demo data, which is the worst way round.
+        // Read through the entity rather than as JSON text. An earlier version cast the column
+        // to CHAR in native SQL, which MySQL widens and H2 reads as CHAR(1), truncating every
+        // transcript to "{" and passing for the wrong reason on one engine. Going through the
+        // converter also asserts the structure instead of the serialisation.
+        List<server.db.entities.BotSession> conversations = inTx(session -> session.createQuery(
+                "select s from BotSession s", server.db.entities.BotSession.class).getResultList());
+
+        assertThat(conversations).hasSameSizeAs(DOCUMENT.botSessions());
+        assertThat(conversations).allSatisfy(conversation -> {
+            List<server.db.entities.BotTranscript.Turn> turns =
+                    conversation.getTranscript().turns();
+
+            assertThat(turns).as("one exchange is two turns").hasSize(2);
+            assertThat(turns.get(0).role()).isEqualTo("student");
+            assertThat(turns.get(1).role()).isEqualTo("bot");
+            assertThat(turns.get(0).text()).isNotBlank();
+            assertThat(turns.get(1).text()).isNotBlank();
+        });
+
+        // And the transcript agrees with the normalised copy, which is what dual-writing means.
+        conversations.forEach(conversation -> {
+            List<List<Object>> message = rows("""
+                    select m.question, m.answer from BotMessage m
+                    where m.sessionId = %d
+                    """.formatted(conversation.getId()));
+
+            assertThat(message).as("session %d has no message", conversation.getId()).hasSize(1);
+            assertThat(conversation.getTranscript().turns().get(0).text())
+                    .isEqualTo(message.get(0).get(0));
+            assertThat(conversation.getTranscript().turns().get(1).text())
+                    .isEqualTo(message.get(0).get(1));
+        });
+    }
+
+    private long count(String table) {
+        return inTx(session -> session
+                .createNativeQuery("SELECT COUNT(*) FROM " + table, Long.class)
+                .getSingleResult());
+    }
+
+    @Test
     @DisplayName("notifications match the document on recipient, type, title and read state")
     void notificationsMatch() {
         // Titles carry em dashes, so they are matched by the house-rule predicate rather than
@@ -344,7 +679,10 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                     for (Object value : row) {
                         values.add(value instanceof Number number ? number.intValue() : value);
                     }
-                    return List.copyOf(values);
+                    // Not List.copyOf: it rejects nulls, and a null is meaningful here.
+                    // §9.2's grades have no final score because nothing has been approved, and
+                    // collapsing that to a zero would make eight students look like failures.
+                    return java.util.Collections.unmodifiableList(values);
                 })
                 .toList();
     }
