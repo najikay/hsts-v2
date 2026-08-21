@@ -1,0 +1,171 @@
+package server.features.bank;
+
+import java.util.List;
+
+/**
+ * Every sentence the question bank sends a human (Logic tier, E6.2 - PRD §4.1).
+ *
+ * <p>One class, for the three reasons {@code ExamMessages}, {@code BotMessages} and
+ * {@code NotificationCatalog} exist: the copy rules are checkable by one test rather than by
+ * reading a service, a refusal and the screen that renders it cannot drift apart, and the
+ * wording is reviewed once instead of once per handler.
+ *
+ * <p>Two rules bind every string here. <b>No em dashes</b> (PRD §4.1). And <b>every error says
+ * what to do next</b>, which is the harder one: "invalid question" is a dead end, "two answers
+ * are the same, change one of them" is a next move.
+ *
+ * <h2>Why the validation messages name a specific answer</h2>
+ *
+ * <p>Acceptance case T-2.2 saves three bad questions in a row and expects three different
+ * sentences. That is the visible reason. The invisible one is E6.11: the editor maps a server
+ * error back onto the field that caused it, so a message that says only "answers are invalid"
+ * leaves the client guessing which of four boxes to highlight. Every sentence below that can
+ * name a position does, and {@link server.features.bank.QuestionValidator.Violation} carries
+ * the field name beside it so the client never has to match on text.
+ */
+public final class BankMessages {
+
+    private BankMessages() {
+        // static copy - no instances
+    }
+
+    // ===================== Malformed or unauthorized ======================
+
+    /** The payload was not the type this verb expects, or failed its own well-formedness check. */
+    public static final String MALFORMED_REQUEST =
+            "That request did not arrive in a form the server could read. Please try again.";
+
+    /**
+     * The caller does not teach the course she is writing into (S-5, F2.1).
+     *
+     * <p>Deliberately does not name the course's teachers. A teacher who is not on a course has
+     * no business learning its roster from an error message, and the next step she needs is the
+     * same either way.
+     */
+    public static final String COURSE_NOT_TAUGHT =
+            "You can only add questions to courses you teach. Pick one of your own courses, "
+                    + "or ask the coordinator to add you to that course.";
+
+    /** No such question, soft deleted, or outside the caller's courses. All three read alike. */
+    public static final String QUESTION_NOT_FOUND =
+            "That question is not in your bank. It may have been deleted, or it may belong to a "
+                    + "course you do not teach, so go back to the bank list and pick another.";
+
+    // ===================== Validation, C-8 and ADR-016 ====================
+
+    /** F2.1: a question must actually ask something. */
+    public static final String TEXT_REQUIRED =
+            "The question text is empty. Write the question a student will read.";
+
+    /** C-8: four answers, no more and no fewer. Reachable only from a non-UI caller. */
+    public static final String ANSWER_COUNT =
+            "A question needs exactly four answers. Fill in all four and try again.";
+
+    /** Which box is empty matters, so this one is a method rather than a constant. */
+    public static String answerBlank(int position) {
+        return "Answer " + position + " is empty. Fill in all four answers before saving.";
+    }
+
+    /**
+     * ADR-016: the four answers must be pairwise distinct.
+     *
+     * <p>Names both positions, because with four boxes on screen "two answers are the same" still
+     * leaves the teacher comparing them by eye.
+     */
+    public static String answersDuplicated(int first, int second) {
+        return "Answers " + first + " and " + second + " are the same. Two identical answers make "
+                + "the correct one ambiguous, so change one of them.";
+    }
+
+    /**
+     * C-8: exactly one correct answer, identified by position.
+     *
+     * <p>The editor's radio group makes this unreachable from our own client, which is the point
+     * of ADR-016. It stays enforced because the server does not get to assume its client.
+     */
+    public static final String CORRECT_ANSWER_RANGE =
+            "Mark exactly one of the four answers as the correct one.";
+
+    /**
+     * The three length refusals, which exist so a schema limit is a sentence and not a crash.
+     *
+     * <p>Each names the limit rather than only saying "too long", because a teacher who has just
+     * pasted a paragraph needs to know how much to cut, and "shorten it" without a number means
+     * trying twice.
+     */
+    public static String textTooLong(int limit) {
+        return "The question text is longer than " + limit + " characters. Shorten it and save "
+                + "again.";
+    }
+
+    /** @see #textTooLong(int) */
+    public static String answerTooLong(int position, int limit) {
+        return "Answer " + position + " is longer than " + limit + " characters. Shorten it and "
+                + "save again.";
+    }
+
+    /** @see #textTooLong(int) */
+    public static String topicTooLong(int limit) {
+        return "The topic is longer than " + limit + " characters. Shorten it and save again.";
+    }
+
+    /** F2.1: the topic is what the auto generator selects on in E7.4, so it cannot be blank. */
+    public static final String TOPIC_REQUIRED =
+            "Pick a topic. Exam auto generation selects questions by topic, so a question without "
+                    + "one can never be chosen.";
+
+    /** F2.1: EASY, MEDIUM or HARD. */
+    public static final String DIFFICULTY_REQUIRED =
+            "Pick a difficulty: easy, medium or hard.";
+
+    // ===================== Editing and versions ===========================
+
+    /**
+     * F10.3, ADR-008: somebody else saved a new version while this editor was open.
+     *
+     * <p>Says what happened to her work, because the honest answer is "nothing was lost, but you
+     * are not looking at the newest version any more".
+     */
+    public static final String STALE_EDIT =
+            "Someone else saved a new version of this question while you had it open. Nothing you "
+                    + "typed was lost, but reopen the question to edit the newest version.";
+
+    /** E6.14, F2.6: the advisory edit lock is held by another teacher. */
+    public static String lockedBy(String editorName) {
+        return "This question is being edited by " + editorName + " right now. You can read it, "
+                + "and it becomes editable as soon as that editor closes it.";
+    }
+
+    // ===================== Deleting =======================================
+
+    /**
+     * F2.5, T-2.7: deletion refused because exams reference the question.
+     *
+     * <p>Names the exams, which is the whole requirement. A teacher told only "cannot delete" has
+     * no route forward; told which exams, she can go and change them.
+     */
+    public static String deleteBlocked(List<String> examNames) {
+        String list = String.join(", ", examNames);
+        return examNames.size() == 1
+                ? "This question cannot be deleted because the exam " + list + " uses it. Remove "
+                        + "it from that exam first."
+                : "This question cannot be deleted because " + examNames.size() + " exams use it: "
+                        + list + ". Remove it from those exams first.";
+    }
+
+    // ===================== Images, E6.6 ===================================
+
+    /** NFR-18 and E6.6: 2MB ceiling, stated in the units the teacher sees on her own file. */
+    public static final String IMAGE_TOO_LARGE =
+            "That image is larger than 2 MB. Save a smaller copy and attach that instead.";
+
+    /**
+     * E6.6: PNG or JPEG only, and sniffed from the bytes rather than the file name.
+     *
+     * <p>Says "we looked at the file", because a teacher who renamed a HEIC to .png would
+     * otherwise read this as the server being broken.
+     */
+    public static final String IMAGE_WRONG_TYPE =
+            "Illustrations must be PNG or JPEG images, and the file you attached is neither, "
+                    + "whatever its name ends with. Save it as a PNG and attach it again.";
+}
