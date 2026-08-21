@@ -1,5 +1,7 @@
 package client.core;
 
+import common.config.ExternalConfig;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -11,15 +13,21 @@ import java.util.Properties;
 /**
  * Loads client connection settings from {@code client.properties}.
  *
- * <p>Lookup order:
+ * <p>Lookup order (E20.4, the candidate list itself is
+ * {@link common.config.ExternalConfig}):
  * <ol>
- *   <li>File beside the running JAR (or project root when launched from the IDE)</li>
+ *   <li>File beside the running JAR</li>
+ *   <li>File of the same name in the working directory (the only external
+ *       candidate when launched from the IDE or from exploded classes)</li>
  *   <li>Classpath resource {@code /client.properties} (bundled default)</li>
  *   <li>Hard-coded fallback ({@code localhost:5555})</li>
  * </ol>
  *
- * <p>For a two-machine demo, place {@code client.properties} next to
- * {@code hsts-client.jar} and set {@code server.host} to the server machine's IP.
+ * <p>This is the fallback path, not the usual one: since E19.10 the client
+ * discovers the server over UDP and pins it, and these settings are what it starts
+ * from when discovery finds nothing. For a two-machine demo on a network that
+ * blocks broadcast, place {@code client.properties} next to the client JAR and set
+ * {@code server.host} to the server machine's IP.
  */
 public final class ClientConfig {
 
@@ -72,15 +80,14 @@ public final class ClientConfig {
     }
 
     /**
-     * Maps this class's code-source location to the config file beside it:
-     * next to the JAR when running packaged, otherwise the working directory.
-     * Visible for testing.
+     * Maps this class's code-source location to the external config file to read:
+     * next to the JAR when one is there, otherwise the same name in the working
+     * directory (E20.4). Visible for testing.
+     *
+     * @see common.config.ExternalConfig
      */
     static Path externalPathFor(Path codeSourceLocation) {
-        if (Files.isRegularFile(codeSourceLocation)) {
-            return codeSourceLocation.getParent().resolve(CONFIG_FILE);
-        }
-        return Paths.get(CONFIG_FILE);
+        return ExternalConfig.locate(codeSourceLocation, CONFIG_FILE);
     }
 
     /** Visible for testing (unreadable-file branch). */

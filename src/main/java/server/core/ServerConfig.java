@@ -1,5 +1,7 @@
 package server.core;
 
+import common.config.ExternalConfig;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -11,15 +13,21 @@ import java.util.Properties;
 /**
  * Loads server-side settings from {@code server.properties}.
  *
- * <p>Lookup order:
+ * <p>Lookup order (E20.4, the candidate list itself is
+ * {@link common.config.ExternalConfig}):
  * <ol>
- *   <li>File beside the running JAR (or project root when launched from the IDE)</li>
+ *   <li>File beside the running JAR</li>
+ *   <li>File of the same name in the working directory (the only external
+ *       candidate when launched from the IDE or from exploded classes)</li>
  *   <li>Classpath resource {@code /server.properties} (bundled default)</li>
  *   <li>Hard-coded fallback ({@code root} / {@code root})</li>
  * </ol>
  *
- * <p>Place {@code server.properties} next to {@code hsts-server.jar} and set
- * {@code db.user} / {@code db.password} to match the local MySQL instance.
+ * <p>Place {@code server.properties} next to the server JAR and set
+ * {@code db.user} / {@code db.password} to match the local MySQL instance. The
+ * {@code package} build puts a copy there already: the machine's real file when it
+ * has one, otherwise {@code server.properties.example}, so a fresh clone's
+ * {@code target/} runs without anybody hand-copying anything.
  */
 public final class ServerConfig {
 
@@ -98,15 +106,14 @@ public final class ServerConfig {
     }
 
     /**
-     * Maps this class's code-source location to the config file beside it:
-     * next to the JAR when running packaged, otherwise the working directory.
-     * Visible for testing.
+     * Maps this class's code-source location to the external config file to read:
+     * next to the JAR when one is there, otherwise the same name in the working
+     * directory (E20.4). Visible for testing.
+     *
+     * @see common.config.ExternalConfig
      */
     static Path externalPathFor(Path codeSourceLocation) {
-        if (Files.isRegularFile(codeSourceLocation)) {
-            return codeSourceLocation.getParent().resolve(CONFIG_FILE);
-        }
-        return Paths.get(CONFIG_FILE);
+        return ExternalConfig.locate(codeSourceLocation, CONFIG_FILE);
     }
 
     /** Visible for testing (unreadable-file branch). */

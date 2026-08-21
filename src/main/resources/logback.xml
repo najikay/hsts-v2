@@ -21,9 +21,36 @@
 -->
 <configuration>
 
+    <!--
+      The defence view (E20.3). The terminal the server is started from is on the
+      projector for the whole session, so the stream is formatted to be read at a
+      glance from the back of a room rather than grepped afterwards:
+
+        08:41:36.204 INFO  s.features.exams.ExamService  Exam 12 started for 3 students
+        ^ gray, quiet ^ coloured by severity  ^ cyan, one column  ^ plain, the part being read
+
+      %logger{30} shortens leading packages only as far as it has to, so the
+      feature and the class survive (s.features.exams.ExamService) where a tighter
+      target would have left s.f.e.ExamService and made every line look alike.
+
+      Colour comes from logback's own %highlight / %gray / %cyan converters, which
+      write plain ANSI escapes. Nothing is added to the classpath for it: Windows
+      Terminal and PowerShell 5+ render those natively, which is what the demo
+      machines run. A terminal with no ANSI support (a bare legacy conhost) prints
+      the escapes literally, and the fix on the day is to open Windows Terminal,
+      never to rebuild.
+
+      Width modifiers sit INSIDE each colour converter (%cyan(%-28.28logger{30})),
+      never around it. Padding applied outside would be counting escape characters
+      as if they were letters and every column would drift.
+
+      Only the terminal is coloured. The console window's log pane reads from RING
+      below, which formats events itself and never sees this pattern (E19.4), so a
+      change here cannot leak escape codes into the JavaFX view.
+    -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%gray(%d{HH:mm:ss.SSS}) %highlight(%-5level) %cyan(%-28.28logger{30}) %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>

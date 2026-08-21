@@ -121,13 +121,24 @@ class ServerConfigTest {
     }
 
     @Test
-    @DisplayName("packaged run: the config file is looked up beside the JAR")
+    @DisplayName("packaged run: a file beside the JAR wins over the working directory")
     void externalPathIsResolvedBesideTheJar() throws IOException {
+        Path fakeJar = tempDir.resolve("hsts-server.jar");
+        Files.writeString(fakeJar, "not really a jar");
+        Files.writeString(tempDir.resolve("server.properties"), "db.user=beside_the_jar\n");
+
+        assertThat(ServerConfig.externalPathFor(fakeJar))
+                .isEqualTo(tempDir.resolve("server.properties"));
+    }
+
+    @Test
+    @DisplayName("packaged run with nothing beside the JAR: the working directory is tried next (E20.4)")
+    void externalPathFallsBackToTheWorkingDirectory() throws IOException {
         Path fakeJar = tempDir.resolve("hsts-server.jar");
         Files.writeString(fakeJar, "not really a jar");
 
         assertThat(ServerConfig.externalPathFor(fakeJar))
-                .isEqualTo(tempDir.resolve("server.properties"));
+                .isEqualTo(Path.of("server.properties"));
     }
 
     @Test

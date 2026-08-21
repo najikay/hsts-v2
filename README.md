@@ -47,8 +47,12 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS hsts_db CHARACTER SET utf8mb4
 # 2. Build both Fat JARs + copy deployment properties into target/
 mvn clean package
 ```
--Build using the wrapper
+
+Build using the wrapper (Windows):
+
+```powershell
 .\mvnw clean package
+```
 
 After the build, `target/` contains:
 
@@ -58,6 +62,22 @@ After the build, `target/` contains:
 | `hsts-client.jar` | JavaFX Thin Client |
 | `server.properties` | DB credentials for the server |
 | `client.properties` | Server host/port for the client |
+
+The two properties files are the machine's real ones when the project root has them,
+and copies of `server.properties.example` / `client.properties.example` when it does
+not, so a fresh clone's `target/` runs without hand-copying anything. An existing
+file in `target/` is never overwritten by the examples.
+
+**Submission build (E20.1).** The JAR names carry the group number, and the group
+number is passed on the command line rather than committed:
+
+```powershell
+.\mvnw -Djar.prefix=G13 package     # -> target\G13_Server.jar + target\G13_Client.jar
+```
+
+Without the switch the build keeps the `hsts-server.jar` / `hsts-client.jar` names
+this README and every script use. Substitute the real group number for `G13`, and
+build the submission JARs **on Windows** (see §9, Platform note).
 
 Edit the properties files to match your environment, then launch **server first,
 client second** (separate processes — the intended deployment model):
@@ -94,9 +114,14 @@ reached, or when you click "change server".
 
 ### Configuration
 
-Both JARs load an external properties file from the **same directory as the JAR**
-(if present), then fall back to bundled defaults inside the JAR, then hard-coded
-fallbacks.
+Both JARs look for their properties file in this order (E20.4):
+
+1. **beside the JAR** — the deployment layout, and the one that wins when both exist;
+2. **the working directory** — the same file name where the process was started, which
+   is what a shortcut or a `java -jar C:\hsts\G13_Server.jar` typed from elsewhere hits,
+   and the only external candidate when running from the IDE;
+3. **bundled defaults** inside the JAR;
+4. **hard-coded fallbacks** (`root`/`root`, `localhost:5555`).
 
 **`server.properties`** (beside `hsts-server.jar`):
 
@@ -237,14 +262,27 @@ HSTS/
 ## 9. Build Notes
 
 - **Two Fat JARs.** `maven-shade-plugin` produces separate deployable artifacts:
-  - `hsts-server.jar` — `Main-Class = server.core.ServerMain`; includes MySQL driver, excludes JavaFX.
-  - `hsts-client.jar` — `Main-Class = client.core.ClientLauncher`; includes JavaFX, excludes MySQL driver.
+  - `hsts-server.jar` — `Main-Class = server.core.ServerMain`; includes MySQL driver and JavaFX
+    (the server console of E19 is a JavaFX window).
+  - `hsts-client.jar` — `Main-Class = client.core.ClientLauncher`; includes JavaFX, excludes
+    MySQL driver, Hibernate, Flyway, PDFBox, POI and the bot providers by allow-list.
   Both are plain (non-`Application`) entry points to satisfy JavaFX module restrictions in a shaded jar.
-- **External configuration.** Root-level `client.properties` and `server.properties` are copied
-  into `target/` at package time so they sit beside the JARs out of the box. Edit those copies
-  (or place your own next to the JARs at deploy time) without rebuilding.
+- **JAR names (E20.1).** `-Djar.prefix=G13 package` switches both to `G13_Server.jar` /
+  `G13_Client.jar`; without it they keep the `hsts-server` / `hsts-client` names. The switch
+  activates a profile rather than editing a property, so the group number never lands in a commit.
+- **External configuration (E20.4).** Root-level `client.properties` and `server.properties` are
+  copied into `target/` at package time so they sit beside the JARs out of the box; whichever of
+  the two is still missing is seeded from its `*.properties.example`, and an existing file in
+  `target/` is left alone. Edit those copies (or place your own next to the JARs at deploy time)
+  without rebuilding.
+- **Terminal logs (E20.3).** The server's stdout stream is colour-coded by severity through
+  logback's own ANSI converters (no extra library). Windows Terminal and PowerShell 5+ render it;
+  a terminal with no ANSI support prints the escape codes literally, and the fix is the terminal,
+  not the build. The console window's log pane formats events itself and is unaffected.
 - **Self-contained deps.** OCSF is native source, not a dependency; only JavaFX and the
   MySQL connector resolve from Maven Central.
-- **Platform note.** The client JAR bundles the JavaFX natives for the OS it was built on, so
-  build on the platform you intend to run the client (or add per-platform classifiers for
-  cross-platform client builds). The server JAR has no native dependencies.
+- **Platform note (E20.4b).** JavaFX ships its natives per platform and shade bakes in whichever
+  the build machine resolved. **Both** JARs contain JavaFX since E19, so **both** are
+  platform-specific: the submission JARs must be built on Windows, on the machine family that
+  will run them. A JAR built on Linux or macOS fails at launch on Windows with an
+  `UnsatisfiedLinkError`, and no amount of re-zipping fixes it.

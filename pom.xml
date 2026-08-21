@@ -20,9 +20,24 @@
         <!-- Reproducible builds (E0.3): fixed archive entry timestamps -->
         <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
 
-        <!-- Fat-JAR name prefix. Flipped to G<Num> before submission:
-             mvn -Djar.prefix=G12 package  ->  G12_Server.jar / G12_Client.jar -->
+        <!-- Fat-JAR naming (E20.1).
+
+             Dev builds keep the lower-case names every script, README line and
+             muscle memory in this repo already uses:
+
+                 mvn package                 ->  hsts-server.jar / hsts-client.jar
+
+             The submission build passes the group number on the command line,
+             which activates the `submission-jar-names` profile below and switches
+             both JARs to the exact names the spec asks for:
+
+                 mvn -Djar.prefix=G13 package ->  G13_Server.jar / G13_Client.jar
+
+             The group number is never written into this file: one CLI switch is
+             harder to forget on the day than an edit-then-remember-to-revert. -->
         <jar.prefix>hsts</jar.prefix>
+        <jar.server.name>${jar.prefix}-server</jar.server.name>
+        <jar.client.name>${jar.prefix}-client</jar.client.name>
 
         <!-- ===== Runtime dependency versions ===== -->
         <javafx.version>21.0.4</javafx.version>
@@ -52,6 +67,7 @@
         <!-- ===== Plugin versions ===== -->
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
+        <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
         <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
         <jacoco-plugin.version>0.8.12</jacoco-plugin.version>
@@ -426,7 +442,14 @@
                 </executions>
             </plugin>
 
-            <!-- Copy deployment properties beside the built JARs -->
+            <!--
+                Copy deployment properties beside the built JARs (E20.4).
+
+                This execution copies the machine's REAL, gitignored
+                server.properties / client.properties from the project root when
+                they exist. A fresh clone and CI have neither, which is why the
+                antrun execution below seeds the examples afterwards.
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
@@ -454,6 +477,51 @@
                 </executions>
             </plugin>
 
+            <!--
+                First-run defaults beside the JARs (E20.4).
+
+                Runs after the execution above, in the same phase, and seeds
+                target/ from the *.properties.example files for whichever of the
+                two is still missing. A fresh clone therefore has a runnable
+                target/ directory without anybody hand-copying a file, and the
+                real credentials of a machine that has them are never touched.
+
+                Ant rather than a second copy-resources execution because the rule
+                is "only when absent", and copy-resources can only express "only
+                when the source is newer" — a timestamp comparison that would
+                decide whether somebody's edited demo config survives a rebuild
+                by which file git happened to check out last. <available> makes
+                that a fact about existence instead of about clocks.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>${maven-antrun-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>seed-deployment-properties</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target xmlns:unless="ant:unless">
+                                <available file="${project.build.directory}/server.properties"
+                                           property="hsts.server.properties.present"/>
+                                <available file="${project.build.directory}/client.properties"
+                                           property="hsts.client.properties.present"/>
+                                <copy unless:set="hsts.server.properties.present"
+                                      file="${project.basedir}/server.properties.example"
+                                      tofile="${project.build.directory}/server.properties"/>
+                                <copy unless:set="hsts.client.properties.present"
+                                      file="${project.basedir}/client.properties.example"
+                                      tofile="${project.build.directory}/client.properties"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Two Fat JARs -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -469,7 +537,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <finalName>${jar.prefix}-server</finalName>
+                            <finalName>${jar.server.name}</finalName>
                             <shadedArtifactAttached>false</shadedArtifactAttached>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
@@ -503,7 +571,7 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <finalName>${jar.prefix}-client</finalName>
+                            <finalName>${jar.client.name}</finalName>
                             <shadedArtifactAttached>false</shadedArtifactAttached>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
@@ -561,4 +629,33 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Submission JAR names (E20.1).
+
+            Activated by the presence of the -Djar.prefix switch on the command
+            line, never by the <jar.prefix> default above: profile activation
+            reads user and system properties only, so an ordinary `mvn package`
+            still produces hsts-server.jar / hsts-client.jar and
+            `mvn -Djar.prefix=G13 package` produces G13_Server.jar / G13_Client.jar.
+
+            The two spellings differ deliberately. The submission names are fixed
+            by the assignment (G<Num>_Server / G<Num>_Client) and the dev names
+            are what every doc, script and habit in this repo points at, so
+            neither is bent to match the other.
+        -->
+        <profile>
+            <id>submission-jar-names</id>
+            <activation>
+                <property>
+                    <name>jar.prefix</name>
+                </property>
+            </activation>
+            <properties>
+                <jar.server.name>${jar.prefix}_Server</jar.server.name>
+                <jar.client.name>${jar.prefix}_Client</jar.client.name>
+            </properties>
+        </profile>
+    </profiles>
 </project>

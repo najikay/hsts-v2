@@ -201,6 +201,7 @@ Client:
 - [x] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
 - [x] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
 - [x] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
+- [ ] E11.7 Attention events (F7.1b, Naji 2026-08-21): client reports exam-window focus loss during IN_PROGRESS (debounced, resumes counted); server extends the monitor row flags (reuse IntegrityFlag shape); live push to watching teachers; no student-facing UI; tests incl. flicker debounce and the flag surviving resume. Build with the post-manual-test polish round
 - [x] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
 - [ ] E11.6 Acceptance pass vs T-7 ⚑
 
@@ -306,15 +307,16 @@ Client:
 
 ## E20 — Packaging & deployment [L]
 
-- [ ] E20.1 Final JAR names `G<Num>_Server` / `G<Num>_Client` (group number parameterized in pom)
-- [ ] E20.2 Double-click verified on clean Windows machine (no IDE, only JRE/JDK 21) ⚑
-- [ ] E20.3 Terminal run shows the colorized log stream (defense view) ⚑
-- [ ] E20.4 Externalized properties beside JARs + first-run defaults; client remembers last server; pom copies from `*.properties.example` when the gitignored real files are absent (fresh clone/CI currently ships no adjacent config)
-- [ ] E20.4b Final defense JARs must be built on Windows — JavaFX natives are baked in at build time (hard gate, add to day-of checklist)
-- [ ] E20.5 Two-machine LAN checklist doc (firewall rules incl. UDP discovery port, IP from console, smoke script, **test discovery on the actual demo network type — bring a hotspot as fallback**, manual-IP path rehearsed too) — rehearsed ⚑
-- [ ] E20.6 DB setup path for a fresh machine: install MySQL → run server → Flyway + seed → done (documented, timed)
+- [x] E20.1 Final JAR names `G<Num>_Server` / `G<Num>_Client` (group number parameterized in pom) — `-Djar.prefix=G13 package` activates a profile that renames both JARs to `G13_Server.jar` / `G13_Client.jar`; without the switch the dev names `hsts-server` / `hsts-client` stand, so the group number never lands in a commit. One line, in README §2 and `docs/DEMO_DAY.md` §1.1
+- [ ] E20.2 Double-click verified on clean Windows machine (no IDE, only JRE/JDK 21) ⚑ — **instructions ready, manual execution pending**: `docs/DEMO_DAY.md` §2 (machine prep, the four-file layout to hand in, the checks to observe)
+- [x] E20.3 Terminal run shows the colorized log stream (defense view) ⚑ — `logback.xml` CONSOLE pattern is `%gray(time) %highlight(level) %cyan(logger) msg`, logback's own ANSI converters, no new dependency; widths sit inside the colour converters so the message column cannot drift. The E19.4 ring buffer formats events itself and is untouched. `TerminalLogFormatTest` asserts all of it against the shipped config
+- [x] E20.4 Externalized properties beside JARs + first-run defaults; client remembers last server; pom copies from `*.properties.example` when the gitignored real files are absent (fresh clone/CI currently ships no adjacent config) — lookup is now beside-the-JAR → working directory → bundled → hard-coded (`common.config.ExternalConfig`, shared by both tiers; the working-directory step was the gap, hit by any launch whose cwd is not the JAR's folder). `package` seeds `target/` from the examples only for whichever file is absent, so a fresh clone runs out of the box and real credentials are never overwritten
+- [ ] E20.4b Final defense JARs must be built on Windows — JavaFX natives are baked in at build time (hard gate, add to day-of checklist) — **instructions ready, manual execution pending**: `docs/DEMO_DAY.md` §1.2, incl. the `jar tf | Select-String "\.dll$"` proof. Note **both** JARs carry JavaFX since E19, not just the client; README §9 corrected
+- [ ] E20.5 Two-machine LAN checklist doc (firewall rules incl. UDP discovery port, IP from console, smoke script, **test discovery on the actual demo network type — bring a hotspot as fallback**, manual-IP path rehearsed too) — rehearsed ⚑ — **instructions ready, manual execution pending**: `docs/DEMO_DAY.md` §4 (TCP 5555 + UDP 5556 rules, Private-profile requirement, unicast-reply-to-broadcast note, discovery path, manual-IP path, hotspot plan, smoke script)
+- [ ] E20.6 DB setup path for a fresh machine: install MySQL → run server → Flyway + seed → done (documented, timed) — **instructions ready, manual execution pending**: `docs/DEMO_DAY.md` §3, with a budget/measured table and the startup-failure sentences mapped to fixes. Budgets are estimates until the first rehearsal fills the measured column
 
 ## E21 — Hardening & test completion [all, coordinated by L]
+- [ ] E21.0 (build nit, 2026-08-21): a surefire fork lingers 30s after the suite since E19/E20 ("kill self fork JVM ... elapsed 30 seconds after System.exit(0)") - some test leaves a non-daemon thread (suspect: console TestFX or discovery loopback). Find and close it; costs 30s per build and could flake CI
 
 - [ ] E21.1 Execute the full PRD §6 edge-case catalog as a tracked checklist — every line gets a test or a manual-verified note
 - [ ] E21.2 Race-condition suite: parallel attempts, simultaneous edits, extension-vs-expiry, submit-vs-expiry, login race ⚑
