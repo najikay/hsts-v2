@@ -153,6 +153,15 @@ public final class Routes {
      */
     public static final Route CHECKED_FORM = Route.shell("grades.checked", "Checked exam");
 
+    /**
+     * The teacher's grading queue and review (E12.5–E12.7, F8, T-8).
+     *
+     * <p>The id is {@code "grading"} because that is what {@code RoleNav.ROUTE_GRADING} has
+     * spelled since E5.4, when the rail reserved this slot with a disabled item — the same
+     * swap E14 made for Results and E13 for My Grades.
+     */
+    public static final Route GRADING = Route.shell("grading", "Grading", "Grading");
+
     private Routes() {
     }
 
@@ -181,7 +190,7 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM);
+                CHECKED_FORM, GRADING);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

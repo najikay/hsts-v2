@@ -173,7 +173,8 @@ class AppArgsAndRoutesTest {
             // E5 added Login and the four role dashboards; E10/E11 added take-exam and the
             // live monitor; E16 added the study bot's four screens; E14 added results; E8 added the approval
             // queue, the exam preview and the teacher's own approval-status list; E13 added
-            // the student's own grades and E13.4 the checked form behind them. Per-role registration and the role→home mapping are
+            // the student's own grades and E13.4 the checked form behind them; E12 added the
+            // teacher's grading queue. Per-role registration and the role→home mapping are
             // covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
@@ -182,7 +183,7 @@ class AppArgsAndRoutesTest {
                             "attempt", "monitor",
                             "approvals", "approvals.preview", "exams",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
-                            "grades", "grades.checked");
+                            "grades", "grades.checked", "grading");
         }
 
         @Test

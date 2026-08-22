@@ -92,7 +92,7 @@ class SessionRoutesTest {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS,
                             Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
-                            Routes.RESULTS, Routes.EXAMS);
+                            Routes.RESULTS, Routes.GRADING, Routes.EXAMS);
         }
 
         @Test
@@ -101,7 +101,8 @@ class SessionRoutesTest {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS,
                             Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
-                            Routes.RESULTS, Routes.EXAMS, Routes.APPROVALS, Routes.EXAM_PREVIEW);
+                            Routes.RESULTS, Routes.GRADING, Routes.EXAMS, Routes.APPROVALS,
+                            Routes.EXAM_PREVIEW);
         }
 
         @Test
@@ -127,8 +128,9 @@ class SessionRoutesTest {
                     .doesNotContain(Routes.QUESTIONS, Routes.MONITOR,
                             Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
                             // The teacher's results screen is a different route from her own
-                            // grades, and only one of them is hers (E13.1 vs E14).
-                            Routes.RESULTS);
+                            // grades, and only one of them is hers (E13.1 vs E14). Grading is
+                            // hers to do, not hers to receive.
+                            Routes.RESULTS, Routes.GRADING);
         }
 
         @Test

@@ -346,6 +346,7 @@
                              and would silently un-instrument the whole feature. -->
                         <exclude>client/features/results/MyGradesView*</exclude>
                         <exclude>client/features/results/CheckedFormView*</exclude>
+                        <exclude>client/features/grading/GradingQueueView*</exclude>
                         <exclude>client/features/approval/ApprovalQueueView*</exclude>
                         <exclude>client/features/approval/ExamPreviewView*</exclude>
                         <exclude>client/features/approval/MyApprovalsView*</exclude>
