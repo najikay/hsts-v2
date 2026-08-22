@@ -52,7 +52,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [x] E2.12 Take-exam projection that structurally excludes `correct_answer` (F6.6) + test proving the DTO has no correctness data ⚑
 - [x] E2.13 Repo test suites: H2 fast suite + MySQL suite (test base class = Template Method wipe/reseed)
 - [x] E2.14 ID allocators: 5-digit question display id (course2+serial3), 6-digit exam id (subject2+course2+serial2), concurrency-safe, with tests (S-8, S-10)
-- [x] E2.15 Seed migration/loader per PRD §5 (idempotent, one command + server-console button) — every seed section loads; `SeedMain` is the one command; `SeedDocument` + `SeedLoadedDbTest` verify the loaded database against the document on both engines. The E19.6 console button calls `SeedLoader.standard(factory).load(RESEED, confirmation)` and is [L]'s, per the ServerMain scope split
+- [x] E2.15 Seed migration/loader per PRD §5 (idempotent, one command + server-console button) — every seed section loads; `SeedMain` is the one command; `SeedDocument` + `SeedLoadedDbTest` verify the loaded database against the document on both engines, and `SeedArithmeticTest` recomputes every figure the document derives from another figure in it — scores from the answer grids, frozen stats from the grades, and the two notification titles that quote them. Mutation-tested: five deliberate corruptions each fail their own group and only it. The E19.6 console button calls `SeedLoader.standard(factory).load(RESEED, confirmation)` and is [L]'s, per the ServerMain scope split
 - [ ] E2.16 Seed review pass with [L]: every demo screen looks "well-filled" ⚑ — after PR 3b merges, doubles as the first E22.4 cross-walkthrough
 - [x] E2.17 BCrypt hashing for all seeded users; document demo credentials in DEMO_ACCOUNTS.md
 
@@ -223,7 +223,7 @@ Client:
 - [ ] E12.5 Grading queue screen: executions awaiting grading, per-execution student table (auto scores, status)
 - [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve
 - [ ] E12.7 Bulk approve with summary confirm — *covered by the same verb and service: ApproveRequest takes a list, so bulk is the same code path as single (E12.2). Not ticked: the confirm UI*
-- [ ] E12.8 Session + integration tests (auto-grade correctness, override w/o reason blocked, idempotent approve, stats values verified against hand-computed fixture)
+- [ ] E12.8 Session + integration tests (auto-grade correctness, override w/o reason blocked, idempotent approve, stats values verified against hand-computed fixture) — *three of the four done: `AutoGraderTest`/`GradingServiceTest` for correctness, `GradingHandlersTest` for the blocked blank justification, `ApprovalServiceTest` for idempotence-without-re-stamping. The hand-computed fixture is now `SeedArithmeticTest`, which recomputes §9.1's frozen stats from its own grade column rather than asserting typed constants. Not ticked: the end-to-end session test over a live router*
 - [ ] E12.9 Acceptance pass vs T-8 ⚑
 
 ## E13 — Student results [B]

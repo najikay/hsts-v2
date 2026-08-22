@@ -95,6 +95,25 @@ public final class SeedDocument {
     /** A "3 rina.barak" style reference: the number is the document's, the name is the key. */
     private static final Pattern REFERENCE = Pattern.compile("^\\s*\\d+\\s+([A-Za-z0-9._]+)\\s*$");
 
+    /** §9.1's frozen participation JSON, wherever in the prose it sits. */
+    private static final Pattern PARTICIPATION = Pattern.compile(
+            "\\{\\s*\"started\"\\s*:\\s*(\\d+)\\s*,\\s*\"finished\"\\s*:\\s*(\\d+)\\s*,"
+                    + "\\s*\"timed_out\"\\s*:\\s*(\\d+)\\s*}");
+
+    /** A "7 / 8 = 0.875" pass-rate cell: the fraction and the decimal it claims to equal. */
+    private static final Pattern PASS_RATE = Pattern.compile(
+            "(\\d+)\\s*/\\s*(\\d+)\\s*=\\s*(\\d+(?:\\.\\d+)?)");
+
+    /**
+     * One named decile bucket, {@code 40–49: 1}.
+     *
+     * <p>Both dash characters are accepted because the document uses an en dash and a keyboard
+     * hyphen is what anyone editing it will type; refusing the second would fail the build over
+     * a character nobody can see.
+     */
+    private static final Pattern DECILE = Pattern.compile(
+            "(\\d+)\\s*[\\u2013-]\\s*(\\d+)\\s*:\\s*(\\d+)");
+
     private final List<String> lines;
 
     private SeedDocument(List<String> lines) {
@@ -512,6 +531,132 @@ public final class SeedDocument {
         }
         require(!selections.isEmpty(), heading + " produced no selections");
         return List.copyOf(selections);
+    }
+
+    /**
+     * §9.1's frozen {@code stats} JSON, as the document states it.
+     *
+     * <p>Every figure here is <b>derived data written down by hand</b>, which is the reason this
+     * accessor exists at all. The table is what the loader freezes into
+     * {@code exam_executions.stats}, so if it and the grade rows above it ever disagree, the
+     * demo shows a class average that the class's own scores do not produce — and nothing would
+     * have caught it, because both halves live in the same prose document.
+     *
+     * @param deciles ten buckets, {@code 0-9} through {@code 90-100}, in the shape
+     *                {@code ScoreStatistics.deciles()} returns. The document writes only the
+     *                non-empty ones, so the absent buckets are zero rather than missing
+     */
+    public record FrozenStats(double mean, double median, double stddev, int min, int max,
+                              double passRate, List<Integer> deciles) { }
+
+    /**
+     * @return §9.1's frozen statistics table
+     */
+    public FrozenStats frozenStats() {
+        List<String[]> table = tables(section("### 9.1"), "### 9.1").stream()
+                .filter(candidate -> headerNames(candidate.get(0), "metric"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("SEED_CONTENT.md: no table in §9.1 "
+                        + "has a 'metric' column. The frozen stats are derived data in a "
+                        + "document and must stay checkable against the grades above them."));
+
+        java.util.Map<String, String> byMetric = new java.util.LinkedHashMap<>();
+        for (String[] cells : table.subList(1, table.size())) {
+            byMetric.put(bare(cells[0]).toLowerCase(Locale.ROOT), bare(cells[1]));
+        }
+        for (String required : List.of("mean", "median", "stddev", "min", "max", "pass rate",
+                "deciles")) {
+            require(byMetric.containsKey(required),
+                    "§9.1's stats table has no '" + required + "' row. Every figure the loader "
+                            + "freezes has to be stated here, or it is unchecked.");
+        }
+
+        return new FrozenStats(
+                decimal(byMetric.get("mean"), "§9.1 mean"),
+                decimal(byMetric.get("median"), "§9.1 median"),
+                decimal(byMetric.get("stddev"), "§9.1 stddev"),
+                number(byMetric.get("min"), "§9.1 min"),
+                number(byMetric.get("max"), "§9.1 max"),
+                // "7 / 8 = 0.875" — the fraction is there for a reader; the value is the last
+                // number, and reading the whole cell rather than just that would accept a
+                // fraction that no longer equals its own decimal.
+                passRate(byMetric.get("pass rate")),
+                deciles(byMetric.get("deciles")));
+    }
+
+    /**
+     * §9.1's frozen {@code participation} JSON.
+     *
+     * <p>Prose rather than a table, and derived from the attempt-status column above it, so it
+     * is the same hazard as the stats: hand-written data whose source is three paragraphs away.
+     *
+     * @param started   how many sat it
+     * @param finished  how many submitted
+     * @param timedOut  how many the server submitted for them
+     */
+    public record Participation(int started, int finished, int timedOut) { }
+
+    /**
+     * @return §9.1's frozen participation counts
+     */
+    public Participation participation() {
+        Matcher matcher = PARTICIPATION.matcher(String.join("\n", section("### 9.1")));
+        require(matcher.find(), "§9.1 states no frozen participation JSON. It is written as "
+                + "`{\"started\": 8, \"finished\": 7, \"timed_out\": 1}`; if that shape changed, "
+                + "this parser changes in the same commit.");
+        return new Participation(
+                Integer.parseInt(matcher.group(1)),
+                Integer.parseInt(matcher.group(2)),
+                Integer.parseInt(matcher.group(3)));
+    }
+
+    /** A decimal figure, and nothing else. */
+    private static double decimal(String cell, String what) {
+        String text = bare(cell).trim();
+        require(text.matches("-?\\d+(\\.\\d+)?"), what + " is not a single decimal number: '"
+                + cell + "'.");
+        return Double.parseDouble(text);
+    }
+
+    /** The value of a "7 / 8 = 0.875" cell: the decimal after the equals sign. */
+    private static double passRate(String cell) {
+        Matcher matcher = PASS_RATE.matcher(bare(cell));
+        require(matcher.find(), "§9.1's pass rate is not written as 'n / m = d': '" + cell + "'.");
+        int passed = Integer.parseInt(matcher.group(1));
+        int total = Integer.parseInt(matcher.group(2));
+        double stated = Double.parseDouble(matcher.group(3));
+        // The fraction and the decimal are two statements of one fact, side by side in one
+        // cell. Checking them against each other here means no consumer has to wonder which
+        // half to believe.
+        require(Math.abs((double) passed / total - stated) < 1e-9,
+                "§9.1's pass rate says " + passed + " / " + total + " but also " + stated
+                        + ", and those are different numbers.");
+        return stated;
+    }
+
+    /**
+     * The deciles cell, expanded to ten buckets.
+     *
+     * <p>The document writes only the non-empty ranges, as {@code 40–49: 1 · 50–59: 1}, because
+     * a reader wants the shape of the class and not six zeroes. The stored form is ten buckets,
+     * so this expands rather than the document padding itself.
+     */
+    private static List<Integer> deciles(String cell) {
+        List<Integer> buckets = new ArrayList<>(java.util.Collections.nCopies(10, 0));
+        Matcher matcher = DECILE.matcher(bare(cell));
+        int found = 0;
+        while (matcher.find()) {
+            int low = Integer.parseInt(matcher.group(1));
+            int count = Integer.parseInt(matcher.group(3));
+            require(low % 10 == 0, "§9.1's deciles has a bucket starting at " + low
+                    + ", which is not a decile boundary.");
+            buckets.set(Math.min(low / 10, 9), count);
+            found++;
+        }
+        require(found > 0, "§9.1's deciles cell named no buckets: '" + cell + "'. It is written "
+                + "as '40–49: 1 · 50–59: 1'; if that shape changed, this parser changes in the "
+                + "same commit.");
+        return List.copyOf(buckets);
     }
 
     /**
