@@ -134,6 +134,16 @@ public final class Routes {
      */
     public static final Route RESULTS = Route.shell("results", "Results", "Results");
 
+    /**
+     * The student's own grades (E13.3, F9.1, T-9.1).
+     *
+     * <p>The id is {@code "grades"} because that is what {@code RoleNav.ROUTE_MY_GRADES} has
+     * spelled since E5.4, when the rail reserved this slot with a disabled item. Enabling the
+     * feature is a swap there and a line here — no rename anywhere — which is the same path
+     * E14 took for {@link #RESULTS}.
+     */
+    public static final Route MY_GRADES = Route.shell("grades", "My grades", "My Grades");
+
     private Routes() {
     }
 
@@ -161,7 +171,7 @@ public final class Routes {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
-                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS);
+                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

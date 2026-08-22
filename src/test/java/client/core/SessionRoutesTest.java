@@ -116,14 +116,18 @@ class SessionRoutesTest {
         }
 
         @Test
-        @DisplayName("a student gets take-exam and her own bot screens, and no authoring route")
+        @DisplayName("a student gets take-exam, her own bot screens and her grades, "
+                + "and no authoring route")
         void student() {
             assertThat(SessionRoutes.routesFor(Role.STUDENT))
                     .containsExactly(Routes.HOME_STUDENT, Routes.SETTINGS, Routes.TAKE_EXAM,
-                            Routes.BOT_CHAT, Routes.BOT_HISTORY)
+                            Routes.BOT_CHAT, Routes.BOT_HISTORY, Routes.MY_GRADES)
                     .as("the teacher's half of the bot is not offered to her either (E16)")
                     .doesNotContain(Routes.QUESTIONS, Routes.MONITOR,
-                            Routes.BOT_MANAGER, Routes.BOT_ANALYTICS);
+                            Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
+                            // The teacher's results screen is a different route from her own
+                            // grades, and only one of them is hers (E13.1 vs E14).
+                            Routes.RESULTS);
         }
 
         @Test

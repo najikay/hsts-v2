@@ -344,6 +344,7 @@
                              the same terms as the other exam views it was extracted from.
                              Never a wildcard: a single '*' crosses path separators in JaCoCo
                              and would silently un-instrument the whole feature. -->
+                        <exclude>client/features/results/MyGradesView*</exclude>
                         <exclude>client/features/approval/ApprovalQueueView*</exclude>
                         <exclude>client/features/approval/ExamPreviewView*</exclude>
                         <exclude>client/features/approval/MyApprovalsView*</exclude>

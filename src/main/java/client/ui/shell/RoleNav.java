@@ -104,7 +104,10 @@ public final class RoleNav {
         return List.of(
                 dashboard(Role.STUDENT),
                 soon(ROUTE_TAKE_EXAM, "Take Exam", Icons.EXAMS, 10),
-                soon(ROUTE_MY_GRADES, "My Grades", Icons.RESULTS, 13),
+                // Live since E13. The rail item has reserved this slot since E5.4 and its id
+                // is still ROUTE_MY_GRADES: Routes.MY_GRADES was declared with the same
+                // string, so enabling the feature was a swap here rather than a rename.
+                NavItem.of(Routes.MY_GRADES.id(), "My Grades", Icons.RESULTS),
                 // Live since E16. A student's Study Bot is the chat; her history is
                 // one button away inside it.
                 NavItem.of(Routes.BOT_CHAT.id(), "Study Bot", Icons.BOT),

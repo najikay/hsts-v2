@@ -1,6 +1,8 @@
 package client.features.results;
 
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
@@ -190,6 +192,83 @@ class MyGradesSessionTest {
             // Re-asking is what stops the list drifting from the server's answer.
             assertThat(connection.sentCount()).isEqualTo(1);
             assertThat(connection.lastSent().getVerb()).isEqualTo(Verb.MY_GRADES_GET);
+        }
+    }
+
+    @Nested
+    @DisplayName("the push subscription")
+    class PushSubscription {
+
+        private ClientEventBus eventBus;
+
+        @BeforeEach
+        void subscribe() {
+            eventBus = new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+            session.subscribeTo(eventBus);
+        }
+
+        @Test
+        @DisplayName("a PUSH_GRADE_PUBLISHED on the bus refreshes the list with no user action")
+        void pushRefreshes() {
+            connection.replyOk(Verb.MY_GRADES_GET, MyGrades.EMPTY);
+            session.load();
+            assertThat(session.state()).isEqualTo(AsyncViewState.EMPTY);
+
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            eventBus.post(new ServerPushEvent(Verb.PUSH_GRADE_PUBLISHED, MAYA_ALGEBRA));
+
+            // NFR-18: the student pressed nothing. Before this subscription existed,
+            // onGradePublished() was a hook nothing called and the screen only ever
+            // updated when it was reopened.
+            assertThat(session.state()).isEqualTo(AsyncViewState.READY);
+            assertThat(session.grades()).containsExactly(MAYA_ALGEBRA);
+        }
+
+        @Test
+        @DisplayName("the pushed payload is ignored — the list is re-read, never appended to")
+        void payloadIsNotTrusted() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            session.load();
+            connection.clearSent();
+
+            // A push carrying somebody else's row must not be able to put it on this screen.
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            eventBus.post(new ServerPushEvent(Verb.PUSH_GRADE_PUBLISHED, ADJUSTED));
+
+            assertThat(connection.sentCount()).isEqualTo(1);
+            assertThat(session.grades()).containsExactly(MAYA_ALGEBRA);
+        }
+
+        @Test
+        @DisplayName("every other push verb is ignored, since one event type carries them all")
+        void ignoresOtherVerbs() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            session.load();
+            connection.clearSent();
+
+            eventBus.post(new ServerPushEvent(Verb.PUSH_NOTIFICATION, null));
+
+            assertThat(connection.sentCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("a push carrying no payload still refreshes, because the payload is unused")
+        void nullPayloadStillRefreshes() {
+            connection.replyOk(Verb.MY_GRADES_GET, MyGrades.EMPTY);
+            session.load();
+
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            eventBus.post(new ServerPushEvent(Verb.PUSH_GRADE_PUBLISHED, null));
+
+            assertThat(session.grades()).containsExactly(MAYA_ALGEBRA);
+        }
+
+        @Test
+        @DisplayName("subscribing refuses a null bus rather than silently never refreshing")
+        void rejectsNullBus() {
+            org.assertj.core.api.Assertions
+                    .assertThatExceptionOfType(NullPointerException.class)
+                    .isThrownBy(() -> session.subscribeTo(null));
         }
     }
 

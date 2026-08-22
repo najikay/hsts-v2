@@ -1,12 +1,15 @@
 package client.features.results;
 
+import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.grading.MyGrades;
 import common.dto.grading.StudentGradeRow;
 import common.protocol.Message;
 import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.List;
 import java.util.Objects;
@@ -94,6 +97,44 @@ public final class MyGradesSession {
      */
     public void onGradePublished() {
         load();
+    }
+
+    /**
+     * Subscribes this session to {@code PUSH_GRADE_PUBLISHED} (E13.6).
+     *
+     * <p>The subscription lives here rather than on the screen, and that is the point: the view
+     * is a thin renderer excluded from the coverage gate, so a live-refresh path wired there
+     * would be a behaviour nothing measures. Here it has a test.
+     *
+     * <p>Optional by design — {@link #load()} alone is a complete screen, and the existing tests
+     * that never call this still describe a working session. A student whose bus is not wired
+     * sees her grades on open and simply does not see them arrive.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this session, so the screen can chain it after {@link #onChange}
+     */
+    public MyGradesSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * Applies a {@code PUSH_GRADE_PUBLISHED} by re-reading the list.
+     *
+     * <p>One generic event type carries every push (E1.8), so this ignores everything that is
+     * not its own verb. <b>The payload is deliberately not read.</b> It carries the published
+     * row, and appending it would be faster — and would also be the one code path capable of
+     * putting a grade on this screen that the server did not just list. Re-querying costs one
+     * round trip and removes that possibility entirely.
+     *
+     * @param event any server push
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_GRADE_PUBLISHED) {
+            return;
+        }
+        onGradePublished();
     }
 
     private void settle(Message response, Throwable failure) {
