@@ -87,7 +87,10 @@ public final class RoleNav {
         }
         items.add(soon(ROUTE_RELEASES, "Releases", Icons.RELEASE, 9));
         items.add(soon(ROUTE_MONITOR, "Live Monitor", Icons.MONITOR, 11));
-        items.add(soon(ROUTE_GRADING, "Grading", Icons.GRADING, 12));
+        // Live since E12. The rail item has reserved this slot since E5.4 and its id is still
+        // ROUTE_GRADING: Routes.GRADING was declared with the same string, so enabling the
+        // feature was a swap here rather than a rename anywhere.
+        items.add(NavItem.of(Routes.GRADING.id(), "Grading", Icons.GRADING));
         // Live since E14. The rail item has reserved this slot since E5.4 and its id is
         // still ROUTE_RESULTS: Routes.RESULTS was declared with the same string, so
         // enabling the feature was a swap here rather than a rename anywhere.
