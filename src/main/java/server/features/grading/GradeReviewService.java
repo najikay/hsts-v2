@@ -115,7 +115,7 @@ public class GradeReviewService {
      */
     public Optional<ReviewContext> contextOf(Session session, long gradeId) {
         Objects.requireNonNull(session, "session");
-        return grades.findById(session, gradeId)
+        return grades.findByIdUnscoped(session, gradeId)
                 .flatMap(grade -> attempts.findRecordById(session, grade.getAttemptId())
                         .flatMap(attempt -> executions.findContext(session, attempt.executionId())
                                 .map(execution -> new ReviewContext(grade, attempt, execution))));
