@@ -45,12 +45,16 @@ E21 hardening is everyone (each attacks the others' features); E23 stretch assig
 Compressed plan: features done Aug 23-24 · integration + lead's manual passes Aug 24-25 ·
 hardening Aug 26 · submission zip + two-machine rehearsal + DEFENSE Aug 27. Because of the lost
 day, **E14.3 (StatChart) moved to the lead** (it is shared design-system work; B keeps E14 and
-wires the finished component), and the lead also runs E11.7. **THE ENDGAME PLAN (final, 2026-08-22) — this section is the authority; work from it without waiting on chat.**
+wires the finished component), and the lead also runs E11.7. **THE ENDGAME PLAN (amended 2026-08-22 evening) — this section is the authority; work from it without waiting on chat.**
 
-Lead operating mode from Aug 22: **review-only** (resource budget). Reviews land same-day on every
-PR; no further lead-built features. E9 therefore STAYS WITH MEMBER A (the absorption offer is
-withdrawn); the lead's remaining deliverables are reviews, merges, the full manual pass, the E2.16
-walkthrough, hardening coordination and the submission mechanics.
+**Amendment:** the resource constraint behind "review-only" was lifted the same day (plan upgraded),
+and the calendar is the scarce thing now. So the lead lane re-absorbs the two remaining epics that
+were always absorption candidates: **E9 (release manager) → L** and **E15 (report engine) → L**
+(E15 was earmarked to the lead in the original sprint plan and is built around the lead's
+StatChart). Final ownership of everything unbuilt: **A = E6 screens + E7** · **B = E12 screens +
+acceptance execution + walkthrough prep** · **L = E9 + E15 + reviews + manual pass + endgame
+mechanics**. Same-day reviews continue on every PR. The day table below reads with this mapping;
+RadioGroup and ImagePicker land from the lead today per rule 3.
 
 | Day | Member A (Omar) | Member B (Amjad) | Lead (Naji) |
 |---|---|---|---|
