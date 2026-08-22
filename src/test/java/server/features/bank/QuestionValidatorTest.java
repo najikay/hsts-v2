@@ -448,5 +448,78 @@ class QuestionValidatorTest {
             assertThat(QuestionValidator.sameAnswer(null, "")).isTrue();
             assertThat(QuestionValidator.sameAnswer(null, "Paris")).isFalse();
         }
+
+        @Test
+        @DisplayName("exotic Unicode spaces do not make two answers different")
+        void unicodeSpacesFoldLikeOrdinaryOnes() {
+            // The whitespace half of foldedForm is ASCII-only in both of its steps: trim() cuts
+            // nothing above U+0020, and Java's \s is [ \t\n\x0B\f\r] without
+            // UNICODE_CHARACTER_CLASS. So on a reading of that line alone these pairs would come
+            // back distinct while utf8mb4_unicode_ci calls them one answer, which is the one
+            // direction section 5 forbids: a pair the service accepts and the CHECK rejects
+            // arrives as a raw constraint violation.
+            //
+            // They do not, and an earlier version of this comment named the wrong reason. It is
+            // NOT the NFKD pass. It is the fourth step, the Collator at PRIMARY strength, which
+            // treats a space as COMPLETELY IGNORABLE: compare("ab", "a b") is 0 before any of
+            // these characters is involved. spaceIsIgnorableToTheCollator below pins that
+            // directly, because it is the property the rest of this test actually rests on and
+            // nothing was asserting it. Measured on JDK 21, not reasoned: with the NFKD pass
+            // deleted five of the six pairs here still fold, and with trim moved ahead of
+            // normalisation all six do.
+            //
+            // Literal characters, as the Hebrew cases above are: this file is UTF-8 and the
+            // build reads it as UTF-8. Each is named in its own assertion description, because
+            // an invisible character in a failure message is not a diagnosis.
+            assertThat(QuestionValidator.sameAnswer("a　b", "a b"))
+                    .as("IDEOGRAPHIC SPACE U+3000").isTrue();
+            assertThat(QuestionValidator.sameAnswer("a b", "a b"))
+                    .as("EN SPACE U+2002").isTrue();
+            assertThat(QuestionValidator.sameAnswer("a b", "a b"))
+                    .as("NO-BREAK SPACE U+00A0").isTrue();
+            assertThat(QuestionValidator.sameAnswer("a b", "a b"))
+                    // The one case in this test that NFKD carries rather than the collator:
+                    // Java's root collation table does not hold U+202F, so deleting the
+                    // normalisation pass breaks this pair alone.
+                    .as("NARROW NO-BREAK SPACE U+202F, the one NFKD actually earns").isTrue();
+            // At the edges too, where trim() is the step that would have to cope and cannot:
+            // it stops at U+0020 and every one of these is above it.
+            assertThat(QuestionValidator.sameAnswer("ab　", "ab"))
+                    .as("trailing IDEOGRAPHIC SPACE").isTrue();
+            assertThat(QuestionValidator.sameAnswer(" ab", "ab"))
+                    .as("leading EN SPACE").isTrue();
+        }
+
+        @Test
+        @DisplayName("the collator ignores spaces outright, which is the mechanism above")
+        void spaceIsIgnorableToTheCollator() {
+            // The property the whitespace test rests on, asserted directly so that it is
+            // guarded rather than assumed. A Collator at PRIMARY strength gives a space no
+            // weight at all, so the comparison never sees one whatever foldedForm did to it.
+            assertThat(QuestionValidator.sameAnswer("ab", "a b")).isTrue();
+            assertThat(QuestionValidator.sameAnswer("ab", "a  b")).isTrue();
+        }
+
+        @Test
+        @DisplayName("spacing alone never separates two answers, which is stricter than the CHECK")
+        void spacingAloneNeverSeparatesTwoAnswers() {
+            // The consequence of the line above, recorded because it is surprising and nothing
+            // named it. These pairs differ only in spacing, and the service calls them one
+            // answer, so a teacher offering both is refused.
+            //
+            // This is the SAFE direction and it is deliberate. Section 5's rule is
+            // one-directional: never accept a pair the database will reject. MySQL's
+            // utf8mb4_unicode_ci gives a space a primary weight, so it would call these two
+            // different answers and accept them. Being stricter costs a teacher a refusal;
+            // being looser costs her a constraint violation and a generic INTERNAL error.
+            //
+            // What section 5 does NOT say is that the strictness reaches this far. Its stated
+            // worst case is "a teacher told two confusingly similar answers are too similar",
+            // and "1 2 3" against "123" in a sequence question is not obviously that. Raised
+            // with the lead as a product question rather than fixed here, because loosening it
+            // is a change to the one-directional rule and that is his to make.
+            assertThat(QuestionValidator.sameAnswer("1 2 3", "123")).isTrue();
+            assertThat(QuestionValidator.sameAnswer("red car", "redcar")).isTrue();
+        }
     }
 }

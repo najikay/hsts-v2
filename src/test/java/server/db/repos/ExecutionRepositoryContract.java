@@ -243,8 +243,8 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
     }
 
     @Test
-    @DisplayName("a grade is fetched by its own id, unscoped")
-    void findsGradeById() {
+    @DisplayName("a grade is fetched by its own id, unscoped — the caller owns the gate")
+    void findsGradeByIdUnscoped() {
         long executionId = persistExecution("AB12", ExecutionStatus.CLOSED);
         long attemptId = persistAttempt(executionId, mayaId);
         long gradeId = inTx(session -> {
@@ -254,7 +254,7 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
             return grade.getId();
         });
 
-        Optional<Grade> found = inTx(session -> grades.findById(session, gradeId));
+        Optional<Grade> found = inTx(session -> grades.findByIdUnscoped(session, gradeId));
 
         assertThat(found).isPresent();
         assertThat(found.get().getAutoScore()).isEqualTo(88);
@@ -262,8 +262,8 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
 
     @Test
     @DisplayName("a grade id that was never issued is empty, not an exception")
-    void findByIdIsEmptyForUnknown() {
-        Optional<Grade> none = inTx(session -> grades.findById(session, 999_999L));
+    void findByIdUnscopedIsEmptyForUnknown() {
+        Optional<Grade> none = inTx(session -> grades.findByIdUnscoped(session, 999_999L));
 
         assertThat(none).isEmpty();
     }

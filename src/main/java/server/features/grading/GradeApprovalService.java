@@ -55,9 +55,9 @@ import java.util.Set;
  * E12.4's "→ stored": the numbers a teacher and the report engine read are the ones that existed
  * at the moment grading finished, not a recomputation that could drift as data changes later.
  */
-public class ApprovalService {
+public class GradeApprovalService {
 
-    private static final Logger log = LoggerFactory.getLogger(ApprovalService.class);
+    private static final Logger log = LoggerFactory.getLogger(GradeApprovalService.class);
 
     private final GradeRepository grades;
     private final AttemptRepository attempts;
@@ -65,7 +65,7 @@ public class ApprovalService {
     private final Notifier notifier;
     private final Clock clock;
 
-    public ApprovalService(GradeRepository grades,
+    public GradeApprovalService(GradeRepository grades,
                            AttemptRepository attempts,
                            ExecutionRepository executions,
                            Notifier notifier,

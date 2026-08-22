@@ -50,8 +50,4 @@ public record DeleteOutcome(boolean deleted, List<BlockingExam> blockingExams) i
     public boolean isBlocked() {
         return !deleted && !blockingExams.isEmpty();
     }
-
-    public int size() {
-        return blockingExams.size();
-    }
 }

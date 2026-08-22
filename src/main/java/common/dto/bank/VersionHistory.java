@@ -38,10 +38,6 @@ public record VersionHistory(String displayId5,
         return versions.isEmpty() ? Optional.empty() : Optional.of(versions.get(0));
     }
 
-    public int size() {
-        return versions.size();
-    }
-
     public boolean isEmpty() {
         return versions.isEmpty();
     }

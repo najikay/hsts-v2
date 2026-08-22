@@ -3,6 +3,7 @@ package server.core;
 import common.dto.auth.Role;
 
 import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -121,16 +122,14 @@ public final class Authorization {
     /**
      * Binds the directory the two-argument {@link #requireTeachesCourse} reads.
      *
-     * <p>Meant to be called once, from {@code HSTSServer}'s assembly, with a lambda over
-     * {@code CourseRepository.teaches}, exactly as {@link #useSubjectCoordinators} already is at
-     * that file's line 215.
+     * <p>Called once from {@code HSTSServer}'s assembly, with a lambda over
+     * {@code CourseRepository.teaches}, beside {@link #useSubjectCoordinators} and
+     * {@link #useReachableCourses}. <b>Wired 2026-08-21</b>; this javadoc said "not called yet"
+     * until it was, because claiming a wiring that does not exist is the defect P-6 is about and
+     * the claim had to expire when the fact did.
      *
-     * <p><b>It is not called yet, and saying otherwise would be the defect P-6 is about.</b>
-     * {@code HSTSServer} is the lead's file and outside this epic's scope, so the one-line wiring
-     * is handed to him with this PR. Until it lands, the two-argument
-     * {@link #requireTeachesCourse(CallerContext, String)} refuses everyone, which is the correct
-     * behaviour for an unwired guard and is pinned by a test. Services should call the
-     * three-argument overload regardless, which depends on nothing global.
+     * <p>Services should still call the three-argument overload, which depends on nothing global
+     * and can be handed a double without touching process state.
      *
      * <p>Returns the previous value so a caller can restore it, which is the reason this returns
      * anything at all.
@@ -161,12 +160,16 @@ public final class Authorization {
      * subject she coordinates, which is the lead's ruling of 2026-08-21 and is why
      * {@code rina.barak}, who teaches nothing at all, must still see a full bank.
      *
-     * <p>So {@code QuestionService} composes: {@code TEACHER} goes through this guard,
-     * {@code COORDINATOR} through {@link #requireCoordinatorOf} on the course's subject. The
-     * alternative, one wider guard that quietly means "teaches, or coordinates the subject
-     * containing", would be a guard whose name lies in the one place a reader cannot afford it.
-     * Asking the wide question and filtering afterwards is how the wrong answer eventually gets
-     * used.
+     * <p>So {@code QuestionService} composes nothing: <b>this is the write gate and
+     * {@link #reachesCourse} is the read scope</b>, and the verb decides which applies (contract
+     * §3's table). The alternative, one wider guard quietly meaning "teaches, or coordinates the
+     * subject containing", would be a guard whose name lies in the one place a reader cannot
+     * afford it. Asking the wide question and filtering afterwards is how the wrong answer
+     * eventually gets used.
+     *
+     * <p>An earlier draft of this javadoc said the service branches on role between this guard and
+     * {@link #requireCoordinatorOf}. That was the shape before the lead's two-scope ruling, and it
+     * described a composition no handler now performs.
      *
      * <p>Uses the directory installed by {@link #useCourseTeachers}; with none installed it
      * refuses, because a guard that cannot check has not checked. Services already holding a
@@ -249,6 +252,112 @@ public final class Authorization {
             return false;
         }
         return directory.teaches(caller.userId(), courseCode.strip());
+    }
+
+    // ===================== bank read scope: implemented (E6) ==============
+
+    /**
+     * Every course a caller may <b>read</b> the question bank of (E6, §7.3).
+     *
+     * <p>The third directory seam, and it answers a different question from the other two on
+     * purpose. {@link CourseTeachers} asks "does she teach this one course"; this returns the whole
+     * reachable set, because the bank browse filters by the set while the single-question reads
+     * check membership in it, and those two must never disagree about what a caller reaches.
+     *
+     * <h2>Why this one takes the whole caller and its siblings take an id</h2>
+     *
+     * <p>Because it is the only one of the three whose answer <b>depends on the role</b>.
+     * "Does she teach course 11" and "does she coordinate subject 10" are facts about rows, true
+     * or false regardless of what the session says she is. "Which courses may she read" is not:
+     * a {@code PRINCIPAL} reaches every course (F9.3), and she has no {@code course_teachers} rows
+     * and no {@code coordinators} rows, so the union this seam is otherwise built from returns her
+     * <b>nothing</b>. An id-only signature makes F9.3 unimplementable without re-deriving the role
+     * from the database, which is a second source of truth for a value the session already carries
+     * authoritatively, and {@link #requireCoordinatorOf} argues at length against exactly that.
+     *
+     * <p>So the implementation switches on {@link CallerContext#role()}: teacher and coordinator
+     * get the union, principal gets everything.
+     *
+     * <p><b>Not {@code CourseRepository.findForUser}.</b> That method merges taught courses with
+     * <em>enrolled</em> ones, so under it a student's reachable set would be her enrolments,
+     * {@link #reachesCourse} would answer true, and the only thing between her and a
+     * {@code QuestionDetail}'s answer key would be a {@code requireRole} call in each handler.
+     * The write-side sibling carries the same warning for the same reason.
+     */
+    @FunctionalInterface
+    public interface ReachableCourses {
+
+        /**
+         * @param caller the session's caller, whose role is part of the answer
+         * @return the course codes she may read, never null
+         */
+        Set<String> forCaller(CallerContext caller);
+
+        /** Fail closed: nothing is reachable until a real one is wired. */
+        ReachableCourses UNWIRED = caller -> Set.of();
+    }
+
+    private static final AtomicReference<ReachableCourses> REACHABLE_COURSES =
+            new AtomicReference<>(ReachableCourses.UNWIRED);
+
+    /**
+     * Binds the directory {@link #reachesCourse} reads.
+     *
+     * <p><b>Not wired yet.</b> It belongs beside its two siblings in {@code HSTSServer}'s assembly,
+     * which is the lead's file; the line is handed to him with this PR. Until it lands, both forms
+     * refuse everything, which is correct for an unwired guard and is pinned by a test. Services
+     * should call the three-argument overloads regardless, which depend on nothing global.
+     *
+     * <p>Stated as "not yet" rather than "wired", because the sibling sixty lines above carries the
+     * rule this sentence would otherwise break: a claim about a wiring that does not exist is the
+     * defect P-6 is about. The rule was written there this afternoon and broken here within the
+     * hour, which is the more useful half of the lesson.
+     *
+     * @param directory the lookup, or {@code null} to go back to refusing
+     * @return whatever was installed before
+     */
+    public static ReachableCourses useReachableCourses(ReachableCourses directory) {
+        return REACHABLE_COURSES.getAndSet(
+                directory == null ? ReachableCourses.UNWIRED : directory);
+    }
+
+    /**
+     * Whether the caller may read this course's bank, answered rather than thrown (E6, §7.3).
+     *
+     * <p><b>The form every bank read actually uses.</b> `QUESTION_GET`, `QUESTION_VERSIONS` and
+     * `QUESTION_IMAGE_GET` resolve the course from a <em>stored</em> question, so a `FORBIDDEN`
+     * naming that course would tell a caller probing ids both that the question exists and which
+     * course it belongs to. The contract forbids exactly that: {@code NOT_FOUND} is the only answer
+     * for anything out of reach, indistinguishable from a question that does not exist. So these
+     * verbs ask, and answer {@code NOT_FOUND} themselves.
+     *
+     * <p>Stripped, not trimmed, and the difference is not pedantry: {@code courses.code2} is
+     * {@code CHAR(2)} under a PAD SPACE collation, so a code carrying a Unicode space matches the
+     * row in SQL while failing Java equality against this set. {@code trim()} cuts only characters
+     * at or below U+0020 and would leave that gap open.
+     *
+     * <p><b>This answers the membership question and not the role question.</b> It returns true for
+     * a student whose reachable set contains the course, because deciding who may call a verb is
+     * the handler's job and mixing the two would make this unusable for the one thing it is for.
+     * Every caller of this method must have run {@link #requireRole} first. The write-side sibling
+     * says the same and it matters more here: a bank read that skipped the role check hands back a
+     * {@code QuestionDetail}, which carries the answer key, and no structural guard in this
+     * repository can see a missing call.
+     *
+     * @param caller     the session's caller, <b>already role-checked by the caller of this
+     *                   method</b>
+     * @param courseCode the 2-character course code
+     * @param directory  how to look the reachable set up; {@code null} answers false
+     * @return whether the course is in her reachable set
+     */
+    public static boolean reachesCourse(CallerContext caller, String courseCode,
+                                        ReachableCourses directory) {
+        if (caller == null || !caller.isAuthenticated()
+                || courseCode == null || courseCode.isBlank() || directory == null) {
+            return false;
+        }
+        Set<String> reachable = directory.forCaller(caller);
+        return reachable != null && reachable.contains(courseCode.strip());
     }
 
     // ===================== requireCoordinatorOf: implemented (E8) =========

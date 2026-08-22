@@ -110,10 +110,10 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 *Note (2026-08-20): the bank list shows a live "Editing · <name>" chip per row, fed by E18.8's LOCK_WATCH + LOCKS_SNAPSHOT (server side provided by the lead). Rows update live on LOCK_CHANGED pushes; opening a locked question still gets the full E18 banner + read-only mode.*
 
 Server:
-- [ ] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
+- [x] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
 - [ ] E6.2 Answer validity enforcement (C-8): exactly one correct answer; 4 answers pairwise distinct (trim + whitespace-collapse, case-insensitive compare) — server-side validation with precise error messages ⚑
-- [ ] E6.3 Edit → new immutable version; version history query; latest-version resolution
-- [ ] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
+- [ ] E6.3 Edit → new immutable version; version history query; latest-version resolution *(2026-08-22: the edit and latest-version halves are built and wired; the box stays open because the version history query does not exist yet — `QuestionRepository` can fetch one version or the latest, not the list. It arrives with `QUESTION_VERSIONS` in the read PR.)*
+- [x] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
 - [ ] E6.5 Browse/filter query (course/topic/difficulty/text) + pagination
 - [ ] E6.6 Image handling: size/type limits (≤2MB, png/jpg), stored in question_versions, `QUESTION_IMAGE_GET` lazy fetch verb *(reworded 2026-08-21: the lead ruled for the noun-first convention over this line's original `GET_QUESTION_IMAGE`; the verb exists in Verb.java under that name)*
 - [x] E6.7 QuestionValidator (Strategy, shared by add/edit) unit-tested to 100%
@@ -217,9 +217,9 @@ Client:
 ## E12 — Grading [B]
 
 - [x] E12.1 GradingService.autoGrade: per-question correctness (selection == correct_answer), weighted score, persist AUTO grade — *complete, and now wired: `GradingOnSubmit` implements `AttemptFinalizedListener` and replaces the no-op in `HSTSServer`, so an attempt is marked the moment it closes. Auto-grading publishes nothing (C-3) — approval does*
-- [x] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3) — *`ApprovalService` + `GRADES_APPROVE` on the router behind `GradingHandlers`' shared teacher gate. Idempotent (counts, never re-stamps), per-grade ownership, refused list, freezes stats into `exam_executions.stats` on completion*
+- [x] E12.2 Approve grade(s): single + bulk; status→APPROVED; push GRADE_PUBLISHED to student (C-3) — *`GradeApprovalService` + `GRADES_APPROVE` on the router behind `GradingHandlers`' shared teacher gate. Idempotent (counts, never re-stamps), per-grade ownership, refused list, freezes stats into `exam_executions.stats` on completion*
 - [ ] E12.3 Override: new score requires justification (S-23); audit trail (auto score kept); comment to student (S-22) — *`OverrideService` + `GRADE_OVERRIDE` done: blank justification is VALIDATION before anything is read, out-of-range score likewise, an approved grade is CONFLICT, the auto score is kept beside the new one, and it answers with the refreshed `GradeReview`. Not ticked: the override dialog (E12.6's screen) and the comment-to-student box (S-22)*
-- [x] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` tested against the seeded execution 4821 fixture (population σ, deciles, pass mark 55), and **stored**: `ApprovalService` freezes it into `exam_executions.stats` in the approving transaction*
+- [x] E12.4 Stats computation on execution fully graded: avg, median, **std dev**, min/max, pass rate, deciles → stored (S-25); values unit-tested against hand-computed fixtures ⚑ — *`ScoreStatistics` tested against the seeded execution 4821 fixture (population σ, deciles, pass mark 55), and **stored**: `GradeApprovalService` freezes it into `exam_executions.stats` in the approving transaction*
 - [ ] E12.5 Grading queue screen: executions awaiting grading, per-execution student table (auto scores, status)
 - [ ] E12.6 Per-student review screen: checked form view (correct/wrong marks), override dialog (score+reason), comment box, approve — *server side done: `GradeReviewService` assembles the marked paper and `GRADE_REVIEW_GET` serves it to the owning teacher. The ticks are re-run through `AutoGrader`, so a paper's marks and the score above them can never come from two different rules. Not ticked: the screen*
 - [ ] E12.7 Bulk approve with summary confirm — *covered by the same verb and service: ApproveRequest takes a list, so bulk is the same code path as single (E12.2). Not ticked: the confirm UI*
@@ -325,6 +325,7 @@ Client:
 - [ ] E20.6 DB setup path for a fresh machine: install MySQL → run server → Flyway + seed → done (documented, timed) — **instructions ready, manual execution pending**: `docs/DEMO_DAY.md` §3, with a budget/measured table and the startup-failure sentences mapped to fixes. Budgets are estimates until the first rehearsal fills the measured column
 
 ## E21 — Hardening & test completion [all, coordinated by L]
+- [ ] E21.0b (build nit, 2026-08-21): TestDatabases.REPO_SCHEMA is hardcoded (hsts_e2_repo_test) while its migration sibling honors HSTS_TEST_SCHEMA - three phantom failures under parallel builds so far. Two-line fix: env-override it the same way (Member A's file, rule-5 style)
 - [ ] E21.0 (build nit, 2026-08-21): a surefire fork lingers 30s after the suite since E19/E20 ("kill self fork JVM ... elapsed 30 seconds after System.exit(0)") - some test leaves a non-daemon thread (suspect: console TestFX or discovery loopback). Find and close it; costs 30s per build and could flake CI
 
 - [ ] E21.1 Execute the full PRD §6 edge-case catalog as a tracked checklist — every line gets a test or a manual-verified note

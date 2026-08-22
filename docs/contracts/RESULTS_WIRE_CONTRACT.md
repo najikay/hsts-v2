@@ -1,8 +1,14 @@
-# E14 teacher results & statistics wire contract — DRAFT
+# E14 teacher results & statistics wire contract — FROZEN v1
 
-**Status: DRAFT, 2026-08-21.** Written while E14 was built, for the lead to freeze. Until it is
-frozen, the names here may still change; after it is frozen the same rule applies as to the
-grading contract — record names, component names, their order and their types are the wire, and
+**Status: frozen 2026-08-21** after lead review (independent verify at merge).
+
+**Lead rulings at freeze:**
+1. Scope is AUTHOR-ONLY — literally F9.2's "exams she wrote"; the runner's surfaces are the monitor and grading, not results. Narrower than the monitor's author-or-runner rule, on purpose.
+2. `passCount` reconstitution from the stored full-precision `passRate` counts as READING, not recomputing (Member A's 1e-13 analysis, accepted). **This ruling expires** if `passRate` ever becomes a coarsely-quantised value — at that moment the count gets its own stored field.
+3. Cancelled sittings are excluded from F9.2's results as well as from E15's reports — H15.2's principle, applied one screen earlier than its letter.
+4. Statistics travel exactly as frozen at approval time (population σ, pass mark 55); nothing on this path recomputes them, pinned by the stored-not-recomputed test.
+
+After the freeze the same rule applies as to the grading contract — record names, component names, their order and their types are the wire, and
 a rename is a protocol break between two separately-built JARs rather than a refactor.
 
 This is the contract the `GRADING_WIRE_CONTRACT.md` "what is deliberately absent" section

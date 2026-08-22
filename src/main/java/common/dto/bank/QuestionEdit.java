@@ -64,8 +64,13 @@ public record QuestionEdit(String displayId5,
      */
     public QuestionEdit {
         imageAction = imageAction == null ? ImageAction.KEEP : imageAction;
-        // List.copyOf yields an immutable, Serializable list - safe on the wire.
-        answers = answers == null ? List.of() : List.copyOf(answers);
+        // NOT List.copyOf: that throws on a null ELEMENT, and this constructor runs on the
+        // server's socket read thread during deserialization, where any throw kills the
+        // connection (E1.11, found by Member A 2026-08-21). A null element must survive
+        // construction so QuestionValidator can refuse it with a named VALIDATION sentence
+        // instead of the teacher losing her work to a silent disconnect.
+        answers = answers == null ? List.of()
+                : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(answers));
         image = image == null ? null : image.clone();
     }
 
@@ -78,14 +83,6 @@ public record QuestionEdit(String displayId5,
     /** @return {@code true} when this edit actually carries replacement bytes. */
     public boolean hasImage() {
         return image != null && image.length > 0;
-    }
-
-    /**
-     * @return whether the illustration is being changed at all, which is what tells the handler
-     *         to look at {@link #image()} rather than copy the previous version's blob forward
-     */
-    public boolean changesImage() {
-        return imageAction != ImageAction.KEEP;
     }
 
     /** Compares by value, illustration bytes included; see {@link QuestionDraft#equals(Object)}. */

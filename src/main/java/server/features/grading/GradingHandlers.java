@@ -81,12 +81,12 @@ public class GradingHandlers {
     }
 
     private final SessionFactory sessionFactory;
-    private final ApprovalService approvals;
+    private final GradeApprovalService approvals;
     private final OverrideService overrides;
     private final GradeReviewService reviews;
 
     public GradingHandlers(SessionFactory sessionFactory,
-                           ApprovalService approvals,
+                           GradeApprovalService approvals,
                            OverrideService overrides,
                            GradeReviewService reviews) {
         this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");

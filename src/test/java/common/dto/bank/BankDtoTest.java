@@ -335,11 +335,15 @@ class BankDtoTest {
         }
 
         @Test
-        @DisplayName("a null answer list becomes empty, and the copy is immutable")
+        @DisplayName("a null answer list is a server bug and says so at build time; the copy is immutable")
         void detailDefensivelyCopies() {
-            QuestionDetail none = new QuestionDetail("11005", "11", "אלגברה", 1, 1, STEM, null, 1,
-                    "גאומטריה", Difficulty.EASY, false, "דנה כהן", WHEN);
-            assertThat(none.answers()).isEmpty();
+            // Outbound policy corrected 2026-08-21 (Member A's contract read, finding 5): the
+            // required, prose-constrained field surfaces as a server-side failure, never as an
+            // empty editor whose error names neither the question nor the server.
+            assertThatThrownBy(() -> new QuestionDetail("11005", "11", "אלגברה", 1, 1, STEM, null,
+                    1, "גאומטריה", Difficulty.EASY, false, "דנה כהן", WHEN))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("answers");
 
             List<String> mutable = new ArrayList<>(ANSWERS);
             QuestionDetail detail = new QuestionDetail("11005", "11", "אלגברה", 1, 1, STEM,
@@ -431,8 +435,10 @@ class BankDtoTest {
                     null, false, "דנה", WHEN))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("difficulty");
-            assertThat(new QuestionVersionDetail(1, STEM, null, 1, "t", Difficulty.EASY, false,
-                    "דנה", WHEN).answers()).isEmpty();
+            assertThatThrownBy(() -> new QuestionVersionDetail(1, STEM, null, 1, "t",
+                    Difficulty.EASY, false, "דנה", WHEN))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("answers");
         }
 
         @Test
@@ -444,7 +450,7 @@ class BankDtoTest {
             VersionHistory restored = roundTrip(original);
 
             assertThat(restored).isEqualTo(original);
-            assertThat(restored.size()).isEqualTo(3);
+            assertThat(restored.versions().size()).isEqualTo(3);
             assertThat(restored.isEmpty()).isFalse();
             assertThat(restored.latest()).contains(version(3));
         }
@@ -456,7 +462,7 @@ class BankDtoTest {
 
             assertThat(empty.versions()).isEmpty();
             assertThat(empty.isEmpty()).isTrue();
-            assertThat(empty.size()).isZero();
+            assertThat(empty.versions().size()).isZero();
             assertThat(empty.latest()).isEmpty();
         }
 
@@ -467,7 +473,7 @@ class BankDtoTest {
             VersionHistory history = new VersionHistory("11005", mutable);
             mutable.add(version(2));
 
-            assertThat(history.size()).isEqualTo(1);
+            assertThat(history.versions().size()).isEqualTo(1);
             assertThatThrownBy(() -> history.versions().add(version(2)))
                     .isInstanceOf(UnsupportedOperationException.class);
         }
@@ -599,6 +605,25 @@ class BankDtoTest {
         }
 
         @Test
+        @DisplayName("a null ELEMENT survives construction so the validator can name it (E1.11)")
+        void draftSurvivesANullElement() {
+            // Member A's contract read, finding 1: List.copyOf throws on a null element inside
+            // the canonical constructor, which runs on the socket read thread during
+            // deserialization - so ["a", null, "c", "d"] used to disconnect the teacher with
+            // no dialog. Delete the tolerant copy and THIS test fails; the old
+            // draftDoesNotThrowOnNulls only covered the null LIST and passed either way.
+            java.util.List<String> withHole = new java.util.ArrayList<>();
+            withHole.add("a"); withHole.add(null); withHole.add("c"); withHole.add("d");
+
+            QuestionDraft draft = new QuestionDraft("11", STEM, withHole, 1, "t",
+                    Difficulty.EASY, null);
+
+            // The DTO's whole job here is survival; QuestionValidatorTest owns proving the
+            // hole then gets a named refusal (its structural rules run before distinctness).
+            assertThat(draft.answers()).containsExactly("a", null, "c", "d");
+        }
+
+        @Test
         @DisplayName("an edit round-trips its base version, its action and its bytes")
         void editRoundTrips() throws Exception {
             QuestionEdit restored = roundTrip(edit(ImageAction.REPLACE, png));
@@ -610,7 +635,6 @@ class BankDtoTest {
             assertThat(restored.imageAction()).isEqualTo(ImageAction.REPLACE);
             assertThat(restored.image()).containsExactly(png);
             assertThat(restored.hasImage()).isTrue();
-            assertThat(restored.changesImage()).isTrue();
         }
 
         @Test
@@ -619,18 +643,8 @@ class BankDtoTest {
             QuestionEdit restored = roundTrip(edit(null, null));
 
             assertThat(restored.imageAction()).isEqualTo(ImageAction.KEEP);
-            assertThat(restored.changesImage()).isFalse();
             assertThat(restored.hasImage()).isFalse();
             assertThat(restored.image()).isNull();
-        }
-
-        @Test
-        @DisplayName("removing changes the image without carrying any")
-        void removeChangesTheImage() {
-            QuestionEdit remove = edit(ImageAction.REMOVE, null);
-
-            assertThat(remove.changesImage()).isTrue();
-            assertThat(remove.hasImage()).isFalse();
         }
 
         @Test
@@ -680,7 +694,19 @@ class BankDtoTest {
         }
 
         @Test
-        @DisplayName("an edit's answers are copied, and a null list becomes empty")
+        @DisplayName("an edit also survives a null ELEMENT (E1.11, same finding as the draft)")
+        void editSurvivesANullElement() {
+            java.util.List<String> withHole = new java.util.ArrayList<>();
+            withHole.add("a"); withHole.add(null); withHole.add("c"); withHole.add("d");
+
+            QuestionEdit edit = new QuestionEdit("11005", 2, STEM, withHole, 1, "t",
+                    Difficulty.EASY, ImageAction.KEEP, null);
+
+            assertThat(edit.answers()).containsExactly("a", null, "c", "d");
+        }
+
+        @Test
+                @DisplayName("an edit's answers are copied, and a null list becomes empty")
         void editCopiesAnswers() {
             List<String> mutable = new ArrayList<>(ANSWERS);
             QuestionEdit fromMutable = new QuestionEdit("11005", 1, STEM, mutable, 1, "t",
@@ -737,7 +763,7 @@ class BankDtoTest {
             assertThat(restored.deleted()).isTrue();
             assertThat(restored.isBlocked()).isFalse();
             assertThat(restored.blockingExams()).isEmpty();
-            assertThat(restored.size()).isZero();
+            assertThat(restored.blockingExams().size()).isZero();
         }
 
         @Test
@@ -752,7 +778,7 @@ class BankDtoTest {
             assertThat(restored).isEqualTo(original);
             assertThat(restored.deleted()).isFalse();
             assertThat(restored.isBlocked()).isTrue();
-            assertThat(restored.size()).isEqualTo(2);
+            assertThat(restored.blockingExams().size()).isEqualTo(2);
             assertThat(restored.blockingExams())
                     .extracting(BlockingExam::displayId6)
                     .containsExactly("101101", "101102");
@@ -772,7 +798,7 @@ class BankDtoTest {
             DeleteOutcome outcome = DeleteOutcome.blockedBy(mutable);
             mutable.add(new BlockingExam("101102", "מבחן אחר"));
 
-            assertThat(outcome.size()).isEqualTo(1);
+            assertThat(outcome.blockingExams().size()).isEqualTo(1);
             assertThatThrownBy(() -> outcome.blockingExams()
                     .add(new BlockingExam("101103", "עוד מבחן")))
                     .isInstanceOf(UnsupportedOperationException.class);

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import server.db.HibernateUtil;
 import server.db.QuestionDAO;
 import server.db.Transactions;
+import server.db.ids.QuestionIdAllocator;
 import server.db.repos.AttemptRepository;
 import server.db.repos.CourseRepository;
 import server.db.repos.ExamRepository;
@@ -23,7 +24,9 @@ import server.features.approval.JpaApprovalStore;
 import server.features.auth.AuthService;
 import server.features.auth.UserDirectory;
 import server.features.auth.UserRecord;
+import server.features.bank.BankHandlers;
 import server.features.bank.LegacyQuestionHandlers;
+import server.features.bank.QuestionService;
 import server.features.bot.AskRateLimiter;
 import server.features.bot.BotAdminService;
 import server.features.bot.BotConfig;
@@ -40,6 +43,7 @@ import server.features.exam.ExtendService;
 import server.features.exam.JpaExamStore;
 import server.features.exam.MonitorService;
 import server.features.exam.TimerService;
+import server.features.grading.GradeApprovalService;
 import server.features.grading.GradeReviewService;
 import server.features.grading.GradingHandlers;
 import server.features.grading.GradingOnSubmit;
@@ -210,6 +214,27 @@ public class HSTSServer extends AbstractServer {
         // grades were approved (F8.5) and it recomputes none of them.
         new TeacherResultsService(new JpaTeacherResultsStore(sessionFactory)).registerOn(router);
         registerApprovalFeature(router, notifications, sessionFactory);
+        // The question bank's write verbs (E6.1, E6.3, E6.4). Assembled last, and the only
+        // things above it that it uses are the sessionFactory and clock locals: its guards ask
+        // the open transaction's own data through a repository lambda rather than the
+        // process-wide COURSE_TEACHERS seam, so it holds no snapshot that could go stale
+        // against an ordering change.
+        //
+        // This does NOT replace LegacyQuestionHandlers above. The two answer disjoint verbs
+        // (GET_ALL_QUESTIONS / UPDATE_QUESTION against QUESTION_CREATE / UPDATE / DELETE), and
+        // the legacy pair is retired in its own PR (contract §7.4). Keep them disjoint:
+        // MessageRouter.register throws on a duplicate verb rather than overwriting, and it
+        // throws here, inside the HSTSServer(port) constructor, which no test calls and which
+        // JaCoCo excludes. A collision is therefore not a red build, it is a server that will
+        // not boot, found by a human. The E6 read PR adds the second bank line to this method.
+        //
+        // BankWiringGuardTest reads this statement out of the source and fails if it stops
+        // constructing-and-registering in one expression. It is literal on purpose: extracting
+        // this into a registerBankFeature helper will fail it even if the helper is called.
+        new BankHandlers(sessionFactory,
+                new QuestionService(new QuestionRepository(), new CourseRepository(),
+                        new UserRepository(), new QuestionIdAllocator(), clock))
+                .registerOn(router);
         return router;
     }
 
@@ -255,13 +280,8 @@ public class HSTSServer extends AbstractServer {
         GradeReviewService reviews =
                 new GradeReviewService(grades, attempts, executions, reads, questions, users);
 
-        // Fully qualified because two different features have an ApprovalService: E8's
-        // approves exams, E12's approves grades. The import above is E8's, and picking the
-        // wrong one here would compile against a constructor that happens not to match rather
-        // than fail on the name — so the long form stays until one of them is renamed.
         new GradingHandlers(sessionFactory,
-                new server.features.grading.ApprovalService(
-                        grades, attempts, executions, notifications, clock),
+                new GradeApprovalService(grades, attempts, executions, notifications, clock),
                 new OverrideService(reviews),
                 reviews).registerOn(router);
 
@@ -291,6 +311,11 @@ public class HSTSServer extends AbstractServer {
         Authorization.useSubjectCoordinators((teacherId, subjectCode) ->
                 Transactions.inTx(sessionFactory,
                         session -> courses.coordinates(session, teacherId, subjectCode)));
+        // E6's write gate (requireTeachesCourse) resolves through the same repository,
+        // wired beside its sibling so the two course-scoped guards read as a pair.
+        Authorization.useCourseTeachers((teacherId, courseCode) ->
+                Transactions.inTx(sessionFactory,
+                        session -> courses.teaches(session, teacherId, courseCode)));
 
         new ApprovalService(new JpaApprovalStore(sessionFactory), notifications)
                 .registerOn(router);

@@ -342,6 +342,52 @@ public final class QuestionRepository {
     }
 
     /**
+     * Where each pinned question sits on the paper, by question version (E8.4).
+     *
+     * <h2>Why this is a separate read rather than a column on the one above</h2>
+     *
+     * <p>{@link #findAnswerKeyForAuthoring} orders by {@code evq.ordinal} and cannot select it: it
+     * returns entities, and the position lives on the join row. Pairing the two in the caller was
+     * being done with a 1..N counter, which is only correct while the stored positions happen to
+     * be contiguous and start at 1. {@code V3}'s {@code ord} is {@code UNIQUE} and {@code >= 1} and
+     * nothing more, so an exam with a gap showed a coordinator "Q3" against a paper whose Q3 was a
+     * different question, on the one screen whose purpose is checking that the answers are right.
+     *
+     * <p><b>The obvious fix is forbidden, and correctly so.</b> A projection carrying the position
+     * beside the key would trip {@code CorrectnessLeakGuardTest}'s absolute rule that no projection
+     * in that package may hold an answer key. A record wrapping the <em>entity</em> beside the
+     * position would pass that scan, because it inspects component names and neither says
+     * "correct", while carrying the key transitively: the letter of the guard with none of its
+     * point. So the key stays on the entity route, where the {@code ForAuthoring} convention puts
+     * it, and the position comes back separately and keyless.
+     *
+     * <p>A {@code Map} rather than a list because the caller pairs by id, and because ordering a
+     * second list correctly is the same bug again in a different shape.
+     *
+     * <p>Consumer: E8.4's exam preview, through {@code ApprovalStore.answerKeyOf}.
+     *
+     * @param session       the current session
+     * @param examVersionId the exam version being previewed
+     * @return question version id to its 1-based position on the paper, empty when none are pinned
+     */
+    public Map<Long, Integer> findPinnedPositions(Session session, long examVersionId) {
+        List<Object[]> rows = session.createQuery("""
+                        select evq.id.questionVersionId, evq.ordinal
+                        from ExamVersionQuestion evq
+                        where evq.id.examVersionId = :examVersionId
+                        order by evq.ordinal
+                        """, Object[].class)
+                .setParameter("examVersionId", examVersionId)
+                .getResultList();
+
+        Map<Long, Integer> positions = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            positions.put((Long) row[0], ((Number) row[1]).intValue());
+        }
+        return Map.copyOf(positions);
+    }
+
+    /**
      * The newest version of a question, correct answer included.
      *
      * <p><b>Teacher-only.</b> Consumer: E6 editing, which creates version n+1 from the
