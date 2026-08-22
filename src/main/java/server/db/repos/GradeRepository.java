@@ -290,6 +290,54 @@ public final class GradeRepository {
     }
 
     /**
+     * How many grades in each of these executions a teacher has already approved (E12.5).
+     *
+     * <p>The mirror of {@link #countGradesByExecution}, and the second half of what a grading
+     * queue row says: how many papers exist, and how many have been signed off. Together they
+     * are the difference between "nothing marked yet", "half done" and "finished" — three
+     * states a queue must tell apart, and which one count cannot.
+     *
+     * <p><b>In bulk, deliberately.</b> The per-execution alternative is one read each, which is
+     * fine for a queue of four and is the shape that quietly becomes a problem the first time a
+     * teacher has a term's worth. The queue is one read per fact rather than one per row.
+     *
+     * <p>An execution with no approved grades is <b>absent from the map</b> rather than present
+     * with a zero — the same convention as its sibling, so a caller reads both the same way.
+     *
+     * <p>Carries no scores and no correctness data: it answers counts.
+     *
+     * <p>Consumer: E12.5's {@code GRADING_QUEUE_GET}.
+     *
+     * @param session      the current session
+     * @param executionIds the executions to count
+     * @return execution id → approved grades; empty when {@code executionIds} is empty
+     */
+    public Map<Long, Integer> countApprovedByExecution(Session session,
+                                                       Collection<Long> executionIds) {
+        if (executionIds == null || executionIds.isEmpty()) {
+            // Same `in ()` reason as countGradesByExecution.
+            return Map.of();
+        }
+        List<Object[]> rows = session.createQuery("""
+                        select a.executionId, count(g)
+                        from Grade g, ExamAttempt a
+                        where g.attemptId = a.id
+                          and a.executionId in (:executionIds)
+                          and g.status = :status
+                        group by a.executionId
+                        """, Object[].class)
+                .setParameterList("executionIds", executionIds)
+                .setParameter("status", GradeStatus.APPROVED)
+                .getResultList();
+
+        Map<Long, Integer> counts = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            counts.put(((Number) row[0]).longValue(), ((Number) row[1]).intValue());
+        }
+        return counts;
+    }
+
+    /**
      * Every marked student in one execution, by name (E14.1 — F9.2, T-10).
      *
      * <p>The teacher's results table, in one read: the grade, the attempt's recorded solving

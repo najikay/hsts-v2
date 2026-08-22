@@ -73,6 +73,8 @@ class GradingHandlersTest {
     private OverrideService overrides;
     @Mock
     private GradeReviewService reviews;
+    @Mock
+    private GradingQueueService queues;
 
     private GradingHandlers handlers;
     private MockSessions.Wiring wiring;
@@ -80,7 +82,7 @@ class GradingHandlersTest {
     @BeforeEach
     void setUp() {
         wiring = MockSessions.commitsOn(session);
-        handlers = new GradingHandlers(wiring.factory(), approvals, overrides, reviews);
+        handlers = new GradingHandlers(wiring.factory(), approvals, overrides, reviews, queues);
     }
 
     // ===================== Fixtures =======================================
@@ -127,16 +129,20 @@ class GradingHandlersTest {
     // ===================== Registration ===================================
 
     @Test
-    @DisplayName("registers exactly the three teacher grading verbs")
+    @DisplayName("registers every teacher grading verb, none of them open")
     void registersTheThreeVerbs() {
         MessageRouter router = new MessageRouter(new SessionManager());
 
         handlers.registerOn(router);
 
+        assertThat(router.isRegistered(Verb.GRADING_QUEUE_GET)).isTrue();
+        assertThat(router.isRegistered(Verb.GRADING_EXECUTION_GET)).isTrue();
         assertThat(router.isRegistered(Verb.GRADES_APPROVE)).isTrue();
         assertThat(router.isRegistered(Verb.GRADE_OVERRIDE)).isTrue();
         assertThat(router.isRegistered(Verb.GRADE_REVIEW_GET)).isTrue();
         // None of them is reachable without a session.
+        assertThat(router.isOpen(Verb.GRADING_QUEUE_GET)).isFalse();
+        assertThat(router.isOpen(Verb.GRADING_EXECUTION_GET)).isFalse();
         assertThat(router.isOpen(Verb.GRADES_APPROVE)).isFalse();
         assertThat(router.isOpen(Verb.GRADE_OVERRIDE)).isFalse();
         assertThat(router.isOpen(Verb.GRADE_REVIEW_GET)).isFalse();
@@ -404,13 +410,15 @@ class GradingHandlersTest {
     @DisplayName("rejects null collaborators at construction rather than at first request")
     void rejectsNullCollaborators() {
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(null, approvals, overrides, reviews));
+                new GradingHandlers(null, approvals, overrides, reviews, queues));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), null, overrides, reviews));
+                new GradingHandlers(wiring.factory(), null, overrides, reviews, queues));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), approvals, null, reviews));
+                new GradingHandlers(wiring.factory(), approvals, null, reviews, queues));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), approvals, overrides, null));
+                new GradingHandlers(wiring.factory(), approvals, overrides, null, queues));
+        assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
+                new GradingHandlers(wiring.factory(), approvals, overrides, reviews, null));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
                 handlers.registerOn(null));
     }

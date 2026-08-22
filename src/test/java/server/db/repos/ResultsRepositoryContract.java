@@ -255,6 +255,50 @@ abstract class ResultsRepositoryContract extends RepositoryTestBase {
     }
 
     @Test
+    @DisplayName("approved grades are counted separately from all grades (E12.5)")
+    void approvedGradesAreGrouped() {
+        long examId = newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן");
+        long versionId = versionIdOf(examId, 1);
+        long half = newExecution(versionId, "4821", ExecutionStatus.CLOSED, danaId, 0);
+        long untouched = newExecution(versionId, "2075", ExecutionStatus.CLOSED, danaId, 1);
+        long yaelId = newStudent("yael.azulay", "יעל אזולאי", "301548203");
+        long mayasAttempt = persistAttempt(half, mayaId);
+        long yaelsAttempt = persistAttempt(half, yaelId);
+        long untouchedAttempt = persistAttempt(untouched, mayaId);
+        runInTx(session -> {
+            // One approved, one still AUTO, in the same sitting.
+            Grade pending = new Grade(mayasAttempt, 60);
+            session.persist(pending);
+            Grade approved = new Grade(yaelsAttempt, 45);
+            approved.approve(danaId, OPENED);
+            session.persist(approved);
+            // A second sitting with a grade nobody has approved.
+            session.persist(new Grade(untouchedAttempt, 70));
+        });
+
+        Map<Long, Integer> approvedCounts = inTx(session ->
+                grades.countApprovedByExecution(session, List.of(half, untouched)));
+        Map<Long, Integer> allCounts = inTx(session ->
+                grades.countGradesByExecution(session, List.of(half, untouched)));
+
+        // The pair is what tells "half done" from "finished": two grades, one approved.
+        assertThat(approvedCounts).containsEntry(half, 1);
+        assertThat(allCounts).containsEntry(half, 2);
+        // A sitting with nothing approved is ABSENT rather than present with a zero, which is
+        // the same convention its sibling follows, so a caller reads both the same way.
+        assertThat(approvedCounts).doesNotContainKey(untouched);
+        assertThat(allCounts).containsEntry(untouched, 1);
+    }
+
+    @Test
+    @DisplayName("counting approved grades for no sittings returns nothing, not every grade")
+    void approvedGradesOfNothing() {
+        Map<Long, Integer> none =
+                inTx(session -> grades.countApprovedByExecution(session, List.of()));
+        assertThat(none).isEmpty();
+    }
+
+    @Test
     @DisplayName("counting grades for no sittings returns nothing")
     void gradesOfNothing() {
         Map<Long, Integer> none =

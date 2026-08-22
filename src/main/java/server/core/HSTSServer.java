@@ -49,6 +49,7 @@ import server.features.grading.GradeApprovalService;
 import server.features.grading.GradeReviewService;
 import server.features.grading.GradingHandlers;
 import server.features.grading.GradingOnSubmit;
+import server.features.grading.GradingQueueService;
 import server.features.grading.GradingReads;
 import server.features.grading.GradingService;
 import server.features.grading.OverrideService;
@@ -295,7 +296,8 @@ public class HSTSServer extends AbstractServer {
         new GradingHandlers(sessionFactory,
                 new GradeApprovalService(grades, attempts, executions, notifications, clock),
                 new OverrideService(reviews),
-                reviews).registerOn(router);
+                reviews,
+                new GradingQueueService(executions, grades, attempts)).registerOn(router);
 
         ResultsService studentResults = new ResultsService(grades, users);
         new ResultsHandlers(sessionFactory, studentResults,
