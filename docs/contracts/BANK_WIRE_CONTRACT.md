@@ -310,6 +310,27 @@ one-directional by design: **never accept a pair the database will reject.** Bei
 the collation is safe, because the worst case is a teacher told two confusingly similar answers
 are too similar. Being looser is the case with a stack trace in it.
 
+**The named worst case, so it is not a hypothetical: `sameAnswer("1 2 3", "123")` is `true`.** The
+`Collator` at primary strength treats a space as completely ignorable, so spacing alone never
+separates two answers, and `"red car"` against `"redcar"` goes the same way. A sequence question
+whose options are `1 2 3` and `123` is refused here even though `utf8mb4_unicode_ci` gives a space
+a primary weight and would have stored both.
+
+**The hyphen goes the same way and nothing else does.** Measured against the shipped validator on
+JDK 21 rather than assumed: `co-op`/`coop` and `e-mail`/`email` fold, while `cat.`/`cat`,
+`it's`/`its`, `3+4`/`34` and `A(1)`/`A1` do not. So the rule is **spacing and hyphens**, not
+punctuation. The ruling's own wording said punctuation; the code has never done that, and the
+teacher-facing sentence says what is true instead, because telling her punctuation will not save
+her would make her rewrite an answer that a full stop would in fact have got past.
+
+**Ruled 2026-08-22: keep it.** This is the one-directional rule working rather than an exception to
+it: we refuse something the database would have accepted, never the reverse. Two things follow, and
+both are shipped. `QuestionValidatorTest.spacingAloneNeverSeparatesTwoAnswers` pins the behaviour as
+documented rather than accidental, and `BankMessages.answersDuplicated` tells the teacher the rule
+she just hit, that answers must differ by more than spacing or hyphens. Without that sentence
+she retypes one of them with a different space and gets the same refusal, which is a wall rather
+than a rule.
+
 Exact equivalence with MySQL's UCA table is **not** claimed and is not achievable in Java; the two
 are separate implementations. The implementation is NFKD, strip combining marks, upper-then-lower
 (which folds Greek final sigma), then a `Collator` at primary strength (which folds the ß and œ
@@ -401,19 +422,30 @@ questions were.
 E6's handlers exist against it. The lead's words: "Freeze happens on the PR review once E6's
 handlers exist against it."
 
-### 7.6 One question raised after the rulings, not yet answered
+### 7.6 The seventh ruling: the topic filter becomes a lookup
 
-**The topic filter cannot be driven by any UI as specified.** `topic` is exact equality on free
-text a teacher typed at create time, and no query returns the distinct topics of a course, so
-E6.11 cannot populate a picker and a typed topic misses on any spacing or spelling difference.
-PRD F2.4 lists topic beside course and difficulty, which are both closed sets.
+**The question.** `topic` is exact equality on free text a teacher typed at create time, and no
+query returned the distinct topics of a course, so E6.11 could not populate a picker and a typed
+topic missed on any spacing or spelling difference. PRD F2.4 lists topic beside course and
+difficulty, which are both closed sets.
 
-Two ways out, and it is a product call rather than a defect: either topic becomes a lookup fed by
-a new `findDistinctTopics` query and the filter stays exact, or F2.4's topic filter becomes a text
-match like the stem search. Related: `topic` is currently compared raw while `search` is
-lowercased, so on MySQL `topic = 'Equations'` matches `'equations'` and on H2 it does not. That
-asymmetry becomes visible the moment a topic is typed rather than picked, which is the same
-decision.
+**Ruled 2026-08-22: option A, the lookup.** The lead's three reasons in his own order of strength:
+F2.4 reads as a closed set and A keeps that meaning; A is additive where B rewrites what the filter
+means to someone who already learned it; and **A dissolves the raw-versus-lowercased defect instead
+of patching it, because a picked value came out of the database**. So the comparison stays exact
+and stays raw, and the asymmetry with `search` stops being reachable rather than being fixed.
+
+There is a demo consequence the lead called out and it is worth keeping: the picker makes the
+seed's deliberately thin `Recursion` topic **visible**, which sets up the F3.3 infeasibility demo
+instead of hiding it behind a text field a teacher would never think to type into.
+
+**What it costs, and where it lands.** `QuestionRepository.findDistinctTopics(courseCode)` with a
+two-engine pair, a `BANK_TOPICS` verb carrying a `BankTopics` payload, and the picker in E6.11. The
+wire half was missing entirely when this was ruled: neither the verb nor any carrier existed, and
+`BankPage` has no field for it. The lead **opened `common/protocol` and `common/dto/bank` to Member
+A for exactly that addition** rather than making it wait on his lane, and ruled that it lands
+together with `findDistinctTopics` and its caller, which keeps the no-method-without-a-caller rule
+intact. It is therefore **not** in the read-verbs PR; §3's row for it arrives with the code.
 
 ### 7.7 The sixth ruling, which arrived after the other five: two scopes, not one
 

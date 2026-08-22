@@ -24,7 +24,9 @@ import server.features.approval.JpaApprovalStore;
 import server.features.auth.AuthService;
 import server.features.auth.UserDirectory;
 import server.features.auth.UserRecord;
+import server.features.bank.BankBrowseService;
 import server.features.bank.BankHandlers;
+import server.features.bank.BankReadHandlers;
 import server.features.bank.LegacyQuestionHandlers;
 import server.features.bank.QuestionService;
 import server.features.bot.AskRateLimiter;
@@ -226,14 +228,23 @@ public class HSTSServer extends AbstractServer {
         // MessageRouter.register throws on a duplicate verb rather than overwriting, and it
         // throws here, inside the HSTSServer(port) constructor, which no test calls and which
         // JaCoCo excludes. A collision is therefore not a red build, it is a server that will
-        // not boot, found by a human. The E6 read PR adds the second bank line to this method.
+        // not boot, found by a human. The read line below is the second bank registration this
+        // comment anticipated; its verbs are disjoint from both of the others.
         //
-        // BankWiringGuardTest reads this statement out of the source and fails if it stops
+        // BankWiringGuardTest reads these statements out of the source and fails if either stops
         // constructing-and-registering in one expression. It is literal on purpose: extracting
         // this into a registerBankFeature helper will fail it even if the helper is called.
         new BankHandlers(sessionFactory,
                 new QuestionService(new QuestionRepository(), new CourseRepository(),
                         new UserRepository(), new QuestionIdAllocator(), clock))
+                .registerOn(router);
+        // The bank's read verbs (E6.3, E6.5, E6.6), separate from the writes above because they
+        // carry a different guard over a wider role set: reachesCourse, and the principal reads
+        // where she may not write (F9.3). The split is the contract's section 3 and the reason
+        // the two handler classes exist rather than one.
+        new BankReadHandlers(sessionFactory,
+                new BankBrowseService(new QuestionRepository(), new CourseRepository(),
+                        new UserRepository()))
                 .registerOn(router);
         return router;
     }

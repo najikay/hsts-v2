@@ -530,11 +530,6 @@ class AuthorizationTest {
         private final Authorization.ReachableCourses rina =
                 caller -> caller.userId() == 3L ? Set.of("11", "12") : Set.of();
 
-        @AfterEach
-        void uninstall() {
-            Authorization.useReachableCourses(null);
-        }
-
         @Test
         @DisplayName("a coordinator reads a course she does not teach: the whole point of the split")
         void coordinatorReadsWhereSheCannotWrite() {
@@ -627,37 +622,56 @@ class AuthorizationTest {
         }
 
         @Test
-        @DisplayName("an explicit null directory refuses even while a permissive one is installed")
-        void nullDirectoryDoesNotFallBackToGlobalState() {
-            // The mutation the first version of this suite could not catch. Insert a silent
-            // `if (directory == null) directory = REACHABLE_COURSES.get();` and every other test
-            // stays green, because the field's default is UNWIRED and @AfterEach resets it there.
-            // Installing a permissive directory first is what makes the fallback visible, and the
-            // explicit-directory form's whole point is depending on nothing global.
-            Authorization.useReachableCourses(caller -> Set.of("11", "12", "21", "22"));
-
+        @DisplayName("a null directory refuses, for every role that needs one")
+        void nullDirectoryRefuses() {
+            // There is no process-wide directory to fall back to any more, which is what makes
+            // this simple: with nothing to ask, the answer is no.
             assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), "11", null))
+                    .isFalse();
+            assertThat(Authorization.reachesCourse(caller(2L, Role.TEACHER), "11", null))
                     .isFalse();
         }
 
         @Test
-        @DisplayName("UNWIRED reaches nothing, and is the default at the field")
+        @DisplayName("UNWIRED reaches nothing, which is the fail-closed default")
         void unwiredReachesNothing() {
-            Authorization.ReachableCourses previous =
-                    Authorization.useReachableCourses(caller -> Set.of("11"));
-            assertThat(previous).isSameAs(Authorization.ReachableCourses.UNWIRED);
             assertThat(Authorization.ReachableCourses.UNWIRED.forCaller(caller(3L, Role.TEACHER)))
                     .isEmpty();
+            assertThat(Authorization.reachesCourse(caller(3L, Role.TEACHER), "11",
+                    Authorization.ReachableCourses.UNWIRED)).isFalse();
         }
 
         @Test
-        @DisplayName("installing null goes back to refusing, not to the last real directory")
-        void installingNullFailsClosed() {
-            Authorization.useReachableCourses(rina);
-            Authorization.useReachableCourses(null);
+        @DisplayName("the principal reaches every course without any directory at all (F9.3)")
+        void principalReachesEveryCourse() {
+            // The finding a cold audit produced on 2026-08-22, as a test. The role branch used to
+            // live in a private method of BankBrowseService, so every OTHER caller of this guard -
+            // E7's question picker, E9's release screens - would have written the obvious union
+            // directory, believed this javadoc, and shown a starred demo account an empty screen.
+            // It now lives here, so a directory that knows nothing about roles is still correct.
+            CallerContext principal = caller(900L, Role.PRINCIPAL);
 
-            assertThat(Authorization.ReachableCourses.UNWIRED.forCaller(caller(3L, Role.COORDINATOR)))
-                    .isEmpty();
+            assertThat(Authorization.reachesCourse(principal, "11", caller -> Set.of())).isTrue();
+            assertThat(Authorization.reachesCourse(principal, "99", null)).isTrue();
+            assertThat(Authorization.reachesEveryCourse(principal)).isTrue();
+        }
+
+        @Test
+        @DisplayName("and that short-circuit reaches nobody else")
+        void onlyThePrincipalSkipsTheDirectory() {
+            // Without this the test above would pass just as well if the short-circuit were
+            // `return true` for everyone, which is the mutation that turns a guard into a
+            // formality. A permissive-for-nobody directory is what makes the difference visible.
+            Authorization.ReachableCourses nothing = caller -> Set.of();
+
+            assertThat(Authorization.reachesCourse(caller(2L, Role.TEACHER), "11", nothing))
+                    .isFalse();
+            assertThat(Authorization.reachesCourse(caller(3L, Role.COORDINATOR), "11", nothing))
+                    .isFalse();
+            assertThat(Authorization.reachesCourse(caller(11L, Role.STUDENT), "11", nothing))
+                    .isFalse();
+            assertThat(Authorization.reachesEveryCourse(caller(2L, Role.TEACHER))).isFalse();
+            assertThat(Authorization.reachesEveryCourse(null)).isFalse();
         }
     }
 

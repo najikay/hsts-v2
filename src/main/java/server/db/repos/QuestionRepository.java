@@ -408,6 +408,36 @@ public final class QuestionRepository {
                 .uniqueResultOptional();
     }
 
+    /**
+     * Every version of a question, newest first, correct answers included (E6.3 - F2.3, T-2.4).
+     *
+     * <p><b>Teacher-only, and the suffix is what says so.</b> Consumer: E6.3's
+     * {@code QUESTION_VERSIONS}, which draws the history panel a teacher opens on her own bank.
+     * The key travels because the panel shows an old version exactly as it was written, and a
+     * history that hid which answer used to be correct would be a history of the wrong thing.
+     * {@code CorrectnessLeakGuardTest} licenses that through the name, not through this javadoc.
+     *
+     * <p><b>Newest first, and the order is load-bearing rather than cosmetic.</b> The panel is a
+     * timeline read top-down, and {@code VersionHistory} carries the list in the order it is
+     * given, so ordering here is the only place it is decided. Sorting on {@code versionNo}
+     * rather than {@code createdAt}: two versions written inside the same clock millisecond
+     * would tie on the timestamp, and {@code uq_question_versions_no} makes the number unique
+     * per question by construction.
+     *
+     * @param session    the current session
+     * @param questionId the question's internal id
+     * @return every version, highest number first; empty when the question has none
+     */
+    public List<QuestionVersion> findVersionsForAuthoring(Session session, long questionId) {
+        return session.createQuery("""
+                        from QuestionVersion
+                        where questionId = :questionId
+                        order by versionNo desc
+                        """, QuestionVersion.class)
+                .setParameter("questionId", questionId)
+                .getResultList();
+    }
+
     // ===================== E6 bank browse and delete ======================
 
     /**
