@@ -172,15 +172,17 @@ class AppArgsAndRoutesTest {
         void declaresEveryRouteThisBuildHas() {
             // E5 added Login and the four role dashboards; E10/E11 added take-exam and the
             // live monitor; E16 added the study bot's four screens; E14 added results; E8 added the approval
-            // queue, the exam preview and the teacher's own approval-status list. Per-role
-            // registration and the role→home mapping are covered in SessionRoutesTest.
+            // queue, the exam preview and the teacher's own approval-status list; E13 added
+            // the student's own grades. Per-role registration and the role→home mapping are
+            // covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
                             "home.student", "home.principal", "settings", "questions",
                             "attempt", "monitor",
                             "approvals", "approvals.preview", "exams",
-                            "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results");
+                            "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
+                            "grades");
         }
 
         @Test

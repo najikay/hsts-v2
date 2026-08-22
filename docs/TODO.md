@@ -230,10 +230,10 @@ Client:
 
 - [x] E13.1 ResultsService: student's own grades only (authorization test: requesting others fails) ⚑ — *ownership is the SQL filter, not a check. `MY_GRADES_GET` is on the router behind `ResultsHandlers`, whose gate is deliberately a different shape from the teacher one: no role check at all, because the session's id **is** the query*
 - [ ] E13.2 Checked-form DTO: questions, chosen vs correct, marks, comments — only for APPROVED grades
-- [ ] E13.3 My Grades screen: exam list with scores, status, date; empty-state — *`MyGradesSession` and `MY_GRADES_GET` both done, and `StudentGradeRow` v1.1 now names its exam: every row carries `examName`/`courseCode`, read in bulk by `GradeRepository.findExamLabels`. Not ticked: the FXML screen*
+- [x] E13.3 My Grades screen: exam list with scores, status, date; empty-state — *`MyGradesView` over the existing session, on the router and on the student's rail (the E5.4 placeholder swapped for a live item, same path E14 took for Results). Every string and formatted value is in `MyGradesCopy`, tested, because the view is coverage-excluded. `StudentGradeRow` v1.1 labels each row with its own exam. **Also closes a gap:** `onGradePublished()` existed and nothing called it — `subscribeTo(ClientEventBus)` wires `PUSH_GRADE_PUBLISHED` in the session where it can be tested, so the list refreshes with no user action (NFR-18)*
 - [ ] E13.4 Checked form viewer: green/red marking, teacher comments, score breakdown
 - [ ] E13.5 Export/print view of the checked form (S-36) — printable layout
-- [ ] E13.6 GRADE_PUBLISHED push → notification + dashboard card refresh
+- [ ] E13.6 GRADE_PUBLISHED push → notification + dashboard card refresh — *the My Grades half is done: the session subscribes to `PUSH_GRADE_PUBLISHED` and re-queries rather than appending the pushed row, so the screen cannot drift from the server. The durable notification already goes through `Notifier`/`NotificationCatalog` on approval. Not ticked: the student dashboard card*
 - [ ] E13.7 Session tests + acceptance pass vs T-9 ⚑
 
 ## E14 — Teacher results & statistics [L, taken from B 2026-08-21 for the compressed endgame; B keeps E12/E13/E15]

@@ -106,8 +106,10 @@ class RoleNavTest {
             assertThat(enabledLabels(Role.COORDINATOR))
                     .containsExactly("Dashboard", "Question Bank", "Exams", "Approvals",
                             "Results", "Study Bot", "Settings");
+            // My Grades went live with E13.3; the rail item had reserved the slot as a
+            // disabled "Arrives with E13" since E5.4.
             assertThat(enabledLabels(Role.STUDENT))
-                    .containsExactly("Dashboard", "Study Bot", "Settings");
+                    .containsExactly("Dashboard", "My Grades", "Study Bot", "Settings");
             assertThat(enabledLabels(Role.PRINCIPAL)).containsExactly("Dashboard", "Settings");
         }
 

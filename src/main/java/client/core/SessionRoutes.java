@@ -14,6 +14,7 @@ import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
 import client.features.home.TeacherHomeView;
+import client.features.results.MyGradesView;
 import client.features.results.TeacherResultsView;
 import client.features.settings.SettingsView;
 import client.ui.screen.AbstractScreen;
@@ -100,6 +101,11 @@ public final class SessionRoutes {
             // for the same reason analytics is reached from the manager.
             routes.add(Routes.BOT_CHAT);
             routes.add(Routes.BOT_HISTORY);
+            // Her own grades (E13.3). Offered to students only, but the safety property is
+            // not this list: MY_GRADES_GET takes no payload and answers from the session's
+            // own id, so a caller reaching the verb by any other means still gets their own
+            // grades and nobody else's (E13.1).
+            routes.add(Routes.MY_GRADES);
         }
         return List.copyOf(routes);
     }
@@ -170,6 +176,9 @@ public final class SessionRoutes {
         }
         if (Routes.RESULTS.id().equals(route.id())) {
             return TeacherResultsView::new;
+        }
+        if (Routes.MY_GRADES.id().equals(route.id())) {
+            return MyGradesView::new;
         }
         return homeBuilder(role);
     }
