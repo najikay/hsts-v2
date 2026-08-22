@@ -635,7 +635,6 @@ class BankDtoTest {
             assertThat(restored.imageAction()).isEqualTo(ImageAction.REPLACE);
             assertThat(restored.image()).containsExactly(png);
             assertThat(restored.hasImage()).isTrue();
-            assertThat(restored.changesImage()).isTrue();
         }
 
         @Test
@@ -644,18 +643,8 @@ class BankDtoTest {
             QuestionEdit restored = roundTrip(edit(null, null));
 
             assertThat(restored.imageAction()).isEqualTo(ImageAction.KEEP);
-            assertThat(restored.changesImage()).isFalse();
             assertThat(restored.hasImage()).isFalse();
             assertThat(restored.image()).isNull();
-        }
-
-        @Test
-        @DisplayName("removing changes the image without carrying any")
-        void removeChangesTheImage() {
-            QuestionEdit remove = edit(ImageAction.REMOVE, null);
-
-            assertThat(remove.changesImage()).isTrue();
-            assertThat(remove.hasImage()).isFalse();
         }
 
         @Test

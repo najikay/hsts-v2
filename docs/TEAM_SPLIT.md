@@ -45,7 +45,28 @@ E21 hardening is everyone (each attacks the others' features); E23 stretch assig
 Compressed plan: features done Aug 23-24 · integration + lead's manual passes Aug 24-25 ·
 hardening Aug 26 · submission zip + two-machine rehearsal + DEFENSE Aug 27. Because of the lost
 day, **E14.3 (StatChart) moved to the lead** (it is shared design-system work; B keeps E14 and
-wires the finished component), and the lead also runs E11.7. **E8 and E14 were taken by the lead on Aug 21** (the offers converted to decisions when the lead lane finished early); A keeps E6, E7, E9; B keeps E12, E13, E15 and the SeedArithmeticTest port. Defense note: the cross-walkthroughs (E22.4) cover both reassigned epics so every member can still speak to them.
+wires the finished component), and the lead also runs E11.7. **THE ENDGAME PLAN (final, 2026-08-22) — this section is the authority; work from it without waiting on chat.**
+
+Lead operating mode from Aug 22: **review-only** (resource budget). Reviews land same-day on every
+PR; no further lead-built features. E9 therefore STAYS WITH MEMBER A (the absorption offer is
+withdrawn); the lead's remaining deliverables are reviews, merges, the full manual pass, the E2.16
+walkthrough, hardening coordination and the submission mechanics.
+
+| Day | Member A (Omar) | Member B (Amjad) | Lead (Naji) |
+|---|---|---|---|
+| Aug 22 | E6 read half + screens (topic ruling = A: findDistinctTopics + picker); wire line into #25 | #23 renames + merge; E13 screens (My Grades, checked form + CHECKED_FORM_GET handler, print) | reviews on arrival; push pending fix batch |
+| Aug 23 | finish E6; start E9 (release manager: windows, codes, close-early via ExecutionCloseService — the seam is documented in the E10/E11 report) | E12 screens (queue, review, override dialog, bulk); SeedArithmeticTest port + fuller bot sources | reviews; EVENING: full manual pass + team brief (triage map: C:\dev\HSTS-triage-map.pdf) |
+| Aug 24 | E7 (builder + auto-generation; F3.3 refuses when the bank is thin — the seed's Recursion topic is the demo fixture) | E15 (report engine, 3 axes, Strategy, reuse StatChart); scenario re-runs | reviews; route the manual-pass findings by the triage map |
+| Aug 25 | finish E7; legacy retirement PR (shrinks two guard allow-lists — that diff is the proof) | finish E15; acceptance scenarios for grading/results | reviews; second manual pass; E16.17 live-key checklist; E2.16 walkthrough (first E22.4) |
+| Aug 26 | HARDENING DAY (E21): everyone attacks everyone's features; E1.11 hostile-payload fuzz; full 115-case acceptance run; E21.0/E21.0b build nits | | |
+| Aug 27 | morning: submission doc final (B writes, L reviews), `-Djar.prefix=G12-1` build ON WINDOWS, zip per DEMO_DAY.md, two-machine rehearsal → **DEFENSE** | | |
+
+Standing rules that keep this self-serving: every PR gets the same-day independent review; findings
+route by the triage map (C:\dev\HSTS-triage-map.pdf, lead's machine — layer owner, not screen owner);
+anything marked PENDING there is expected absent; all decisions already ruled are in the frozen
+contracts and this file — if it is written down, do not re-ask.
+
+**E8 and E14 were taken by the lead on Aug 21** (the offers converted to decisions when the lead lane finished early); A keeps E6, E7, E9; B keeps E12, E13, E15 and the SeedArithmeticTest port. Defense note: the cross-walkthroughs (E22.4) cover both reassigned epics so every member can still speak to them.
 
 | Milestone | L | A | B |
 |---|---|---|---|

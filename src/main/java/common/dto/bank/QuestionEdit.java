@@ -85,14 +85,6 @@ public record QuestionEdit(String displayId5,
         return image != null && image.length > 0;
     }
 
-    /**
-     * @return whether the illustration is being changed at all, which is what tells the handler
-     *         to look at {@link #image()} rather than copy the previous version's blob forward
-     */
-    public boolean changesImage() {
-        return imageAction != ImageAction.KEEP;
-    }
-
     /** Compares by value, illustration bytes included; see {@link QuestionDraft#equals(Object)}. */
     @Override
     public boolean equals(Object other) {
