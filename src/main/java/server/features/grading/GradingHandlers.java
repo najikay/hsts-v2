@@ -2,6 +2,9 @@ package server.features.grading;
 
 import common.dto.auth.Role;
 import common.dto.grading.ApproveRequest;
+import common.dto.grading.ExecutionGrades;
+import common.dto.grading.ExecutionGradesRequest;
+import common.dto.grading.GradingQueue;
 import common.dto.grading.ApproveResult;
 import common.dto.grading.GradeOverrideRequest;
 import common.dto.grading.GradeReview;
@@ -84,15 +87,18 @@ public class GradingHandlers {
     private final GradeApprovalService approvals;
     private final OverrideService overrides;
     private final GradeReviewService reviews;
+    private final GradingQueueService queues;
 
     public GradingHandlers(SessionFactory sessionFactory,
                            GradeApprovalService approvals,
                            OverrideService overrides,
-                           GradeReviewService reviews) {
+                           GradeReviewService reviews,
+                           GradingQueueService queues) {
         this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
         this.approvals = Objects.requireNonNull(approvals, "approvals");
         this.overrides = Objects.requireNonNull(overrides, "overrides");
         this.reviews = Objects.requireNonNull(reviews, "reviews");
+        this.queues = Objects.requireNonNull(queues, "queues");
     }
 
     /**
@@ -102,6 +108,8 @@ public class GradingHandlers {
      */
     public void registerOn(MessageRouter router) {
         Objects.requireNonNull(router, "router");
+        router.register(Verb.GRADING_QUEUE_GET, this::queue);
+        router.register(Verb.GRADING_EXECUTION_GET, this::executionGrades);
         router.register(Verb.GRADES_APPROVE, this::approve);
         router.register(Verb.GRADE_OVERRIDE, this::override);
         router.register(Verb.GRADE_REVIEW_GET, this::review);
@@ -150,6 +158,61 @@ public class GradingHandlers {
     /** The validator for a verb whose payload needs nothing checked beyond its type. */
     private static <T> String noExtraChecks(T payload) {
         return null;
+    }
+
+    // ===================== GRADING_QUEUE_GET =============================
+
+    /**
+     * {@code GRADING_QUEUE_GET} — what is waiting to be graded (E12.5).
+     *
+     * <p>Takes no payload at all, and that is the security design rather than a convenience:
+     * whose queue this is comes from the session, so there is no field a client could put
+     * another teacher's id in (ARCHITECTURE §3).
+     *
+     * <p>An empty queue is {@code OK} with {@link GradingQueue#EMPTY}, never an error — a
+     * teacher who has signed everything off has a finished inbox, which is a state the screen
+     * renders rather than a failure.
+     *
+     * @param caller  the authenticated teacher
+     * @param request the request; its payload is ignored, and there is nothing it could say
+     * @return {@code OK} with a {@link GradingQueue}
+     */
+    Message queue(CallerContext caller, Message request) {
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
+        long teacherId = caller.userId();
+
+        GradingQueue queue = Transactions.inTx(sessionFactory,
+                session -> queues.queue(session, teacherId));
+        log.debug("Grading queue for teacher {}: {} execution(s) waiting", teacherId, queue.size());
+        return Message.ok(request, queue);
+    }
+
+    // ===================== GRADING_EXECUTION_GET =========================
+
+    /**
+     * {@code GRADING_EXECUTION_GET} — one sitting opened for grading (E12.5/E12.6).
+     *
+     * <p>Unknown execution and somebody else's are one {@code NOT_FOUND} with one sentence: a
+     * queue row is not a capability, and a teacher who guesses an id must learn nothing from
+     * the answer.
+     *
+     * @param caller  the authenticated teacher
+     * @param request the request, carrying an {@link ExecutionGradesRequest}
+     * @return {@code OK} with {@link ExecutionGrades}, or {@code NOT_FOUND}
+     */
+    Message executionGrades(CallerContext caller, Message request) {
+        return asTeacher(request, caller, ExecutionGradesRequest.class,
+                GradingHandlers::noExtraChecks, (session, teacherId, ask) -> {
+                    Optional<ExecutionGrades> found =
+                            queues.executionGrades(session, teacherId, ask.executionId());
+                    if (found.isEmpty()) {
+                        log.debug("Teacher {} asked for execution {} and does not own it (or it "
+                                + "does not exist)", teacherId, ask.executionId());
+                        return Message.error(request, ErrorCode.NOT_FOUND,
+                                GradingMessages.NO_SUCH_EXECUTION);
+                    }
+                    return Message.ok(request, found.get());
+                });
     }
 
     // ===================== GRADES_APPROVE ================================

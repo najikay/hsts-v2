@@ -36,6 +36,10 @@ public final class GradingMessages {
     public static final String SCORE_OUT_OF_RANGE =
             "A score must be between 0 and 100.";
 
+    /** Unknown execution, or one that is not this teacher's — one sentence for both. */
+    public static final String NO_SUCH_EXECUTION =
+            "That exam sitting is not available.";
+
     /** The grade has already been published to the student, so it may not be changed (C-3). */
     public static final String ALREADY_APPROVED =
             "This grade has already been approved and sent to the student, so it can no longer "
