@@ -84,6 +84,73 @@ abstract class BankRepositoryContract extends RepositoryTestBase {
     }
 
     @Test
+    @DisplayName("the version history comes back newest first, whatever order it was written in")
+    void findsEveryVersionNewestFirst() {
+        // Inserted out of order on purpose. The panel is a timeline read top-down and
+        // VersionHistory carries the list in the order the query hands it over, so this ordering
+        // is the only place it is decided. Sorted on versionNo rather than createdAt because all
+        // three rows here share one timestamp, which is the tie a clock-based sort would lose.
+        long questionId = persistQuestion((short) 5);
+        persistVersion(questionId, 2, "שנייה");
+        persistVersion(questionId, 3, "שלישית");
+        persistVersion(questionId, 1, "ראשונה");
+
+        List<Integer> numbers = inTx(session ->
+                questions.findVersionsForAuthoring(session, questionId).stream()
+                        .map(QuestionVersion::getVersionNo)
+                        .toList());
+
+        assertThat(numbers).containsExactly(3, 2, 1);
+    }
+
+    @Test
+    @DisplayName("the history is only this question's versions, never the neighbour's")
+    void versionHistoryIsScopedToOneQuestion() {
+        // question_versions is keyed by question_id and nothing else, so a WHERE that went
+        // missing would return the whole course's history in one teacher's panel and read as
+        // plausible data rather than as an error.
+        long mine = persistQuestion((short) 5);
+        long neighbour = persistQuestion((short) 6);
+        persistVersion(mine, 1, "שלי");
+        persistVersion(neighbour, 1, "של השכן");
+        persistVersion(neighbour, 2, "של השכן, מתוקן");
+
+        List<String> texts = inTx(session ->
+                questions.findVersionsForAuthoring(session, mine).stream()
+                        .map(QuestionVersion::getText)
+                        .toList());
+
+        assertThat(texts).containsExactly("שלי");
+    }
+
+    @Test
+    @DisplayName("a question with no versions has an empty history rather than an error")
+    void emptyHistoryIsEmpty() {
+        long questionId = persistQuestion((short) 7);
+
+        List<QuestionVersion> history =
+                inTx(session -> questions.findVersionsForAuthoring(session, questionId));
+
+        assertThat(history).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Hebrew version text round-trips through the history query")
+    void hebrewSurvivesTheHistory() {
+        // utf8mb4 end to end. H2 would pass this on almost any encoding, which is why the MySQL
+        // leaf of this pair is the one that means something here.
+        long questionId = persistQuestion((short) 8);
+        persistVersion(questionId, 1, "מה ערכו של x במשוואה?");
+
+        List<String> texts = inTx(session ->
+                questions.findVersionsForAuthoring(session, questionId).stream()
+                        .map(QuestionVersion::getText)
+                        .toList());
+
+        assertThat(texts).containsExactly("מה ערכו של x במשוואה?");
+    }
+
+    @Test
     @DisplayName("an exam is found by its 6-digit id")
     void findsExamByDisplayId() {
         long examId = persistExam((byte) 1);

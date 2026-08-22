@@ -66,6 +66,21 @@ public final class BankMessages {
             "That question is not in your bank. It may have been deleted, or it may belong to a "
                     + "course you do not teach, so go back to the bank list and pick another.";
 
+    /**
+     * E6.6: no such illustration, on any of the four routes that can mean.
+     *
+     * <p>Unknown question, out of the caller's reach, no such version number, and a version that
+     * simply carries no picture all answer with this one sentence. Uniform on purpose: the first
+     * two must stay indistinguishable per the contract's section 6, and once they are, splitting
+     * the other two out would be the same oracle with extra steps.
+     *
+     * <p>Separate from {@link #QUESTION_NOT_FOUND} because a teacher looking at a question she
+     * has open should not be told the question is missing when it is the picture that is.
+     */
+    public static final String IMAGE_NOT_FOUND =
+            "There is no illustration on that version of the question. Go back and open the "
+                    + "question again to see the version that is current.";
+
     // ===================== Validation, C-8 and ADR-016 ====================
 
     /** F2.1: a question must actually ask something. */
@@ -86,10 +101,25 @@ public final class BankMessages {
      *
      * <p>Names both positions, because with four boxes on screen "two answers are the same" still
      * leaves the teacher comparing them by eye.
+     *
+     * <p><b>And names the rule, per the lead's ruling of 2026-08-22.</b> Without the last sentence
+     * a teacher who typed {@code "1 2 3"} and {@code "123"} sees a refusal she can read as a bug,
+     * retypes one of them with a different space, and gets the same refusal again. The hint is
+     * what turns a wall into a rule she can satisfy.
+     *
+     * <p><b>"Spacing or hyphens", not "punctuation", and the difference was measured.</b> The
+     * ruling's own wording said punctuation, but {@code sameAnswer} does not fold it: at
+     * {@code Collator} PRIMARY strength only whitespace and the hyphen are ignorable. Verified on
+     * JDK 21 against the shipped validator - {@code "1 2 3"}/{@code "123"}, {@code "co-op"}/
+     * {@code "coop"} and {@code "e-mail"}/{@code "email"} all fold, while {@code "cat."}/
+     * {@code "cat"}, {@code "it's"}/{@code "its"} and {@code "3+4"}/{@code "34"} do not. Telling
+     * her punctuation will not save her would be false in the direction that costs her work: she
+     * would rewrite an answer semantically when a full stop would in fact have been accepted.
      */
     public static String answersDuplicated(int first, int second) {
         return "Answers " + first + " and " + second + " are the same. Two identical answers make "
-                + "the correct one ambiguous, so change one of them.";
+                + "the correct one ambiguous, so change one of them. They have to differ by more "
+                + "than spacing or hyphens.";
     }
 
     /**

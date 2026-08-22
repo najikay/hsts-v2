@@ -112,10 +112,10 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 Server:
 - [x] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
 - [ ] E6.2 Answer validity enforcement (C-8): exactly one correct answer; 4 answers pairwise distinct (trim + whitespace-collapse, case-insensitive compare) — server-side validation with precise error messages ⚑
-- [ ] E6.3 Edit → new immutable version; version history query; latest-version resolution *(2026-08-22: the edit and latest-version halves are built and wired; the box stays open because the version history query does not exist yet — `QuestionRepository` can fetch one version or the latest, not the list. It arrives with `QUESTION_VERSIONS` in the read PR.)*
+- [x] E6.3 Edit → new immutable version; version history query; latest-version resolution
 - [x] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
-- [ ] E6.5 Browse/filter query (course/topic/difficulty/text) + pagination
-- [ ] E6.6 Image handling: size/type limits (≤2MB, png/jpg), stored in question_versions, `QUESTION_IMAGE_GET` lazy fetch verb *(reworded 2026-08-21: the lead ruled for the noun-first convention over this line's original `GET_QUESTION_IMAGE`; the verb exists in Verb.java under that name)*
+- [x] E6.5 Browse/filter query (course/topic/difficulty/text) + pagination *(2026-08-22: the topic filter is exact equality per §7.6's option A ruling; the picker that makes it usable is E6.11 and lands with `BANK_TOPICS`)*
+- [x] E6.6 Image handling: size/type limits (≤2MB, png/jpg), stored in question_versions, `QUESTION_IMAGE_GET` lazy fetch verb *(reworded 2026-08-21: the lead ruled for the noun-first convention over this line's original `GET_QUESTION_IMAGE`; the verb exists in Verb.java under that name)*
 - [x] E6.7 QuestionValidator (Strategy, shared by add/edit) unit-tested to 100%
 - [ ] E6.8 Verbs + DTOs (list item, detail, editor payload, version history) — frozen with [L]
 Client:

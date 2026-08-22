@@ -138,6 +138,7 @@ public class QuestionService {
     private final UserRepository users;
     private final QuestionIdAllocator ids;
     private final Clock clock;
+    private final BankDetails details;
 
     public QuestionService(QuestionRepository questions,
                            CourseRepository courses,
@@ -149,6 +150,10 @@ public class QuestionService {
         this.users = Objects.requireNonNull(users, "users");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
+        // Built here rather than injected: the constructor signature is what HSTSServer's
+        // assembly line and every existing test call, and a shared mapper over two repositories
+        // this class already holds is not a seam worth widening that for.
+        this.details = new BankDetails(this.courses, this.users);
     }
 
     // ===================== QUESTION_CREATE (E6.1) =========================
@@ -376,25 +381,11 @@ public class QuestionService {
      */
     private QuestionDetail detailOf(Session session, Question question, QuestionVersion version,
                                     int latestVersionNo) {
-        String courseName = courses.findName(session, question.getCourseCode())
-                .orElse(question.getCourseCode());
-        String authorName = users.findById(session, version.getCreatedBy())
-                .map(user -> user.getFullName())
-                .orElse("");
-        return new QuestionDetail(
-                question.getDisplayId(),
-                question.getCourseCode(),
-                courseName,
-                version.getVersionNo(),
-                latestVersionNo,
-                version.getText(),
-                List.of(version.getA1(), version.getA2(), version.getA3(), version.getA4()),
-                version.getCorrectAnswer(),
-                version.getTopic(),
-                wireDifficulty(version.getDifficulty()),
-                version.hasImage(),
-                authorName,
-                version.getCreatedAt());
+        // Delegated rather than done here since the read half landed: QUESTION_GET answers with
+        // the same QuestionDetail this method builds, and two mappers agreeing today is exactly
+        // the "two expressions of one rule, checked against each other nowhere" the contract's
+        // section 5 keeps closing. See BankDetails.
+        return details.detail(session, question, version, latestVersionNo);
     }
 
     /**
@@ -415,17 +406,6 @@ public class QuestionService {
     static server.db.entities.Difficulty entityDifficulty(
             common.dto.bank.Difficulty difficulty) {
         return difficulty == null ? null : server.db.entities.Difficulty.valueOf(difficulty.name());
-    }
-
-    /**
-     * Stored difficulty to wire difficulty.
-     *
-     * @param difficulty the stored value
-     * @return the wire value
-     */
-    private static common.dto.bank.Difficulty wireDifficulty(
-            server.db.entities.Difficulty difficulty) {
-        return common.dto.bank.Difficulty.valueOf(difficulty.name());
     }
 
     /**

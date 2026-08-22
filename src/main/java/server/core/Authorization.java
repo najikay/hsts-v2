@@ -123,10 +123,17 @@ public final class Authorization {
      * Binds the directory the two-argument {@link #requireTeachesCourse} reads.
      *
      * <p>Called once from {@code HSTSServer}'s assembly, with a lambda over
-     * {@code CourseRepository.teaches}, beside {@link #useSubjectCoordinators} and
-     * {@link #useReachableCourses}. <b>Wired 2026-08-21</b>; this javadoc said "not called yet"
-     * until it was, because claiming a wiring that does not exist is the defect P-6 is about and
-     * the claim had to expire when the fact did.
+     * {@code CourseRepository.teaches}, beside {@link #useSubjectCoordinators}. <b>Wired
+     * 2026-08-21</b>; this javadoc said "not called yet" until it was, because claiming a wiring
+     * that does not exist is the defect P-6 is about and the claim had to expire when the fact
+     * did.
+     *
+     * <p><b>The read scope has no equivalent installer and that is deliberate.</b>
+     * {@link #reachesCourse} takes its directory per call, so there is nothing process-wide to
+     * bind. One existed until 2026-08-22 and was deleted: it was written to, never read, and its
+     * javadoc said {@code reachesCourse} read it. Two tests appeared to cover it and asserted only
+     * that a constant lambda returns an empty set, so both would have passed with the field and
+     * the setter deleted, which is what a cold audit pointed out and what happened next.
      *
      * <p>Services should still call the three-argument overload, which depends on nothing global
      * and can be handed a double without touching process state.
@@ -275,8 +282,17 @@ public final class Authorization {
      * from the database, which is a second source of truth for a value the session already carries
      * authoritatively, and {@link #requireCoordinatorOf} argues at length against exactly that.
      *
-     * <p>So the implementation switches on {@link CallerContext#role()}: teacher and coordinator
-     * get the union, principal gets everything.
+     * <p><b>So the role branch is here, in {@link #reachesCourse}, and not in each
+     * implementation.</b> An implementation answers the membership question only: which courses
+     * this caller's rows put in front of her. {@code reachesCourse} short-circuits the principal
+     * before the directory is consulted, through {@link #reachesEveryCourse}.
+     *
+     * <p>An earlier version of this sentence said the implementation switched on the role, and the
+     * only implementation did not. That is not a documentation slip, it is the shape of the E7 and
+     * E9 bug it would have caused: an author writing the obvious union directory, reading this
+     * javadoc, believing the principal was handled, and shipping her an empty question picker that
+     * fails to a blank screen rather than to an error. The rule now lives in one place and every
+     * directory inherits it by not being asked.
      *
      * <p><b>Not {@code CourseRepository.findForUser}.</b> That method merges taught courses with
      * <em>enrolled</em> ones, so under it a student's reachable set would be her enrolments,
@@ -288,37 +304,35 @@ public final class Authorization {
     public interface ReachableCourses {
 
         /**
-         * @param caller the session's caller, whose role is part of the answer
-         * @return the course codes she may read, never null
+         * @param caller the session's caller, whose rows are the answer; the role branch is
+         *               {@link #reachesCourse}'s and not this method's
+         * @return the course codes her rows put in front of her, never null
          */
         Set<String> forCaller(CallerContext caller);
 
-        /** Fail closed: nothing is reachable until a real one is wired. */
+        /** Fail closed: an absent directory reaches nothing. */
         ReachableCourses UNWIRED = caller -> Set.of();
     }
 
-    private static final AtomicReference<ReachableCourses> REACHABLE_COURSES =
-            new AtomicReference<>(ReachableCourses.UNWIRED);
-
     /**
-     * Binds the directory {@link #reachesCourse} reads.
+     * Whether this caller reaches every course in the school, by role (F9.3).
      *
-     * <p><b>Not wired yet.</b> It belongs beside its two siblings in {@code HSTSServer}'s assembly,
-     * which is the lead's file; the line is handed to him with this PR. Until it lands, both forms
-     * refuse everything, which is correct for an unwired guard and is pinned by a test. Services
-     * should call the three-argument overloads regardless, which depend on nothing global.
+     * <p><b>The single expression of the principal's read scope.</b> {@link #reachesCourse} calls
+     * it before consulting any directory, and the bank browse calls it to choose between an
+     * unrestricted query and a scoped one. One predicate rather than two, because the contract's
+     * §2 table is only worth anything while the browse and the guard cannot disagree about who
+     * sees what, and two copies of "is she the principal" is exactly how they start to.
      *
-     * <p>Stated as "not yet" rather than "wired", because the sibling sixty lines above carries the
-     * rule this sentence would otherwise break: a claim about a wiring that does not exist is the
-     * defect P-6 is about. The rule was written there this afternoon and broken here within the
-     * hour, which is the more useful half of the lesson.
+     * <p>By role rather than by membership, deliberately: she holds no {@code course_teachers} and
+     * no {@code coordinators} rows, so every table-derived answer for her is "nothing".
      *
-     * @param directory the lookup, or {@code null} to go back to refusing
-     * @return whatever was installed before
+     * @param caller the session's caller
+     * @return whether her scope is the whole school
      */
-    public static ReachableCourses useReachableCourses(ReachableCourses directory) {
-        return REACHABLE_COURSES.getAndSet(
-                directory == null ? ReachableCourses.UNWIRED : directory);
+    public static boolean reachesEveryCourse(CallerContext caller) {
+        return caller != null
+                && caller.isAuthenticated()
+                && caller.role().orElse(null) == Role.PRINCIPAL;
     }
 
     /**
@@ -335,6 +349,13 @@ public final class Authorization {
      * {@code CHAR(2)} under a PAD SPACE collation, so a code carrying a Unicode space matches the
      * row in SQL while failing Java equality against this set. {@code trim()} cuts only characters
      * at or below U+0020 and would leave that gap open.
+     *
+     * <p><b>How far strip actually gets, measured rather than assumed.</b> It removes what
+     * {@code Character.isWhitespace()} accepts, which excludes the non-breaking spaces U+00A0,
+     * U+2007 and U+202F. A code padded with one of those reaches {@code contains} unchanged and
+     * is refused, because it equals no member of the set. That is the safe direction and it is
+     * the reason this is documented rather than widened: the hazard above is a value the database
+     * accepts and this guard does not <em>admit</em>, never one it wrongly admits.
      *
      * <p><b>This answers the membership question and not the role question.</b> It returns true for
      * a student whose reachable set contains the course, because deciding who may call a verb is
@@ -353,7 +374,15 @@ public final class Authorization {
     public static boolean reachesCourse(CallerContext caller, String courseCode,
                                         ReachableCourses directory) {
         if (caller == null || !caller.isAuthenticated()
-                || courseCode == null || courseCode.isBlank() || directory == null) {
+                || courseCode == null || courseCode.isBlank()) {
+            return false;
+        }
+        // The principal before the directory, never through it: she has no rows in either table
+        // the union is built from, so any membership answer for her is "nothing" (F9.3).
+        if (reachesEveryCourse(caller)) {
+            return true;
+        }
+        if (directory == null) {
             return false;
         }
         Set<String> reachable = directory.forCaller(caller);

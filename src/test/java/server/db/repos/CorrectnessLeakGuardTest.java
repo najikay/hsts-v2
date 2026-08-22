@@ -206,10 +206,22 @@ class CorrectnessLeakGuardTest {
         // (licence corrected 2026-08-21, Member A's rule-5 pass: the earlier wording was
         // narrower than the code). ApprovalServiceTest proves every refusal, including the
         // plain teacher who neither authored nor coordinates.
+        // findVersionsForAuthoring joined the list in E6's read half (2026-08-22). Its audience
+        // is the same one findVersionForAuthoring and findLatestVersionForAuthoring already
+        // serve, and it is not a new one: E6.12's version history panel, opened by a teacher on
+        // her own bank behind QUESTION_VERSIONS, whose handler answers NOT_FOUND for any course
+        // outside her reachable set. The key travels because the panel shows an old version
+        // exactly as it was written, and a history that hid which answer used to be correct
+        // would be a history of the wrong thing.
+        //
+        // Worth stating because it is the widest of the three: the other two return one version,
+        // this returns all of them. That changes the volume of a leak, not its possibility, and
+        // the guard on it is the same single one.
         assertThat(keyBearingReads)
                 .as("every key-bearing read is accounted for, and each names its audience")
                 .containsExactlyInAnyOrder(
                         "findVersionForAuthoring",
+                        "findVersionsForAuthoring",
                         "findLatestVersionForAuthoring",
                         "findAnswerKeyForAuthoring",
                         "findVersionsForGrading");
