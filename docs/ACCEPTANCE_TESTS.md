@@ -41,7 +41,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 
 | # | Scenario | Cases | Status |
 |---|---|---|---|
-| 1 | Login (כניסה למערכת) | 4 | ⚠ 2 partial, 2 blocked — B-1 |
+| 1 | Login (כניסה למערכת) | 4 | ✅ 3 passed, 1 partial (throttle not driven) — B-1 fixed |
 | 2 | Question bank editing (עריכת מאגר שאלות) | 8 | ⬜ |
 | 3 | Exam building (בניית מבחנים) | 9 | ⬜ |
 | 4 | Exam approval (אישור מבחן) | 6 | ⬜ |
@@ -49,7 +49,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 | 6 | Exam execution (ביצוע מבחן) | 10 | ⬜ |
 | 7 | Extending exam duration (הארכת משך הבחינה) | 4 | ⬜ |
 | 8 | Exam checking (בדיקת מבחנים) | 7 | ⬜ |
-| 9 | Viewing an exam grade (צפיה בציון הבחינה) | 5 | ⬜ |
+| 9 | Viewing an exam grade (צפיה בציון הבחינה) | 5 | ⚠ 2 passed, 1 passed below the screen, 2 not walked |
 | 10 | Viewing exam results (צפיה בתוצאות בחינות) | 5 | ⬜ |
 | 11 | Viewing data — principal (צפיה בנתונים) | 4 | ⬜ |
 | 12 | Viewing reports (צפיה בדו"חות) | 5 | ⬜ |
@@ -202,7 +202,7 @@ fully graded) · **7390** (closed, awaiting grading) · **5164** (scheduled toda
 | 9.2 | Open the Algebra Midterm result. | The checked form: her answers, wrong ones marked, the correct answers shown, points per question, teacher comments (T-9.2, S-24). | **Passed.** Opened from the My Grades row. Header carried exam, course and the effective score; the attempt line read as submitted with the recorded solving time. Seven questions, each labelled Correct or Wrong with "Your answer" and "Correct answer" tags on the options and points per question. **The "Reviewed by your teacher" marker was correctly absent** — Maya’s 71 was never overridden, and the marker keys on the two scores *differing* rather than on a final score being present, which every approved row has. Styling is deliberately plain: the marking colours are left for the lead’s screen review, and every outcome carries a word as well as a class so the form does not depend on colour alone. | ✅ | |
 | 9.3 | Use the export / print action on that result. | She obtains a copy of the checked exam (S-36). | | ⬜ | |
 | 9.4 | Try to reach another student's grade — via the UI, and by replaying the request with a different student id. | Refused **server-side**, not just hidden in the UI. A student can never see another's grade (T-9 note, F9.1). | | ⬜ | |
-| 9.5 | As `omer.katz` (the seeded TIMED_OUT attempt), open his result. | Grade is present and the attempt is shown as timed out, with his actual solving time in minutes (S-19). | | ⬜ | |
+| 9.5 | As `omer.katz` (the seeded TIMED_OUT attempt), open his result. | Grade is present and the attempt is shown as timed out, with his actual solving time in minutes (S-19). | **Passed below the screen; screen render outstanding.** Verified by running the production assembler (`CheckedFormService` → `GradeReviewService` → `CheckedFormCopy`) against the reseeded database: header `45 / 100`, attempt line **"Time ran out — submitted automatically · 75 minutes"**, seven questions, of which **four render as "Not answered" and three as Correct**. All three checked-form gates pass for this grade (execution `CLOSED`, grade `APPROVED`, ownership by query), and the attempt carries 3 answer rows on a 7-question paper — the four absent rows of §9.1.1, present in the database as absences rather than zeros. **Method noted deliberately:** this exercises every layer below JavaFX and does not exercise rendering, so the pixels are confirmed at the manual pass rather than here. An earlier report of "no Not answered questions" was a false alarm — most likely a different student’s form still open, since `maya.levi` answered everything and correctly shows none. | ⚠ | |
 
 ---
 
