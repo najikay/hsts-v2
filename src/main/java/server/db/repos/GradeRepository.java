@@ -41,10 +41,17 @@ public final class GradeRepository {
      * away in {@code exam_executions}, and the caller resolves it through
      * {@code ExecutionContext} rather than duplicating that join into every grading query.
      *
-     * <p>So the rule for this one is a caller rule: <b>a handler that calls this must resolve
-     * ownership before answering with anything it returns.</b> Student paths must not use it
-     * at all — they have {@link #findForStudent}, which makes ownership the query, and which
-     * exists precisely so E13.1's guarantee cannot be forgotten.
+     * <p><b>The danger is in the name, which is the point.</b> {@code Unscoped} works the way
+     * {@code ForAuthoring} and {@code ForGrading} do: it makes every call site confess at
+     * review time, so nobody has to notice the absence of a filter. A read whose only warning
+     * lives in its Javadoc is a read whose warning is invisible at the one moment it matters —
+     * when somebody is scanning a diff for the word that should have made them stop.
+     *
+     * <p>The sentence stays as well, because the name says <em>that</em> it is dangerous and
+     * only prose can say what to do about it: <b>a handler calling this must resolve ownership
+     * before answering with anything it returns.</b> Student paths must not use it at all —
+     * they have {@link #findForStudent}, which makes ownership the query, and which exists
+     * precisely so E13.1's guarantee cannot be forgotten.
      *
      * <p>Consumers: E12.3's {@code GRADE_OVERRIDE} and E12.6's {@code GRADE_REVIEW_GET},
      * through {@code server.features.grading.GradeReviewService#contextOf}, which reads the
@@ -54,7 +61,7 @@ public final class GradeRepository {
      * @param gradeId the grade
      * @return the grade, or empty when no such row exists
      */
-    public Optional<Grade> findById(Session session, long gradeId) {
+    public Optional<Grade> findByIdUnscoped(Session session, long gradeId) {
         return Optional.ofNullable(session.get(Grade.class, gradeId));
     }
 

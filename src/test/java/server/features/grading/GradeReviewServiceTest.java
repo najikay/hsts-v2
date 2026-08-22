@@ -122,7 +122,7 @@ class GradeReviewServiceTest {
 
     /** The three-question paper, with the student's two right answers and one blank. */
     private void givenThePaper() {
-        lenient().when(grades.findById(session, GRADE_ID)).thenReturn(Optional.of(grade(75)));
+        lenient().when(grades.findByIdUnscoped(session, GRADE_ID)).thenReturn(Optional.of(grade(75)));
         lenient().when(attempts.findRecordById(session, ATTEMPT_ID))
                 .thenReturn(Optional.of(attemptRecord()));
         lenient().when(executions.findContext(session, EXECUTION_ID))
@@ -175,7 +175,7 @@ class GradeReviewServiceTest {
         @Test
         @DisplayName("is empty for a grade that does not exist")
         void emptyForUnknownGrade() {
-            when(grades.findById(session, 404)).thenReturn(Optional.empty());
+            when(grades.findByIdUnscoped(session, 404)).thenReturn(Optional.empty());
 
             assertThat(service.contextOf(session, 404)).isEmpty();
         }
@@ -183,7 +183,7 @@ class GradeReviewServiceTest {
         @Test
         @DisplayName("is empty when the attempt behind the grade has gone")
         void emptyWhenAttemptMissing() {
-            when(grades.findById(session, GRADE_ID)).thenReturn(Optional.of(grade(75)));
+            when(grades.findByIdUnscoped(session, GRADE_ID)).thenReturn(Optional.of(grade(75)));
             when(attempts.findRecordById(session, ATTEMPT_ID)).thenReturn(Optional.empty());
 
             assertThat(service.contextOf(session, GRADE_ID)).isEmpty();
@@ -192,7 +192,7 @@ class GradeReviewServiceTest {
         @Test
         @DisplayName("is empty when the execution has gone — same answer as a missing grade")
         void emptyWhenExecutionMissing() {
-            when(grades.findById(session, GRADE_ID)).thenReturn(Optional.of(grade(75)));
+            when(grades.findByIdUnscoped(session, GRADE_ID)).thenReturn(Optional.of(grade(75)));
             when(attempts.findRecordById(session, ATTEMPT_ID))
                     .thenReturn(Optional.of(attemptRecord()));
             when(executions.findContext(session, EXECUTION_ID)).thenReturn(Optional.empty());
@@ -299,7 +299,7 @@ class GradeReviewServiceTest {
         @Test
         @DisplayName("is empty when the exam version pinned nothing, rather than throwing")
         void emptyPaper() {
-            when(grades.findById(session, GRADE_ID)).thenReturn(Optional.of(grade(0)));
+            when(grades.findByIdUnscoped(session, GRADE_ID)).thenReturn(Optional.of(grade(0)));
             when(attempts.findRecordById(session, ATTEMPT_ID))
                     .thenReturn(Optional.of(attemptRecord()));
             when(executions.findContext(session, EXECUTION_ID))
@@ -356,7 +356,7 @@ class GradeReviewServiceTest {
             // A teacher moved 75 up to 80. The ticks still add to 75; the header must say 80.
             Grade overridden = grade(75);
             overridden.override(80, "credit for a badly worded question");
-            lenient().when(grades.findById(session, GRADE_ID)).thenReturn(Optional.of(overridden));
+            lenient().when(grades.findByIdUnscoped(session, GRADE_ID)).thenReturn(Optional.of(overridden));
 
             GradeReview review =
                     service.review(session, service.contextOf(session, GRADE_ID).orElseThrow());
@@ -374,7 +374,7 @@ class GradeReviewServiceTest {
             givenThePaper();
             Grade overridden = grade(75);
             overridden.override(80, "credit for a badly worded question");
-            lenient().when(grades.findById(session, GRADE_ID)).thenReturn(Optional.of(overridden));
+            lenient().when(grades.findByIdUnscoped(session, GRADE_ID)).thenReturn(Optional.of(overridden));
 
             GradeReview review =
                     service.review(session, service.contextOf(session, GRADE_ID).orElseThrow());

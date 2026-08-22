@@ -68,7 +68,7 @@ class GradingHandlersTest {
     @Mock
     private Session session;
     @Mock
-    private ApprovalService approvals;
+    private GradeApprovalService approvals;
     @Mock
     private OverrideService overrides;
     @Mock

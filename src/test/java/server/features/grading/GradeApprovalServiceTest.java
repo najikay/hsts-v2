@@ -39,7 +39,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * {@link ApprovalService} — E12.2 / E12.7.
+ * {@link GradeApprovalService} — E12.2 / E12.7.
  *
  * <p>Four rules carry the weight here, and each is one a plausible implementation gets wrong:
  * approval is idempotent <i>without re-stamping the audit fields</i>, partial success is a normal
@@ -73,11 +73,11 @@ class ApprovalServiceTest {
     @Mock
     private Notifier notifier;
 
-    private ApprovalService service;
+    private GradeApprovalService service;
 
     @BeforeEach
     void setUp() {
-        service = new ApprovalService(grades, attempts, executions, notifier,
+        service = new GradeApprovalService(grades, attempts, executions, notifier,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

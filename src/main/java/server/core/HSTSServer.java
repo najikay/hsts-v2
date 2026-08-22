@@ -43,6 +43,7 @@ import server.features.exam.ExtendService;
 import server.features.exam.JpaExamStore;
 import server.features.exam.MonitorService;
 import server.features.exam.TimerService;
+import server.features.grading.GradeApprovalService;
 import server.features.grading.GradeReviewService;
 import server.features.grading.GradingHandlers;
 import server.features.grading.GradingOnSubmit;
@@ -279,13 +280,8 @@ public class HSTSServer extends AbstractServer {
         GradeReviewService reviews =
                 new GradeReviewService(grades, attempts, executions, reads, questions, users);
 
-        // Fully qualified because two different features have an ApprovalService: E8's
-        // approves exams, E12's approves grades. The import above is E8's, and picking the
-        // wrong one here would compile against a constructor that happens not to match rather
-        // than fail on the name — so the long form stays until one of them is renamed.
         new GradingHandlers(sessionFactory,
-                new server.features.grading.ApprovalService(
-                        grades, attempts, executions, notifications, clock),
+                new GradeApprovalService(grades, attempts, executions, notifications, clock),
                 new OverrideService(reviews),
                 reviews).registerOn(router);
 
