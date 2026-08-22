@@ -110,10 +110,10 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 *Note (2026-08-20): the bank list shows a live "Editing · <name>" chip per row, fed by E18.8's LOCK_WATCH + LOCKS_SNAPSHOT (server side provided by the lead). Rows update live on LOCK_CHANGED pushes; opening a locked question still gets the full E18 banner + read-only mode.*
 
 Server:
-- [ ] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
+- [x] E6.1 QuestionService: create (validate: text, 4 non-empty answers, ≥1 correct, course taught, topic, difficulty), allocate display id
 - [ ] E6.2 Answer validity enforcement (C-8): exactly one correct answer; 4 answers pairwise distinct (trim + whitespace-collapse, case-insensitive compare) — server-side validation with precise error messages ⚑
-- [ ] E6.3 Edit → new immutable version; version history query; latest-version resolution
-- [ ] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
+- [ ] E6.3 Edit → new immutable version; version history query; latest-version resolution *(2026-08-22: the edit and latest-version halves are built and wired; the box stays open because the version history query does not exist yet — `QuestionRepository` can fetch one version or the latest, not the list. It arrives with `QUESTION_VERSIONS` in the read PR.)*
+- [x] E6.4 Delete: block when referenced by any exam version (return referencing exam names); soft-delete otherwise
 - [ ] E6.5 Browse/filter query (course/topic/difficulty/text) + pagination
 - [ ] E6.6 Image handling: size/type limits (≤2MB, png/jpg), stored in question_versions, `QUESTION_IMAGE_GET` lazy fetch verb *(reworded 2026-08-21: the lead ruled for the noun-first convention over this line's original `GET_QUESTION_IMAGE`; the verb exists in Verb.java under that name)*
 - [x] E6.7 QuestionValidator (Strategy, shared by add/edit) unit-tested to 100%
