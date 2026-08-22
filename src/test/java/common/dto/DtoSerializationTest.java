@@ -1,5 +1,6 @@
 package common.dto;
 
+import common.dto.exam.AttemptState;
 import common.dto.auth.CourseRef;
 import common.dto.auth.LoginRequest;
 import common.dto.auth.LoginResult;
@@ -337,7 +338,7 @@ class DtoSerializationTest {
                 GradeState.APPROVED, null, null, APPROVED_AT);
 
         CheckedFormRequest request = roundTrip(new CheckedFormRequest(9L));
-        CheckedForm form = roundTrip(new CheckedForm(approved, "Midterm", "11", List.of(answer)));
+        CheckedForm form = roundTrip(new CheckedForm(approved, "Midterm", "11", AttemptState.TIMED_OUT, 75, List.of(answer)));
         MyGrades mine = roundTrip(new MyGrades(List.of(approved)));
 
         assertThat(request.gradeId()).isEqualTo(9L);

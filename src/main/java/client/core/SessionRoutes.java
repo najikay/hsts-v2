@@ -14,6 +14,7 @@ import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
 import client.features.home.TeacherHomeView;
+import client.features.results.CheckedFormView;
 import client.features.results.MyGradesView;
 import client.features.results.TeacherResultsView;
 import client.features.settings.SettingsView;
@@ -106,6 +107,10 @@ public final class SessionRoutes {
             // own id, so a caller reaching the verb by any other means still gets their own
             // grades and nobody else's (E13.1).
             routes.add(Routes.MY_GRADES);
+            // The checked form is registered with My Grades rather than on its own rail
+            // item: it is a view of one paper, reached from a row, and the server
+            // re-checks all three of its conditions on every request.
+            routes.add(Routes.CHECKED_FORM);
         }
         return List.copyOf(routes);
     }
@@ -179,6 +184,9 @@ public final class SessionRoutes {
         }
         if (Routes.MY_GRADES.id().equals(route.id())) {
             return MyGradesView::new;
+        }
+        if (Routes.CHECKED_FORM.id().equals(route.id())) {
+            return CheckedFormView::new;
         }
         return homeBuilder(role);
     }

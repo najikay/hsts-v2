@@ -55,6 +55,7 @@ import server.features.locks.EditLockService;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
 import server.features.notify.NotificationStore;
+import server.features.results.CheckedFormService;
 import server.features.results.JpaTeacherResultsStore;
 import server.features.results.ResultsHandlers;
 import server.features.results.ResultsService;
@@ -285,7 +286,10 @@ public class HSTSServer extends AbstractServer {
                 new OverrideService(reviews),
                 reviews).registerOn(router);
 
-        new ResultsHandlers(sessionFactory, new ResultsService(grades, users)).registerOn(router);
+        ResultsService studentResults = new ResultsService(grades, users);
+        new ResultsHandlers(sessionFactory, studentResults,
+                new CheckedFormService(studentResults, reviews, attempts, executions, users))
+                .registerOn(router);
 
         return new GradingOnSubmit(sessionFactory, new GradingService(reads, grades), attempts);
     }

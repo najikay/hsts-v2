@@ -1,9 +1,14 @@
 package server.features.results;
 
+import common.dto.ErrorPayload;
 import common.dto.auth.Role;
+import common.dto.exam.AttemptState;
+import common.dto.grading.CheckedForm;
+import common.dto.grading.CheckedFormRequest;
 import common.dto.grading.GradeState;
 import common.dto.grading.MyGrades;
 import common.dto.grading.StudentGradeRow;
+import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
 import org.hibernate.Session;
@@ -20,9 +25,11 @@ import server.core.SessionManager;
 import server.db.MockSessions;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +52,8 @@ class ResultsHandlersTest {
     private Session session;
     @Mock
     private ResultsService results;
+    @Mock
+    private CheckedFormService checkedForms;
 
     private ResultsHandlers handlers;
     private MockSessions.Wiring wiring;
@@ -52,7 +61,7 @@ class ResultsHandlersTest {
     @BeforeEach
     void setUp() {
         wiring = MockSessions.commitsOn(session);
-        handlers = new ResultsHandlers(wiring.factory(), results);
+        handlers = new ResultsHandlers(wiring.factory(), results, checkedForms);
     }
 
     private static Message request() {
@@ -65,14 +74,16 @@ class ResultsHandlersTest {
     }
 
     @Test
-    @DisplayName("registers MY_GRADES_GET, behind a session")
+    @DisplayName("registers both student verbs, behind a session")
     void registers() {
         MessageRouter router = new MessageRouter(new SessionManager());
 
         handlers.registerOn(router);
 
         assertThat(router.isRegistered(Verb.MY_GRADES_GET)).isTrue();
+        assertThat(router.isRegistered(Verb.CHECKED_FORM_GET)).isTrue();
         assertThat(router.isOpen(Verb.MY_GRADES_GET)).isFalse();
+        assertThat(router.isOpen(Verb.CHECKED_FORM_GET)).isFalse();
     }
 
     @Test
@@ -155,13 +166,88 @@ class ResultsHandlersTest {
         assertThat(wiring.tx().committed()).isTrue();
     }
 
+    // ===================== CHECKED_FORM_GET ==============================
+
+    @Test
+    @DisplayName("serves the caller's own marked paper, asking with the session's id")
+    void servesTheCheckedForm() {
+        CheckedForm form = new CheckedForm(
+                new StudentGradeRow(900, STUDENT_ID, "מאיה לוי", 71, 71, 71,
+                        GradeState.APPROVED, null, null, null, "Algebra midterm", "11"),
+                "Algebra midterm", "11", AttemptState.SUBMITTED, 70, List.of());
+        when(checkedForms.checkedForm(session, STUDENT_ID, 900)).thenReturn(Optional.of(form));
+
+        Message response = handlers.checkedForm(
+                CallerContext.authenticated(null, STUDENT_ID, Role.STUDENT),
+                Message.request(Verb.CHECKED_FORM_GET, new CheckedFormRequest(900)));
+
+        assertThat(response.isOk()).isTrue();
+        assertThat(response.getPayload()).isSameAs(form);
+        // The id came from the session, and the payload carries no student id to have used.
+        verify(checkedForms).checkedForm(session, STUDENT_ID, 900);
+    }
+
+    @Test
+    @DisplayName("every refusal is one NOT_FOUND with one sentence, whatever the reason was")
+    void refusalsAreOneAnswer() {
+        when(checkedForms.checkedForm(session, STUDENT_ID, 900)).thenReturn(Optional.empty());
+
+        Message response = handlers.checkedForm(
+                CallerContext.authenticated(null, STUDENT_ID, Role.STUDENT),
+                Message.request(Verb.CHECKED_FORM_GET, new CheckedFormRequest(900)));
+
+        // The service returns an Optional rather than a reason precisely so this handler has
+        // nothing to accidentally report. Four causes, one answer.
+        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+        assertThat(((ErrorPayload) response.getPayload()).message())
+                .isEqualTo(ResultsHandlers.ResultsCopyMessages.NO_SUCH_FORM);
+    }
+
+    @Test
+    @DisplayName("refuses an anonymous caller before reading anything")
+    void checkedFormRefusesAnonymous() {
+        assertThatExceptionOfType(AuthorizationException.class).isThrownBy(() ->
+                handlers.checkedForm(CallerContext.anonymous(null),
+                        Message.request(Verb.CHECKED_FORM_GET, new CheckedFormRequest(900))));
+    }
+
+    @Test
+    @DisplayName("a malformed payload is VALIDATION, and reads nothing")
+    void checkedFormMalformedPayload() {
+        Message response = handlers.checkedForm(
+                CallerContext.authenticated(null, STUDENT_ID, Role.STUDENT),
+                Message.request(Verb.CHECKED_FORM_GET, "nonsense"));
+
+        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+        verify(checkedForms, org.mockito.Mockito.never())
+                .checkedForm(any(), org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    @DisplayName("any authenticated caller may open their own paper — no role gate here either")
+    void checkedFormHasNoRoleGate() {
+        when(checkedForms.checkedForm(any(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong())).thenReturn(Optional.empty());
+
+        for (Role role : Role.values()) {
+            Message response = handlers.checkedForm(
+                    CallerContext.authenticated(null, STUDENT_ID, role),
+                    Message.request(Verb.CHECKED_FORM_GET, new CheckedFormRequest(900)));
+            // NOT_FOUND rather than FORBIDDEN: the gate is whose grade it is, not who she is.
+            assertThat(response.getErrorCode()).as("%s", role).isEqualTo(ErrorCode.NOT_FOUND);
+        }
+    }
+
     @Test
     @DisplayName("rejects null collaborators at construction")
     void rejectsNulls() {
         assertThatExceptionOfType(NullPointerException.class)
-                .isThrownBy(() -> new ResultsHandlers(null, results));
+                .isThrownBy(() -> new ResultsHandlers(null, results, checkedForms));
         assertThatExceptionOfType(NullPointerException.class)
-                .isThrownBy(() -> new ResultsHandlers(wiring.factory(), null));
+                .isThrownBy(() -> new ResultsHandlers(wiring.factory(), null, checkedForms));
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(() -> new ResultsHandlers(wiring.factory(), results, null));
         assertThatExceptionOfType(NullPointerException.class)
                 .isThrownBy(() -> handlers.registerOn(null));
     }

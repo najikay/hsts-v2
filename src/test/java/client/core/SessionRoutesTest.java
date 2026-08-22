@@ -121,7 +121,8 @@ class SessionRoutesTest {
         void student() {
             assertThat(SessionRoutes.routesFor(Role.STUDENT))
                     .containsExactly(Routes.HOME_STUDENT, Routes.SETTINGS, Routes.TAKE_EXAM,
-                            Routes.BOT_CHAT, Routes.BOT_HISTORY, Routes.MY_GRADES)
+                            Routes.BOT_CHAT, Routes.BOT_HISTORY, Routes.MY_GRADES,
+                            Routes.CHECKED_FORM)
                     .as("the teacher's half of the bot is not offered to her either (E16)")
                     .doesNotContain(Routes.QUESTIONS, Routes.MONITOR,
                             Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,

@@ -144,6 +144,15 @@ public final class Routes {
      */
     public static final Route MY_GRADES = Route.shell("grades", "My grades", "My Grades");
 
+    /**
+     * One of the student's own papers, marked (E13.4 ⚑, F9.1, S-36).
+     *
+     * <p>Not on any rail, for the same reason {@link #EXAM_PREVIEW} is not: it is a view of one
+     * paper, and a rail item that needed a grade chosen first would be a dead end. Reached from
+     * a My Grades row, which carries the grade id as a nav parameter.
+     */
+    public static final Route CHECKED_FORM = Route.shell("grades.checked", "Checked exam");
+
     private Routes() {
     }
 
@@ -171,7 +180,8 @@ public final class Routes {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
-                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES);
+                BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
+                CHECKED_FORM);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */
