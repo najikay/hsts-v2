@@ -53,7 +53,7 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 - [x] E2.13 Repo test suites: H2 fast suite + MySQL suite (test base class = Template Method wipe/reseed)
 - [x] E2.14 ID allocators: 5-digit question display id (course2+serial3), 6-digit exam id (subject2+course2+serial2), concurrency-safe, with tests (S-8, S-10)
 - [x] E2.15 Seed migration/loader per PRD §5 (idempotent, one command + server-console button) — every seed section loads; `SeedMain` is the one command; `SeedDocument` + `SeedLoadedDbTest` verify the loaded database against the document on both engines. The E19.6 console button calls `SeedLoader.standard(factory).load(RESEED, confirmation)` and is [L]'s, per the ServerMain scope split
-- [ ] E2.16 Seed review pass with [L]: every demo screen looks "well-filled" ⚑ — after PR 3b merges, doubles as the first E22.4 cross-walkthrough
+- [ ] E2.16 Seed review pass with [L]: every demo screen looks "well-filled" ⚑ — after PR 3b merges, doubles as the first E22.4 cross-walkthrough *The bot half is done: §10.1's eight sources went from 546 words to 1,781 (200–250 each) on 2026-08-22, so the Java bot answers from ~480 words of course material rather than ~160. The document and `BotSection.java` are generated from one text, and `SeedLoadedDbTest.botSourcesMatch` fails on a one-word divergence — verified by mutation.*
 - [x] E2.17 BCrypt hashing for all seeded users; document demo credentials in DEMO_ACCOUNTS.md
 
 ## E3 — Server core [L]
