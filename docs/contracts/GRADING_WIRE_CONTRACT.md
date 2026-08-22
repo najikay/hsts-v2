@@ -78,10 +78,20 @@ open dashboard; the notification is the durable record.
   enforced STRUCTURALLY: both student containers (`MyGrades` and `CheckedForm`) strip it in their
   compact constructors, so no handler can leak it by assembly.
 - `CheckedFormRequest(long gradeId)`
-- `CheckedForm(StudentGradeRow grade, String examName, String courseCode, List<AnswerReviewRow>
-  answers)` — the E13.2 checked form; reaches a student only under the three conditions above.
-  Reuses `AnswerReviewRow` deliberately: one row shape for both audiences, gated by verb, so
-  there is exactly one place correctness is serialized and two guards in front of it.
+- `CheckedForm(StudentGradeRow grade, String examName, String courseCode,
+  AttemptState attemptStatus, Integer actualMinutes, List<AnswerReviewRow> answers)` — the
+  E13.2 checked form; reaches a student only under the three conditions above. Reuses
+  `AnswerReviewRow` deliberately: one row shape for both audiences, gated by verb, so there is
+  exactly one place correctness is serialized and two guards in front of it.
+  **Checked-form amendment (2026-08-22, additive, lead's ruling):** `attemptStatus` and
+  `actualMinutes` added. Acceptance case 9.5 asks that a student whose attempt was
+  force-submitted sees that it timed out, with the solving time recorded (S-19), and neither
+  fact was anywhere on this wire — the case could not pass as written. They land here rather
+  than on `StudentGradeRow` because **the case says "open his result and *see*", and the seeing
+  happens on the marked paper**: solving time belongs beside the answers it measures, and the
+  list wire pays nothing for data most of its rows would never show. `StudentGradeRow` stays at
+  v1.1. A "timed out" glyph on the *list* is priced separately as polish; the case as written is
+  satisfied on the paper.
 
 ## Error codes
 

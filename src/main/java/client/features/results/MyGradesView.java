@@ -1,6 +1,7 @@
 package client.features.results;
 
 import client.core.NavParams;
+import client.core.Routes;
 import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
@@ -104,6 +105,19 @@ public final class MyGradesView extends AbstractScreen {
                 // Unheaded, like the teacher table's: the marker is about the row, not a
                 // property of it, and a column heading would imply every row has a value.
                 .column("", MyGradesCopy::adjustedMarker);
+
+        // Double-click opens the marked paper (E13.4). The server re-checks all three of its
+        // conditions, so a row that opens nothing is a refusal and not a broken link: the
+        // checked form says so itself rather than this table trying to predict it.
+        table.table().setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                StudentGradeRow row = table.table().getSelectionModel().getSelectedItem();
+                if (row != null) {
+                    navigator().navigate(Routes.CHECKED_FORM.id(),
+                            NavParams.of("gradeId", row.gradeId()));
+                }
+            }
+        });
 
         table.emptyState(new EmptyState(Icons.RESULTS, "No grades yet", MyGradesSession.NOTHING_YET));
         table.getStyleClass().add("my-grades-table");
