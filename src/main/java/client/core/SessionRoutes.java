@@ -14,6 +14,7 @@ import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
 import client.features.home.TeacherHomeView;
+import client.features.grading.GradingQueueView;
 import client.features.results.CheckedFormView;
 import client.features.results.MyGradesView;
 import client.features.results.TeacherResultsView;
@@ -80,6 +81,10 @@ public final class SessionRoutes {
             // scopes every answer to the exams the caller wrote (S-35), so this list
             // decides what is offered and never what is permitted.
             routes.add(Routes.RESULTS);
+            // Grading (E12). Offered to both teaching roles; the server scopes the queue to the
+            // exams the caller wrote and re-checks ownership on every sitting she opens, so this
+            // list decides what is offered and never what is permitted.
+            routes.add(Routes.GRADING);
             // E8.6's teacher side. Every teacher gets it, coordinators included: it is the
             // surface F4.2's "the reason is visible on the exam" needs, and it is where the
             // rejection notification's reference points.
@@ -187,6 +192,9 @@ public final class SessionRoutes {
         }
         if (Routes.CHECKED_FORM.id().equals(route.id())) {
             return CheckedFormView::new;
+        }
+        if (Routes.GRADING.id().equals(route.id())) {
+            return GradingQueueView::new;
         }
         return homeBuilder(role);
     }
