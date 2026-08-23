@@ -123,7 +123,7 @@ public final class GradingQueueView extends AbstractScreen {
 
         approveSelected.getStyleClass().add("primary");
         approveSelected.setOnAction(event -> confirmAndApprove());
-        selectAll.setOnAction(event -> session.selectAllApprovable());
+        selectAll.setOnAction(event -> selectAllApprovableRows());
         override.setOnAction(event -> openOverrideDialog());
 
         HBox actions = new HBox(8, selectAll, Buttons.spacer(), override, approveSelected);
@@ -170,7 +170,13 @@ public final class GradingQueueView extends AbstractScreen {
     private void render() {
         selecting = true;
         try {
-            queueList.getItems().setAll(session.queue());
+            // Only replace the lists when their contents actually changed. setAll() is a
+            // clear-then-add, and JavaFX drops the selection when a backing list is cleared —
+            // so refilling on every render silently wiped what the user had just clicked. A
+            // render happens on every session change, including the one her click caused.
+            if (!queueList.getItems().equals(session.queue())) {
+                queueList.getItems().setAll(session.queue());
+            }
             boolean empty = session.queue().isEmpty();
             show(queueEmpty, empty);
             show(queueList, !empty);
@@ -179,21 +185,16 @@ public final class GradingQueueView extends AbstractScreen {
                 examName.setText(GradingCopy.examLabel(open.summary()));
                 progress.setText(GradingCopy.progress(open.summary()) + "  ·  closed "
                         + GradingCopy.closedAt(open.summary(), ZONE));
-                table.setItems(session.rows());
+                if (!table.table().getItems().equals(session.rows())) {
+                    table.setItems(session.rows());
+                }
             }, () -> {
                 examName.setText("");
                 progress.setText("");
-                table.setItems(java.util.List.of());
+                if (!table.table().getItems().isEmpty()) {
+                    table.setItems(java.util.List.of());
+                }
             });
-
-            // The session is this screen's source of truth for what is selected, so the table's
-            // visible selection is driven FROM it rather than merely reported TO it. Without
-            // this, "Select all" ticked rows in the session and highlighted nothing — the
-            // button enabled and the confirmation counted correctly, but a teacher could not
-            // see what she was about to approve, on the one action that cannot be undone.
-            // Found by walking acceptance case 8.5; invisible to the session tests, because
-            // there the selection genuinely is correct.
-            syncTableSelection();
 
             String message = session.error().orElse("");
             error.setText(message);
@@ -214,33 +215,23 @@ public final class GradingQueueView extends AbstractScreen {
     }
 
     /**
-     * Makes the table show what the session has selected.
+     * Ticks every row that can still be approved, <b>in the table</b>.
      *
-     * <p>Runs inside {@link #render()}'s {@code selecting} guard, so setting the selection here
-     * cannot re-enter the listener that reads it back — the same guard the queue rail uses, and
-     * the reason a two-way binding on this screen does not loop.
+     * <p>The table is this screen's source of truth for selection, and the listener mirrors it
+     * into the session. Driving it the other way — session first, table second — is what broke
+     * row selection outright: the listener clears the session before rebuilding it, that clear
+     * triggers a render, and a render that touched the table's selection wiped it out from
+     * under the listener's own iteration. One direction, no loop, nothing to guard.
      *
-     * <p>Does nothing when the two already agree. That is not an optimisation: reselecting the
-     * same rows on every render would fight a teacher mid-click, because a render happens on
-     * every session change including the one her click caused.
+     * <p>Approved rows are skipped rather than ticked and refused. Re-approving is harmless by
+     * contract, but counting rows already done would make the confirmation overstate what is
+     * about to happen.
      */
-    private void syncTableSelection() {
+    private void selectAllApprovableRows() {
         var model = table.table().getSelectionModel();
-        List<Long> wanted = session.selection();
-
-        List<Long> showing = new ArrayList<>();
-        for (StudentGradeRow row : model.getSelectedItems()) {
-            if (row != null) {
-                showing.add(row.gradeId());
-            }
-        }
-        if (showing.size() == wanted.size() && showing.containsAll(wanted)) {
-            return;
-        }
-
         model.clearSelection();
         for (StudentGradeRow row : session.rows()) {
-            if (wanted.contains(row.gradeId())) {
+            if (GradingCopy.canOverride(row)) {
                 model.select(row);
             }
         }
