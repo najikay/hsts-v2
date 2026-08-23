@@ -187,6 +187,21 @@ public final class Routes {
      */
     public static final Route REPORTS = Route.shell("reports", "Reports", "Reports");
 
+    /**
+     * The principal's data browser (E15.2, F9.3, T-11).
+     *
+     * <p>The id is {@code "data"} because that is what {@code RoleNav.ROUTE_DATA} has spelled
+     * since E5.4, when the rail reserved this slot with a disabled item. Enabling the feature is
+     * a swap there and a line here — no rename anywhere — which is the same path E14 took for
+     * {@link #RESULTS} and E15.4 for {@link #REPORTS}.
+     *
+     * <p>Read-only, and registered for the principal alone. Three tabs over three read verbs:
+     * the bank's own {@code BANK_LIST}, which has admitted her since E6, plus
+     * {@code DATA_EXAMS_GET} and {@code DATA_RESULTS_GET}. A teacher reaching it would still be
+     * refused by the server, which is where the role gate actually is (F9.3).
+     */
+    public static final Route DATA = Route.shell("data", "Data", "Data");
+
     private Routes() {
     }
 
@@ -215,7 +230,7 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING, REPORTS);
+                CHECKED_FORM, GRADING, REPORTS, DATA);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

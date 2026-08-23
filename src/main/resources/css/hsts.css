@@ -1594,3 +1594,41 @@
     -fx-effect: null;
 }
 .reports-print .hsts-stat-chart { -fx-padding: 8px 0 0 0; }
+
+/* =========================================================================
+   Principal data browser · E15.2 (F9.3, T-11)
+   -------------------------------------------------------------------------
+   The browse screen reuses .hsts-segmented for its tab picker and the stock
+   DataTable for all three tables, so what is left here is spacing, the
+   read-only note, and hiding the two tables that are not the selected tab
+   (which the view does by unmanaging them, not by a rule below).
+
+   The read-only note is the one thing on this screen that is styled rather
+   than merely laid out: T-11.3 has a reviewer looking for a control that
+   writes, and a sentence saying there is none has to be findable.
+
+   Every value below is a literal except the colours, per the token rule the
+   E4.24 smoke test enforces.
+   ========================================================================= */
+
+.principal-data .data-picker-row { -fx-padding: 4px 0 0 0; }
+
+/* An inset note rather than a banner: it is a standing fact about the screen,
+   not something that just happened, and a banner would read as an alert the
+   first time and as furniture every time after. */
+.principal-data .data-read-only-note {
+    -fx-padding: 6px 10px;
+    -fx-background-color: -hsts-bg;
+    -fx-background-radius: 6px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+}
+
+.principal-data .data-count { -fx-padding: 2px 0 0 2px; }
+.principal-data .data-scope-hint { -fx-padding: 0 0 2px 2px; }
+.principal-data .data-truncated { -fx-padding: 2px 0 0 2px; }
+
+/* The three tables share one slot, so each must fill it when it is the one
+   showing rather than shrinking to its rows. */
+.principal-data .data-body { -fx-spacing: 0; }

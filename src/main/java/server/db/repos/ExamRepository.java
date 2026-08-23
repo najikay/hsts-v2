@@ -7,6 +7,7 @@ import server.db.entities.ExamVersionQuestion;
 import server.db.entities.ExamVersionStatus;
 import server.db.projections.AuthoredExam;
 import server.db.projections.ExamVersionContext;
+import server.db.projections.SchoolExam;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -411,6 +412,54 @@ public final class ExamRepository {
                         order by e.displayId
                         """, AuthoredExam.class)
                 .setParameter("authorId", authorId)
+                .getResultList();
+    }
+
+    // ===================== The principal's data browser (E15.2) ============
+    // One read, added under TEAM_SPLIT rule 5 - repositories grow with their callers.
+
+    /**
+     * Every exam in the school, with its course, its author and its latest version
+     * (E15.2 - F9.3).
+     *
+     * <p>The school-wide sibling of {@link #findAuthoredSummaries}, and deliberately a second
+     * query rather than that one with a nullable author parameter. A scoped read whose scope can
+     * be switched off with a {@code null} is one call site away from serving a teacher the whole
+     * school, and S-35's guarantee is that {@code findAuthoredSummaries} has an author in its
+     * {@code WHERE} clause and cannot be asked not to.
+     *
+     * <p><b>Unscoped by caller, and that is the requirement rather than an oversight.</b> The
+     * only caller is the principal's data browser, whose scope is the school (spec 7.3.1, F9.3).
+     * A caller-id parameter here would be a scope this read does not have, and the role gate on
+     * {@code DATA_EXAMS_GET} is where "may you ask this at all" is decided.
+     *
+     * <p>The name and the date come from the exam's <b>highest version number</b>, through the
+     * same correlated subquery {@link #findAuthoredSummaries} uses and for the same reason: an
+     * exam always has at least one version, so no exam is left out, while a join to "the approved
+     * version" would silently drop every exam still in draft or rejected - which are exactly the
+     * ones a catalogue should still list.
+     *
+     * <p>Carries no questions, no answer key, no instructions and no approval status.
+     *
+     * <p>Consumer: E15.2's {@code DATA_EXAMS_GET}.
+     *
+     * @param session the current session
+     * @return every exam ordered by display id; empty only before any exam is written
+     */
+    public List<SchoolExam> findAllSummaries(Session session) {
+        return session.createQuery("""
+                        select new server.db.projections.SchoolExam(
+                            e.displayId, e.courseCode, c.name, v.name, u.fullName,
+                            v.versionNo, v.createdAt)
+                        from Exam e, Course c, ExamVersion v, User u
+                        where c.code = e.courseCode
+                          and u.id = e.authorId
+                          and v.examId = e.id
+                          and v.versionNo = (
+                              select max(later.versionNo) from ExamVersion later
+                              where later.examId = e.id)
+                        order by e.displayId
+                        """, SchoolExam.class)
                 .getResultList();
     }
 }

@@ -1,9 +1,13 @@
 package server.features.reports;
 
 import common.dto.auth.Role;
+import common.dto.report.DataExamRow;
+import common.dto.report.DataExams;
+import common.dto.report.DataResults;
 import common.dto.report.ReportDimension;
 import common.dto.report.ReportRequest;
 import common.dto.report.ReportResult;
+import common.dto.report.ReportRow;
 import common.dto.report.ReportSubject;
 import common.dto.report.ReportSubjects;
 import common.dto.report.ReportSubjectsRequest;
@@ -25,6 +29,7 @@ import server.db.entities.ExecutionStatus;
 import server.db.projections.CourseSummary;
 import server.db.projections.ExecutionReport;
 import server.db.projections.PersonRef;
+import server.db.projections.SchoolExam;
 import server.db.repos.ExecutionRepository;
 
 import java.time.Instant;
@@ -279,6 +284,139 @@ abstract class JpaReportStoreContract extends RepositoryTestBase {
         assertThat(nullCode).isEmpty();
     }
 
+    // ===================== The data browser's two reads (E15.2) ==========
+
+    @Test
+    @DisplayName("the catalogue lists every exam in the school, whoever wrote it")
+    void catalogueIsSchoolWide() {
+        newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן אמצע: אלגברה");
+        newExam(COURSE_CALCULUS, (byte) 1, rinaId, "בוחן: גבולות");
+
+        List<SchoolExam> catalogue = store().inTx(ReportData::allExams);
+
+        assertThat(catalogue).extracting(SchoolExam::examName)
+                .as("both authors' exams, which is the difference between this read and "
+                        + "findAuthoredSummaries")
+                .containsExactly("מבחן אמצע: אלגברה", "בוחן: גבולות");
+        assertThat(catalogue).extracting(SchoolExam::authorName)
+                .containsExactly("דנה כהן", "רינה ברק");
+        assertThat(catalogue).extracting(SchoolExam::courseName)
+                .containsExactly("אלגברה", "חשבון דיפרנציאלי");
+        assertThat(catalogue).allSatisfy(exam ->
+                assertThat(exam.versions()).isEqualTo(1));
+    }
+
+    @Test
+    @DisplayName("an exam's row is its LATEST version's name, number and date")
+    void catalogueTakesTheLatestVersion() {
+        long examId = newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן אמצע");
+        newVersion(examId, 2, "מבחן אמצע: אלגברה", SUMMER);
+
+        SchoolExam exam = store().inTx(ReportData::allExams).get(0);
+
+        assertThat(exam.examName())
+                .as("this row answers 'which exams exist', which is a question about the exam, "
+                        + "so a renamed exam is found under the name it now has")
+                .isEqualTo("מבחן אמצע: אלגברה");
+        assertThat(exam.versions()).isEqualTo(2);
+        assertThat(exam.lastVersionAt()).isEqualTo(SUMMER);
+    }
+
+    @Test
+    @DisplayName("an exam that was never released is in the catalogue all the same")
+    void catalogueKeepsUnreleasedExams() {
+        newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן שלא שוחרר");
+
+        assertThat(store().inTx(ReportData::allExams))
+                .as("a catalogue that only listed exams somebody had sat would be a list of "
+                        + "sittings under another name")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("⚑ the browse lists every closed sitting, newest first, cancelled ones excluded")
+    void browseIsSchoolWideAndNewestFirst() {
+        long algebra = newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן אמצע: אלגברה");
+        long calculus = newExam(COURSE_CALCULUS, (byte) 1, rinaId, "בוחן: גבולות");
+        long earlier = newExecution(algebra, "4821", ExecutionStatus.CLOSED, danaId, SPRING);
+        long later = newExecution(calculus, "5150", ExecutionStatus.CLOSED, rinaId, SUMMER);
+        freeze(earlier, SEEDED);
+        freeze(later, QUIET);
+        // The contrived row again: cancelled, and carrying statistics anyway (H15.2 ⚑).
+        long cancelled = newExecution(algebra, "9999", ExecutionStatus.CANCELLED, danaId, SUMMER);
+        freeze(cancelled, SEEDED);
+        // Closed and awaiting grading: nothing to show, so not a result yet.
+        newExecution(algebra, "7390", ExecutionStatus.CLOSED, danaId, SUMMER);
+
+        List<ExecutionReport> browse = store().inTx(ReportData::allClosedSittings);
+
+        assertThat(browse).extracting(ExecutionReport::code)
+                .as("both teachers' sittings, newest first, and neither the cancelled one nor "
+                        + "the unmarked one")
+                .containsExactly("5150", "4821");
+        assertThat(browse.get(1).stats().stdDev())
+                .as("read out of the JSON column, not recomputed from anything beside it")
+                .isEqualTo(17.5);
+    }
+
+    @Test
+    @DisplayName("⚑ the browse and the reports agree about which sittings exist")
+    void browseAndReportsShareOneDefinition() {
+        long examId = newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן אמצע");
+        long good = newExecution(examId, "4821", ExecutionStatus.CLOSED, danaId, SPRING);
+        freeze(good, SEEDED);
+        long cancelled = newExecution(examId, "9999", ExecutionStatus.CANCELLED, danaId, SUMMER);
+        freeze(cancelled, SEEDED);
+
+        store().inTx(data -> {
+            assertThat(data.allClosedSittings()).extracting(ExecutionReport::executionId)
+                    .as("one REPORTABLE clause, so a sitting cannot be on one screen and off "
+                            + "the other")
+                    .containsExactlyElementsOf(
+                            data.executionsByAuthor(danaId).stream()
+                                    .map(ExecutionReport::executionId).toList());
+            return null;
+        });
+    }
+
+    @Test
+    @DisplayName("⚑ end to end on a real database: the principal browses exams and results")
+    void dataBrowseOverRealData() {
+        long examId = newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן אמצע: אלגברה");
+        long executionId = newExecution(examId, "4821", ExecutionStatus.CLOSED, rinaId, SUMMER);
+        newAttempt(executionId, mayaId);
+        freeze(executionId, SEEDED);
+
+        DataBrowseService service = new DataBrowseService(store());
+        CallerContext principal = CallerContext.authenticated(SOCKET, principalId, Role.PRINCIPAL);
+
+        DataExams exams = (DataExams) service.exams(principal,
+                Message.request(Verb.DATA_EXAMS_GET, null)).getPayload();
+        DataResults results = (DataResults) service.results(principal,
+                Message.request(Verb.DATA_RESULTS_GET, null)).getPayload();
+
+        assertThat(exams.exams()).extracting(DataExamRow::examName)
+                .containsExactly("מבחן אמצע: אלגברה");
+        assertThat(exams.exams().get(0).authorName()).isEqualTo("דנה כהן");
+        assertThat(results.sittings()).extracting(ReportRow::code4).containsExactly("4821");
+        assertThat(results.sittings().get(0).participants()).isEqualTo(1);
+        assertThat(results.sittings().get(0).statistics().standardDeviation()).isEqualTo(17.5);
+    }
+
+    @Test
+    @DisplayName("⚑ end to end: a teacher browsing the school is refused by the role gate")
+    void nonPrincipalCannotBrowseOverRealData() {
+        DataBrowseService service = new DataBrowseService(store());
+        CallerContext dana = CallerContext.authenticated(SOCKET, danaId, Role.TEACHER);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        service.exams(dana, Message.request(Verb.DATA_EXAMS_GET, null)))
+                .isInstanceOf(server.core.AuthorizationException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        service.results(dana, Message.request(Verb.DATA_RESULTS_GET, null)))
+                .isInstanceOf(server.core.AuthorizationException.class);
+    }
+
     // ===================== Typed shorthands ==============================
     //
     // The store's inTx is generic, and AssertJ has an assertThat overload for almost every
@@ -394,6 +532,12 @@ abstract class JpaReportStoreContract extends RepositoryTestBase {
                         "select v.id from ExamVersion v where v.examId = :examId", Long.class)
                 .setParameter("examId", examId)
                 .getSingleResult();
+    }
+
+    /** A second (or later) version of an exam, for the "latest version wins" rule. */
+    private void newVersion(long examId, int versionNo, String name, Instant createdAt) {
+        runInTx(session -> session.persist(new ExamVersion(examId, versionNo, name, 60, null,
+                null, ExamVersionStatus.APPROVED, createdAt)));
     }
 
     private void newAttempt(long executionId, long studentId) {

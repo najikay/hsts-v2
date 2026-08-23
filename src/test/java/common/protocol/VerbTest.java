@@ -179,6 +179,27 @@ class VerbTest {
     }
 
     @Test
+    @DisplayName("the two data-browser verbs exist, spelled as amendment A1 spells them")
+    void dataBrowseVerbsExist() {
+        // docs/contracts/REPORTS_WIRE_CONTRACT.md amendment A1 (E15.2). Same reasoning again:
+        // valueOf is the spelling assertion, because the name is what travels between two
+        // separately-shipped JARs.
+        assertThat(Verb.values()).contains(Verb.DATA_EXAMS_GET, Verb.DATA_RESULTS_GET);
+        assertThat(Verb.valueOf("DATA_EXAMS_GET")).isEqualTo(Verb.DATA_EXAMS_GET);
+        assertThat(Verb.valueOf("DATA_RESULTS_GET")).isEqualTo(Verb.DATA_RESULTS_GET);
+        // Neither is a push: an exam catalogue and a list of closed sittings are things a
+        // principal reads, and nothing about either moves while it is on screen.
+        assertThat(Verb.DATA_EXAMS_GET.isPush()).isFalse();
+        assertThat(Verb.DATA_RESULTS_GET.isPush()).isFalse();
+        // ⚑ The bank tab of that screen adds NO verb. She has been on BANK_LIST's role list
+        // since E6 (F9.3, BANK contract section 3), and a DATA_QUESTIONS_GET beside it would be
+        // a second answer to a question that already has one.
+        assertThat(java.util.Arrays.stream(Verb.values()).map(Enum::name))
+                .as("the data browser's third tab reuses BANK_LIST rather than duplicating it")
+                .doesNotContain("DATA_QUESTIONS_GET", "DATA_BANK_GET");
+    }
+
+    @Test
     @DisplayName("exactly seven push verbs are defined (adding one is a deliberate act)")
     void pushVerbCount() {
         assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(7);

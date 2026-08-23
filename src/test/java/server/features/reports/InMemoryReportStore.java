@@ -5,6 +5,7 @@ import server.db.entities.ExecutionStatus;
 import server.db.projections.CourseSummary;
 import server.db.projections.ExecutionReport;
 import server.db.projections.PersonRef;
+import server.db.projections.SchoolExam;
 import server.db.repos.ExecutionRepository;
 
 import java.time.Instant;
@@ -54,6 +55,7 @@ final class InMemoryReportStore implements ReportStore, ReportData {
     private final Map<Long, Sitting> sittings = new LinkedHashMap<>();
     private final Map<Long, Set<Long>> satBy = new LinkedHashMap<>();
     private final Map<Long, Integer> participants = new LinkedHashMap<>();
+    private final Map<String, SchoolExam> examCatalogue = new LinkedHashMap<>();
 
     // ===================== Building the world ============================
 
@@ -89,6 +91,24 @@ final class InMemoryReportStore implements ReportStore, ReportData {
         }
         sittings.put(executionId, new Sitting(executionId, code, openAt, examName, courseCode,
                 course.name(), authorId, status, stats));
+        return this;
+    }
+
+    /**
+     * Adds one exam to the school's catalogue (E15.2).
+     *
+     * <p>Deliberately independent of {@link #sitting}: the browse's Exams tab lists exams that
+     * have never been released as readily as ones that have, and a fixture that derived the
+     * catalogue from the sittings could not show that.
+     */
+    InMemoryReportStore exam(String displayId, String courseCode, String examName,
+                             String authorName, int versions, Instant lastVersionAt) {
+        CourseSummary course = courses.get(courseCode);
+        if (course == null) {
+            throw new IllegalStateException("Seed the course before its exams: " + courseCode);
+        }
+        examCatalogue.put(displayId, new SchoolExam(displayId, courseCode, course.name(),
+                examName, authorName, versions, lastVersionAt));
         return this;
     }
 
@@ -191,6 +211,29 @@ final class InMemoryReportStore implements ReportStore, ReportData {
             }
         }
         return counts;
+    }
+
+    // ===================== The data browser (E15.2) ======================
+
+    @Override
+    public List<SchoolExam> allExams() {
+        List<SchoolExam> sorted = new ArrayList<>(examCatalogue.values());
+        sorted.sort(Comparator.comparing(SchoolExam::displayId));
+        return List.copyOf(sorted);
+    }
+
+    /**
+     * Every reportable sitting, <b>newest first</b>.
+     *
+     * <p>Faithful about the ordering as well as about the filter, because the browse's order is
+     * the opposite of the reports' and a fixture that returned them oldest first would let a
+     * query with the wrong {@code order by} pass its own test.
+     */
+    @Override
+    public List<ExecutionReport> allClosedSittings() {
+        List<ExecutionReport> rows = new ArrayList<>(reportable(sitting -> true));
+        java.util.Collections.reverse(rows);
+        return List.copyOf(rows);
     }
 
     // ===================== The reportable filter =========================

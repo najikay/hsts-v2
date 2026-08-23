@@ -124,7 +124,10 @@ public final class RoleNav {
     private static List<NavItem> principal() {
         return List.of(
                 dashboard(Role.PRINCIPAL),
-                soon(ROUTE_DATA, "Data", Icons.BANK, 15),
+                // Live since E15.2. The rail item has reserved this slot since E5.4 and its id
+                // is still ROUTE_DATA: Routes.DATA was declared with the same string, so
+                // enabling the feature was a swap here rather than a rename anywhere.
+                NavItem.of(Routes.DATA.id(), "Data", Icons.BANK),
                 // Live since E15.4. The rail item has reserved this slot since E5.4 and its id
                 // is still ROUTE_REPORTS: Routes.REPORTS was declared with the same string, so
                 // enabling the feature was a swap here rather than a rename anywhere.
