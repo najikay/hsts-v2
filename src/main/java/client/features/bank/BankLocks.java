@@ -29,6 +29,9 @@ import common.dto.lock.EntityRef;
  */
 final class BankLocks {
 
+    /** Course(2) + serial(3), per S-8. The width is what keeps the key space disjoint. */
+    private static final int DISPLAY_ID_LENGTH = 5;
+
     private BankLocks() {
     }
 
@@ -50,6 +53,15 @@ final class BankLocks {
             throw new IllegalArgumentException("a question needs a display id to be locked");
         }
         String trimmed = displayId5.strip();
+        // The length check the javadoc above promises, and which was missing: without it
+        // of("7") returned question#7 and the @throws clause was false. It also closes the
+        // collision by construction, because a five-digit key space starts at 10000 and the
+        // legacy screen's primary keys do not reach it.
+        if (trimmed.length() != DISPLAY_ID_LENGTH) {
+            throw new IllegalArgumentException(
+                    "question display id '" + trimmed + "' is not " + DISPLAY_ID_LENGTH
+                            + " digits, so it cannot key a lock (S-8)");
+        }
         try {
             return EntityRef.question(Long.parseLong(trimmed));
         } catch (NumberFormatException notANumber) {

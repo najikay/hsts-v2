@@ -181,7 +181,21 @@ public final class BankMessages {
             "Someone else saved a new version of this question while you had it open. Nothing you "
                     + "typed was lost, but reopen the question to edit the newest version.";
 
-    /** E6.14, F2.6: the advisory edit lock is held by another teacher. */
+    /**
+     * E6.14, F2.6: the advisory edit lock is held by another teacher.
+     *
+     * <p><b>NO CALLER, and that is the finding rather than an oversight in this file.</b> The
+     * contract's section 6 lists {@code CONFLICT} for "the question is edit-locked by someone
+     * else", but no handler ever issues it: {@code BankHandlers} produces {@code CONFLICT} only
+     * from the two {@code case STALE} branches on {@code baseVersionNo}, and
+     * {@code QuestionService} never reads the lock table. So the mutual exclusion E6.14's editor
+     * shows on screen is enforced by the client alone, and two teachers holding current base
+     * versions can both write.
+     *
+     * <p>Kept rather than deleted because the sentence is correct and the decision is the lead's:
+     * the contract is FROZEN v1, so either this gains an issuer or section 6 loses that line.
+     * Raised 2026-08-23. Deleting it first would remove the evidence that the gap exists.
+     */
     public static String lockedBy(String editorName) {
         return "This question is being edited by " + editorName + " right now. You can read it, "
                 + "and it becomes editable as soon as that editor closes it.";

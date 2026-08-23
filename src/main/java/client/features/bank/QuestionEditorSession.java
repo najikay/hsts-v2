@@ -548,8 +548,16 @@ public final class QuestionEditorSession {
      * greyed its controls would still have a session that would happily send
      * {@code QUESTION_UPDATE} if anything else called {@code save()}.
      *
-     * <p>The server is the real gate either way: the contract answers {@code CONFLICT} for a
-     * question locked by someone else. This stops the client offering the attempt.
+     * <p><b>The server does not currently gate this, and this javadoc used to say it did.</b>
+     * The contract's section 6 lists {@code CONFLICT} for "the question is edit-locked by
+     * someone else", but nothing implements it: the only {@code CONFLICT} the bank produces is
+     * a stale {@code baseVersionNo}, and {@code BankMessages.lockedBy} — a sentence written for
+     * exactly that refusal — has no caller anywhere. So the edit lock on the versioned bank is a
+     * client courtesy, and two teachers holding current base versions can both write.
+     *
+     * <p>Which makes this method the only thing standing between them, rather than a convenience
+     * in front of a server check. Raised with the lead, whose call it is: the contract is frozen,
+     * so either the consult gets implemented or section 6 loses that line.
      *
      * @param locked whether another editor holds it
      */

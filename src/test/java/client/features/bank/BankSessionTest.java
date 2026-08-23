@@ -54,6 +54,16 @@ class BankSessionTest {
     private static final Instant SPRING = Instant.parse("2026-03-10T07:00:00Z");
     private static final Instant SUMMER = Instant.parse("2026-08-07T06:00:00Z");
 
+    /**
+     * A non-breaking space, built from its code point rather than typed.
+     *
+     * <p>An invisible character in a source literal is fragile in exactly the way this test is
+     * about: it survives no copy-paste reliably, and a tool that "helpfully" normalises it turns
+     * the assertion into one about an ordinary space that passes for the wrong reason. This test
+     * has already been wrong twice about which character it was passing.
+     */
+    private static final String NBSP = Character.toString(0x00A0);
+
     private static final CourseRef ALGEBRA = new CourseRef("11", "אלגברה");
     private static final CourseRef CALCULUS = new CourseRef("12", "חדו\"א");
 
@@ -900,12 +910,21 @@ class BankSessionTest {
         }
 
         @Test
-        @DisplayName("a course code padded with a non-breaking space still matches its course")
+        @DisplayName("an ordinary-space padded course code still matches, and a NBSP one does not")
         void writeScopeStrips() {
             assertThat(session.canWriteIn(" 11 "))
-                    .as("strip() handles the ordinary spaces; the contract's section 5 is why "
-                            + "this compares stripped rather than raw")
+                    .as("strip() handles the ordinary spaces, which is what the contract's "
+                            + "section 5 asks for")
                     .isTrue();
+
+            assertThat(session.canWriteIn(NBSP + "11"))
+                    .as("and it does NOT reach U+00A0: Character.isWhitespace rejects it, so the "
+                            + "padded code equals no member of the set and the write is refused. "
+                            + "That fails closed, which is the safe direction, and it is the "
+                            + "same measured limit E7-TYPES section 4.3 pins. This test was "
+                            + "named for the non-breaking case while passing ordinary spaces, "
+                            + "so it reported green for a case it never ran.")
+                    .isFalse();
         }
 
         @Test

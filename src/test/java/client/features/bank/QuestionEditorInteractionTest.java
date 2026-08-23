@@ -234,8 +234,11 @@ class QuestionEditorInteractionTest extends ApplicationTest {
                 NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
 
         assertThat(buttonNamed(scene, QuestionEditorCopy.SAVE).isDisabled())
-                .as("the contract answers CONFLICT for a question locked by somebody else, so "
-                        + "offering Save offers an attempt with one possible outcome")
+                .as("this is a CLIENT claim and only a client claim. The contract lists CONFLICT "
+                        + "for an edit-locked question, but nothing implements it, so greying "
+                        + "Save is the whole of the mutual exclusion rather than a courtesy in "
+                        + "front of a server check. Stated exactly because an earlier version of "
+                        + "this sentence told the next reader the server had been verified.")
                 .isTrue();
         assertThat(labelTexts(scene))
                 .as("and the banner names who has it, because 'locked' without a name leaves her "
