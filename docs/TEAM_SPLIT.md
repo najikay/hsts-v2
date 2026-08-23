@@ -54,14 +54,14 @@ were always absorption candidates: **E9 (release manager) → L** and **E15 (rep
 StatChart). Final ownership of everything unbuilt: **A = E6 screens + E7** · **B = E12 screens +
 acceptance execution + walkthrough prep** · **L = E9 + E15 + reviews + manual pass + endgame
 mechanics**. Same-day reviews continue on every PR. The day table below reads with this mapping;
-RadioGroup and ImagePicker land from the lead today per rule 3.
+RadioGroup and ImagePicker landed from the lead on Aug 22 per rule 3.
 
 | Day | Member A (Omar) | Member B (Amjad) | Lead (Naji) |
 |---|---|---|---|
 | Aug 22 | E6 read half + screens (topic ruling = A: findDistinctTopics + picker); wire line into #25 | #23 renames + merge; E13 screens (My Grades, checked form + CHECKED_FORM_GET handler, print) | reviews on arrival; push pending fix batch |
-| Aug 23 | finish E6; start E9 (release manager: windows, codes, close-early via ExecutionCloseService — the seam is documented in the E10/E11 report) | E12 screens (queue, review, override dialog, bulk); SeedArithmeticTest port + fuller bot sources | reviews; EVENING: full manual pass + team brief (triage map: C:\dev\HSTS-triage-map.pdf) |
-| Aug 24 | E7 (builder + auto-generation; F3.3 refuses when the bank is thin — the seed's Recursion topic is the demo fixture) | E15 (report engine, 3 axes, Strategy, reuse StatChart); scenario re-runs | reviews; route the manual-pass findings by the triage map |
-| Aug 25 | finish E7; legacy retirement PR (shrinks two guard allow-lists — that diff is the proof) | finish E15; acceptance scenarios for grading/results | reviews; second manual pass; E16.17 live-key checklist; E2.16 walkthrough (first E22.4) |
+| Aug 23 | pull; E6 screens (components RadioGroup + ImagePicker are on main) | EXAM — no code tasks; when free, prep the E12/E13 walkthrough | E9 + E15 merged to main (4969 green, REPORTS contract frozen v1); reviews on arrival |
+| Aug 24 | finish E6 screens; start E7 (builder + auto-generation; F3.3 refuses when the bank is thin — the seed's Recursion topic is the demo fixture) | EXAM | E15.2 principal data browser; reviews |
+| Aug 25 | finish E7; legacy retirement PR (shrinks two guard allow-lists — that diff is the proof) | back: E12/E13 walkthrough prep; joins the brief | reviews; EVENING: full manual pass + team brief (triage map: C:\dev\HSTS-triage-map.pdf); acceptance execution folds into the pass; E16.17 live-key checklist |
 | Aug 26 | HARDENING DAY (E21): everyone attacks everyone's features; E1.11 hostile-payload fuzz; full 115-case acceptance run; E21.0/E21.0b build nits | | |
 | Aug 27 | morning: submission doc final (B writes, L reviews), `-Djar.prefix=G12-1` build ON WINDOWS, zip per DEMO_DAY.md, two-machine rehearsal → **DEFENSE** | | |
 
@@ -70,7 +70,7 @@ route by the triage map (C:\dev\HSTS-triage-map.pdf, lead's machine — layer ow
 anything marked PENDING there is expected absent; all decisions already ruled are in the frozen
 contracts and this file — if it is written down, do not re-ask.
 
-**E8 and E14 were taken by the lead on Aug 21** (the offers converted to decisions when the lead lane finished early); A keeps E6, E7, E9; B keeps E12, E13, E15 and the SeedArithmeticTest port. Defense note: the cross-walkthroughs (E22.4) cover both reassigned epics so every member can still speak to them.
+**E8 and E14 were taken by the lead on Aug 21; E9 and E15 were reabsorbed by the lead on Aug 22** (plan limits lifted). Final: A keeps E6 screens and E7; B keeps E12/E13 screens (done and merged), acceptance execution (runs inside the lead's manual pass at the brief) and walkthrough prep. B's exam (Aug 23-24) costs nothing on this plan: his remaining items are the brief itself and his own walkthrough, neither of which can or should be delegated. Defense note: the cross-walkthroughs (E22.4) cover all four reassigned epics so every member can still speak to them.
 
 | Milestone | L | A | B |
 |---|---|---|---|
