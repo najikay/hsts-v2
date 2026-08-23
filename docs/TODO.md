@@ -360,7 +360,7 @@ Client:
 - [ ] E22.1 Acceptance-test results table (scenario, steps, expected, actual, bugs found + which case exposed them)
 - [ ] E22.2 Submission doc: cover page (group, names, IDs), per-member responsibilities, test table, design/coding-problem answer (from PROBLEMS.md — pick the best story, e.g. exam-vs-execution modeling or timer race)
 - [ ] E22.3 Export to required format, assemble `G<Num>_Assignment3.zip` (doc + 2 JARs), verify zip contents against spec ⚑
-- [ ] E22.4 Cross-walkthrough sessions (spec §11): each member walks the other two through her components until all three can answer defense questions on ANY component; verified with a mock Q&A round ⚑
+- [ ] E22.4 Cross-walkthrough sessions (spec §11): each member walks the other two through her components until all three can answer defense questions on ANY component; verified with a mock Q&A round ⚑ *Member B's half is written: `docs/briefs/member-b-e12-e13-walkthrough.md` covers E12 and E13 — the five-step pipeline, the four decisions most likely to be pushed on, seven anticipated questions with answers, the demo order, and the one gap (E12.6's paper review) stated rather than hidden. Not ticked: the session itself and the mock Q&A round.*
 - [ ] E22.4 Demo script: ordered walkthrough matching scenarios 1–21 + wow-moments (theme switch, live extension, edit locks, bot fallback) + break-it invitation
 - [ ] E22.5 Defense Q&A prep sheet: patterns, decisions, "what would you change for phase 2 (internet)", concurrency story
 - [ ] E22.6 Dry-run defense #1 (full, timed, two machines) → fix list
