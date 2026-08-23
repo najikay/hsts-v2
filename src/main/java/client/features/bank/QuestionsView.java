@@ -8,6 +8,7 @@ import client.features.locks.LockAwareEditor;
 import client.features.locks.LockBanner;
 import client.features.locks.LockCopy;
 import client.net.RequestDispatcher;
+import client.ui.components.Buttons;
 import client.ui.screen.AbstractScreen;
 import client.ui.components.Logo;
 import client.ui.components.WarnConfirm;
@@ -28,6 +29,7 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import java.util.List;
@@ -75,6 +77,9 @@ public class QuestionsView extends AbstractScreen {
     /** Prototype stylesheet, scoped to this screen's root only. */
     private static final String LEGACY_STYLESHEET = "/css/app.css";
 
+    /** The versioned bank's route id, until this class is retired (E6.9, temporary). */
+    private static final String NEW_BANK_ROUTE = "bank";
+
     @FXML private ListView<Question> listView;
     @FXML private TextArea questionField;
     @FXML private TextArea answerArea;
@@ -104,7 +109,43 @@ public class QuestionsView extends AbstractScreen {
         if (legacyCss != null) {
             root.getStylesheets().add(legacyCss.toExternalForm());
         }
-        return root;
+        Node banner = newBankBanner();
+        if (banner == null) {
+            return root;
+        }
+        VBox wrapper = new VBox(banner, root);
+        VBox.setVgrow(root, javafx.scene.layout.Priority.ALWAYS);
+        return wrapper;
+    }
+
+    /**
+     * The way into the versioned bank, for as long as both screens exist (E6.9, temporary).
+     *
+     * <p>The lead ruled on 2026-08-23 that rail id {@code questions} keeps serving this screen
+     * until E6's retirement PR, so the replacement is registered as a non-rail route and needs
+     * something to be reached from. This is that something, and it is deliberately built in Java
+     * rather than added to the FXML: the FXML is outside Member A's scope, and this whole method
+     * is deleted in the same PR that deletes the class.
+     *
+     * <p>It answers {@code null} when the route is not registered, which is the state of this
+     * branch until the assembly PR lands. A button that navigated nowhere would teach a teacher
+     * that the screen is broken, which is slower to unlearn than a link that was not there yet.
+     *
+     * @return the banner, or {@code null} when there is nothing to link to
+     */
+    private Node newBankBanner() {
+        if (navigator() == null || !navigator().isRegistered(NEW_BANK_ROUTE)) {
+            return null;
+        }
+        Label note = new Label("A new question bank has replaced this screen.");
+        note.getStyleClass().addAll("small", "muted");
+        Button open = Buttons.styled("Open the new bank", Buttons.LINK);
+        open.setOnAction(event -> navigator().navigate(NEW_BANK_ROUTE));
+        HBox banner = new HBox(10, note, open);
+        banner.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        banner.setPadding(new javafx.geometry.Insets(10, 16, 10, 16));
+        banner.getStyleClass().add("legacy-bank-banner");
+        return banner;
     }
 
     /** Wired automatically by FXMLLoader after {@code @FXML} fields are injected. */
