@@ -140,6 +140,19 @@ Server:
 - [ ] E7.6 Submit for approval: DRAFT → PENDING, notify coordinator (E17)
 - [ ] E7.7 Newer-question-version indicator data (exam uses vN, bank has vN+1)
 - [ ] E7.8 ExamValidator unit tests (all rules)
+
+> **Open after the E7 store PR, and enforced by nothing on disk until the handlers land.** The
+> repository and its two-engine tests are in, so the *writes* are held. These five rules are not,
+> and each is a service rule with no database backstop that could stand in for it:
+> **(1)** no soft-deleted question (contract §5.2, assigned to E7 by name in ARCHITECTURE §5 - the
+> MySQL leaf's `softDeleteHasNoDatabaseBackstop` deliberately asserts the hole is open);
+> **(2)** no duplicate question through two versions of it, as a *named* refusal rather than a
+> constraint violation (§5.2, T-3.9 - the constraint itself is tested);
+> **(3)** points summing to exactly 100, in both directions with the shortfall quantified (§5.1);
+> **(4)** every question in the exam's own course, resolved server-side (§5.2);
+> **(5)** only a DRAFT is savable, and REVISE refuses a DRAFT (§5.4, answering CONFLICT not
+> VALIDATION).
+> Listed here because the store PR is the last artefact reviewed before these get assumed done.
 - [ ] E7.9 Verbs + DTOs frozen with [L] *(types landed by [L] 2026-08-23, freeze on handlers PR — `common/protocol/Verb.java` has its `Exam builder (E7)` section with all seven verbs, and `common/dto/authoring` holds the fourteen records of the contract's §4, reusing `Difficulty` and `ApprovalState`. The five rulings are §12 of `docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md`; what Member A must know before writing handlers — the constants to cite and the tolerance boundaries his validator has to cover because the constructors deliberately do not — is `docs/reports/lead/E7-TYPES.md`. Not ticked: the tick is the freeze, and the contract still says DRAFT so a handler author who finds a real problem with a shape still gets to say so.)*
 Client:
 - [ ] E7.10 Exam list screen: teacher's exams, status chips, versions expandable, actions per state
