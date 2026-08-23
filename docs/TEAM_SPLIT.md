@@ -60,7 +60,7 @@ RadioGroup and ImagePicker landed from the lead on Aug 22 per rule 3.
 |---|---|---|---|
 | Aug 22 | E6 read half + screens (topic ruling = A: findDistinctTopics + picker); wire line into #25 | #23 renames + merge; E13 screens (My Grades, checked form + CHECKED_FORM_GET handler, print) | reviews on arrival; push pending fix batch |
 | Aug 23 | pull; E6 screens (components RadioGroup + ImagePicker are on main) | EXAM — no code tasks; when free, prep the E12/E13 walkthrough | E9 + E15 merged to main (4969 green, REPORTS contract frozen v1); reviews on arrival |
-| Aug 24 | finish E6 screens; start E7 (builder + auto-generation; F3.3 refuses when the bank is thin — the seed's Recursion topic is the demo fixture) | EXAM | E15.2 principal data browser; reviews |
+| Aug 24 | E6 PR-B (editor, locks, retirement fold-in); E7 server half against E7-TYPES.md §4 | EXAM | UI wave 1 lands (docs/reports/lead/MANUAL-PASS-1.md F-6..F-14); wave-2 design canvas + markup; reviews. E15.2 done Aug 23 |
 | Aug 25 | finish E7; legacy retirement PR (shrinks two guard allow-lists — that diff is the proof) | back: E12/E13 walkthrough prep; joins the brief | reviews; EVENING: full manual pass + team brief (triage map: C:\dev\HSTS-triage-map.pdf); acceptance execution folds into the pass; E16.17 live-key checklist |
 | Aug 26 | HARDENING DAY (E21): everyone attacks everyone's features; E1.11 hostile-payload fuzz; full 115-case acceptance run; E21.0/E21.0b build nits | | |
 | Aug 27 | morning: submission doc final (B writes, L reviews), `-Djar.prefix=G12-1` build ON WINDOWS, zip per DEMO_DAY.md, two-machine rehearsal → **DEFENSE** | | |
