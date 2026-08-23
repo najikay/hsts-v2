@@ -660,12 +660,15 @@ public final class BankSession {
      * The courses the picker offers: the caller's own, plus every course the bank has actually
      * shown her.
      *
-     * <p><b>The union is not tidiness, it is the only thing that makes the picker work for two
-     * of the three roles the contract lets browse.</b> {@code LoginResult.courses()} is
-     * {@code CourseRepository.findForUser}, which is taught union enrolled and touches neither
-     * {@code coordinators} nor {@code subjects}. The bank's read scope is wider on purpose
-     * (contract section 2): a coordinator reaches every course of her subject and the principal
-     * reaches every course in the school.
+     * <p><b>The union is not tidiness, it is the only thing that makes the picker work for the
+     * coordinator.</b> {@code LoginResult.courses()} is {@code CourseRepository.findForUser},
+     * which is taught union enrolled and touches neither {@code coordinators} nor
+     * {@code subjects}. The bank's read scope is wider on purpose (contract section 2): a
+     * coordinator reaches every course of her subject, whether or not she teaches it.
+     *
+     * <p>The principal reaches wider still and is not a caller here: this screen is registered
+     * for the two authoring roles only, because it carries Delete. Her browse is the E15.2 Data
+     * screen (the lead's ruling on #41).
      *
      * <p>So for {@code rina.barak}, who holds a {@code coordinators} row and <b>zero</b>
      * {@code course_teachers} rows deliberately, the sign-in payload alone would offer a picker

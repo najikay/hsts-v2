@@ -38,21 +38,41 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <h2>The mutations it has to reject</h2>
  *
- * <p>One assertion is not a guard (method rule 4). Four separate ways the wiring can be wrong,
+ * <p>One assertion is not a guard (method rule 4). Five separate ways the wiring can be wrong,
  * one test each, so a failure names which one happened:
  *
  * <ol>
  *   <li>the route is registered for nobody, which is #25 exactly;</li>
- *   <li>it is registered for some teaching roles and not others, which is how a coordinator
+ *   <li>it is registered for one teaching role and not the other, which is how a coordinator
  *       finds an empty rail where a teacher finds a bank;</li>
  *   <li>it is offered to a student, which is a trip the server would refuse and the client
  *       should never have offered (F1.2);</li>
+ *   <li>it is offered to the principal, which hands an S-7 role a Delete button;</li>
  *   <li>the legacy screen leaves the rail before its replacement is on it, which would take the
  *       bank away from everyone for as long as the gap lasts.</li>
  * </ol>
  *
- * <p>The fourth is the one this PR's sequencing actually risks, and it is the reason the lead
+ * <p>The fifth is the one this PR's sequencing actually risks, and it is the reason the lead
  * ruled that rail id {@code questions} stays on the legacy screen until the retirement PR.
+ *
+ * <h2>Why the principal is a negative case, when the contract lets her read the bank</h2>
+ *
+ * <p>She is on all four read verbs, and this screen is still not hers. <b>The wire licence and
+ * the UI offering are different questions</b> (the lead's ruling on #41): her {@code BANK_LIST}
+ * licence exists to feed the E15.2 Data screen, which is her read-only surface and whose own
+ * interaction test asserts that no writing control exists anywhere under {@code .principal-data}.
+ * {@code BankView} carries Delete today and Edit in the next PR, so registering the S-7 role for
+ * it would hand her controls whose only possible outcome is a server refusal.
+ *
+ * <p>This file had it the other way round first, reasoning from the verb list. That is the same
+ * offering-versus-permission distinction case 3 above already makes about students, applied
+ * inconsistently one role over.
+ *
+ * <p><b>Both negative cases pass vacuously until the assembly lands</b>, because nothing offers
+ * the route to anybody yet. Said out loud rather than left for a reader to assume otherwise: they
+ * are green today for the same reason the positives are red, and they only start guarding
+ * anything the moment the route exists. The vacuity assertions in each are the most that can be
+ * checked before then.
  */
 class BankScreenWiringGuardTest {
 
@@ -67,9 +87,14 @@ class BankScreenWiringGuardTest {
     /** The rail id the legacy screen keeps until the retirement PR (the lead's ruling). */
     private static final String LEGACY_ROUTE_ID = "questions";
 
-    /** Everyone who may browse the bank, per BANK_WIRE_CONTRACT section 2's read column. */
-    private static final List<Role> MAY_BROWSE =
-            List.of(Role.TEACHER, Role.COORDINATOR, Role.PRINCIPAL);
+    /**
+     * Everyone this SCREEN is for: the two roles that may write into the bank.
+     *
+     * <p>Not the contract's read column, which is wider by one. See the class javadoc: the
+     * principal reads the bank through the Data screen, and a screen carrying Delete is not a
+     * read-only surface however read-only her verbs are.
+     */
+    private static final List<Role> MAY_BROWSE = List.of(Role.TEACHER, Role.COORDINATOR);
 
     private static boolean offers(Role role, String routeId) {
         return SessionRoutes.routesFor(role).stream()
@@ -91,15 +116,32 @@ class BankScreenWiringGuardTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = Role.class, names = {"TEACHER", "COORDINATOR", "PRINCIPAL"})
-    @DisplayName("every role the contract lets read the bank is offered the screen")
-    void everyReadingRoleIsOfferedTheBank(Role role) {
+    @EnumSource(value = Role.class, names = {"TEACHER", "COORDINATOR"})
+    @DisplayName("both roles that may write into the bank are offered the screen")
+    void everyAuthoringRoleIsOfferedTheBank(Role role) {
         assertThat(offers(role, BANK_ROUTE_ID))
-                .as("%s may read the bank under BANK_WIRE_CONTRACT section 2 (the four read "
-                        + "verbs add PRINCIPAL to the two teaching roles), so the client must "
-                        + "offer her the trip. Registering it for some of the three and not the "
-                        + "others is how one role finds an empty rail.", role)
+                .as("%s may write into the bank under BANK_WIRE_CONTRACT section 2, so the "
+                        + "screen that writes is hers. Registering it for one of the two and not "
+                        + "the other is how a coordinator finds an empty rail where a teacher "
+                        + "finds a bank.", role)
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("the principal is never offered the bank screen, read licence or not ⚑")
+    void thePrincipalIsNotOfferedTheBank() {
+        assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
+                .as("guard against the guard: an empty route list would make the assertion "
+                        + "below pass by vacuity")
+                .isNotEmpty();
+        assertThat(offers(Role.PRINCIPAL, BANK_ROUTE_ID))
+                .as("She is on all four bank READ verbs, and this screen is still not hers: it "
+                        + "carries Delete, and Edit next. S-7 gives her zero mutating verbs, so "
+                        + "every control she could reach here can only fail server-side. Her "
+                        + "browse is the E15.2 Data screen, whose own test asserts it holds no "
+                        + "writing control at all. The licence and the offering are different "
+                        + "questions (lead's ruling on #41).")
+                .isFalse();
     }
 
     @Test
