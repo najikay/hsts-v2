@@ -39,6 +39,11 @@ import static org.mockito.Mockito.when;
  * <p>{@code notFoundAndNotMineAreTheSameAnswer} is asserted by comparing the two outcomes to
  * each other rather than by checking both are refusals, because "both refuse" is also true of
  * an implementation that refuses them with two distinguishable answers.
+ *
+ * <p>The fourth rule arrived with amendment A3 and has its own nest: a comment travels on the
+ * override, and <b>a null comment preserves rather than clears</b>. That one is pinned by
+ * overriding twice, because it is only wrong on the second override — an implementation that
+ * assigned the comment unconditionally would pass every single-override test here.
  */
 @ExtendWith(MockitoExtension.class)
 class OverrideServiceTest {
@@ -87,6 +92,10 @@ class OverrideServiceTest {
 
     private static GradeOverrideRequest ask(int newScore) {
         return new GradeOverrideRequest(GRADE_ID, newScore, "question 3 was ambiguous");
+    }
+
+    private static GradeOverrideRequest ask(int newScore, String comment) {
+        return new GradeOverrideRequest(GRADE_ID, newScore, "question 3 was ambiguous", comment);
     }
 
     // ===================== Overriding =====================================
@@ -167,6 +176,116 @@ class OverrideServiceTest {
 
             assertThat(service.override(session, TEACHER_ID, ask(80)).outcome())
                     .isEqualTo(OverrideService.Outcome.OVERRIDDEN);
+        }
+    }
+
+    // ===================== The comment ====================================
+
+    @Nested
+    @DisplayName("The comment for the student (S-22, amendment A3)")
+    class Comment {
+
+        @Test
+        @DisplayName("is written in the same act as the score it explains")
+        void commentIsPersistedWithTheOverride() {
+            Grade grade = grade(75);
+            when(reviews.contextOf(session, GRADE_ID))
+                    .thenReturn(Optional.of(contextFor(grade)));
+            lenient().when(reviews.review(any(), any())).thenReturn(null);
+
+            service.override(session, TEACHER_ID, ask(80, "שיפור ניכר. שימי לב לשאלה 3."));
+
+            assertThat(grade.getFinalScore()).isEqualTo(80);
+            assertThat(grade.getTeacherComment()).isEqualTo("שיפור ניכר. שימי לב לשאלה 3.");
+            // The two are different pieces of writing for different readers, and both are on
+            // the grade after one call.
+            assertThat(grade.getOverrideReason()).isEqualTo("question 3 was ambiguous");
+        }
+
+        @Test
+        @DisplayName("⚑ a second override with no comment PRESERVES the first one's comment")
+        void nullCommentPreservesWhatIsAlreadyThere() {
+            // The rule the whole amendment turns on. A teacher fixes a score, writes to the
+            // student, then fixes the score again after re-reading question four. The dialog's
+            // comment box opens empty the second time. If null cleared, her sentence to the
+            // student would be gone and nothing on any screen would say so.
+            Grade grade = grade(75);
+            when(reviews.contextOf(session, GRADE_ID))
+                    .thenReturn(Optional.of(contextFor(grade)));
+            lenient().when(reviews.review(any(), any())).thenReturn(null);
+
+            service.override(session, TEACHER_ID, ask(80, "עבודה יפה מאוד."));
+            service.override(session, TEACHER_ID, ask(85));
+
+            assertThat(grade.getEffectiveScore())
+                    .as("the second correction still moved the score")
+                    .isEqualTo(85);
+            assertThat(grade.getTeacherComment()).isEqualTo("עבודה יפה מאוד.");
+        }
+
+        @Test
+        @DisplayName("a blank comment preserves too, because the request already made it null")
+        void blankCommentPreservesAsWell() {
+            // Belt and braces across the tier boundary: the collapse happens in the record's
+            // compact constructor, and this proves the service's guard is keyed on the same
+            // null it produces rather than on an isBlank() check of its own.
+            Grade grade = grade(75);
+            when(reviews.contextOf(session, GRADE_ID))
+                    .thenReturn(Optional.of(contextFor(grade)));
+            lenient().when(reviews.review(any(), any())).thenReturn(null);
+
+            service.override(session, TEACHER_ID, ask(80, "כל הכבוד."));
+            service.override(session, TEACHER_ID, ask(85, "    "));
+
+            assertThat(grade.getTeacherComment()).isEqualTo("כל הכבוד.");
+        }
+
+        @Test
+        @DisplayName("a second comment replaces the first: she is amending, not appending")
+        void anewCommentReplacesTheOldOne() {
+            Grade grade = grade(75);
+            when(reviews.contextOf(session, GRADE_ID))
+                    .thenReturn(Optional.of(contextFor(grade)));
+            lenient().when(reviews.review(any(), any())).thenReturn(null);
+
+            service.override(session, TEACHER_ID, ask(80, "כמעט."));
+            service.override(session, TEACHER_ID, ask(85, "אחרי בדיקה חוזרת: יפה מאוד."));
+
+            assertThat(grade.getTeacherComment()).isEqualTo("אחרי בדיקה חוזרת: יפה מאוד.");
+        }
+
+        @Test
+        @DisplayName("a comment is refused with the override on an approved grade, not saved "
+                + "beside it")
+        void commentIsRefusedAfterApprovalExactlyAsTheOverrideIs() {
+            // The CONFLICT path is unchanged, and that is the assertion: riding the override
+            // means the comment inherits every gate the override has. A comment that landed on
+            // a published grade would be a change to what a student has already been shown,
+            // through a door the override itself is locked out of.
+            Grade grade = grade(75);
+            grade.approve(TEACHER_ID, Instant.parse("2026-06-02T10:00:00Z"));
+            when(reviews.contextOf(session, GRADE_ID))
+                    .thenReturn(Optional.of(contextFor(grade)));
+
+            OverrideService.OverrideOutcome outcome =
+                    service.override(session, TEACHER_ID, ask(80, "משהו לתלמידה"));
+
+            assertThat(outcome.outcome()).isEqualTo(OverrideService.Outcome.ALREADY_APPROVED);
+            assertThat(grade.getTeacherComment()).isNull();
+            assertThat(grade.getEffectiveScore()).isEqualTo(75);
+            verify(reviews, never()).review(any(), any());
+        }
+
+        @Test
+        @DisplayName("somebody else's grade gets no comment either")
+        void refusedOwnershipWritesNoComment() {
+            Grade grade = grade(75);
+            when(reviews.contextOf(session, GRADE_ID))
+                    .thenReturn(Optional.of(contextFor(grade)));
+
+            service.override(session, OTHER_TEACHER, ask(80, "משהו לתלמידה"));
+
+            assertThat(grade.getTeacherComment()).isNull();
         }
     }
 

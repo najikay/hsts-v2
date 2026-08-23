@@ -19,6 +19,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.BorderPane;
@@ -222,7 +223,22 @@ public final class GradingQueueView extends AbstractScreen {
                 .ifPresent(button -> session.approveSelected());
     }
 
-    /** The override dialog: a score, and the reason that must accompany it (S-23). */
+    /**
+     * The override dialog: a score, the reason that must accompany it (S-23), and the optional
+     * comment for the student (S-22).
+     *
+     * <p><b>Two boxes, not one, and they are separated on purpose.</b> They are written at the
+     * same moment about the same paper, but they have different readers: the reason is the
+     * audit trail and never leaves the staff room, the comment is the only free text the
+     * student ever sees. Merging them would mean either a teacher writing for the record in
+     * front of a student, or writing for the student in the audit log — and each label says
+     * which one this box is, because a box's placement cannot.
+     *
+     * <p>The comment box opens <b>empty even when the grade already has a comment</b>, and the
+     * label says that leaving it empty keeps what is saved. Pre-filling would be friendlier
+     * until the first teacher cleared the box expecting the comment to go away, which on this
+     * wire it does not (the contract's A3 null-preserves rule).
+     */
     private void openOverrideDialog() {
         Optional<StudentGradeRow> target = selectedRow();
         if (target.isEmpty()) {
@@ -234,24 +250,36 @@ public final class GradingQueueView extends AbstractScreen {
         score.setEditable(true);
 
         TextArea reason = new TextArea();
-        reason.setPromptText("Reason");
+        reason.setPromptText(GradingCopy.JUSTIFICATION_PROMPT);
         reason.setWrapText(true);
         reason.setPrefRowCount(3);
 
-        Label label = new Label(GradingCopy.JUSTIFICATION_LABEL);
-        label.setWrapText(true);
-        label.getStyleClass().addAll("small", "muted");
+        Label reasonLabel = new Label(GradingCopy.JUSTIFICATION_LABEL);
+        reasonLabel.setWrapText(true);
+        reasonLabel.getStyleClass().addAll("small", "muted");
+
+        TextArea comment = new TextArea();
+        comment.setPromptText(GradingCopy.COMMENT_PROMPT);
+        comment.setWrapText(true);
+        comment.setPrefRowCount(3);
+
+        Label commentLabel = new Label(GradingCopy.COMMENT_LABEL);
+        commentLabel.setWrapText(true);
+        commentLabel.getStyleClass().addAll("small", "muted");
+
+        Separator between = new Separator();
 
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle(GradingCopy.OVERRIDE_TITLE);
         dialog.setHeaderText(row.studentName());
-        dialog.getDialogPane().setContent(new VBox(8, score, label, reason));
+        dialog.getDialogPane().setContent(
+                new VBox(8, score, reasonLabel, reason, between, commentLabel, comment));
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, ButtonType.OK);
 
         dialog.showAndWait()
                 .filter(button -> button == ButtonType.OK)
                 .ifPresent(button -> session.override(row.gradeId(), score.getValue(),
-                        reason.getText()));
+                        reason.getText(), comment.getText()));
     }
 
     // ===================== Cells =========================================

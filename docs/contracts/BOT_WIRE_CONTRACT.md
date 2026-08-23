@@ -29,7 +29,7 @@ material, and the specification asks for "the questions from the question bank".
 **no marking of which is correct**, and `QuestionRepository.findBankForBot` does not select
 `correct_answer` at all. A study bot that hands out answer keys for material that may be on next
 week's paper defeats its own purpose. Because that read carries no key it needs none of the
-sanctioned `ForAuthoring` / `ForCheckedForm` suffixes — and `CorrectnessLeakGuardTest` confirms
+sanctioned `ForAuthoring` / `ForGrading` suffixes — and `CorrectnessLeakGuardTest` confirms
 that rather than taking it on trust.
 
 **S-34 — the teacher's aggregate is anonymous by construction.** `BotAnalytics`,

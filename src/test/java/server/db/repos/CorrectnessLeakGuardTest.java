@@ -47,13 +47,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>These two tests scan instead of naming, so a new leak fails the build the moment it is
  * written rather than when someone happens to review it.
  *
- * <h2>The review feature arrived, and it is sanctioned rather than exempted</h2>
+ * <h2>The review feature arrived, and it landed differently</h2>
  *
  * <p>The hypothetical above is now E13.2's checked form, specified in the frozen grading wire
- * contract. It did not get a suppression: it got a sanctioned suffix of its own,
- * {@code ForCheckedForm}, on the same terms as {@code ForAuthoring} — the name says which
- * audience the read is for, and the three conditions that make that audience legitimate are
- * enforced and tested elsewhere. See {@link #SANCTIONED_SUFFIXES}.
+ * contract. It was given a sanctioned suffix of its own when the contract was frozen,
+ * {@code ForCheckedForm} — and then it was built without one, because {@code CHECKED_FORM_GET}
+ * shares {@code GradeReviewService}'s assembler with the teacher's review and therefore reads
+ * through {@code findVersionsForGrading}. The suffix sat in this list for a day with no method
+ * anywhere named for it.
+ *
+ * <p>It has been removed (2026-08-23, lead's ruling on Member B's PR 17 finding). The javadoc
+ * on {@link #SANCTIONED_SUFFIXES} says a suffix stops being licensed when the feature that
+ * licensed it goes away, and a licensed name with no readers is the same hole from the other
+ * direction: it is a permission standing open that nobody is using and nobody would notice
+ * being used. The checked form is now served through the grading assembler under its own three
+ * gates, and the contract says so.
  */
 class CorrectnessLeakGuardTest {
 
@@ -71,22 +79,24 @@ class CorrectnessLeakGuardTest {
      * because that is what authoring is, and the suffix is what stops a student-facing caller
      * reaching for one of those reads by mistake.
      *
-     * <h2>{@code ForCheckedForm} — the student's own marked paper (E13.2)</h2>
+     * <h2>{@code ForCheckedForm} — withdrawn, 2026-08-23</h2>
      *
-     * <p>Added when the E12/E13 wire contract was frozen. A student <b>is</b> entitled to see
-     * which answer was right, but only on their own paper and only after the marking is
-     * finished, so {@code CHECKED_FORM_GET} serves correctness under three conditions that all
-     * have to hold: the grade is the caller's, its state is {@code APPROVED}, and the execution
-     * is closed. The reads behind that verb carry an answer key and can therefore never be
-     * named {@code ForAuthoring} honestly, which would have left one legitimate feature with a
-     * choice between a lie and a suppression.
+     * <p>Sanctioned when the E12/E13 wire contract was frozen, for reads serving a student her
+     * own marked paper, and <b>removed once E13.4 shipped without using it</b>. The checked
+     * form reuses {@code GradeReviewService.answers}, the same assembler the teacher's review
+     * uses, so its read is {@code findVersionsForGrading} and no method was ever named
+     * {@code …ForCheckedForm}.
      *
-     * <p><b>What licenses it is not this list.</b> A suffix is a naming convention, not a
-     * guard: it makes a leak deliberate rather than accidental. The actual enforcement is
-     * E13.1's authorization tests, which prove all three conditions on the handler and prove
-     * that failing any of them answers {@code NOT_FOUND} indistinguishably. If those tests ever
-     * go away, this suffix stops being licensed and should come back out of this list — the
-     * contract file (docs/contracts/GRADING_WIRE_CONTRACT.md) records that dependency.
+     * <p><b>What licenses a suffix is not this list.</b> A suffix is a naming convention, not a
+     * guard: it makes a leak deliberate rather than accidental. What actually enforces the
+     * checked form's three conditions is E13.1's authorization tests, and those are unaffected
+     * by this removal — they were always the licence, and they still hold.
+     *
+     * <p>Removing it is the same rule this javadoc already states in the other direction: a
+     * suffix comes out of the list when the feature that licensed it is no longer behind it.
+     * An unused sanctioned name is a permission nobody is exercising and nobody is watching,
+     * and the next read that wanted to carry an answer key to a student could have taken it
+     * without a single test noticing. Found by Member B (PR 17) and ruled by the lead.
      *
      * <h2>{@code ForGrading} — the server comparing a selection against the key (E12)</h2>
      *
@@ -97,8 +107,13 @@ class CorrectnessLeakGuardTest {
      * which is a different audience under different conditions. Without a third name both would
      * have faced the same lie-or-suppression choice {@code ForCheckedForm} was created to avoid.
      *
-     * <p><b>Audience:</b> grading services and the teacher-facing review, never anything a
-     * student calls. <b>Licensed by:</b> the frozen contract's rule for teacher verbs —
+     * <p>Since 2026-08-23 it is also the read behind the student's checked form, which shares
+     * the assembler. The name still describes the read honestly — it is the grading read — and
+     * what stands in front of it for that caller is E13.4's three gates rather than a name.
+     *
+     * <p><b>Audience:</b> grading services, the teacher-facing review and, through the shared
+     * assembler, the student's own checked form. <b>Licensed by:</b> the frozen contract's rule
+     * for teacher verbs —
      * {@code requireRole(TEACHER, COORDINATOR)} plus ownership resolved from repositories, the
      * caller being the execution's executing teacher or the exam's author. <b>Enforced by:</b>
      * the E12 handler tests that prove those gates, and {@code AutoGraderTest}, which proves the
@@ -106,7 +121,7 @@ class CorrectnessLeakGuardTest {
      * go away this suffix stops being licensed and comes back out of this list.
      */
     private static final List<String> SANCTIONED_SUFFIXES =
-            List.of("ForAuthoring", "ForCheckedForm", "ForGrading");
+            List.of("ForAuthoring", "ForGrading");
 
     @Test
     @DisplayName("no projection anywhere in the package can hold an answer key")
@@ -157,24 +172,45 @@ class CorrectnessLeakGuardTest {
     }
 
     @Test
-    @DisplayName("the sanctioned suffixes name three audiences, and nothing that merely looks like one")
+    @DisplayName("the sanctioned suffixes name two audiences, and nothing that merely looks like one")
     void eachSanctionedSuffixNamesOneRealAudience() {
         // Adding one is a deliberate act with a licensing argument behind it, which is what
-        // SANCTIONED_SUFFIXES' javadoc records — three so far: authoring (E2.12), the student's
-        // own checked form (E13.2) and grading (E12). A read that merely mentions the words is
-        // not sanctioned: the suffix has to be the end of the name.
+        // SANCTIONED_SUFFIXES' javadoc records — two: authoring (E2.12) and grading (E12). A
+        // read that merely mentions the words is not sanctioned: the suffix has to be the end
+        // of the name.
         assertThat(SANCTIONED_SUFFIXES)
-                .containsExactly("ForAuthoring", "ForCheckedForm", "ForGrading");
+                .containsExactly("ForAuthoring", "ForGrading");
 
         assertThat(isSanctioned("findVersionForAuthoring")).isTrue();
-        assertThat(isSanctioned("findAnswersForCheckedForm")).isTrue();
         assertThat(isSanctioned("findVersionsForGrading")).isTrue();
 
-        assertThat(isSanctioned("findForCheckedFormAndAlsoTheDashboard")).isFalse();
         assertThat(isSanctioned("findForAuthoringPreview")).isFalse();
         assertThat(isSanctioned("findForGradingQueueBanner")).isFalse();
         assertThat(isSanctioned("findForReview")).isFalse();
         assertThat(isSanctioned("findForTakeExam")).isFalse();
+    }
+
+    @Test
+    @DisplayName("ForCheckedForm is withdrawn: a name nobody reads through is a permission "
+            + "standing open")
+    void checkedFormSuffixIsNoLongerLicensed() {
+        // E13.4 shipped sharing GradeReviewService's assembler, so no repository method is
+        // named for the checked form and the suffix licensed nothing. This asserts the removal
+        // rather than only the two that remain, because a merge that restored the entry would
+        // otherwise put the hole back silently — the same reason the list is spelled out above.
+        assertThat(SANCTIONED_SUFFIXES).doesNotContain("ForCheckedForm");
+        assertThat(isSanctioned("findAnswersForCheckedForm")).isFalse();
+
+        List<String> named = classesIn(COMPILED_REPOSITORIES).stream()
+                .flatMap(repository -> Arrays.stream(repository.getDeclaredMethods()))
+                .map(Method::getName)
+                .filter(name -> name.endsWith("ForCheckedForm"))
+                .toList();
+
+        assertThat(named)
+                .as("nothing reads through the withdrawn name; if this ever fails, the read "
+                        + "came back and the licensing argument has to come back with it")
+                .isEmpty();
     }
 
     @Test

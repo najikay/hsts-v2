@@ -100,8 +100,99 @@ unowned id (both cases, indistinguishable on purpose) · `FORBIDDEN` role gate �
 `CONFLICT` override-after-approve, stale `lock_version` on concurrent override ·
 `UNAUTHORIZED` no session.
 
+## Additive amendments
+
+Everything below was added **after** the 2026-08-20 freeze, under its additive-only rule: no
+verb renamed, no payload component removed or reordered, no semantics changed for any existing
+field. A client built against v1 still works against a server that implements the amendments.
+
+Two amendments are already recorded **inline above** and keep the names they were given: the
+`StudentGradeRow` **amendment v1.1** (`examName`/`courseCode`, 2026-08-20) is **A1**, and the
+**checked-form amendment** (`attemptStatus`/`actualMinutes`, 2026-08-22) is **A2**. Numbering
+continues from there, in EXAM_WIRE_CONTRACT.md's style.
+
+### A3 — `GradeOverrideRequest.teacherComment` (E12.3 / S-22, added 2026-08-23, lead-ruled)
+
+`GradeOverrideRequest` gains a fourth component, **appended last**:
+
+```
+GradeOverrideRequest(long gradeId, int newScore, String justification, String teacherComment)
+```
+
+**Why it exists at all.** `teacherComment` could be read everywhere on this contract — it is a
+component of `StudentGradeRow`, both student containers preserve it, `MY_GRADES_GET` renders it
+in a column and the checked form renders it under a heading — and **nothing could write one**.
+No request payload carried a comment field and no service called `setTeacherComment`; only the
+seed loader did. S-22 had a read path and no wire, and acceptance case 8.4 ("change a grade with
+a justification, and add a comment to the student") could not pass. Found by Member B,
+2026-08-23.
+
+**The field.**
+- **Nullable, and blank is null.** The compact constructor strips the value and collapses an
+  empty result to `null` (`strip`, not `trim`), so a request from an untouched box and one from
+  a box holding two spaces are the same request and every later decision is a null test.
+- **No maximum length and no shape rule**, mirroring `justification` exactly. The column behind
+  both is MySQL `TEXT`. The comment adds **no new error code and no new refusal**: `VALIDATION`
+  still means a malformed payload, a blank justification or a score out of range.
+- **The three-component constructor is retained**, delegating with a null comment, so every
+  call site and test written against v1 keeps compiling and keeps meaning what it meant — the
+  same move `ReleaseCreateRequest` made for its optional code.
+- `serialVersionUID` goes **1 → 2**, on the precedent `StudentGradeRow` and `CheckedForm` set at
+  their own amendments. Stated plainly because it is the one place "additive" is not literally
+  true of the bytes: a v1 *client jar* talking to an amended server would refuse this payload,
+  so client and server ship together, as they always have. Source compatibility — the thing the
+  retained constructor buys — is unaffected.
+
+**Null preserves; it does not clear.** ⚑ The service writes the comment **only when one was
+sent**. An override carrying no comment leaves any existing comment exactly where it is.
+Correcting a score twice is ordinary, and the dialog's comment box opens empty every time; if
+null meant "clear it", a teacher's second correction would silently delete the sentence she
+wrote to the student on the first, and no screen would say so. **There is therefore no way to
+clear a comment on this wire at all** — removing one is a v2 shape.
+
+**Written in the same transaction as the score**, by `OverrideService`, because the comment
+explains that score and a student must never be able to read one without the other. It is
+refused with the override in every case the override is refused, `CONFLICT` on an already
+approved grade included — that is the point of riding the same verb.
+
+**Why A and not B.** A standalone `GRADE_COMMENT_SET` verb was considered and **declined for
+v1**: commenting rides the adjustment for v1, and a standalone `GRADE_COMMENT_SET` is the v2
+shape. The two acts happen at one moment in front of one paper — T-8.3 has her writing both in
+the same dialog — so a second verb would have bought a second round trip, a second set of
+ownership and state gates saying the same thing, and the possibility of a comment landing on a
+grade whose score change had just been refused. It is the right shape for what v1 does not do:
+commenting on a grade **without** changing it, and clearing a comment.
+
+**Nothing changed on the read side.** `StudentGradeRow` stays at v1.1 and both student
+containers strip `overrideReason` exactly as before. The comment already travelled every read
+path; this amendment gives it a way in.
+
+### A4 — the `ForCheckedForm` suffix is withdrawn (E13.2 / E13.4, 2026-08-23, lead-ruled)
+
+The scope section above records that repository reads powering `CHECKED_FORM_GET` are named
+`…ForCheckedForm`, sanctioned as a second suffix in `CorrectnessLeakGuardTest`. **E13.4 shipped
+without one.** The checked form reuses `GradeReviewService.answers`, the same assembler
+`GRADE_REVIEW_GET` uses, so its read is `findVersionsForGrading` and no method anywhere was ever
+named for the checked form. Found by Member B (PR 17), who declined to remove an entry from a
+security guard on his own judgement and asked.
+
+The entry is **removed**, on the guard's own stated rule: a suffix is licensed by the feature
+behind it, and a licensed name with no readers is a permission standing open that nobody is
+exercising and nobody is watching. `SANCTIONED_SUFFIXES` is now `ForAuthoring, ForGrading`, and
+a test asserts the withdrawal rather than only the two that remain, so restoring the entry
+cannot happen silently.
+
+**Nothing about the checked form's gates changes.** They were never the suffix: E13.1's
+authorization tests prove the grade is the caller's, that it is `APPROVED` and that the
+execution is closed, and that failing any of them answers `NOT_FOUND` indistinguishably. Those
+tests were always the licence and they still hold. The sharing is the right design — one place
+in the product turns an answer key into rows, with two different gates in front of it.
+
 ## What is deliberately absent
 
 - No stats DTOs — teacher statistics/histogram are E14's contract, drafted when E14 starts.
 - No pagination — school-sized lists (§6 scale).
 - No per-question data in `MY_GRADES_GET` — the checked form is its own verb with its own gates.
+- No `GRADE_COMMENT_SET` — commenting rides the adjustment in v1 (A3). Commenting without
+  changing a score, and clearing a comment, are the two things that verb would buy, and both
+  wait for v2.

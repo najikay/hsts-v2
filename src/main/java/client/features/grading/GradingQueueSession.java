@@ -196,16 +196,37 @@ public final class GradingQueueSession {
     /**
      * Changes one grade's score, with the reason that must accompany it (E12.3, S-23).
      *
-     * <p>Validated here as well as on the server, and neither check is redundant. The server's
-     * is the one that matters; this one exists so a teacher who leaves the reason blank is told
-     * so before her request travels, rather than after.
-     *
      * @param gradeId       the grade to change
      * @param newScore      the score she wants, 0..100
      * @param justification why, non-blank
      * @return {@code true} when the request was sent
      */
     public boolean override(long gradeId, int newScore, String justification) {
+        return override(gradeId, newScore, justification, null);
+    }
+
+    /**
+     * Changes one grade's score, with the reason for the record and optionally a comment for
+     * the student (E12.3, S-22/S-23).
+     *
+     * <p>Validated here as well as on the server, and neither check is redundant. The server's
+     * is the one that matters; this one exists so a teacher who leaves the reason blank is told
+     * so before her request travels, rather than after.
+     *
+     * <p><b>The comment is never validated.</b> It is optional, and a blank one is turned into
+     * {@code null} by the request record rather than by a rule here, so the client and the
+     * server agree about what "she wrote nothing" is without either of them having to check
+     * (the two tiers running the same rule, ARCHITECTURE §3). Null does not clear an existing
+     * comment; {@link GradingCopy#COMMENT_LABEL} says so on the dialog.
+     *
+     * @param gradeId        the grade to change
+     * @param newScore       the score she wants, 0..100
+     * @param justification  why, non-blank
+     * @param teacherComment the note for the student, or {@code null}/blank for none
+     * @return {@code true} when the request was sent
+     */
+    public boolean override(long gradeId, int newScore, String justification,
+                            String teacherComment) {
         if (busy) {
             return false;
         }
@@ -225,7 +246,7 @@ public final class GradingQueueSession {
         onChange.run();
 
         dispatcher.send(Verb.GRADE_OVERRIDE,
-                        new GradeOverrideRequest(gradeId, newScore, justification))
+                        new GradeOverrideRequest(gradeId, newScore, justification, teacherComment))
                 .whenComplete((response, failure) -> poster.run(() -> settleOverride(response, failure)));
         return true;
     }

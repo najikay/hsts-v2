@@ -1,8 +1,10 @@
-# E6 question bank wire contract — DRAFT
+# E6 question bank wire contract — FROZEN v1
 
-**Status: DRAFT, 2026-08-21. All five open rulings answered; freeze pending the handlers.**
-The lead's condition, verbatim: "Freeze happens on the PR review once E6's handlers exist against
-it." So this stays DRAFT through the service PR and is not binding until this header says FROZEN.
+**Status: FROZEN v1 (lead, 2026-08-23).** The freeze condition is met: `BankHandlers` and
+`BankReadHandlers` have been on main since #30, built against this text, with the guard family
+(`BankWireLeakGuardTest`, `WireDtoLeakGuardTest`, `BankWiringGuardTest`) enforcing its licences.
+All seven rulings below stand as written. From here, additive changes only (new optional fields,
+new verbs) with any rename or retype recorded as an amendment.
 Same additive-only terms as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) once it is.
 
 Package: `common/dto/bank` (all types `Serializable` records, wire-safe, no entity types).
@@ -418,9 +420,9 @@ questions were.
 5. **Server-side stem truncation approved**, the constant documented, and the detail verb carries
    the full stem.
 
-**Still open, and it is a freeze condition rather than a ruling:** the contract stays DRAFT until
-E6's handlers exist against it. The lead's words: "Freeze happens on the PR review once E6's
-handlers exist against it."
+**The freeze condition closed 2026-08-23:** E6's handlers (#30) exist against this contract and
+are on main, so the header now reads FROZEN v1. The condition is kept here as history rather than
+deleted, because the freeze date and the reason belong in the record.
 
 ### 7.6 The seventh ruling: the topic filter becomes a lookup
 
