@@ -657,6 +657,42 @@ public final class BankSession {
     }
 
     /**
+     * Whether the caller may write into this course, which is narrower than seeing it.
+     *
+     * <p>Contract section 2 keeps two scopes apart: a coordinator <b>reads</b> every course of
+     * her subject and <b>writes</b> only in the ones she also teaches. The read half is why the
+     * list can show her a course at all; this is the write half, and without it the screen
+     * offers her Delete and Edit on rows the server will refuse.
+     *
+     * <p>The set is {@code LoginResult.courses()}, which is
+     * {@code CourseRepository.findForUser}: teaching <b>union enrolment</b>. For staff the
+     * enrolment half is empty, so it is exactly the taught set. Said out loud because the union
+     * is not obvious from the name, and it would be the wrong set for a role that has both.
+     *
+     * <p>Offering, not permission: the server re-checks with {@code requireTeachesCourse} on
+     * create and {@code teachesCourse} on edit and delete, and it is the one that decides. This
+     * only stops the client proposing a trip whose single possible outcome is a refusal.
+     *
+     * @param courseCode the course a row or a detail belongs to
+     * @return whether the caller teaches it
+     */
+    public boolean canWriteIn(String courseCode) {
+        String wanted = blankToNull(courseCode);
+        if (wanted == null) {
+            return false;
+        }
+        for (CourseRef course : courses) {
+            // strip(), never trim(), for the reason the contract's section 5 gives: course codes
+            // are CHAR(2) under a PAD SPACE collation, so a code carrying a Unicode space
+            // matches the row in SQL while failing Java equality.
+            if (wanted.equals(blankToNull(course.code()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The courses the picker offers: the caller's own, plus every course the bank has actually
      * shown her.
      *

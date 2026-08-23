@@ -104,6 +104,15 @@ public final class QuestionEditorCopy {
 
     // ===================== State ==========================================
 
+    /**
+     * What the lock banner calls the thing being edited (E6.14).
+     *
+     * <p>Declared here rather than in {@code LockCopy}: that class is the shared lock vocabulary
+     * and belongs to E18, and the noun is this screen's. The legacy screen declares its own for
+     * the same reason.
+     */
+    public static final String LOCK_NOUN = "question";
+
     /** Shown while a save is in flight, so a second press is visibly pointless. */
     public static final String SAVING = "Saving";
 

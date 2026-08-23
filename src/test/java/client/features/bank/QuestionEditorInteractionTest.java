@@ -1,9 +1,12 @@
 package client.features.bank;
 
 import client.core.AppArgs;
-import client.core.ClientApp;
 import client.core.NavParams;
 import client.core.ScreenManager;
+import client.events.ClientEventBus;
+import client.events.DirectFxThreadPoster;
+import client.ui.theme.ThemeManager;
+import client.ui.theme.ThemeState;
 import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -12,6 +15,10 @@ import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
+import common.dto.lock.EntityRef;
+import common.dto.lock.LockHolder;
+import common.dto.lock.LockResponse;
+import common.protocol.Message;
 import common.protocol.ErrorCode;
 import common.protocol.Verb;
 import javafx.scene.Scene;
@@ -56,8 +63,15 @@ class QuestionEditorInteractionTest extends ApplicationTest {
 
     private static final Instant SPRING = Instant.parse("2026-03-10T07:00:00Z");
 
+    /** The view and the wire the last openEditor produced, so the lock lifecycle is visible. */
+    private QuestionEditorView openedView;
+    private FakeClientConnection openedConnection;
+
     private static final LoginResult DANA = new LoginResult(2, "dana.cohen", "Dana Cohen",
             Role.TEACHER, List.of(new CourseRef("11", "Algebra")), 0);
+
+    /** The key the editor locks under, from the one place that decides it. */
+    private static final EntityRef BANK_LOCK = EntityRef.question(11005L);
 
     private static final QuestionDetail GEOMETRY = new QuestionDetail("11005", "11", "Algebra",
             2, 2, "Read the diagram and answer",
@@ -77,7 +91,7 @@ class QuestionEditorInteractionTest extends ApplicationTest {
 
     @Override
     public void start(Stage stage) {
-        // Each test boots the app itself, as UiSmokeTest does.
+        // Nothing here: openEditor initialises ScreenManager directly, no shell, no connect screen.
     }
 
     @AfterEach
@@ -208,13 +222,69 @@ class QuestionEditorInteractionTest extends ApplicationTest {
                 .isTrue();
     }
 
-    // ===================== Harness ========================================
+    // ===================== E6.14, the edit lock ⚑ =========================
 
-    private Scene openEditor(Consumer<FakeClientConnection> script, NavParams params) {
-        interact(() -> new ClientApp().start(new Stage()));
+    @Test
+    @DisplayName("⚑ a question somebody else is editing opens read-only, and names her")
+    void lockedByAnotherTeacher() {
+        Scene scene = openEditor(connection -> connection.respondTo(Verb.LOCK_ACQUIRE,
+                        request -> Message.ok(request, LockResponse.refused(BANK_LOCK,
+                                new LockHolder(9, "Avi Mizrahi"),
+                                Instant.now().plusSeconds(120)))),
+                NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+
+        assertThat(buttonNamed(scene, QuestionEditorCopy.SAVE).isDisabled())
+                .as("the contract answers CONFLICT for a question locked by somebody else, so "
+                        + "offering Save offers an attempt with one possible outcome")
+                .isTrue();
+        assertThat(labelTexts(scene))
+                .as("and the banner names who has it, because 'locked' without a name leaves her "
+                        + "with nobody to go and ask")
+                .anySatisfy(text -> assertThat(text).contains("Avi Mizrahi"));
+    }
+
+    @Test
+    @DisplayName("⚑ leaving the editor gives the lock back rather than waiting for the sweeper")
+    void leavingReleasesTheLock() {
+        Scene scene = openEditor(connection -> { },
+                NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+
+        interact(() -> openedView.onHide());
         WaitForAsyncUtils.waitForFxEvents();
 
+        assertThat(sentVerbs())
+                .as("the server sweeps expired holds, so a crash frees it eventually. That is "
+                        + "the safety net, not the mechanism: without an explicit release the row "
+                        + "says 'being edited by Dana' for the whole TTL after she has gone.")
+                .contains(Verb.LOCK_RELEASE);
+    }
+
+    @Test
+    @DisplayName("a new question takes no lock, because there is nothing yet to collide over")
+    void createModeTakesNoLock() {
+        openEditor(connection -> { }, NavParams.of(QuestionEditorView.PARAM_COURSE, "11"));
+
+        assertThat(sentVerbs()).doesNotContain(Verb.LOCK_ACQUIRE);
+    }
+
+    // ===================== Harness ========================================
+
+    /**
+     * The same shell-free setup {@code BankScreenInteractionTest.openBankAs} uses, and for the
+     * same reason: booting {@code ClientApp} also boots the connect screen, whose deferred
+     * connect attempt can outlive the test and dereference an event bus that
+     * {@code resetForTests} has already nulled. Initialising {@link ScreenManager} directly gives
+     * the editor a real manager with no connect screen behind it.
+     */
+    private Scene openEditor(Consumer<FakeClientConnection> script, NavParams params) {
         ScreenManager manager = ScreenManager.getInstance();
+        interact(() -> {
+            ClientEventBus bus = new ClientEventBus(ClientEventBus.newBus(),
+                    new DirectFxThreadPoster());
+            manager.init(new Stage(), bus, new ThemeManager(ThemeState.ephemeral(bus)));
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
         interact(() -> {
             FakeClientConnection connection = new FakeClientConnection("demo-server", 5555);
             try {
@@ -224,8 +294,19 @@ class QuestionEditorInteractionTest extends ApplicationTest {
             }
             connection.replyOk(Verb.LOGIN, DANA);
             connection.replyOk(Verb.LOGOUT, null);
+            // The editor takes an edit lock on open (E6.14). Until the acquire is answered the
+            // form is CHECKING, which E18 defines as "disabled, not read-only", so a test that
+            // scripted no lock would be asserting about a form nobody can type in. Granting it
+            // is the ordinary case; lockedByAnotherTeacher scripts the refusal instead.
+            connection.respondTo(Verb.LOCK_ACQUIRE, request -> Message.ok(request,
+                    LockResponse.granted(BANK_LOCK,
+                            new LockHolder(DANA.userId(), DANA.displayName()),
+                            Instant.now().plusSeconds(120))));
+            connection.replyOk(Verb.LOCK_RELEASE, null);
+            connection.replyOk(Verb.LOCK_RENEW, null);
             script.accept(connection);
 
+            openedConnection = connection;
             RequestDispatcher dispatcher = new RequestDispatcher(connection);
             connection.setServerMessageHandler(dispatcher::dispatchIncoming);
             manager.setClient(connection);
@@ -244,6 +325,7 @@ class QuestionEditorInteractionTest extends ApplicationTest {
             stage.show();
             view.onShow(params);
             holder[0] = scene;
+            openedView = view;
         });
         WaitForAsyncUtils.waitForFxEvents();
         return holder[0];
@@ -318,6 +400,11 @@ class QuestionEditorInteractionTest extends ApplicationTest {
                 .filter(Objects::nonNull)
                 .filter(text -> !text.isBlank())
                 .collect(Collectors.toSet());
+    }
+
+    /** Every verb the editor put on the wire, in order. */
+    private List<Verb> sentVerbs() {
+        return openedConnection.sentMessages().stream().map(Message::getVerb).toList();
     }
 
     private static Set<String> labelTexts(Scene scene) {

@@ -1,5 +1,11 @@
 package client.features.bank;
 
+import client.core.ScreenManager;
+import client.features.locks.EditLockState;
+import client.features.locks.FxHeartbeat;
+import client.features.locks.LockAwareEditor;
+import client.features.locks.LockBanner;
+import common.dto.auth.LoginResult;
 import client.core.NavParams;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
@@ -85,6 +91,8 @@ public final class QuestionEditorView extends AbstractScreen {
     private final Button save = Buttons.primary(QuestionEditorCopy.SAVE);
     private final Button cancel = Buttons.styled(QuestionEditorCopy.CANCEL, Buttons.GHOST);
 
+    private final LockBanner lockBanner = new LockBanner();
+    private LockAwareEditor locks;
     private ImagePicker picker;
     private QuestionEditorSession session;
     private boolean filling;
@@ -127,6 +135,68 @@ public final class QuestionEditorView extends AbstractScreen {
         session.onChange(this::render);
 
         buildForm();
+        openLock(detail);
+        render();
+    }
+
+    /**
+     * Takes the edit lock on the question being edited (E6.14, E18.5).
+     *
+     * <p>Edit mode only: a question that does not exist yet cannot be locked, and there is
+     * nothing for another teacher to collide with.
+     *
+     * <p>The key comes from {@link BankLocks}, which is the one place the display-id numbering
+     * lives. Skipped without a session, because this screen is reachable from the gallery and
+     * from tests with no signed-in user, and refusing to build there would be worse than being
+     * unlocked there.
+     */
+    private void openLock(QuestionDetail detail) {
+        if (detail == null) {
+            return;
+        }
+        LoginResult user = ScreenManager.getInstance().signedInUser();
+        if (dispatcher() == null || user == null || eventBus() == null) {
+            return;
+        }
+        locks = new LockAwareEditor(dispatcher(), eventBus(), user.userId(), new FxHeartbeat(),
+                QuestionEditorCopy.LOCK_NOUN);
+        locks.onStateChanged(this::renderLockState);
+        lockBanner.setOnTakeOver(this::takeOver);
+        locks.open(BankLocks.of(detail.displayId5()));
+    }
+
+    /**
+     * Gives the lock back the moment she leaves, rather than waiting for it to expire.
+     *
+     * <p>The server sweeps expired holds, so a client that crashes still frees the question
+     * eventually (E18's sweep-on-access plus {@code sweepExpired}). That is the safety net and
+     * not the mechanism: without this call the row keeps saying "being edited by Dana" for the
+     * whole TTL after she has closed the editor, and the next teacher waits on nothing.
+     */
+    @Override
+    public void onHide() {
+        if (locks != null) {
+            locks.close();
+        }
+    }
+
+    /** The banner's offer, taken. The server decides; this only asks. */
+    private void takeOver() {
+        if (locks != null) {
+            locks.takeOver();
+        }
+    }
+
+    /**
+     * Paints somebody else's lock onto the form.
+     *
+     * <p>The refusal lives on the banner and never under a field: she has typed nothing wrong,
+     * and a red box would blame her form for another teacher's lock. The session is told too, so
+     * the save is refused rather than merely greyed.
+     */
+    private void renderLockState(EditLockState.Snapshot state) {
+        lockBanner.show(state, QuestionEditorCopy.LOCK_NOUN);
+        session.setReadOnly(!state.isEditable());
         render();
     }
 
@@ -210,7 +280,10 @@ public final class QuestionEditorView extends AbstractScreen {
         scroll.getStyleClass().add("editor-scroll");
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        root.getChildren().addAll(new VBox(2, title, subtitle), scroll, actions);
+        // The banner sits above the form, not inside the scroll: "somebody else is editing this"
+        // has to be visible without scrolling to it.
+        lockBanner.hide();
+        root.getChildren().addAll(new VBox(2, title, subtitle), lockBanner, scroll, actions);
         fillFromSession();
     }
 

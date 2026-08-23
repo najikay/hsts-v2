@@ -872,6 +872,43 @@ class BankSessionTest {
         }
 
         @Test
+        @DisplayName("writing is narrower than seeing, which is the coordinator's whole case ⚑")
+        void canWriteOnlyWhereSheTeaches() {
+            // rina.barak reads every course of subject 10 and teaches none of them.
+            FakeClientConnection hers = new FakeClientConnection();
+            RequestDispatcher dispatcher = new RequestDispatcher(hers);
+            hers.setServerMessageHandler(dispatcher::dispatchIncoming);
+            BankSession coordinator =
+                    new BankSession(dispatcher, new DirectFxThreadPoster(), List.of());
+
+            assertThat(coordinator.canWriteIn("11"))
+                    .as("the bank shows her the course; QUESTION_DELETE would refuse her. "
+                            + "Offering the control is offering a trip with one outcome.")
+                    .isFalse();
+
+            assertThat(session.canWriteIn("11"))
+                    .as("Dana teaches Algebra, so the same row is hers to change")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a course code that is blank, null or unknown is never writable")
+        void writeScopeIsClosed() {
+            assertThat(session.canWriteIn(null)).isFalse();
+            assertThat(session.canWriteIn("   ")).isFalse();
+            assertThat(session.canWriteIn("99")).isFalse();
+        }
+
+        @Test
+        @DisplayName("a course code padded with a non-breaking space still matches its course")
+        void writeScopeStrips() {
+            assertThat(session.canWriteIn(" 11 "))
+                    .as("strip() handles the ordinary spaces; the contract's section 5 is why "
+                            + "this compares stripped rather than raw")
+                    .isTrue();
+        }
+
+        @Test
         @DisplayName("a question that would not open can be asked for again")
         void retryAfterAFailedDetail() {
             serverHasTheBank();

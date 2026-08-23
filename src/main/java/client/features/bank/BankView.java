@@ -432,7 +432,14 @@ public final class BankView extends AbstractScreen {
 
         historyToggle.setText(session.isHistoryOpen()
                 ? BankCopy.HISTORY_CLOSE : BankCopy.HISTORY_OPEN);
-        delete.setDisable(session.isDeleting());
+        // Writing is narrower than seeing: a coordinator reads her whole subject and authors
+        // only where she teaches. Both write controls go together, and both say why, because a
+        // greyed button with no reason is a defect of its own on a screen she reached legitimately.
+        boolean mayWrite = session.canWriteIn(detail.courseCode());
+        delete.setDisable(session.isDeleting() || !mayWrite);
+        String why = mayWrite ? null : BankCopy.readOnlyCourse(detail.courseName());
+        setReason(delete, why);
+        setReason(edit, why);
         // Editing is offered only once the illustration has settled, which is what makes the
         // components report's trap unreachable from this screen: the editor takes the bytes as a
         // required argument, so a button that could open it early would be the only way in.
@@ -601,6 +608,9 @@ public final class BankView extends AbstractScreen {
         // check passes for a picture that is not there; and this view already renders that
         // state as a failure in imageNode. forEdit refuses it, so a laxer test here would
         // enable a button whose only outcome is an IllegalArgumentException.
+        if (!session.canWriteIn(detail.courseCode())) {
+            return false;
+        }
         byte[] bytes = session.image();
         return !detail.hasImage() || (bytes != null && bytes.length > 0);
     }
@@ -634,8 +644,32 @@ public final class BankView extends AbstractScreen {
             }
             return;
         }
+        // The filter can name a course she reads and does not teach, because the two scopes are
+        // different sets. QUESTION_CREATE would be refused with COURSE_NOT_TAUGHT, so the trip
+        // is not offered.
+        if (!session.canWriteIn(course)) {
+            if (toasts() != null) {
+                toasts().info(QuestionEditorCopy.NEW_QUESTION,
+                        BankCopy.readOnlyCourse(courseNameOf(course)));
+            }
+            return;
+        }
         navigator().navigate(BankRoutes.EDITOR,
                 NavParams.of(QuestionEditorView.PARAM_COURSE, course));
+    }
+
+    /** A tooltip that explains a disabled control, or clears one that no longer applies. */
+    private static void setReason(Button button, String reason) {
+        button.setTooltip(reason == null ? null : new javafx.scene.control.Tooltip(reason));
+    }
+
+    /** The course's display name from the options in hand, or the code when it is not there. */
+    private String courseNameOf(String courseCode) {
+        return session.courseOptions().stream()
+                .filter(course -> courseCode.equals(course.code()))
+                .map(CourseRef::name)
+                .findFirst()
+                .orElse(courseCode);
     }
 
     private static List<CourseRef> coursesOfSignedInUser() {

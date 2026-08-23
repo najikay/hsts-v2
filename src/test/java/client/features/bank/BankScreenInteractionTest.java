@@ -1,10 +1,13 @@
 package client.features.bank;
 
 import client.core.AppArgs;
-import client.core.ClientApp;
 import client.core.NavParams;
 import client.core.ScreenManager;
+import client.events.ClientEventBus;
+import client.events.DirectFxThreadPoster;
 import client.events.PushEventBridge;
+import client.ui.theme.ThemeManager;
+import client.ui.theme.ThemeState;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.auth.CourseRef;
@@ -79,6 +82,10 @@ class BankScreenInteractionTest extends ApplicationTest {
             Role.TEACHER,
             List.of(new CourseRef("11", "Algebra"), new CourseRef("12", "Calculus")), 0);
 
+    /** rina.barak: coordinates subject 10, teaches nothing, by design. */
+    private static final LoginResult READ_ONLY_RINA = new LoginResult(4, "rina.barak",
+            "Rina Barak", Role.COORDINATOR, List.of(), 0);
+
     private static final BankQuestionRow LINEAR = new BankQuestionRow("11001", "11", "Algebra",
             "Solve the linear equation", "Equations", Difficulty.EASY, 1, false, SPRING);
     private static final BankQuestionRow GEOMETRY = new BankQuestionRow("11005", "11", "Algebra",
@@ -102,7 +109,8 @@ class BankScreenInteractionTest extends ApplicationTest {
 
     @Override
     public void start(Stage stage) {
-        // Each test boots the app itself, as UiSmokeTest does.
+        // Nothing here: openBankAs initialises ScreenManager directly rather than booting the
+        // shell, so no connect screen exists to race the teardown. See its javadoc.
     }
 
     @AfterEach
@@ -285,6 +293,28 @@ class BankScreenInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("⚑ a coordinator sees a course she cannot author in, with both controls shut")
+    void writeControlsAreShutOutsideTheTaughtSet() {
+        Scene scene = openBankAs(READ_ONLY_RINA, connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, GEOMETRY_V2);
+        });
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(buttonNamed(scene, BankCopy.DELETE).isDisabled())
+                .as("her read scope shows her the row; her write scope does not cover it, and "
+                        + "the server would refuse a delete")
+                .isTrue();
+        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled()).isTrue();
+        assertThat(buttonNamed(scene, BankCopy.DELETE).getTooltip())
+                .as("a greyed control with no reason is a defect of its own here: she reached "
+                        + "this state by doing nothing wrong")
+                .isNotNull();
+    }
+
+    @Test
     @DisplayName("a question with no illustration is editable immediately")
     void editOpensWithNoImageAtAll() {
         Scene scene = openBank(connection -> {
@@ -313,10 +343,38 @@ class BankScreenInteractionTest extends ApplicationTest {
      * user; the separate stage is what lets the screen be driven without a route.
      */
     private Scene openBank(Consumer<FakeClientConnection> script) {
-        interact(() -> new ClientApp().start(new Stage()));
+        return openBankAs(DANA, script);
+    }
+
+    /**
+     * Brings up just enough app for a screen to run, and deliberately not the whole shell.
+     *
+     * <p><b>It does not call {@code ClientApp.start}, and that is the point.</b> Booting the app
+     * also boots the connect screen, which schedules its connect attempt with
+     * {@code applyLater}. When a test ends, {@code resetForTests} nulls the manager's event bus,
+     * and a connect attempt still sitting in the FX queue then wakes up and dereferences it:
+     * {@code NullPointerException: eventBus} from {@code ConnectWiring.forEndpoint}, in a test
+     * that was never about connecting. It is a teardown race, it is timing-dependent, and it
+     * surfaced here only because this file grew a twelfth test.
+     *
+     * <p>{@code ScreenManager.init} is the seam the shell itself uses, so initialising it
+     * directly gives these tests a real manager, a real event bus and a real navigator with no
+     * connect screen anywhere near them. {@code ThemeState.ephemeral} keeps it off the user's
+     * home directory too.
+     *
+     * <p><b>The race is not fixed by this, only avoided here.</b> Fourteen test classes share the
+     * boot-and-reset shape; this file and the editor's stop being exposed. Raised with the lead
+     * as a suite-wide item.
+     */
+    private Scene openBankAs(LoginResult who, Consumer<FakeClientConnection> script) {
+        ScreenManager manager = ScreenManager.getInstance();
+        interact(() -> {
+            ClientEventBus bus = new ClientEventBus(ClientEventBus.newBus(),
+                    new DirectFxThreadPoster());
+            manager.init(new Stage(), bus, new ThemeManager(ThemeState.ephemeral(bus)));
+        });
         WaitForAsyncUtils.waitForFxEvents();
 
-        ScreenManager manager = ScreenManager.getInstance();
         interact(() -> {
             FakeClientConnection connection = new FakeClientConnection("demo-server", 5555);
             try {
@@ -324,7 +382,7 @@ class BankScreenInteractionTest extends ApplicationTest {
             } catch (IOException e) {
                 throw new AssertionError(e);
             }
-            connection.replyOk(Verb.LOGIN, DANA);
+            connection.replyOk(Verb.LOGIN, who);
             connection.replyOk(Verb.LOGOUT, null);
             script.accept(connection);
 
@@ -333,7 +391,7 @@ class BankScreenInteractionTest extends ApplicationTest {
             manager.setClient(connection);
             manager.setDispatcher(dispatcher);
             dispatcher.setPushListener(new PushEventBridge(manager.eventBus()));
-            manager.setSignedInUser(DANA);
+            manager.setSignedInUser(who);
         });
         WaitForAsyncUtils.waitForFxEvents();
 

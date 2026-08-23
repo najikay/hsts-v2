@@ -640,6 +640,59 @@ class QuestionEditorSessionTest {
         }
 
         @Test
+        @DisplayName("a question somebody else is editing cannot be saved from here ⚑")
+        void readOnlyBlocksTheSave() {
+            QuestionEditorSession session = editing(false, null);
+            session.setText("Mine now");
+            assertThat(session.canSave())
+                    .as("a complete form with the lock free is savable")
+                    .isTrue();
+
+            session.setReadOnly(true);
+
+            assertThat(session.canSave())
+                    .as("E18 gives the lock to the other teacher, and the contract answers "
+                            + "CONFLICT for a question locked by somebody else. Offering Save "
+                            + "here offers an attempt with one outcome.")
+                    .isFalse();
+            assertThat(session.isReadOnly()).isTrue();
+
+            session.setReadOnly(false);
+            assertThat(session.canSave())
+                    .as("and it comes back when the other editor releases, without a reload")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("read-only stops the save even when nothing else is wrong")
+        void readOnlyIsNotAValidationProblem() {
+            QuestionEditorSession session = editing(false, null);
+            session.setText("Mine now");
+            session.setReadOnly(true);
+
+            assertThat(session.liveProblems())
+                    .as("she has typed nothing wrong; the reason lives on the banner, not under "
+                            + "a field, so a red box would be blaming her form for someone "
+                            + "else's lock")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("setting read-only to what it already is costs no render")
+        void readOnlyIsIdempotent() {
+            QuestionEditorSession session = editing(false, null);
+            session.setReadOnly(true);
+            int before = renders;
+
+            session.setReadOnly(true);
+
+            assertThat(renders)
+                    .as("lock pushes arrive on a heartbeat; re-rendering the form on every one "
+                            + "would rebuild the answer rows under her caret")
+                    .isEqualTo(before);
+        }
+
+        @Test
         @DisplayName("the live rule still marks both boxes, which is where 'both' was true")
         void liveRuleStillMarksBoth() {
             QuestionEditorSession session = creating();

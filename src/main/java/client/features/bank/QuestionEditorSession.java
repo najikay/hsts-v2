@@ -132,6 +132,9 @@ public final class QuestionEditorSession {
     private List<QuestionEditorCopy.Refusal> refusals = List.of();
     private QuestionDetail saved;
 
+    /** Somebody else holds the edit lock; the form renders and refuses to send (E6.14). */
+    private boolean readOnly;
+
     private QuestionEditorSession(RequestDispatcher dispatcher, FxThreadPoster poster, Mode mode,
                                   String courseCode, String displayId5, int baseVersionNo,
                                   ImagePickerLogic image) {
@@ -369,7 +372,7 @@ public final class QuestionEditorSession {
      * "blocked, not warned" shape, applied to a question rather than to an exam.
      */
     public boolean canSave() {
-        if (saveState == AsyncViewState.LOADING) {
+        if (saveState == AsyncViewState.LOADING || readOnly) {
             return false;
         }
         if (text.isBlank() || topic.isBlank() || difficulty == null || correctAnswer == null) {
@@ -535,6 +538,32 @@ public final class QuestionEditorSession {
             return error.message();
         }
         return payload instanceof String text ? text : null;
+    }
+
+    /**
+     * Puts the form into read-only, because somebody else holds the edit lock (E6.14, E18).
+     *
+     * <p>Told to the session rather than only painted on the view, so "a question somebody else
+     * is editing cannot be saved" is a property the FX-free tests can prove. A screen that only
+     * greyed its controls would still have a session that would happily send
+     * {@code QUESTION_UPDATE} if anything else called {@code save()}.
+     *
+     * <p>The server is the real gate either way: the contract answers {@code CONFLICT} for a
+     * question locked by someone else. This stops the client offering the attempt.
+     *
+     * @param locked whether another editor holds it
+     */
+    public void setReadOnly(boolean locked) {
+        if (readOnly == locked) {
+            return;
+        }
+        readOnly = locked;
+        onChange.run();
+    }
+
+    /** @return whether somebody else's lock is holding this editor open read-only */
+    public boolean isReadOnly() {
+        return readOnly;
     }
 
     /** Clears the last outcome once the screen has acted on it. */
