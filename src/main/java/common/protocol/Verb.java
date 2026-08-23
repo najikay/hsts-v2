@@ -558,6 +558,260 @@ public enum Verb {
      */
     CHECKED_FORM_GET,
 
+    // ===================== Exam builder (E7) ===============================
+    // The draft wire contract: docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md, with
+    // the lead's rulings of 2026-08-23 applied. Payload types live in
+    // {@code common.dto.authoring} (ruling 1: NOT common.dto.exam, which is
+    // E10/E11's take-exam surface); the handlers are
+    // {@code server.features.exambuild.ExamHandlers} over {@code ExamService},
+    // {@code ExamValidator} and {@code AutoComposer}.
+    //
+    // THE RULE THIS GROUP EXISTS TO ENFORCE: an exam version that exists is a
+    // releasable object, or it is a DRAFT nobody has submitted. There is no third
+    // state. E9, E10 and E12 all read exam_version_questions and all assume its
+    // points sum to 100, and that CANNOT be a DDL constraint - a table-level CHECK
+    // cannot span rows, and V3__exams.sql says so in a comment. So it is enforced
+    // on the write path with no exceptions, and the consequence is stated rather
+    // than discovered: THERE IS NO WORK-IN-PROGRESS ROW. A half-composed exam
+    // lives in the teacher's client and nowhere else (F3.1's "save blocked, not
+    // warned"). That is why EXAM_CREATE carries the whole composition and why
+    // EXAM_AUTO_COMPOSE writes nothing at all.
+    //
+    // EVERY verb here is staff-only: requireRole(TEACHER, COORDINATOR) on all
+    // seven. The principal is absent from this group entirely - F9.3 gives her a
+    // read of data as entered and E15.2's DATA_EXAMS_GET already serves her the
+    // school's exams, and an authoring surface is not a read of entered data.
+    //
+    // SCOPE IS AUTHOR-ONLY, which is NARROWER than "teaches the course" (ruling 2,
+    // following E14's frozen author-only ruling and S-12):
+    //   TEACHER     - may CREATE in courses she teaches; may READ or EDIT the exam
+    //                 versions SHE AUTHORED
+    //   COORDINATOR - the same, in courses she also teaches. Her read of somebody
+    //                 else's exam is E8's EXAM_PREVIEW_GET and nothing here widens it
+    //   PRINCIPAL   - never; E15.2 serves her instead
+    //
+    // TWO GUARDS, CHOSEN BY VERB, NEVER COMPOSED, same shape as the bank group and
+    // for the same reason - which guard applies is a property of the verb, so a
+    // handler using the wrong one is visibly wrong in review:
+    //   - requireTeachesCourse THROWS FORBIDDEN on the two verbs where the caller
+    //     SUPPLIES the course (EXAM_CREATE, EXAM_AUTO_COMPOSE). A refusal naming a
+    //     course she already named tells her nothing she did not know.
+    //   - Authorship is checked against the STORED row on the other five and
+    //     answers NOT_FOUND, never FORBIDDEN. Naming the exam would tell a caller
+    //     probing ids that it exists and who owns it, which is the existence oracle
+    //     P-5 is about and which both frozen contracts already refuse.
+    // NOT_FOUND is the only answer for anything the caller cannot reach: unknown
+    // id, another teacher's exam, and an exam whose course she has stopped teaching
+    // are one answer, indistinguishable on purpose.
+    //
+    // No payload carries a caller id - authorship is CallerContext.userId() (S-12).
+    // No DTO here carries a lock-holder field: the builder's live "being edited by"
+    // state rides E18.8's LOCK_WATCH / LOCKS_SNAPSHOT under the existing
+    // EntityRef.EXAM_VERSION constant (F10.0). expectedLockVersion is a different
+    // thing - the optimistic token on exam_versions.lock_version, the same token
+    // ExamApproveRequest carries against the same row.
+    //
+    // NO ANSWER KEY ANYWHERE IN THIS GROUP. ComposedQuestion carries a stem and
+    // nothing a student could not see, so E7 adds no type to the correctness
+    // boundary and the leak guard's licensed list does not grow. A teacher who
+    // wants to read a question opens it in the bank under QUESTION_GET.
+    //
+    // There are NO PUSHES here. The author learns her exam was approved or rejected
+    // through E8's durable notification, which already points at route id `exams`.
+    //
+    // MY_APPROVALS_GET RETIRES INTO EXAM_LIST (contract section 8, the lead's
+    // ruling at the E8 freeze, confirmed 2026-08-23). It is still live below and
+    // is removed in the SAME PR that lands E7.10's screen, so there is never a
+    // window where two overlapping reads of one fact are both live.
+
+    /**
+     * Every exam the calling teacher wrote, each with all of its versions
+     * (E7.10 — F3.6, F9.2).
+     * Caller: teacher, coordinator. Request payload: {@code null} — whose exams
+     * these are is resolved from the session, not from a field. Response:
+     * {@code ExamList}, scoped to the exams she AUTHORED <em>in the SQL</em>
+     * rather than filtered afterwards.
+     *
+     * <p>Rows are {@code ExamListRow} and carry every version, drafts included,
+     * which is what makes a row expandable and what makes
+     * {@link #MY_APPROVALS_GET}'s retirement into this verb honest: that verb
+     * showed non-draft versions only. {@code ExamListRow.name} is the LATEST
+     * version's name, because F3.5 makes a rename a version and a teacher looks
+     * for her exam under the name she is using now.
+     *
+     * <p>An empty list is a real answer with a designed panel behind it. There is
+     * deliberately no second empty state meaning "she teaches nothing": a teacher
+     * who teaches nothing cannot reach this screen at all.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role).
+     */
+    EXAM_LIST,
+
+    /**
+     * One exam version opened, whole (E7.14 — F3.5).
+     * Caller: teacher, coordinator, <b>author only</b>. Request payload:
+     * {@code ExamVersionRequest}; response: {@code ExamComposition}.
+     *
+     * <p><b>It serves two screens, and that is the point.</b> It opens the builder
+     * on a DRAFT and it renders a past version read-only in the history panel.
+     * One payload, and the client decides what is editable from {@code state}, so
+     * a past version and a live draft can never render from two shapes that drift.
+     *
+     * <p>There is no coordinator path here and none is needed (ruling 5): she
+     * previews somebody else's exam through E8's {@link #EXAM_PREVIEW_GET}, which
+     * renders the paper as a student sees it plus the teacher-only block, and that
+     * is her complete read.
+     *
+     * <p>{@code ComposedQuestion} carries the stem and no answers and no key. Its
+     * {@code pinnedVersionNo} against {@code latestVersionNo} IS E7.7's badge.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role),
+     * {@code NOT_FOUND} (unknown, or not hers — indistinguishable on purpose).
+     */
+    EXAM_VERSION_GET,
+
+    /**
+     * Create an exam, composed, in one message (E7.1 — F3.1, F3.4, S-10).
+     * Caller: teacher, coordinator. Request payload: {@code ExamCreateRequest};
+     * response: {@code ExamComposition} (the new v1 DRAFT).
+     * {@code requireTeachesCourse} <b>throws</b> here, because the caller supplies
+     * the course.
+     *
+     * <p><b>The whole composition travels.</b> Creating an empty exam and filling
+     * it in later would put a row in {@code exam_versions} that cannot satisfy the
+     * points rule for as long as the teacher is thinking, and T-3.5 says in plain
+     * words that a refused auto-composition creates no exam. The server allocates
+     * the 6-digit display id (S-10, {@code ExamIdAllocator}) and takes the author
+     * from the session (S-12); neither is a field anybody could set.
+     *
+     * <p>Points must sum to exactly {@code ExamCreateRequest.POINTS_TOTAL}, each
+     * question is worth 1..100, and there is at least one question. The failure
+     * names the shortfall in both directions and by how much, never just
+     * "invalid": T-3.2 watches the indicator go from wrong to right and the
+     * sentence is what tells her which way.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role, or the course is
+     * not hers to write in), {@code VALIDATION} (any rule in contract sections 5.1
+     * to 5.3, naming the field; an unknown {@code questionVersionId} names its
+     * position in the list rather than answering {@code NOT_FOUND}).
+     */
+    EXAM_CREATE,
+
+    /**
+     * Replace a DRAFT's metadata and composition together (E7.2/E7.3 — F3.1).
+     * Caller: teacher, coordinator, <b>author only</b>. Request payload:
+     * {@code ExamVersionSave}; response: {@code ExamComposition}, re-read from the
+     * database rather than patched together from the request — a client assembling
+     * its own new state is guessing at {@code versionNo} and {@code lockVersion}
+     * and will guess wrong exactly once.
+     *
+     * <p><b>A full replace</b>, matching ARCHITECTURE §5's storage rule: the
+     * composition rows are deleted and reinserted inside one transaction, so no
+     * reorder dance is ever needed. A partial save would need a diff of a list
+     * whose {@code ord} is unique per version, which is the dance that decision
+     * exists to avoid.
+     *
+     * <p><b>Only a DRAFT is savable.</b> PENDING, APPROVED or REJECTED answers
+     * {@code CONFLICT} and not {@code VALIDATION}: the request was well formed and
+     * the world moved. Editing one of those is {@link #EXAM_VERSION_REVISE}.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role),
+     * {@code NOT_FOUND} (unknown, or not hers), {@code VALIDATION} (sections 5.1
+     * to 5.3), {@code CONFLICT} (stale {@code expectedLockVersion}, wrong state,
+     * or the version is edit-locked by someone else).
+     */
+    EXAM_VERSION_SAVE,
+
+    /**
+     * Edit an approved, pending or rejected version by making a new DRAFT
+     * (E7.5 — F3.5, C-2).
+     * Caller: teacher, coordinator, <b>author only</b>. Request payload:
+     * {@code ExamVersionAction}; response: {@code ExamComposition} — the NEW
+     * DRAFT, at {@code latestVersionNo + 1} ({@code uq_exam_versions_no}), copying
+     * the metadata and composition of the version it was revised from.
+     * {@code rejected_reason} is deliberately NOT copied: it belongs to the
+     * version that was rejected.
+     *
+     * <p><b>This verb exists so that "edit" is never a lie.</b> Folding it into
+     * {@link #EXAM_VERSION_SAVE} would mean one verb that sometimes mutates a row
+     * and sometimes creates one, decided by a status the client cannot see at the
+     * moment it presses the button. Two verbs, and which one the screen calls is
+     * decided by the state it is already showing.
+     *
+     * <p>It <b>refuses a DRAFT</b> with {@code CONFLICT}: revising a draft would
+     * produce two drafts of one exam, and the second is a version number nobody
+     * asked for. A teacher editing her draft saves it.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role),
+     * {@code NOT_FOUND} (unknown, or not hers), {@code CONFLICT} (stale
+     * {@code expectedLockVersion}, or the version is a DRAFT).
+     */
+    EXAM_VERSION_REVISE,
+
+    /**
+     * Send a DRAFT to its coordinator (E7.6 — F3.6, F4.1).
+     * Caller: teacher, coordinator, <b>author only</b>. Request payload:
+     * {@code ExamVersionAction}; response: {@code ExamComposition}, now PENDING.
+     *
+     * <p><b>It hands off to E8 and emits nothing itself.</b>
+     * {@code ExamService.submitForApproval} calls
+     * {@code ApprovalService.versionSubmitted(examVersionId)} and sends no
+     * notification of its own — the approval contract's E8.2 names that hook as an
+     * instruction, because the one call supersedes the other pending versions,
+     * notifies the coordinator about the supersede, and emits the ordinary
+     * APPROVAL_REQUESTED. Splitting it would let E7 emit a request for a version
+     * whose supersede failed, or emit two notifications in an order that reads
+     * backwards. E7 owns the transition; E8 owns everything the queue sees.
+     *
+     * <p>Requires DRAFT and answers {@code CONFLICT} otherwise. It re-checks the
+     * points rule cheaply even though the invariant above means no stored version
+     * can fail it: that check is a genuine test of the invariant rather than a
+     * restatement of it, and if it ever fires the log line says so.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role),
+     * {@code NOT_FOUND} (unknown, or not hers), {@code CONFLICT} (stale
+     * {@code expectedLockVersion}, or the version is not a DRAFT).
+     */
+    EXAM_SUBMIT,
+
+    /**
+     * Propose a composition from a criteria grid, or say exactly what is missing
+     * (E7.4 ⚑ — F3.2, F3.3).
+     * Caller: teacher, coordinator. Request payload: {@code AutoComposeRequest};
+     * response: {@code AutoComposeResult}. {@code requireTeachesCourse}
+     * <b>throws</b> here, because the caller supplies the course.
+     *
+     * <p><b>It writes nothing at all.</b> No exam, no version, no allocated
+     * serial. That is what makes T-3.5's "No exam is created" true by construction
+     * rather than by a rollback that has to work. A proposal the teacher likes is
+     * sent on to {@link #EXAM_CREATE} by the client.
+     *
+     * <p>Exactly one of {@code questions} and {@code shortfalls} is non-empty and
+     * {@code feasible} says which; both empty is refused in the record's compact
+     * constructor, because an auto-composition that selected nothing and explained
+     * nothing is the failure F3.3 exists to prevent and must not be representable.
+     *
+     * <p>A feasible proposal arrives with points already totalling 100, spread as
+     * evenly as the count allows with the remainder on the earliest questions, so
+     * the auto path is savable in one click (T-3.4). An infeasible one reports
+     * EVERY shortfall rather than the first, each a structured
+     * {@code Shortfall(topic, difficulty, requested, available)} that the client
+     * renders as F3.3's sentence — the report is data and the sentence is composed
+     * once in {@code ExamCopy} (ruling 4). {@code available} is the real count in
+     * her own bank, because a number she can disprove by filtering the bank screen
+     * would make the report worse than nothing.
+     *
+     * <p>{@code seed} is nullable and null means random; the real client sends
+     * null. It is disclosed rather than found: tests pin a selection with it, and
+     * a teacher who says "it gave me a strange set" cannot be helped if nobody can
+     * reproduce it.
+     *
+     * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role, or the course is
+     * not hers), {@code VALIDATION} (a quota bucket below zero, a total of zero
+     * across the request, or two quotas naming one topic — contract section 5.3).
+     */
+    EXAM_AUTO_COMPOSE,
+
     // ===================== Exam approval (E8) ==============================
     // The draft wire contract: docs/contracts/APPROVAL_WIRE_CONTRACT.md. Payload
     // types live in {@code common.dto.approval}; the handlers are
@@ -637,6 +891,16 @@ public enum Verb {
      *
      * <p>Deliberately the narrow approval-status read and not an exam list: E7
      * owns the exam list and its verb, and this one retires into it.
+     *
+     * <p><b>That verb now exists: {@link #EXAM_LIST}</b> (E7 contract section 8,
+     * confirmed 2026-08-23). This one stays live until E7.10's screen lands and is
+     * removed in the SAME PR as the screen swap, on the pattern the lead ruled for
+     * the legacy bank screen, so there is never a window where two overlapping
+     * reads of one fact are both live. {@code ExamListRow} is a strict superset of
+     * what {@code MyApprovals} showed; the two facts that do not cross over are
+     * {@code submittedAt}, replaced by the version's {@code createdAt}, and
+     * {@code selfAuthored}, which on a screen showing only the caller's own exams
+     * is true on every row and therefore says nothing.
      */
     MY_APPROVALS_GET,
 

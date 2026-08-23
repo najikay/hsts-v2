@@ -164,6 +164,67 @@ class VerbTest {
     }
 
     @Test
+    @DisplayName("the seven exam-builder verbs exist, spelled as the E7 contract spells them")
+    void examBuilderVerbsExist() {
+        // docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md plus the lead's rulings of 2026-08-23.
+        // Same reasoning as the checks above: a verb travels by name between two
+        // separately-shipped JARs, so valueOf is the spelling assertion — referring to the
+        // constant would survive a rename.
+        assertThat(Verb.values()).contains(
+                Verb.EXAM_LIST, Verb.EXAM_VERSION_GET, Verb.EXAM_CREATE,
+                Verb.EXAM_VERSION_SAVE, Verb.EXAM_VERSION_REVISE, Verb.EXAM_SUBMIT,
+                Verb.EXAM_AUTO_COMPOSE);
+
+        assertThat(Verb.valueOf("EXAM_LIST")).isEqualTo(Verb.EXAM_LIST);
+        assertThat(Verb.valueOf("EXAM_VERSION_GET")).isEqualTo(Verb.EXAM_VERSION_GET);
+        assertThat(Verb.valueOf("EXAM_CREATE")).isEqualTo(Verb.EXAM_CREATE);
+        assertThat(Verb.valueOf("EXAM_VERSION_SAVE")).isEqualTo(Verb.EXAM_VERSION_SAVE);
+        assertThat(Verb.valueOf("EXAM_VERSION_REVISE")).isEqualTo(Verb.EXAM_VERSION_REVISE);
+        assertThat(Verb.valueOf("EXAM_SUBMIT")).isEqualTo(Verb.EXAM_SUBMIT);
+        assertThat(Verb.valueOf("EXAM_AUTO_COMPOSE")).isEqualTo(Verb.EXAM_AUTO_COMPOSE);
+    }
+
+    @Test
+    @DisplayName("no exam-builder verb is a push: the builder has none, by contract")
+    void noExamBuilderVerbIsAPush() {
+        // The author learns her exam was approved or rejected through E8's durable
+        // notification, which already points at route id `exams`; the builder's live "being
+        // edited by" state rides E18.8's LOCK_WATCH / LOCKS_SNAPSHOT under the existing
+        // EntityRef.EXAM_VERSION constant. A PUSH_EXAM_* here would be a second source of
+        // either truth.
+        assertThat(List.of(Verb.EXAM_LIST, Verb.EXAM_VERSION_GET, Verb.EXAM_CREATE,
+                        Verb.EXAM_VERSION_SAVE, Verb.EXAM_VERSION_REVISE, Verb.EXAM_SUBMIT,
+                        Verb.EXAM_AUTO_COMPOSE))
+                .allSatisfy(verb -> assertThat(verb.isPush()).isFalse());
+    }
+
+    @Test
+    @DisplayName("MY_APPROVALS_GET is still live: it retires only when E7.10's screen lands")
+    void myApprovalsGetHasNotRetiredYet() {
+        // E7 contract section 8: the verb retires INTO EXAM_LIST, and the removal lands in the
+        // SAME PR as the screen swap, on the pattern the lead ruled for the legacy bank screen —
+        // so there is never a window where two overlapping reads of one fact are both live.
+        // Removing it at type-landing time would open that window from the other side, leaving
+        // E8's MyApprovalsView calling a verb that no longer exists.
+        assertThat(Verb.valueOf("MY_APPROVALS_GET")).isEqualTo(Verb.MY_APPROVALS_GET);
+        assertThat(Verb.MY_APPROVALS_GET.isPush()).isFalse();
+        assertThat(Verb.EXAM_LIST).isNotEqualTo(Verb.MY_APPROVALS_GET);
+    }
+
+    @Test
+    @DisplayName("the exam builder adds no verb the contract deliberately refused")
+    void deliberatelyAbsentExamBuilderVerbs() {
+        // Contract sections 3 and 9, asserted so a handler author reading an older TODO cannot
+        // reintroduce one. There is no exam delete (F3 never asks, C-2 retains versions, and a
+        // released exam has attempts RESTRICT would refuse anyway); there is no bank-picker verb
+        // (E7.12's picker is BANK_LIST, and a second browse verb would be a second set of scope
+        // rules over the same rows); and there is no release verb (E9 owns that).
+        assertThat(Arrays.stream(Verb.values()).map(Verb::name))
+                .doesNotContain("EXAM_DELETE", "EXAM_VERSION_DELETE", "EXAM_QUESTIONS_LIST",
+                        "EXAM_BANK_LIST", "EXAM_RELEASE");
+    }
+
+    @Test
     @DisplayName("the two report verbs exist, spelled as the E15 contract spells them")
     void reportVerbsExist() {
         // docs/contracts/REPORTS_WIRE_CONTRACT.md. Same reasoning as the checks above: a verb

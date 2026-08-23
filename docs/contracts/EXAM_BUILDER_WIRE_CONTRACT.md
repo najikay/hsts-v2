@@ -1,6 +1,10 @@
 # E7 exam builder wire contract — DRAFT
 
-**Status: DRAFT, 2026-08-23.** Written for the lead to land the verbs and DTOs from, on the same
+**Status: DRAFT, 2026-08-23 — types landed 2026-08-23; freeze on the handlers PR.** The verbs and
+the DTO package are built, tested and on `main`; §12 records the five rulings applied while landing
+them, and the in-place corrections they required are marked where they sit. Still DRAFT, and
+deliberately: the freeze happens on Member A's handlers PR, exactly as BANK froze. Written for the
+lead to land the verbs and DTOs from, on the same
 handoff as [BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md): Member A drafts, the lead freezes and
 lands `common/protocol/Verb.java` and the DTO package himself. Not binding until this header says
 FROZEN. Additive-only terms from that point, same as
@@ -304,15 +308,17 @@ column, the reason is given: a rule that only the database knows arrives at the 
 | Field | Rule | Where the number comes from |
 |---|---|---|
 | `name` | non-blank, at most **150** characters | `name VARCHAR(150) NOT NULL` |
-| `durationMinutes` | **1..600** | `ck_exam_versions_duration` gives `> 0` only; the ceiling is a service rule, see below |
+| `durationMinutes` | **1..480** *(lead ruling 3: 480 — a 600 ceiling admits the very 600-for-60 typo it was invented to catch)* | `ck_exam_versions_duration` gives `> 0` only; the ceiling is a service rule, see below |
 | `studentText` | optional, at most **4000** characters | `TEXT` holds 65,535 **bytes**, and utf8mb4 spends up to 4 per character |
 | `teacherText` | optional, at most **4000** characters | same |
 | `courseCode` | `strip()`ped, never `trim()`ped, before any scope comparison | `courses.code2` is `CHAR(2)` under a PAD SPACE collation |
 
-**The 600-minute ceiling is invented here and is worth an explicit yes or no** (ruling 3). The
-column only forbids zero and negatives, so a typo of `600` for `60` is storable today, and an exam
-whose timer says ten hours is a live execution nobody can end. Ten hours is far past any real exam
-and near enough to catch the typo.
+**The 480-minute ceiling is invented here** *(lead ruling 3: 480 — a 600 ceiling admits the very
+600-for-60 typo it was invented to catch)*. The column only forbids zero and negatives, so a typo
+of `600` for `60` is storable today, and an exam whose timer says ten hours is a live execution
+nobody can end. The draft proposed 600 and the ruling cut it to 480: eight hours is already far
+past any real exam, and it is the smallest ceiling that still admits every legitimate sitting
+while refusing the one mistake the rule exists for.
 
 **The 4000-character ceiling on the two texts is deliberately far below what `TEXT` holds.** The
 point is not to conserve storage, it is that a paste of a whole textbook chapter into the student
@@ -321,7 +327,31 @@ than as a truncation nobody notices until a student is sitting the exam.
 
 **The `strip()` rule is imported from the bank contract verbatim**, including its reason: `trim()`
 cuts only characters at or below U+0020, so a course code carrying a Unicode space matches the row
-in SQL while failing Java equality against the reachable set.
+in SQL while failing Java equality against the reachable set. It is imported with its **measured
+limit** too, which `BankBrowseService` states and `BankBrowseServiceTest.nonBreakingSpacesSurviveStrip`
+pins: `strip()` removes what `Character.isWhitespace()` accepts, and the non-breaking spaces
+U+00A0, U+2007 and U+202F are exactly the ones that predicate rejects. A code padded with one of
+those arrives at `requireTeachesCourse` unchanged and is refused, which fails **closed**. The
+dangerous direction would be a value SQL matches while the guard does not, and this is its
+opposite.
+
+**The criteria a generation asks for** *(added at type-landing, 2026-08-23)*. `AutoComposeRequest`
+carries no rules of its own in the DTO — its compact constructor normalises and does not throw
+(§4's inbound rule) — so both of these are `ExamValidator`'s, and both answer `VALIDATION` naming
+the field:
+
+- **`TopicQuota` topics must be distinct within one request.** Two quotas naming one topic break
+  the disjointness that makes §7.4's most-constrained-first selection produce **true** shortfalls:
+  the two buckets would compete for one candidate pool, and the report could then name a shortfall
+  the teacher can disprove by filtering her own bank to the same topic. §7.2 property 2 calls that
+  the worst possible failure here. Comparison is on the **normalised** topic, since the record
+  folds blank to `null`, so `""` and `null` are one bucket and not two.
+- **Every quota bucket is `>= 0`, and the total across all quotas is `>= 1`.** A negative bucket
+  would subtract from a sibling quota's demand and make the derived total a lie; a request for
+  nothing at all is not a composition, and answering it with an empty proposal would violate
+  §4's `AutoComposeResult` invariant rather than produce a paper. The total is
+  `AutoComposeRequest.totalRequested()`, derived from the buckets in one place — see §4 on why
+  there is no total field.
 
 ### 5.4 State rules (F3.6)
 
@@ -552,3 +582,73 @@ Indexed so they can be answered straight down the list.
 | E7.14 version history, update-question action | `EXAM_VERSION_GET` + re-pin and save |
 
 Acceptance: T-3.1 through T-3.9. T-3.5 and T-3.6 are §7's two shots; T-3.9 is §5.2's duplicate rule.
+
+---
+
+## 12. Lead rulings at type-landing (2026-08-23)
+
+§10 asked five questions. All five are answered here, straight down the list, and the answers are
+applied to the document above rather than only recorded here. Where a ruling changed the draft, the
+change is marked in place.
+
+**1. Package: `common/dto/authoring`. Confirmed as drafted.** The alternative was
+`common/dto/exambuild`, matching the server package. `authoring` wins because the pipeline is
+called that everywhere else in the repository, and because the reason to avoid `common/dto/exam` is
+the one that actually matters: it is E10/E11's take-exam surface, and putting a student's paper and
+a teacher's composition in one package would sit two audiences together whose whole relationship is
+that one of them must never see what the other holds. Every import in E7 depends on this, so it is
+settled before a handler is written and not after.
+
+**2. Author-only scope: CONFIRMED.** A co-teacher of the same course cannot open, edit or submit
+another teacher's exam. This is not an invention of this document, it is E14's frozen ruling
+applied to the surface it was always about: `RESULTS_WIRE_CONTRACT` froze E14 as author-only on
+"literally F9.2's exams she wrote", deliberately narrower than the monitor's author-or-runner rule,
+and S-12 records an author on the exam precisely so that F3.5's edit-makes-a-version is a statement
+about that author's document. The coordinator's read of somebody else's exam already exists and is
+E8's `EXAM_PREVIEW_GET`, guarded by `requireCoordinatorOf`; nothing in E7 widens it. The asymmetry
+noted in §2 is the reason to be comfortable ruling now: widening later is a guard change and is
+additive, narrowing later is not.
+
+**3. Duration ceiling: 480, not 600.** The draft invented 600 and asked for a yes, a no or a
+different number. The answer is a different number, and the reasoning is the draft's own: the
+ceiling exists to catch a typo of `600` for `60`. **A ceiling of 600 admits the very 600-for-60
+typo it was invented to catch** — it is the one value in the whole range that the rule must refuse
+and the only one it would have let through. Eight hours is already far past any real exam and
+refuses the mistake the rule is for. Applied to §5.3 in both places, and carried on the wire as
+`ExamCreateRequest.MAX_DURATION_MINUTES` and its alias on `ExamVersionSave`, so the validator and
+the client's spinner count to one number.
+
+**4. The infeasibility sentence stays on the client. `Shortfall` stays structural.** The wire
+carries four fields and **no `summary` string**. The draft offered to move it server-side beside
+`BankMessages` and `ReleaseMessages` and named the thing it wanted to avoid — carrying both and
+letting them disagree — which is exactly right and is the reason the answer is no. The sentence is
+composed **once**, in `ExamCopy`, because PRD §4.1's copy rules and the Hebrew rendering around
+them are client concerns, and because a formatted string on the wire is a second expression of a
+fact the four fields already carry. **The PRD's example sentence is pinned by a copy test**:
+`Topic 'Algebra': requested 5 Hard, bank has 2` is the acceptance artefact of F3.3, so it is
+asserted somewhere rather than typed correctly by luck on the day. That test belongs with
+`ExamCopy` and is Member A's to write with the screen; the four shapes it must cover are in §7.1
+and are already pinned as data by `AutoComposeResultTest`.
+
+**5. `EXAM_VERSION_GET` needs no coordinator path.** Confirmed as the draft believed. She previews
+through E8's `EXAM_PREVIEW_GET`, which renders the paper as a student sees it plus the teacher-only
+block, and that is her **complete** read: approving an exam is deciding about a paper, not editing
+one, and the preview already carries everything the decision needs including the answer key. Adding
+a coordinator path here would give her a second, differently-shaped read of the same version, and
+the first time the two disagreed the one she had not been trained to distrust would be the one she
+believed. If the T-4 walkthrough turns up a real gap, widening the preview is additive; widening
+this verb is not the fix.
+
+---
+
+**Types landed by the lead on 2026-08-23.** `common/protocol/Verb.java` gained its
+`Exam builder (E7)` section with all seven verbs; `common/dto/authoring` holds the fourteen records
+of §4, reusing `Difficulty` and `ApprovalState` rather than redeclaring either. `MY_APPROVALS_GET`
+is deliberately **still live** — §8 binds its removal to the same PR as E7.10's screen swap, and
+removing it at type-landing time would open the window from the other side by leaving E8's
+`MyApprovalsView` calling a verb that no longer exists.
+
+**Freeze happens on Member A's handlers PR, same as BANK.** Until then this header says DRAFT and
+means it: the shapes are compiled and tested, but a handler author who finds a genuine problem with
+one still gets to say so, and the correction is cheaper today than it will be on the far side of
+the freeze. From FROZEN, terms are additive only.

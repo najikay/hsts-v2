@@ -140,7 +140,7 @@ Server:
 - [ ] E7.6 Submit for approval: DRAFT → PENDING, notify coordinator (E17)
 - [ ] E7.7 Newer-question-version indicator data (exam uses vN, bank has vN+1)
 - [ ] E7.8 ExamValidator unit tests (all rules)
-- [ ] E7.9 Verbs + DTOs frozen with [L]
+- [ ] E7.9 Verbs + DTOs frozen with [L] *(types landed by [L] 2026-08-23, freeze on handlers PR — `common/protocol/Verb.java` has its `Exam builder (E7)` section with all seven verbs, and `common/dto/authoring` holds the fourteen records of the contract's §4, reusing `Difficulty` and `ApprovalState`. The five rulings are §12 of `docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md`; what Member A must know before writing handlers — the constants to cite and the tolerance boundaries his validator has to cover because the constructors deliberately do not — is `docs/reports/lead/E7-TYPES.md`. Not ticked: the tick is the freeze, and the contract still says DRAFT so a handler author who finds a real problem with a shape still gets to say so.)*
 Client:
 - [ ] E7.10 Exam list screen: teacher's exams, status chips, versions expandable, actions per state
 - [ ] E7.11 Builder — metadata step (name, duration, texts with student/teacher tabs)
