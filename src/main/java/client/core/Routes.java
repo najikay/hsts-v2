@@ -56,6 +56,17 @@ public final class Routes {
     public static final Route QUESTIONS = Route.shell("questions", "Question bank");
 
     /**
+     * The versioned question bank (E6.9, F2.4/F2.5). Teaching roles only; the principal's
+     * read of the bank is the Data screen (E15.2), because this screen carries Delete and,
+     * with E6.10, Edit (the lead's ruling on #41).
+     *
+     * <p>Not on any rail yet: rail id {@code questions} keeps serving the legacy screen until
+     * E6's retirement PR swaps it, so this is reached from the banner on that screen. Two-arg
+     * shell on purpose - when the retirement lands, the rail item moves here.
+     */
+    public static final Route BANK = Route.shell("bank", "Question bank");
+
+    /**
      * Taking an exam: code, identity, paper, and the ending takeover (E10, F6).
      *
      * <p>One route for the whole flow, so "the exam is unreachable once it is
@@ -230,7 +241,7 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING, REPORTS, DATA);
+                CHECKED_FORM, GRADING, REPORTS, DATA, BANK);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

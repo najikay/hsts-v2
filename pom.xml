@@ -386,6 +386,8 @@
                              the count line and every row label), and both are measured. The
                              tab enum beside them is measured too. -->
                         <exclude>client/features/data/DataView*</exclude>
+                        <!-- E6.9's thin view; BankSession and BankCopy beside it are measured. -->
+                        <exclude>client/features/bank/BankView*</exclude>
 <!-- E16 study bot: the four screens plus the three FX-only widgets they draw
      with. Every decision these render is made in BotChatModel, the four session
      classes and BotCopy, all of which are covered. Listed one by one, never a

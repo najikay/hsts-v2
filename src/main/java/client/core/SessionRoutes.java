@@ -3,6 +3,7 @@ package client.core;
 import client.features.approval.ApprovalQueueView;
 import client.features.approval.ExamPreviewView;
 import client.features.approval.MyApprovalsView;
+import client.features.bank.BankView;
 import client.features.bank.QuestionsView;
 import client.features.bot.BotAnalyticsView;
 import client.features.bot.BotChatView;
@@ -71,6 +72,11 @@ public final class SessionRoutes {
             // The legacy bank screen is the one feature screen that already works
             // end-to-end (over the DAO); E6 replaces it with the versioned bank.
             routes.add(Routes.QUESTIONS);
+            // The versioned bank (E6.9). Teaching roles only: it carries Delete, and E6.10
+            // adds Edit, so the principal reads the bank through the Data screen instead
+            // (the lead's ruling on #41). Off the rail until the retirement PR; reached
+            // from the legacy screen's banner.
+            routes.add(Routes.BANK);
             // The release manager (E9). Teaching roles only. It is also the screen the
             // monitor is normally reached from, which is why the two are registered
             // together: a monitor route with no way in would be a dead end.
@@ -175,6 +181,9 @@ public final class SessionRoutes {
         }
         if (Routes.QUESTIONS.id().equals(route.id())) {
             return QuestionsView::new;
+        }
+        if (Routes.BANK.id().equals(route.id())) {
+            return BankView::new;
         }
         if (Routes.APPROVALS.id().equals(route.id())) {
             return ApprovalQueueView::new;

@@ -90,7 +90,7 @@ class SessionRoutesTest {
         @DisplayName("a teacher gets home, settings, the bank, the monitor, the bot, results and her exams")
         void teacher() {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
-                    .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS,
+                    .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS, Routes.BANK,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
                             Routes.EXAMS);
@@ -100,7 +100,7 @@ class SessionRoutesTest {
         @DisplayName("a coordinator gets the same plus the approvals pair (E8)")
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
-                    .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS,
+                    .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS, Routes.BANK,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
                             Routes.EXAMS, Routes.APPROVALS, Routes.EXAM_PREVIEW);

@@ -183,7 +183,7 @@ class AppArgsAndRoutesTest {
                             "attempt", "release", "monitor",
                             "approvals", "approvals.preview", "exams",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
-                            "grades", "grades.checked", "grading", "reports", "data");
+                            "grades", "grades.checked", "grading", "reports", "data", "bank");
         }
 
         @Test
