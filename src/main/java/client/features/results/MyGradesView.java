@@ -119,10 +119,31 @@ public final class MyGradesView extends AbstractScreen {
             }
         });
 
+        // Widths by content, not evenly. Left to itself the table divided the width equally and
+        // the two-character Course column got the same share as a date, which truncated
+        // "23 Aug 2026" to "23 Au…" — a date column that cannot show a date. Found on a real
+        // screen; the copy tests format the string correctly and never see the column.
+        sizeColumns(220, 90, 110, 150, 260, 170);
+
         table.emptyState(new EmptyState(Icons.RESULTS, "No grades yet", MyGradesSession.NOTHING_YET));
         table.getStyleClass().add("my-grades-table");
         VBox.setVgrow(table, Priority.ALWAYS);
         return table;
+    }
+
+    /**
+     * Gives each column a width suited to what it holds.
+     *
+     * <p>Preferred widths rather than fixed ones, so the table still adapts to the window; the
+     * point is only that a date is not allotted the same room as a two-character course code.
+     *
+     * @param widths one per column, in the order the columns were added
+     */
+    private void sizeColumns(double... widths) {
+        var columns = table.table().getColumns();
+        for (int i = 0; i < columns.size() && i < widths.length; i++) {
+            columns.get(i).setPrefWidth(widths[i]);
+        }
     }
 
     // ===================== Rendering =====================================
