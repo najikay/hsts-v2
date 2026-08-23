@@ -102,16 +102,19 @@ class RoleNavTest {
             // Exams went live with E8.6 carrying its approval-status half only, and
             // Approvals with E8.3; the exam builder behind the same route id is E7's.
             assertThat(enabledLabels(Role.TEACHER))
-                    .containsExactly("Dashboard", "Question Bank", "Exams", "Grading", "Results",
-                            "Study Bot", "Settings");
+                    .containsExactly("Dashboard", "Question Bank", "Exams", "Releases",
+                            "Grading", "Results", "Study Bot", "Settings");
             assertThat(enabledLabels(Role.COORDINATOR))
                     .containsExactly("Dashboard", "Question Bank", "Exams", "Approvals",
-                            "Grading", "Results", "Study Bot", "Settings");
+                            "Releases", "Grading", "Results", "Study Bot", "Settings");
             // My Grades went live with E13.3; the rail item had reserved the slot as a
             // disabled "Arrives with E13" since E5.4.
             assertThat(enabledLabels(Role.STUDENT))
                     .containsExactly("Dashboard", "My Grades", "Study Bot", "Settings");
-            assertThat(enabledLabels(Role.PRINCIPAL)).containsExactly("Dashboard", "Settings");
+            // Reports went live with E15.4; the rail item had reserved the slot as a disabled
+            // "Arrives with E15" since E5.4. Data is still E15.2's and still disabled.
+            assertThat(enabledLabels(Role.PRINCIPAL))
+                    .containsExactly("Dashboard", "Reports", "Settings");
         }
 
         @Test

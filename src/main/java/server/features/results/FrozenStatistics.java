@@ -47,8 +47,18 @@ import java.util.Optional;
  * execution gets — and an ERROR line naming the execution. The alternative, letting it through,
  * ends either in an exception on a socket thread or in a chart drawing something untrue; a
  * teacher deserves neither, and the log is where the fault should be found.
+ *
+ * <h2>Two callers, one mapping (E15.3)</h2>
+ *
+ * <p>Public rather than package-private since E15, because the principal's report engine reads
+ * the same column for the same reason. It was tempting to give the reports package its own
+ * three-line mapper - it is only a constructor call - and that is exactly how a second pass
+ * mark or a second decile-width check gets into the build. The malformed-column rule, the
+ * reconstituted {@code count}, and the {@code passCount} arithmetic are decisions, and they are
+ * decisions this class was created to hold in one place. A report and a teacher's histogram
+ * showing different figures for the same sitting is the failure both of them exist to prevent.
  */
-final class FrozenStatistics {
+public final class FrozenStatistics {
 
     private static final Logger log = LoggerFactory.getLogger(FrozenStatistics.class);
 
@@ -67,7 +77,7 @@ final class FrozenStatistics {
      * @return the wire statistics, or empty when there are none or the stored ones are
      *         unusable
      */
-    static Optional<ResultStatistics> toWire(long executionId, ExecutionStats stored) {
+    public static Optional<ResultStatistics> toWire(long executionId, ExecutionStats stored) {
         if (stored == null) {
             return Optional.empty();
         }

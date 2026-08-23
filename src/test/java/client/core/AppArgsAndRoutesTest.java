@@ -180,10 +180,10 @@ class AppArgsAndRoutesTest {
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
                             "home.student", "home.principal", "settings", "questions",
-                            "attempt", "monitor",
+                            "attempt", "release", "monitor",
                             "approvals", "approvals.preview", "exams",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
-                            "grades", "grades.checked", "grading");
+                            "grades", "grades.checked", "grading", "reports");
         }
 
         @Test
@@ -194,6 +194,11 @@ class AppArgsAndRoutesTest {
             // break the click-through rather than fail anything.
             assertThat(Routes.TAKE_EXAM.id()).isEqualTo("attempt");
             assertThat(Routes.MONITOR.id()).isEqualTo("monitor");
+            // E9's "your exam opens soon" notification navigates here. The rail had
+            // reserved the slot under "releases"; the notification catalogue has always
+            // spelled it "release", and the route follows the catalogue because that is
+            // the side a mismatch would silently break.
+            assertThat(Routes.RELEASES.id()).isEqualTo("release");
             // E16's "study bot sources changed" notification navigates here.
             assertThat(Routes.BOT_MANAGER.id()).isEqualTo("bot.manager");
             // E8's three approval notifications. The rejected one is the load-bearing case:

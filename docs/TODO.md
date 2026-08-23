@@ -173,14 +173,31 @@ Client:
 
 ## E9 — Release manager [A]
 
-- [ ] E9.1 ReleaseService: create execution (approved versions only), window validation, 4-alnum code validation (C-1)
-- [ ] E9.2 Execution status lifecycle SCHEDULED→LIVE→CLOSED driven by TimerService; transitions pushed
-- [ ] E9.3 Cancel scheduled / close-early (with force-submit semantics for active students)
-- [ ] E9.4 Multiple executions per exam version (S-2) + history listing with per-execution stats snapshot
-- [ ] E9.5 Release screen: create form (version picker, datetime pickers, code field with dice-generate), validation
-- [ ] E9.6 Releases list: live status chips, participant counters (pushed), actions (cancel/close/monitor/extend)
-- [ ] E9.7 Session + integration tests (window enforcement, unapproved blocked, cancel, close-early)
+- [x] E9.1 ReleaseService: create execution (approved versions only), window validation, 4-alnum code (C-1)
+- [x] E9.2 Execution status lifecycle SCHEDULED→LIVE→CLOSED driven by a scheduled check; transitions pushed
+- [x] E9.3 Cancel scheduled / close-early (force-submit semantics through ExecutionCloseService)
+- [x] E9.4 Multiple executions per exam version (S-2) + history listing with per-execution participation
+- [x] E9.5 Release screen: create dialog (approved-version picker, datetime pickers), validation, code reveal
+- [x] E9.6 Releases list: live status chips, participant counters (pushed), actions (cancel/close/monitor)
+- [x] E9.7 Session + integration tests (window enforcement, unapproved blocked, cancel, close-early)
 - [ ] E9.8 Acceptance pass vs T-5 ⚑
+
+> **E9 notes (2026-08-22).** Contract: amendments **A3-A7** of
+> `docs/contracts/EXAM_WIRE_CONTRACT.md`. Report: `docs/reports/lead/E9.md`.
+> Three scope corrections against the wording above, all argued in the report:
+> (a) **E9.1's code is the teacher's, validated server-side** (coordinator's ruling,
+> 2026-08-23, reversing E9's first shape). `ReleaseCreateRequest.code` is nullable: typed is
+> validated for C-1 shape by both tiers and for uniqueness inside the inserting transaction
+> (§5), blank is generated. E9.5's dice **clears** the field to server-generation rather than
+> filling it, because a client-rolled code cannot be checked for uniqueness;
+> (b) **E9.2 does not use `TimerService`** — that one ends individual attempts; releases move
+> through a 30 s `ReleaseScheduler.tick()` on the same daemon thread, because a release's window
+> is set weeks ahead and survives restarts;
+> (c) **E9.4's "stats snapshot" is the participation record** (S-21's three counts, frozen at
+> close). Score statistics are E12's and are rendered by E14; and **E9.6's "extend" is E11's
+> verb on the monitor**, which every live row links to, rather than a second button here.
+> `ExecutionCloseService` now has its caller: `RELEASE_CLOSE_EARLY` and the scheduled check both
+> go through it, which is what makes F5.5's "behaves exactly like time expiry" true by reuse.
 
 ## E10 — Take exam [L]
 
@@ -248,12 +265,12 @@ Client:
 
 ## E15 — Principal & reports [B]
 
-- [ ] E15.1 Principal read-only services: browse bank, exams, results (S-7 — zero mutating verbs authorized; negative tests)
-- [ ] E15.2 Principal data browser screen: tabbed (questions/exams/results) with filters — reusing bank/results components read-only
-- [ ] E15.3 Report engine: `ReportDimension` Strategy (ByTeacher / ByCourse / ByStudent) over stored execution stats (C-5); comparison result DTO (S-37 extensibility story) ⚑
-- [ ] E15.4 Reports screen: dimension picker, subject/entity selectors, comparison table + grouped bar chart (avg/median/std), decile distribution view (reuses StatChart)
-- [ ] E15.5 Empty/degenerate data handling (no executions, one student) per PRD catalog
-- [ ] E15.6 Session tests + acceptance pass vs T-11, T-12 ⚑
+- [ ] E15.1 Principal read-only services: browse bank, exams, results (S-7 — zero mutating verbs authorized; negative tests) — *partly done and honestly not ticked. The report half of S-7 is shipped and structural: `ReportData` is read methods only, both report verbs are `requireRole(PRINCIPAL)`, and the positive plus all three negatives are tested. The bank/exam browse verbs are NOT part of E15; `BankReadHandlers` already serves her the bank (F9.3, contract §3), and an exam browse verb for her role does not exist yet*
+- [ ] E15.2 Principal data browser screen: tabbed (questions/exams/results) with filters — reusing bank/results components read-only — *not started. The rail item is still `soon(ROUTE_DATA, "Data", …, 15)`*
+- [x] E15.3 Report engine: `ReportDimension` Strategy (ByTeacher / ByCourse / ByStudent) over stored execution stats (C-5); comparison result DTO (S-37 extensibility story) ⚑ — *one parameterised mechanism: `ReportEngine` over `DimensionStrategy`, three strategies registered in `ReportStrategies.all()`. The extensibility story is proven twice — a fourth strategy defined inside `ReportEngineExtensibilityTest` is served by a real engine, and the engine's own source is asserted to name no dimension. Stats read through `FrozenStatistics` (shared with E14), never recomputed; the cross-row summary is participant-weighted with an exact pooled population σ, hand-computed in `ReportDtoTest`. Contract: docs/contracts/REPORTS_WIRE_CONTRACT.md (DRAFT)*
+- [x] E15.4 Reports screen: dimension picker, subject/entity selectors, comparison table + grouped bar chart (avg/median/std), decile distribution view (reuses StatChart) — *segmented dimension picker built from `ReportDimension.values()`, subject picker per dimension, rows table (sitting, date, mean, median, sigma, pass rate, participants), six cross-row summary cards, and StatChart drawing the SELECTED row's decile distribution with a row-to-chart selection flow. Print-friendly pass as E14.4's. **Deviation, stated:** no grouped bar chart across rows — the comparison is the table plus the per-row distribution, because a grouped bar of three means over two sittings is a chart with less information than the row it sits under. Flagged for the lead*
+- [x] E15.5 Empty/degenerate data handling (no executions, one student) per PRD catalog — *three distinct empty panels (nothing picked / no subjects / no closed sittings), each saying what would make it go away; a subject with nothing to report carries a count of zero **in the picker**, so the dead end is avoided before the click; one sitting says "one sitting, no trend" rather than drawing one; nothing scored prints a dash, never a zero mean*
+- [x] E15.6 Session tests + acceptance pass vs T-11, T-12 ⚑ — *`ReportsSessionTest` (25 FX-free cases), `ReportsCopyTest` (21), `ReportsInteractionTest` (6 TestFX, real input: dimension → subject → rows → row click → chart). T-12 covered end to end. **T-11 is only half covered**: the principal's read of the bank is E6's and passes, but the data browser screen (E15.2) does not exist, so the T-11 acceptance row cannot be signed off yet*
 
 ## E16 — Study bot [L] ⚑⚑ (v1's worst failure — gets over-engineered on purpose)
 

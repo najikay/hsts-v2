@@ -413,4 +413,66 @@ public final class AttemptRepository {
         }
         return counts;
     }
+
+    /**
+     * The three participation numbers for several executions at once (E9.4 — F5.4, S-21).
+     *
+     * <p>{@link #countParticipation} answers one execution in three queries, which is right
+     * for the monitor because the monitor is one execution. The release list is twenty of
+     * them on one screen, and doing it per row would be sixty queries on a paint that
+     * happens again on every push. This groups by execution <em>and</em> status once and
+     * assembles the split in Java.
+     *
+     * <p>Still counted rather than accumulated (§5): no counter column is read, so these
+     * cannot drift from the attempts they describe, and a submit racing an expiry cannot
+     * double-count. The frozen copy on a closed execution's {@code participation} JSON is
+     * the documentation record (S-21) and is what the report engine reads; this is the
+     * live answer, and while the attempt rows exist the two agree.
+     *
+     * <p>An execution nobody joined is <b>absent from the map</b> rather than present with
+     * three zeros, on the same convention as {@link #countAttemptsByExecution}: the caller
+     * defaults it, so there is one way to say "nobody".
+     *
+     * <p>Consumer: E9.4's {@code RELEASE_LIST_GET} and the row rebuilt for every
+     * {@code PUSH_EXECUTION_STATUS}.
+     *
+     * @param session      the current session
+     * @param executionIds the executions to count
+     * @return execution id → its counts; empty when {@code executionIds} is empty
+     */
+    public Map<Long, ParticipationCounts> countParticipationByExecution(
+            Session session, java.util.Collection<Long> executionIds) {
+        if (executionIds == null || executionIds.isEmpty()) {
+            // An `in ()` is a syntax error on one engine and a full scan on the other.
+            return Map.of();
+        }
+        List<Object[]> rows = session.createQuery("""
+                        select a.executionId, a.status, count(a)
+                        from ExamAttempt a
+                        where a.executionId in (:executionIds)
+                        group by a.executionId, a.status
+                        """, Object[].class)
+                .setParameterList("executionIds", executionIds)
+                .getResultList();
+
+        Map<Long, long[]> tallies = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            long executionId = ((Number) row[0]).longValue();
+            AttemptStatus status = (AttemptStatus) row[1];
+            long howMany = ((Number) row[2]).longValue();
+            // [started, finished, timedOut]: every attempt counts as started, whatever
+            // became of it, which is what S-21's "how many sat it" means.
+            long[] tally = tallies.computeIfAbsent(executionId, key -> new long[3]);
+            tally[0] += howMany;
+            if (status == AttemptStatus.SUBMITTED) {
+                tally[1] += howMany;
+            } else if (status == AttemptStatus.TIMED_OUT) {
+                tally[2] += howMany;
+            }
+        }
+        Map<Long, ParticipationCounts> counts = new LinkedHashMap<>();
+        tallies.forEach((executionId, tally) ->
+                counts.put(executionId, new ParticipationCounts(tally[0], tally[1], tally[2])));
+        return counts;
+    }
 }

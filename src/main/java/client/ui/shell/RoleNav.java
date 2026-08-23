@@ -32,10 +32,10 @@ public final class RoleNav {
     /**
      * Route ids of screens that arrive in later epics; declared once, here.
      *
-     * <p>{@code exams} and {@code approvals} left this list in E8: both now have a
-     * {@link Routes} constant of their own, which is what an enabled item points at.
+     * <p>{@code exams} and {@code approvals} left this list in E8, and {@code releases}
+     * in E9: each now has a {@link Routes} constant of its own, which is what an enabled
+     * item points at.
      */
-    static final String ROUTE_RELEASES = "releases";
     static final String ROUTE_MONITOR = "monitor";
     static final String ROUTE_GRADING = "grading";
     static final String ROUTE_RESULTS = "results";
@@ -85,7 +85,10 @@ public final class RoleNav {
             // teacher's (PRD §3).
             items.add(NavItem.of(Routes.APPROVALS.id(), "Approvals", Icons.APPROVALS));
         }
-        items.add(soon(ROUTE_RELEASES, "Releases", Icons.RELEASE, 9));
+        // Live since E9. The rail item had reserved this slot as a disabled "Arrives with
+        // E9" since E5.4; enabling it moved it onto Routes.RELEASES, whose id is "release"
+        // because that is what the "opens soon" notification navigates to.
+        items.add(NavItem.of(Routes.RELEASES.id(), "Releases", Icons.RELEASE));
         items.add(soon(ROUTE_MONITOR, "Live Monitor", Icons.MONITOR, 11));
         // Live since E12. The rail item has reserved this slot since E5.4 and its id is still
         // ROUTE_GRADING: Routes.GRADING was declared with the same string, so enabling the
@@ -122,7 +125,10 @@ public final class RoleNav {
         return List.of(
                 dashboard(Role.PRINCIPAL),
                 soon(ROUTE_DATA, "Data", Icons.BANK, 15),
-                soon(ROUTE_REPORTS, "Reports", Icons.REPORTS, 15),
+                // Live since E15.4. The rail item has reserved this slot since E5.4 and its id
+                // is still ROUTE_REPORTS: Routes.REPORTS was declared with the same string, so
+                // enabling the feature was a swap here rather than a rename anywhere.
+                NavItem.of(Routes.REPORTS.id(), "Reports", Icons.REPORTS),
                 settings());
     }
 

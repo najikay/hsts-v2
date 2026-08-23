@@ -166,6 +166,76 @@ public final class ExamRepository {
     }
 
     /**
+     * The approved versions one teacher may release (E9.1 — F5.1, S-14).
+     *
+     * <p><b>The filter is the requirement.</b> F5.1 says only an approved version may be
+     * released and PRD §6 spells out the UI half as "release unapproved version →
+     * impossible (not listed)". Both are this {@code where} clause: a draft, a pending or a
+     * rejected version is not fetched, cannot be counted and cannot be returned by a code
+     * path that skipped a check. The release service checks approval again on create,
+     * because a list is a courtesy and never a gate.
+     *
+     * <p>Scoped by <b>teaching</b>, not by authorship. A course's exams are the course's,
+     * and a teacher covering a colleague's class has to be able to take one out of the
+     * drawer; scoping by {@code exams.author} would make that impossible while adding no
+     * safety, since she can already write an exam for the same course. It is the join to
+     * {@code course_teachers} that keeps a teacher out of another course's drawer, and it
+     * is in the query rather than applied afterwards for the reason
+     * {@link #findPendingForCoordinator}'s is.
+     *
+     * <p>All approved versions, including superseded ones: S-2 allows an exam to be
+     * released many times, and an older approved version is a legitimate thing to release
+     * again. The picker shows the version number so the two are tellable apart.
+     *
+     * <p>Carries no questions and no answer key; the count per version comes separately
+     * from {@link #countQuestionsByVersion}, which the approval queue already uses.
+     *
+     * <p>Consumer: E9.1's {@code RELEASE_OPTIONS_GET}.
+     *
+     * @param session   the current session
+     * @param teacherId the caller, from the session and never from a payload
+     * @return the approved versions of her courses, newest first; empty when she has none
+     */
+    public List<ExamVersionContext> findReleasableForTeacher(Session session, long teacherId) {
+        return session.createQuery(CONTEXT_SELECT + """
+                          and v.status = :approved
+                          and exists (
+                              select 1 from CourseTeacher ct
+                              where ct.id.teacherId = :teacherId and ct.id.courseCode = c.code)
+                        order by v.createdAt desc, v.id desc
+                        """, ExamVersionContext.class)
+                .setParameter("approved", ExamVersionStatus.APPROVED)
+                .setParameter("teacherId", teacherId)
+                .getResultList();
+    }
+
+    /**
+     * Whether this teacher has any exam at all in the courses she teaches (E9.1).
+     *
+     * <p>One boolean, and it exists to tell two empty states apart. A teacher whose picker
+     * is empty because nothing has been approved yet needs to be told to ask her
+     * coordinator; a teacher whose drawer is empty needs to be told to write an exam. Both
+     * render zero rows, and a screen that could not distinguish them would give half its
+     * readers the wrong next step, which is exactly what PRD §4.1 forbids.
+     *
+     * <p>Consumer: E9.1's {@code RELEASE_OPTIONS_GET}, for {@code ReleaseOptions.anyExams}.
+     *
+     * @param session   the current session
+     * @param teacherId the caller
+     * @return {@code true} when at least one exam exists in a course she teaches
+     */
+    public boolean hasAnyExamInTaughtCourses(Session session, long teacherId) {
+        return session.createQuery("""
+                        select count(e) from Exam e
+                        where exists (
+                            select 1 from CourseTeacher ct
+                            where ct.id.teacherId = :teacherId and ct.id.courseCode = e.courseCode)
+                        """, Long.class)
+                .setParameter("teacherId", teacherId)
+                .getSingleResult() > 0;
+    }
+
+    /**
      * One teacher's own versions that have left her desk (E8.6 — F4.2).
      *
      * <p>F4.2 requires a rejection reason to be visible <em>on the exam</em> and not only in

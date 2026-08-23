@@ -16,6 +16,8 @@ import server.db.entities.Grade;
 import server.db.entities.Question;
 
 import server.db.entities.QuestionVersion;
+import server.db.projections.ExamVersionContext;
+import server.db.projections.ExecutionContext;
 import server.db.projections.GradeExamLabel;
 import server.db.projections.ParticipationCounts;
 
@@ -491,6 +493,157 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
 
         // Identical answers: the query cannot be used to discover that a grade exists.
         assertThat(somebodyElses).isEqualTo(neverExisted).isEmpty();
+    }
+
+    // ===================== E9: the release manager's additions ============
+
+    @Test
+    @DisplayName("⚑ a code is held only while its execution is scheduled or live (§5, C-1)")
+    void codeUniquenessIsPartial() {
+        persistExecution("AAAA", ExecutionStatus.SCHEDULED);
+        persistExecution("BBBB", ExecutionStatus.LIVE);
+        persistExecution("CCCC", ExecutionStatus.CLOSED);
+        persistExecution("DDDD", ExecutionStatus.CANCELLED);
+
+        // The rule has no constraint behind it, so it is entirely this where clause: one
+        // that forgot the status filter would reserve every code ever issued, for ever.
+        boolean scheduledHolds = inTx(session -> executions.isCodeInUse(session, "AAAA"));
+        boolean liveHolds = inTx(session -> executions.isCodeInUse(session, "bbbb"));
+        boolean closedHolds = inTx(session -> executions.isCodeInUse(session, "CCCC"));
+        boolean cancelledHolds = inTx(session -> executions.isCodeInUse(session, "DDDD"));
+
+        assertThat(scheduledHolds).isTrue();
+        assertThat(liveHolds).isTrue();
+        assertThat(closedHolds).isFalse();
+        assertThat(cancelledHolds).isFalse();
+    }
+
+    @Test
+    @DisplayName("a created execution is scheduled and belongs to the teacher who released it")
+    void createsAScheduledExecution() {
+        long examVersionId = newExamVersion();
+
+        long executionId = inTx(session -> executions.create(session, examVersionId, "4B7Q",
+                WHEN, WHEN.plusSeconds(3600), danaId));
+
+        ExamExecution created = inTx(session -> executions.findById(session, executionId))
+                .orElseThrow();
+        assertThat(created.getStatus()).isEqualTo(ExecutionStatus.SCHEDULED);
+        assertThat(created.getCreatedBy()).isEqualTo(danaId);
+        assertThat(created.getCode()).isEqualTo("4B7Q");
+    }
+
+    @Test
+    @DisplayName("⚑ a status transition fires only from the state it was told to expect (§5)")
+    void transitionIsGuarded() {
+        long executionId = persistExecution("AAAA", ExecutionStatus.SCHEDULED);
+
+        int opened = inTx(session -> executions.transition(session, executionId,
+                ExecutionStatus.SCHEDULED, ExecutionStatus.LIVE));
+        int cancelledTooLate = inTx(session -> executions.transition(session, executionId,
+                ExecutionStatus.SCHEDULED, ExecutionStatus.CANCELLED));
+
+        // The scheduled check opening a release and a teacher cancelling it are two writers
+        // a second apart; the loser must change nothing and know it changed nothing.
+        assertThat(opened).isEqualTo(1);
+        assertThat(cancelledTooLate).isZero();
+        Optional<ExamExecution> after = inTx(session -> executions.findById(session, executionId));
+        assertThat(after.orElseThrow().getStatus()).isEqualTo(ExecutionStatus.LIVE);
+    }
+
+    @Test
+    @DisplayName("participation for a whole list comes back in one grouped read")
+    void batchedParticipation() {
+        long busy = persistExecution("AAAA", ExecutionStatus.LIVE);
+        long quiet = persistExecution("BBBB", ExecutionStatus.SCHEDULED);
+        persistAttempt(busy, mayaId);
+        persistAttempt(busy, danaId);
+        persistAttempt(busy, rinaId);
+        finalise(busy, danaId, AttemptStatus.SUBMITTED);
+        finalise(busy, rinaId, AttemptStatus.TIMED_OUT);
+
+        Map<Long, ParticipationCounts> counts = inTx(session ->
+                attempts.countParticipationByExecution(session, List.of(busy, quiet)));
+
+        assertThat(counts.get(busy)).isEqualTo(new ParticipationCounts(3, 1, 1));
+        // Absent rather than three zeros, on the same convention as the other batched reads.
+        assertThat(counts).doesNotContainKey(quiet);
+        Map<Long, ParticipationCounts> none = inTx(session ->
+                attempts.countParticipationByExecution(session, List.of()));
+        assertThat(none).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the release list holds what she ran and what her own exams were run as (S-35)")
+    void executionsForATeacher() {
+        long executionId = persistExecution("AAAA", ExecutionStatus.CANCELLED);
+
+        List<ExecutionContext> hers =
+                inTx(session -> executions.findContextsForTeacher(session, danaId));
+        List<ExecutionContext> somebodyElses =
+                inTx(session -> executions.findContextsForTeacher(session, mayaId));
+
+        // Cancelled rows stay here, unlike on the results picker: "I called that one off" is
+        // exactly the fact the release manager is being asked for.
+        assertThat(hers).extracting(ExecutionContext::executionId).contains(executionId);
+        assertThat(somebodyElses).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the scheduled check sees scheduled rows up to its horizon, and live overdue ones")
+    void schedulerReads() {
+        long soon = persistExecution("AAAA", ExecutionStatus.SCHEDULED);
+        long live = persistExecution("BBBB", ExecutionStatus.LIVE);
+
+        List<ExecutionContext> opening = inTx(session ->
+                executions.findScheduledOpeningBy(session, WHEN.plusSeconds(60)));
+        List<ExecutionContext> closing = inTx(session ->
+                executions.findLiveClosingBy(session, WHEN.plusSeconds(7200)));
+
+        assertThat(opening).extracting(ExecutionContext::executionId).containsExactly(soon);
+        assertThat(closing).extracting(ExecutionContext::executionId).containsExactly(live);
+    }
+
+    @Test
+    @DisplayName("only approved versions of a course she teaches are releasable (F5.1)")
+    void releasableVersions() {
+        long approved = newApprovedVersion();
+
+        List<ExamVersionContext> releasable =
+                inTx(session -> exams.findReleasableForTeacher(session, danaId));
+        List<ExamVersionContext> notHers =
+                inTx(session -> exams.findReleasableForTeacher(session, mayaId));
+
+        assertThat(releasable).extracting(ExamVersionContext::examVersionId)
+                .containsExactly(approved);
+        assertThat(notHers).isEmpty();
+        boolean danaHasExams = inTx(session -> exams.hasAnyExamInTaughtCourses(session, danaId));
+        boolean mayaHasExams = inTx(session -> exams.hasAnyExamInTaughtCourses(session, mayaId));
+        assertThat(danaHasExams).isTrue();
+        assertThat(mayaHasExams).isFalse();
+    }
+
+    @Test
+    @DisplayName("the students enrolled in a course are who the opens-soon notice reaches")
+    void enrolledStudents() {
+        List<Long> algebra = inTx(session ->
+                new CourseRepository().findEnrolledStudentIds(session, COURSE_ALGEBRA));
+        List<Long> nobody = inTx(session ->
+                new CourseRepository().findEnrolledStudentIds(session, "99"));
+
+        assertThat(algebra).containsExactly(mayaId);
+        assertThat(nobody).isEmpty();
+    }
+
+    /** An approved version of a course dana teaches, for the releasable-versions read. */
+    private long newApprovedVersion() {
+        long examVersionId = newExamVersion();
+        runInTx(session -> session.createMutationQuery(
+                        "update ExamVersion set status = :status where id = :id")
+                .setParameter("status", ExamVersionStatus.APPROVED)
+                .setParameter("id", examVersionId)
+                .executeUpdate());
+        return examVersionId;
     }
 
     /** A question with one version, so grading fixtures have a real answer key to read. */

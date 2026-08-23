@@ -164,6 +164,21 @@ class VerbTest {
     }
 
     @Test
+    @DisplayName("the two report verbs exist, spelled as the E15 contract spells them")
+    void reportVerbsExist() {
+        // docs/contracts/REPORTS_WIRE_CONTRACT.md. Same reasoning as the checks above: a verb
+        // travels by name between two separately-shipped JARs, so valueOf is the spelling
+        // assertion and referring to the constant would survive a rename.
+        assertThat(Verb.values()).contains(Verb.REPORT_SUBJECTS_GET, Verb.REPORT_GET);
+        assertThat(Verb.valueOf("REPORT_SUBJECTS_GET")).isEqualTo(Verb.REPORT_SUBJECTS_GET);
+        assertThat(Verb.valueOf("REPORT_GET")).isEqualTo(Verb.REPORT_GET);
+        // Neither is a push: a report compares sittings that have already closed, so there is
+        // nothing about one that could move while it is on screen.
+        assertThat(Verb.REPORT_SUBJECTS_GET.isPush()).isFalse();
+        assertThat(Verb.REPORT_GET.isPush()).isFalse();
+    }
+
+    @Test
     @DisplayName("exactly seven push verbs are defined (adding one is a deliberate act)")
     void pushVerbCount() {
         assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(7);

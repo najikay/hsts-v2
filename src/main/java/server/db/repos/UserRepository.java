@@ -2,6 +2,8 @@ package server.db.repos;
 
 import org.hibernate.Session;
 import server.db.entities.User;
+import server.db.entities.UserRole;
+import server.db.projections.PersonRef;
 
 import java.util.List;
 import java.util.Optional;
@@ -76,5 +78,66 @@ public final class UserRepository {
                         """, String.class)
                 .setParameter("userId", userId)
                 .getResultList();
+    }
+
+    /**
+     * Everyone holding one stored role, by name (E15.3 - F9.4, spec 7.3.1).
+     *
+     * <p>Added under TEAM_SPLIT rule 5. The principal's report needs a list of teachers to run
+     * a "same teacher" comparison about and a list of students to run a "same student" one,
+     * and that list is school-wide: F9.3 gives her the whole school to read, so there is
+     * nothing to scope this by.
+     *
+     * <p><b>Projected, not loaded.</b> It returns {@link PersonRef} rather than {@link User}
+     * because a subject picker needs a name and a handle, and there is no reason for a report
+     * screen's query to bring a password hash and a national id back with it (S-6).
+     *
+     * <p>{@code COORDINATOR} is not a value here, and that is not a gap: coordinator-ness is a
+     * row in {@code coordinators} rather than a stored role (section 5), so a coordinator is
+     * returned by {@code TEACHER} - which is right, because she writes exams like any other
+     * teacher and a report about her exams is a report about a teacher's.
+     *
+     * <p>Consumer: E15.3's {@code JpaReportStore}, for the BY_TEACHER and BY_STUDENT pickers.
+     *
+     * @param session the current session
+     * @param role    the stored role to list
+     * @return the users holding it, by display name then id; empty when there are none
+     */
+    public List<PersonRef> findByRole(Session session, UserRole role) {
+        if (role == null) {
+            return List.of();
+        }
+        return session.createQuery("""
+                        select new server.db.projections.PersonRef(u.id, u.fullName, u.username)
+                        from User u where u.role = :role order by u.fullName, u.id
+                        """, PersonRef.class)
+                .setParameter("role", role)
+                .getResultList();
+    }
+
+    /**
+     * One user as a report names her (E15.3).
+     *
+     * <p>The single-subject sibling of {@link #findByRole}, used to resolve the subject a
+     * report was asked about. Same reason for being a projection: resolving a label should not
+     * drag a credential row across the session.
+     *
+     * @param session the current session
+     * @param userId  the user
+     * @param role    the role she must hold for this to answer
+     * @return her reference, or empty when there is no such user <b>or</b> she holds another
+     *         role - so a report about "student 2" cannot be answered with a teacher's name
+     */
+    public Optional<PersonRef> findRefByRole(Session session, long userId, UserRole role) {
+        if (role == null) {
+            return Optional.empty();
+        }
+        return session.createQuery("""
+                        select new server.db.projections.PersonRef(u.id, u.fullName, u.username)
+                        from User u where u.id = :userId and u.role = :role
+                        """, PersonRef.class)
+                .setParameter("userId", userId)
+                .setParameter("role", role)
+                .uniqueResultOptional();
     }
 }

@@ -91,8 +91,9 @@ class SessionRoutesTest {
         void teacher() {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS,
-                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
-                            Routes.RESULTS, Routes.GRADING, Routes.EXAMS);
+                            Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
+                            Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
+                            Routes.EXAMS);
         }
 
         @Test
@@ -100,9 +101,9 @@ class SessionRoutesTest {
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS,
-                            Routes.MONITOR, Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
-                            Routes.RESULTS, Routes.GRADING, Routes.EXAMS, Routes.APPROVALS,
-                            Routes.EXAM_PREVIEW);
+                            Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
+                            Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
+                            Routes.EXAMS, Routes.APPROVALS, Routes.EXAM_PREVIEW);
         }
 
         @Test
@@ -125,7 +126,7 @@ class SessionRoutesTest {
                             Routes.BOT_CHAT, Routes.BOT_HISTORY, Routes.MY_GRADES,
                             Routes.CHECKED_FORM)
                     .as("the teacher's half of the bot is not offered to her either (E16)")
-                    .doesNotContain(Routes.QUESTIONS, Routes.MONITOR,
+                    .doesNotContain(Routes.QUESTIONS, Routes.RELEASES, Routes.MONITOR,
                             Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
                             // The teacher's results screen is a different route from her own
                             // grades, and only one of them is hers (E13.1 vs E14). Grading is
@@ -148,7 +149,9 @@ class SessionRoutesTest {
         @DisplayName("a principal gets no authoring route either (S-7)")
         void principal() {
             assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
-                    .containsExactly(Routes.HOME_PRINCIPAL, Routes.SETTINGS);
+                    .as("her one feature route is a read: REPORT_SUBJECTS_GET and REPORT_GET, "
+                            + "and there is no third verb behind it (S-7)")
+                    .containsExactly(Routes.HOME_PRINCIPAL, Routes.SETTINGS, Routes.REPORTS);
         }
 
         @Test

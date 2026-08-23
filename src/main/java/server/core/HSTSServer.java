@@ -41,6 +41,7 @@ import server.features.bot.SourceExtractor;
 import server.features.exam.AttemptFinalizedListener;
 import server.features.exam.AttemptService;
 import server.features.exam.ExamStore;
+import server.features.exam.ExecutionCloseService;
 import server.features.exam.ExtendService;
 import server.features.exam.JpaExamStore;
 import server.features.exam.MonitorService;
@@ -58,6 +59,14 @@ import server.features.locks.EditLockService;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
 import server.features.notify.NotificationStore;
+import server.features.release.JpaReleaseStore;
+import server.features.release.ReleaseScheduler;
+import server.features.release.ReleaseService;
+import server.features.release.ReleaseStore;
+import server.features.reports.JpaReportStore;
+import server.features.reports.ReportEngine;
+import server.features.reports.ReportService;
+import server.features.reports.ReportStrategies;
 import server.features.results.CheckedFormService;
 import server.features.results.JpaTeacherResultsStore;
 import server.features.results.ResultsHandlers;
@@ -210,13 +219,28 @@ public class HSTSServer extends AbstractServer {
         // way round: the seam points from submission to marking and never back.
         AttemptFinalizedListener grader =
                 registerGradingFeature(router, notifications, sessionFactory, clock);
-        AttemptService attempts = registerExamFeature(router, sessions, pushGateway, notifications,
+        ExamFeature exam = registerExamFeature(router, sessions, pushGateway, notifications,
                 sessionFactory, clock, examTimers, grader);
+        // The release manager (E9), assembled straight after take-exam and never before it:
+        // closing a release early IS the take-exam feature's ExecutionCloseService, and that
+        // object is built in registerExamFeature over the same store and the same monitor.
+        // This line is where the verb E11 deliberately left unregistered gets its caller.
+        registerReleaseFeature(router, pushGateway, notifications, sessionFactory, clock,
+                examTimers, exam.close());
+        AttemptService attempts = exam.attempts();
         registerBotFeature(router, notifications, locks, sessionFactory, clock, attempts);
         // Teacher results and statistics (E14). Reads only, so it depends on nothing above
         // it and nothing above it depends on it: the figures it serves were frozen when the
         // grades were approved (F8.5) and it recomputes none of them.
         new TeacherResultsService(new JpaTeacherResultsStore(sessionFactory)).registerOn(router);
+        // The principal's reports (E15). Reads only, like the line above it and for a stronger
+        // reason: S-7 authorises this role for literally nothing that writes, and the feature's
+        // whole data seam (ReportData) is read methods, so that is structural here rather than
+        // procedural. The dimensions it serves come from ReportStrategies.all(), which is the
+        // one list a fourth report type is added to (S-37); this line does not name any of them
+        // and does not change when one arrives.
+        new ReportService(new ReportEngine(new JpaReportStore(sessionFactory),
+                ReportStrategies.all())).registerOn(router);
         registerApprovalFeature(router, notifications, sessionFactory);
         // The question bank's write verbs (E6.1, E6.3, E6.4). Assembled last, and the only
         // things above it that it uses are the sessionFactory and clock locals: its guards ask
@@ -407,7 +431,7 @@ public class HSTSServer extends AbstractServer {
      * periodic sweep is the backstop for a task that was lost to a long pause or a
      * saturated executor. Expiry is a compare-and-set, so both are free to overlap.
      */
-    private static AttemptService registerExamFeature(MessageRouter router, SessionManager sessions,
+    private static ExamFeature registerExamFeature(MessageRouter router, SessionManager sessions,
                                             PushGateway pushGateway, NotificationService notifications,
                                             SessionFactory sessionFactory, Clock clock,
                                             ScheduledExecutorService examTimers,
@@ -432,10 +456,62 @@ public class HSTSServer extends AbstractServer {
         examTimers.scheduleWithFixedDelay(attempts.timers()::sweep,
                 TimerService.SWEEP_INTERVAL.toMillis(), TimerService.SWEEP_INTERVAL.toMillis(),
                 TimeUnit.MILLISECONDS);
-        // Returned rather than kept: the study bot's C-4 seam IS this service
-        // (AttemptTracker), and handing it over here is the one wire between the
-        // two features.
-        return attempts;
+        // Returned rather than kept, and two of them. The study bot's C-4 seam IS the
+        // attempt service (AttemptTracker), and the release manager's close-early verb IS
+        // the close service; handing both over here is the whole wiring between this
+        // feature and the two that depend on it. The close service is built here rather
+        // than in E9 because it needs this feature's store AND this feature's monitor, and
+        // assembling it anywhere else would mean a second MonitorService that nobody
+        // watches.
+        return new ExamFeature(attempts,
+                new ExecutionCloseService(examStore, attempts, monitors));
+    }
+
+    /**
+     * The two halves of the take-exam feature that other features are assembled from.
+     *
+     * @param attempts the take-exam service, which is also the study bot's C-4 seam
+     * @param close    the force-submit-and-freeze seam the release manager's close-early
+     *                 verb and its scheduled check both call (E11.5, F5.5)
+     */
+    private record ExamFeature(AttemptService attempts, ExecutionCloseService close) {
+    }
+
+    /**
+     * The release manager (E9 — F5).
+     *
+     * <p>Two objects and one scheduled job, and the order they are built in is the one edge
+     * that runs backwards. {@link ReleaseService} answers the verbs and knows how to build a
+     * release row; {@link ReleaseScheduler} decides when a release opens and closes and has
+     * to be able to say "this one changed" without knowing either of those things. So the
+     * service is built first and handed to the scheduler as a {@code ReleaseAnnouncer} — a
+     * one-method seam rather than the whole service, for the same reason
+     * {@code MonitorPublisher} exists on the other side of this feature.
+     *
+     * <p>The close service arrives as a parameter rather than being built here, and that is
+     * load-bearing: a second one over a second store would still close releases correctly and
+     * would push its monitor updates to a {@code MonitorService} nobody is watching, so the
+     * teachers with the live monitor open would see the exam end nowhere.
+     *
+     * <p>The check runs on the exam timer thread, beside the attempt sweep. Both are the
+     * same kind of work at the same cadence, and a release opening does not need a thread of
+     * its own; what it must not share is the lock sweeper, which is why that one is separate.
+     */
+    private static void registerReleaseFeature(MessageRouter router, PushGateway pushGateway,
+                                               NotificationService notifications,
+                                               SessionFactory sessionFactory, Clock clock,
+                                               ScheduledExecutorService examTimers,
+                                               ExecutionCloseService closeService) {
+        ReleaseStore releaseStore = new JpaReleaseStore(sessionFactory);
+        ReleaseService releases = new ReleaseService(releaseStore, closeService, pushGateway,
+                clock, new java.security.SecureRandom());
+        releases.registerOn(router);
+
+        ReleaseScheduler scheduler = new ReleaseScheduler(releaseStore, closeService,
+                notifications, releases, clock);
+        examTimers.scheduleWithFixedDelay(scheduler::tick,
+                ReleaseScheduler.INTERVAL.toMillis(), ReleaseScheduler.INTERVAL.toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     /** A single daemon thread: it must never keep a shut-down JVM alive. */

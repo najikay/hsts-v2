@@ -411,6 +411,77 @@ public enum Verb {
      */
     EXECUTION_MONITOR_GET,
 
+    // ===================== Release manager (E9) ============================
+    // Additive to the frozen E10/E11 contract, documented as amendments A3-A7
+    // of docs/contracts/EXAM_WIRE_CONTRACT.md. Payload types live in
+    // {@code common.dto.release}; the handlers are
+    // {@code server.features.release.ReleaseService}.
+    //
+    // Every verb below is a TEACHER verb, gated exactly as E11's pair is:
+    // {@code requireRole(TEACHER, COORDINATOR)} PLUS ownership resolved from the
+    // execution itself — the caller must be the teacher who released it or the
+    // author of the exam being sat, never whoever the payload says (P-5). None
+    // of these payloads carries a teacher id, because one could only ever be
+    // somebody else's.
+    //
+    // Two things are the server's and are not on any request: the 4-character
+    // code (generated here, because only the server can check it is free among
+    // releases students might still be sitting) and the state (derived from the
+    // window and the stored status against the server's clock).
+
+    /**
+     * The approved exam versions this teacher may take out of the drawer
+     * (F5.1, S-14).
+     * Request payload: {@code null} — which versions those are is resolved from
+     * the session, not from a field. Response: {@code ReleaseOptions}.
+     * <p>The query filters on {@code APPROVED}, so PRD §6's "release unapproved
+     * version → impossible (not listed)" is a {@code where} clause rather than a
+     * client-side omission. {@link #RELEASE_CREATE} checks it again: a list is a
+     * courtesy, never a gate.
+     */
+    RELEASE_OPTIONS_GET,
+
+    /**
+     * This teacher's releases, with their live state and participation (F5.4).
+     * Request payload: {@code null}; response: {@code ReleaseList}. Scoped in the
+     * query to the releases she created or whose exam she wrote, which is exactly
+     * the set she may act on, so no row in the list is un-actionable and no
+     * actionable release is invisible.
+     */
+    RELEASE_LIST_GET,
+
+    /**
+     * Schedule a release of an approved exam version (F5.1, F5.2, S-2).
+     * Request payload: {@code ReleaseCreateRequest}; response:
+     * {@code ReleaseRow}, carrying the generated code the teacher reads out.
+     * <p>Refuses an unapproved version with {@code VALIDATION}, a window whose
+     * close is not after its open or whose open is well in the past with
+     * {@code VALIDATION}, and a version outside her courses with
+     * {@code FORBIDDEN}. The same exam may be released many times (S-2).
+     */
+    RELEASE_CREATE,
+
+    /**
+     * Call off a scheduled release before it ever opens (F5.5).
+     * Request payload: {@code ReleaseActionRequest}; response:
+     * {@code ReleaseRow}, refreshed. Legal only from {@code SCHEDULED}: a live
+     * release is ended with {@link #RELEASE_CLOSE_EARLY}, which is a different
+     * action because it hands people in. Cancelled releases are excluded from the
+     * report corpus (PRD §6).
+     */
+    RELEASE_CANCEL,
+
+    /**
+     * End a live release now (F5.5).
+     * Request payload: {@code ReleaseActionRequest}; response:
+     * {@code ReleaseRow}, refreshed. <b>Behaves exactly like time expiry for
+     * active students</b>: every attempt still in progress goes through the same
+     * force-submit path an expiry takes, so a student mid-question ends
+     * {@code TIMED_OUT} with the answers she had saved and gets the same
+     * {@link #PUSH_FORCE_SUBMITTED} her own timer would have sent. Idempotent.
+     */
+    RELEASE_CLOSE_EARLY,
+
     // ===================== Grading & results (E12/E13) =====================
     // The frozen wire contract: docs/contracts/GRADING_WIRE_CONTRACT.md. Payload
     // types live in {@code common.dto.grading}; the handlers are E12/E13.
@@ -607,6 +678,47 @@ public enum Verb {
      */
     RESULTS_EXECUTION_GET,
 
+    // ============= Principal reports (E15) =================================
+    // The draft wire contract: docs/contracts/REPORTS_WIRE_CONTRACT.md. Payload
+    // types live in {@code common.dto.report}; the handler is
+    // {@code server.features.reports.ReportService} over
+    // {@code server.features.reports.ReportEngine}.
+    //
+    // Both verbs are requireRole(PRINCIPAL) and nothing else. That is the whole
+    // authorization story and it is deliberate: F9.3 gives the principal a
+    // school-wide READ and literally zero mutating verbs, so there is no scope to
+    // narrow and no ownership to resolve. A teacher, a coordinator and a student
+    // all get FORBIDDEN from the role gate rather than an empty answer, because an
+    // empty answer would read as "you have no reports" rather than "this is not
+    // your screen".
+    //
+    // Neither verb writes. Neither verb pushes. A report is a comparison of
+    // sittings that have already closed, and nothing about it can move while it is
+    // on screen.
+    //
+    // Statistics travel as they were frozen (F8.5): population sigma, pass mark
+    // 55, ten stored buckets. The engine aggregates those numbers across rows and
+    // recomputes none of them. Cancelled executions are excluded (H15.2).
+
+    /**
+     * The subjects a given dimension can be reported about (F9.4).
+     * Caller: principal. Request payload: {@code ReportSubjectsRequest};
+     * response: {@code ReportSubjects}. School-wide and unpaginated (spec 7.3.1,
+     * PRD section 6). Subjects with nothing to report are included and carry a
+     * count of zero, so an empty comparison is visible before it is asked for.
+     */
+    REPORT_SUBJECTS_GET,
+
+    /**
+     * One report: a dimension, a subject, its sittings and their cross-row
+     * summary (F9.4, S-37).
+     * Caller: principal. Request payload: {@code ReportRequest}; response:
+     * {@code ReportResult}. Rows are closed executions with frozen statistics,
+     * oldest first. A subject that exists with nothing to compare answers OK with
+     * no rows - a real answer, not an error.
+     */
+    REPORT_GET,
+
     // ===================== Study bot (E16) =================================
     // The draft wire contract: docs/contracts/BOT_WIRE_CONTRACT.md. Payload types
     // live in {@code common.dto.bot}; the handlers are
@@ -734,7 +846,18 @@ public enum Verb {
      */
     PUSH_FORCE_SUBMITTED,
 
-    /** An execution changed state (SCHEDULED → LIVE → CLOSED) (E9). */
+    /**
+     * A release changed state, or its participation moved (E9 — F5.4).
+     * Payload: {@code common.dto.release.ReleaseRow} — one <b>whole</b> row, not a
+     * delta, for the reason {@link #PUSH_MONITOR_UPDATED} carries a whole
+     * snapshot: a list that patched fields from events drifts the first time one
+     * is missed. Recipients are the teachers who own that release, i.e. the one
+     * who created it and the author of the exam being sat.
+     * <p>Emitted on create, on cancel, on close (early or by the clock) and on the
+     * scheduled opening transition. A row for a release the client has not seen is
+     * an insert, not a mistake: a release created on her other machine has to
+     * appear without anybody pressing refresh (NFR-18).
+     */
     PUSH_EXECUTION_STATUS,
 
     /**

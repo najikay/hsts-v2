@@ -258,6 +258,54 @@ public final class CourseRepository {
                 .uniqueResultOptional();
     }
 
+    /**
+     * Every course in the school, by code (E15.3 - F9.4, spec 7.3.1).
+     *
+     * <p>Added under TEAM_SPLIT rule 5. The one read here with no user in its signature, and
+     * deliberately so: the principal's "same course" report is school-wide, and a variant taking
+     * a caller id would be a scope this feature does not have and could not honestly fill in.
+     * Who may call it is decided by the role gate on {@code REPORT_SUBJECTS_GET}, which is the
+     * whole of F9.3's authorization story.
+     *
+     * <p>A course with no exams is included and the picker says it has nothing to report. That
+     * is E15.5's degenerate case answered in the picker rather than after a click (section 4.1).
+     *
+     * <p>Consumer: E15.3's {@code JpaReportStore}, for the BY_COURSE picker.
+     *
+     * @param session the current session
+     * @return every course, by code
+     */
+    public List<CourseSummary> findAllSummaries(Session session) {
+        return session.createQuery("""
+                        select new server.db.projections.CourseSummary(c.code, c.name)
+                        from Course c order by c.code
+                        """, CourseSummary.class)
+                .getResultList();
+    }
+
+    /**
+     * One course as a report names it (E15.3).
+     *
+     * <p>{@link #findName} answers with a string, which is right for a header; a report's subject
+     * needs the code beside the name so two courses with similar names are told apart in the
+     * picker, and rebuilding the pair at each call site is how the two would eventually disagree.
+     *
+     * @param session    the current session
+     * @param courseCode the 2-character course code
+     * @return the course, or empty when there is no such row
+     */
+    public Optional<CourseSummary> findSummary(Session session, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return Optional.empty();
+        }
+        return session.createQuery("""
+                        select new server.db.projections.CourseSummary(c.code, c.name)
+                        from Course c where c.code = :courseCode
+                        """, CourseSummary.class)
+                .setParameter("courseCode", courseCode.strip())
+                .uniqueResultOptional();
+    }
+
     // ===================== E6 bank scope ==================================
 
     /**
@@ -323,6 +371,36 @@ public final class CourseRepository {
                         order by c.code
                         """, String.class)
                 .setParameter("userId", coordinatorId)
+                .getResultList();
+    }
+
+    /**
+     * Everyone enrolled in one course (E9.2 — F11.1).
+     *
+     * <p>Who a "your exam opens soon" notification goes to. Ids only, deliberately: the
+     * notifier routes to ids and nothing here needs a name, so the read that answers "who"
+     * cannot become a read that hands a caller a table of students it had no reason to
+     * load.
+     *
+     * <p>Ordered so the recipient list of a given course is the same on every run, which is
+     * what lets a notification test assert a list rather than a set.
+     *
+     * <p>Consumer: E9.2's {@code ReleaseScheduler}, for the RELEASE_OPENING_SOON notice.
+     *
+     * @param session    the current session
+     * @param courseCode the two-character course code
+     * @return the enrolled students' ids, ascending; empty for an unknown or empty course
+     */
+    public List<Long> findEnrolledStudentIds(Session session, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return List.of();
+        }
+        return session.createQuery("""
+                        select e.id.studentId from Enrollment e
+                        where e.id.courseCode = :courseCode
+                        order by e.id.studentId
+                        """, Long.class)
+                .setParameter("courseCode", courseCode)
                 .getResultList();
     }
 

@@ -15,6 +15,8 @@ import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
 import client.features.home.TeacherHomeView;
 import client.features.grading.GradingQueueView;
+import client.features.release.ReleaseManagerView;
+import client.features.reports.ReportsView;
 import client.features.results.CheckedFormView;
 import client.features.results.MyGradesView;
 import client.features.results.TeacherResultsView;
@@ -68,6 +70,10 @@ public final class SessionRoutes {
             // The legacy bank screen is the one feature screen that already works
             // end-to-end (over the DAO); E6 replaces it with the versioned bank.
             routes.add(Routes.QUESTIONS);
+            // The release manager (E9). Teaching roles only. It is also the screen the
+            // monitor is normally reached from, which is why the two are registered
+            // together: a monitor route with no way in would be a dead end.
+            routes.add(Routes.RELEASES);
             // The live monitor (E11). Teaching roles only, and the server re-checks
             // ownership on every request: this list decides what is offered, never
             // what is permitted.
@@ -116,6 +122,14 @@ public final class SessionRoutes {
             // item: it is a view of one paper, reached from a row, and the server
             // re-checks all three of its conditions on every request.
             routes.add(Routes.CHECKED_FORM);
+        }
+        if (role == Role.PRINCIPAL) {
+            // Her comparison reports (E15.4). The only feature route this role gets, and it is
+            // a read: REPORT_SUBJECTS_GET and REPORT_GET are the two verbs behind it and there
+            // is no third. S-7's "literally zero mutating verbs" is enforced on the server by
+            // the role gate; this list is what stops the client offering a trip that would be
+            // refused.
+            routes.add(Routes.REPORTS);
         }
         return List.copyOf(routes);
     }
@@ -169,6 +183,9 @@ public final class SessionRoutes {
         if (Routes.TAKE_EXAM.id().equals(route.id())) {
             return TakeExamView::new;
         }
+        if (Routes.RELEASES.id().equals(route.id())) {
+            return ReleaseManagerView::new;
+        }
         if (Routes.MONITOR.id().equals(route.id())) {
             return ExecutionMonitorView::new;
         }
@@ -195,6 +212,9 @@ public final class SessionRoutes {
         }
         if (Routes.GRADING.id().equals(route.id())) {
             return GradingQueueView::new;
+        }
+        if (Routes.REPORTS.id().equals(route.id())) {
+            return ReportsView::new;
         }
         return homeBuilder(role);
     }

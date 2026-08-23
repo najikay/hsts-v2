@@ -1101,6 +1101,59 @@
 .exam-done.timed-out .done-icon-disc { -fx-background-color: -hsts-danger-soft; }
 .exam-done.timed-out .done-icon-timeout { -fx-fill: -hsts-danger; }
 
+/* ---- The release manager (E9.5/E9.6) ---- */
+
+.release-manager { -fx-background-color: -hsts-bg; }
+
+.release-row {
+    -fx-padding: 12px 16px;
+    -fx-background-color: -hsts-surface;
+    -fx-background-radius: 10px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 10px;
+    -fx-border-width: 1px;
+}
+.release-row:hover { -fx-border-color: -hsts-accent; }
+
+.release-name { -fx-font-size: 15px; }
+
+/* The code on a list row: readable, but secondary to the name. The one that
+   matters is the reveal below. */
+.release-code-inline {
+    -fx-font-size: 15px;
+    -fx-text-fill: -hsts-muted;
+}
+
+.release-status-line { -fx-min-width: 220px; -fx-alignment: center-right; }
+
+/* The code reveal (S-17). The largest type in the product, on purpose: the
+   teacher reads this off her screen to a room, and every mis-heard character
+   costs a student minutes she cannot get back.
+
+   The characters are spaced apart by the VIEW, which inserts real spaces
+   between them, not by a CSS property: JavaFX has no -fx-letter-spacing, and a
+   declaration it ignores is a promise nobody keeps. */
+.release-reveal { -fx-padding: 18px 22px; }
+
+.release-code-big {
+    -fx-font-size: 64px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-accent;
+}
+
+.release-create-dialog .release-moment { -fx-alignment: center-left; }
+
+/* The code field (F5.3). Monospaced and wide-tracked in its own right: a teacher
+   proof-reads what she typed here before thirty people have to type it back. */
+.release-code-field {
+    -fx-font-family: "Consolas", "SF Mono", "Menlo", monospace;
+    -fx-font-size: 16px;
+    -fx-pref-width: 120px;
+}
+.release-create-dialog .release-picker-empty { -fx-wrap-text: true; }
+.release-create-dialog .release-window-error { -fx-wrap-text: true; }
+.release-version-picker { -fx-pref-width: 420px; }
+
 /* ---- The live monitor (E11.2) ---- */
 
 .execution-monitor { -fx-background-color: -hsts-bg; }
@@ -1501,3 +1554,43 @@
 .hsts-image-picker .picker-remove .nav-icon { -fx-fill: -hsts-danger; }
 .hsts-image-picker .picker-remove:hover { -fx-background-color: -hsts-danger-soft; }
 .hsts-image-picker .picker-remove:hover .label { -fx-text-fill: -hsts-danger; }
+/* =========================================================================
+   Principal reports · E15.4 (F9.4)
+   -------------------------------------------------------------------------
+   The comparison screen reuses three things wholesale rather than restyling
+   them: .hsts-segmented for the dimension picker, .hsts-stat-card for the
+   summary cards, and .hsts-stat-chart for the selected row's distribution.
+   What is left here is spacing, the selected-row emphasis, and the print
+   layout, which is the only block that changes anything structural.
+
+   Every value below is a literal except the colours, per the token rule the
+   E4.24 smoke test enforces.
+   ========================================================================= */
+
+.principal-reports .reports-picker-row { -fx-padding: 4px 0 0 0; }
+
+.reports-summary { -fx-padding: 4px 0 0 0; }
+
+/* Wider than E14's cards: the hints here name arithmetic ("weighted by
+   participants", "pooled population sigma") rather than a unit, and a hint
+   that wraps to three lines is a hint nobody finishes reading. */
+.reports-stat-card { -fx-min-width: 140px; }
+
+/* The row the chart is drawing. An accent bar rather than a fill, so the
+   selection reads at a glance without competing with the numbers in the row,
+   and so it survives the table's own alternating-row shading. */
+.reports-rows .table-row-cell:selected {
+    -fx-border-color: -hsts-accent transparent transparent transparent;
+    -fx-border-width: 0 0 0 3px;
+}
+
+/* ---- Print layout (E15.4) ----
+   The same modest thing E14.4 built: drop the chrome, flatten the cards, keep
+   the comparison. The heading stays, because a printed page of numbers about
+   nobody is worse than no page. */
+.reports-print .reports-stat-card {
+    -fx-background-color: transparent;
+    -fx-border-color: -hsts-border;
+    -fx-effect: null;
+}
+.reports-print .hsts-stat-chart { -fx-padding: 8px 0 0 0; }

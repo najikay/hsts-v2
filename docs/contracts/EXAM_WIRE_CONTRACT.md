@@ -310,6 +310,141 @@ reason, so every existing construction site keeps compiling and keeps meaning wh
 The row still carries **no answers and no scores**. Nothing here is correctness, and the E10.2
 wire leak guard scans this package unchanged.
 
+### A3 — the release manager's five verbs (E9 / F5, added 2026-08-22, lead)
+
+| Verb | Caller | Request payload | OK payload |
+|---|---|---|---|
+| `RELEASE_OPTIONS_GET` | teacher | *(none)* | `ReleaseOptions` |
+| `RELEASE_LIST_GET` | teacher | *(none)* | `ReleaseList` |
+| `RELEASE_CREATE` | teacher | `ReleaseCreateRequest` | `ReleaseRow` (the new one, with its code) |
+| `RELEASE_CANCEL` | teacher | `ReleaseActionRequest` | `ReleaseRow` (refreshed) |
+| `RELEASE_CLOSE_EARLY` | teacher | `ReleaseActionRequest` | `ReleaseRow` (refreshed) |
+
+**Scope.** Every one is `Authorization.requireRole(TEACHER, COORDINATOR)` **plus** ownership
+resolved from the release itself, on exactly the E11 rule: the caller must be the teacher who
+released it or the author of the exam being sat (S-35). **No payload carries a teacher id.**
+The two payload-less verbs take none because "which releases are hers" is the session's answer.
+
+**Additive only.** No existing verb is renamed, no payload component is removed or reordered,
+and no semantics change for any existing field. A client built against v1 works against a
+server that implements this; a client that implements it works against a v1 server minus the
+screen.
+
+### A4 — `PUSH_EXECUTION_STATUS` gets its payload (E9 / F5.4, added 2026-08-22, lead)
+
+| Push verb | Payload | Recipients |
+|---|---|---|
+| `PUSH_EXECUTION_STATUS` | `ReleaseRow` | the teachers who own that release |
+
+The verb was **reserved in E1** and is given its payload here, as `PUSH_TIMER_EXTENDED` and
+`PUSH_FORCE_SUBMITTED` were given theirs in v1. **The push verb count stays at seven**; E9 adds
+no new one.
+
+One **whole row**, never a delta, for the reason `PUSH_MONITOR_UPDATED` carries a whole
+snapshot: a list that patched fields from events drifts the first time one is missed. A row for
+a release the client has not seen is an **insert**, not a mistake — a release created on her
+other machine, or by the exam's author, has to appear without a refresh (NFR-18).
+
+Emitted on create, on cancel, on close (early or by the clock), and on the scheduled opening
+transition. Recipients are the same pair the verbs admit, so a teacher who may act on a release
+is exactly a teacher who is told when it changes.
+
+### A5 — the release DTOs (`common/dto/release`, added 2026-08-22, lead)
+
+A package of their own rather than `common.dto.exam`, and the reason is that package's own
+defining sentence: everything in it is safe to send to a student sitting an exam. `ReleaseRow`
+carries the 4-character entry code, which S-17 says students learn by ear and never in the app.
+`MonitorCounts` is **reused** rather than re-declared, because a release row's participation and
+the monitor's three numbers are the same derived counts (S-21, §5).
+
+- `ReleaseState` — wire enum `SCHEDULED | LIVE | CLOSED | CANCELLED`, with `canCancel()`,
+  `canCloseEarly()`, `isLive()`, `isOver()`. The F5.5 rules live here so the server's guard and
+  the client's button set are one rule written once.
+- `ReleasableVersion(long examVersionId, String examDisplayId, String examName, int versionNo,
+  String courseCode, String courseName, int durationMinutes, int questionCount)` — a picker row.
+  `label()` is "Midterm (v2) · Algebra 11 · 12 questions".
+- `ReleaseOptions(List<ReleasableVersion> versions, boolean anyExams)` — `waitingOnApproval()`
+  distinguishes "nothing approved yet" (go to your coordinator) from "nothing written yet" (go
+  to the builder); both render zero rows and have different next steps.
+- `ReleaseCreateRequest(long examVersionId, Instant openAt, Instant closeAt, String code)` —
+  `code` is **nullable**: null means "generate one", and the compact constructor collapses a
+  blank string to null so there is one representation of that. Trimmed and upper-cased on the
+  way in. **No teacher id**, see A6. `windowProblem(now, grace)` is the F5.2 rule and
+  `codeProblem()` the C-1 shape rule, both run by both tiers. `PAST_GRACE` is 5 minutes,
+  `MIN_WINDOW` is 1 minute. The three-component constructor is kept and means "generate one",
+  so every call site written before the code field keeps compiling and keeps meaning what it
+  meant.
+- `ReleaseCodeIssue` — enum `MALFORMED | TAKEN`, each carrying its sentence. `MALFORMED` is a
+  rule about a string and both tiers run it; `TAKEN` is a rule about the database and is
+  **server-only**, answered inside the inserting transaction.
+- `ReleaseWindow` — enum of the four ways a window is wrong, each carrying its sentence. On the
+  wire so the dialog's inline hint and the server's refusal are the same string.
+- `ReleaseActionRequest(long executionId)` — cancel and close early. One record, two verbs:
+  which action is meant is the verb, so "cancel a live exam" is not a representable request.
+- `ReleaseRow(long executionId, long examVersionId, String examName, String courseCode,
+  String courseName, String code, Instant openAt, Instant closeAt, int extraMinutes,
+  int durationMinutes, ReleaseState state, MonitorCounts counts)` — `code` is teacher-facing
+  only. `effectiveCloseAt()` and `allottedMinutes()` include extensions (S-20).
+- `ReleaseList(Instant serverNow, List<ReleaseRow> rows)` — `serverNow` travels so countdowns
+  are anchored to the server's clock (ADR-010). `with(row)` is the push merge.
+
+### A6 — the execution code, and the one thing the client never supplies (E9, added 2026-08-22, revised 2026-08-23, lead)
+
+**The code is the teacher's; the check is the server's.** §4 says she defines a 4-character
+execution code and T-5.3 has her typing one, so `ReleaseCreateRequest.code` carries it and the
+create dialog has a field. It is nullable and blank is legitimate: null asks the server to pick
+one.
+
+Both paths are validated **inside the transaction that inserts**. §5 makes uniqueness a
+*service* rule because the constraint is partial and MySQL has no partial unique index: a code
+is unique among **scheduled and live** sittings and free again once one is closed or cancelled
+(the seed's fourth execution reuses the first's shape). That is the only place the question can
+be answered honestly, so:
+
+- a supplied code that clashes → `VALIDATION`, `ReleaseCodeIssue.TAKEN`, which names the way
+  out ("Pick another or leave it blank to generate one.");
+- a supplied code of the wrong shape → `VALIDATION`, `ReleaseCodeIssue.MALFORMED`, checked
+  before any read because it is a rule about a string, and checked by the dialog as she types;
+- a generated code that collides → re-rolled, bounded at 20 attempts.
+
+Codes are stored upper case and compared case-insensitively (C-1), so `ab7q` and `AB7Q` are the
+same code both for a student joining and for the uniqueness check. **The accepted shape is
+C-1's wide `[A-Za-z0-9]{4}`** — the seed, the demo and T-5.3 all use all-digit codes.
+
+The **generator's** alphabet is narrower, `23456789ABCDEFGHJKLMNPQRSTUVWXYZ`: 32 symbols
+without `O`/`0` and `I`/`1`, because a code we invent will be read out loud to a room. That
+narrowing constrains generation only and is never imposed on a code a teacher typed.
+
+**The one thing still absent is the teacher id.** Who is releasing is the session's answer
+(P-5), so no payload has a field a client could put a colleague's id into.
+
+**The state is the server's too.** `ReleaseRow.state` is derived from the stored status *and* the
+window against the server clock, and the derivation is deliberately asymmetric: a `SCHEDULED`
+release whose opening moment has passed still reads **Scheduled** (students cannot enter until
+the column says otherwise, and a teacher must not read the code out to a room that would be
+refused), while a `LIVE` one past its effective close reads **Closed** (joins are already
+refused and every attempt's timer has fired). Extensions move that second answer, so fifteen
+minutes granted keeps it Live for fifteen minutes more.
+
+### A7 — error codes for the release verbs (E9, added 2026-08-22, lead)
+
+`VALIDATION` malformed payload; an **unapproved** exam version (the F5.1 sentence); a window
+whose close is not after its open, is shorter than a minute, or opens well before now; a code
+that is not four letters or digits; a code already held by a scheduled or live sitting ·
+`NOT_FOUND` an exam version that does not exist **or** belongs to a course she does not teach;
+a release that does not exist **or** is not hers — both pairs indistinguishable on purpose ·
+`CONFLICT` cancelling something that is not scheduled; closing early something that is not live;
+losing the guarded-transition race; no free code after twenty rolls ·
+`FORBIDDEN` never used by these verbs, see below · `UNAUTHORIZED` no session.
+
+**One deliberate divergence from E10/E11.** Those answer `FORBIDDEN` for "not your execution",
+on the reasoning that a teacher who reached the monitor already knows it exists and telling her
+whose it is lets her ask the right colleague. The release manager lists exactly the releases she
+may act on, so an id from anywhere else did not come from this screen; its two action verbs
+answer `NOT_FOUND` with one sentence for both cases. The sentences live in
+`server.features.release.ReleaseMessages` and are checked by one test against the §4.1 copy
+rules, exactly as `ExamMessages` is.
+
 ## What is deliberately absent
 
 - **No `student_id` anywhere in a request.** See the scope rule above.

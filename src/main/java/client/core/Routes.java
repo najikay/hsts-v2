@@ -66,6 +66,18 @@ public final class Routes {
     public static final Route TAKE_EXAM = Route.shell("attempt", "Take exam");
 
     /**
+     * The teacher's Release Manager (E9, F5). Teaching roles only.
+     *
+     * <p>The id is {@code "release"} because that is what
+     * {@code NotificationCatalog.ROUTE_RELEASE} has spelled since E17: the "your exam opens
+     * soon" notification navigates here, and a route id that did not match would quietly
+     * turn a clickable row into one that does nothing. The rail item had reserved the slot
+     * as a disabled "Arrives with E9" since E5.4, under the id {@code "releases"}; enabling
+     * the feature moved it onto this constant, which is the same swap E13 and E14 made.
+     */
+    public static final Route RELEASES = Route.shell("release", "Releases", "Releases");
+
+    /**
      * The live execution monitor (E11, F7.2). Teaching roles only.
      *
      * <p>The id matches {@code NotificationCatalog.ROUTE_MONITOR}, which is where
@@ -162,6 +174,19 @@ public final class Routes {
      */
     public static final Route GRADING = Route.shell("grading", "Grading", "Grading");
 
+    /**
+     * The principal's comparison reports (E15.4, F9.4, S-37).
+     *
+     * <p>The id is {@code "reports"} because that is what {@code RoleNav.ROUTE_REPORTS} has
+     * spelled since E5.4, when the rail reserved this slot with a disabled item. Enabling the
+     * feature is a swap there and a line here — no rename anywhere — which is the same path E13
+     * took for {@link #MY_GRADES} and E14 for {@link #RESULTS}.
+     *
+     * <p>Read-only, and registered for the principal alone. A teacher reaching it would still be
+     * refused by the server, which is where the role gate actually is (F9.3).
+     */
+    public static final Route REPORTS = Route.shell("reports", "Reports", "Reports");
+
     private Routes() {
     }
 
@@ -187,10 +212,10 @@ public final class Routes {
     /** @return every route this build defines, for bulk registration and id checks. */
     public static List<Route> all() {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
-                HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, MONITOR,
+                HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING);
+                CHECKED_FORM, GRADING, REPORTS);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

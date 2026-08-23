@@ -331,6 +331,24 @@
                         <exclude>client/features/exam/AnswerGridView*</exclude>
                         <exclude>client/features/exam/ExecutionMonitorView*</exclude>
                         <exclude>client/features/exam/QuestionCardView*</exclude>
+<!-- E9 release manager: the one thin FX screen plus the one dialog that needs
+                             inputs and so could not reuse WarnConfirm. Every decision they
+                             render lives in a measured class beside them — ReleaseManagerSession
+                             (the list, the pushes, the local validation, the sticky code
+                             reveal) and ReleaseCopy (every sentence, checked against the §4.1
+                             rules) — while which actions a row offers is decided on the wire by
+                             common.dto.release.ReleaseState/ReleaseRow and the window and code
+                             rules by ReleaseCreateRequest, all of which are covered. The create
+                             dialog's own decisions live in its public Form, which the
+                             interaction test builds and drives directly because a modal
+                             showAndWait cannot be driven from the FX thread it blocks. The screens are
+                             additionally driven by a real-input TestFX test
+                             (ReleaseManagerInteractionTest) covering create through to the code
+                             reveal and the close-early confirmation. Never a wildcard: a single
+                             '*' crosses path separators in JaCoCo and would silently
+                             un-instrument the whole feature. -->
+                        <exclude>client/features/release/ReleaseManagerView*</exclude>
+                        <exclude>client/features/release/CreateReleaseDialog*</exclude>
 <!-- E8 approval workflow: the three thin FX screens plus the one dialog that
                              needs an input and so could not reuse WarnConfirm. Every decision
                              they render lives in a measured logic class beside them —
@@ -356,6 +374,12 @@
                              print layout, the StatChartData mapping) or in ResultsCopy (the
                              six stat cards and every sentence), and both are measured. -->
                         <exclude>client/features/results/TeacherResultsView*</exclude>
+<!-- E15 principal reports: the one thin FX view. Every decision it renders is
+                             made in ReportsSession (the dimension and subject selection, the
+                             row-to-chart flow, the print layout, the StatChartData mapping) or
+                             in ReportsCopy (the six summary cards, the median band and every
+                             sentence), and both are measured. -->
+                        <exclude>client/features/reports/ReportsView*</exclude>
 <!-- E16 study bot: the four screens plus the three FX-only widgets they draw
      with. Every decision these render is made in BotChatModel, the four session
      classes and BotCopy, all of which are covered. Listed one by one, never a
