@@ -2,20 +2,12 @@ package client.features.bank;
 
 import client.core.NavParams;
 import client.core.ScreenManager;
-import client.features.locks.EditLockState;
-import client.features.locks.FxHeartbeat;
-import client.features.locks.LockAwareEditor;
-import client.features.locks.LockBanner;
-import client.features.locks.LockCopy;
 import client.net.RequestDispatcher;
 import client.ui.components.Buttons;
 import client.ui.screen.AbstractScreen;
 import client.ui.components.Logo;
-import client.ui.components.WarnConfirm;
 import common.dto.auth.LoginResult;
 import common.dto.bank.Question;
-import common.dto.bank.QuestionUpdate;
-import common.dto.lock.EntityRef;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -98,9 +90,6 @@ public class QuestionsView extends AbstractScreen {
     private String originalQuestion = "";
     private String originalAnswer = "";
 
-    /** Advisory edit lock for the selected question (E18.5). */
-    private LockAwareEditor locks;
-    private final LockBanner lockBanner = new LockBanner();
 
     @Override
     protected Parent build() {
@@ -152,7 +141,7 @@ public class QuestionsView extends AbstractScreen {
     @FXML
     private void initialize() {
         logoBox.getChildren().add(Logo.create(34));
-        initLocks();
+        makeReadOnly();
 
         // Multi-line cells: the full question wraps and an answer preview shows,
         // so every question is readable at a glance without truncation.
@@ -160,15 +149,27 @@ public class QuestionsView extends AbstractScreen {
         listView.getSelectionModel().selectedItemProperty().addListener(
                 (obs, oldSel, newSel) -> showSelected(newSel));
 
-        // Any edit marks dirty and dismisses a lingering "Saved" badge.
-        questionField.textProperty().addListener((obs, o, n) -> onEdited());
-        answerArea.textProperty().addListener((obs, o, n) -> onEdited());
-
-        // Clicking back into the editor also dismisses the "Saved" badge.
-        questionField.focusedProperty().addListener((obs, was, is) -> { if (is) clearSavedBadge(); });
-        answerArea.focusedProperty().addListener((obs, was, is) -> { if (is) clearSavedBadge(); });
-
         showSelected(null);
+    }
+
+    /**
+     * Turns the prototype into a reader (the lead's condition, 2026-08-23).
+     *
+     * <p>The controls come from {@code QuestionsView.fxml}, which is outside Member A's scope,
+     * so they are hidden here rather than deleted there. Hidden and unmanaged rather than
+     * disabled: a permanently greyed Save invites a teacher to work out how to un-grey it,
+     * where an absent one simply says the screen does not do that.
+     *
+     * <p>The text areas stay populated and selectable so a question can still be read and
+     * copied; they are just not writable. Everything here dies with the retirement PR.
+     */
+    private void makeReadOnly() {
+        questionField.setEditable(false);
+        answerArea.setEditable(false);
+        for (Node control : new Node[] {saveButton, revertButton, dirtyLabel, savedLabel}) {
+            control.setVisible(false);
+            control.setManaged(false);
+        }
     }
 
     @Override
@@ -176,110 +177,24 @@ public class QuestionsView extends AbstractScreen {
         requestAllQuestions();
     }
 
-    /** Leaving the screen gives the lock back straight away (E18.3). */
-    @Override
-    public void onHide() {
-        if (locks != null) {
-            locks.close();
-        }
-    }
+    // ===== Edit locks: removed, and why ==================================
 
-    // ===== Edit locks (E18.5) ============================================
-
-    /**
-     * Wires the reusable {@link LockAwareEditor} in, following the recipe in its
-     * javadoc. This is the working proof for E18: the other editors (exam
-     * builder, bot sources, release schedule, grading review) compose the same
-     * helper when their epics land.
+    /*
+     * This screen used to compose LockAwareEditor and was E18's working proof. It no longer
+     * takes a lock at all, on the lead's condition of 2026-08-23 for splitting the retirement
+     * out of PR-B.
+     *
+     * The reason is the one the EntityRef ruling exists for. Locks are keyed
+     * (type, long id), and there is no third numbering scheme available: this screen keyed
+     * EntityRef.QUESTION by the questions PRIMARY KEY, while the versioned editor keys the same
+     * type by displayId5. With both screens live and both taking locks, two teachers editing one
+     * question can hold two different keys and never see each other, and two teachers editing
+     * DIFFERENT questions can collide on one key. Read-only legacy keeps exactly one scheme live
+     * at every moment between now and the retirement PR.
+     *
+     * Nothing replaces it here, because a read-only screen has nothing to protect. The versioned
+     * editor holds the lock for anyone actually writing.
      */
-    private void initLocks() {
-        editorBox.getChildren().add(0, lockBanner);
-        lockBanner.hide();
-
-        RequestDispatcher dispatcher = dispatcher();
-        LoginResult user = ScreenManager.getInstance().signedInUser();
-        if (dispatcher == null || user == null) {
-            // The screen is reachable from the gallery and from tests without a
-            // session; it stays fully editable there rather than refusing to build.
-            return;
-        }
-        locks = new LockAwareEditor(dispatcher, eventBus(), user.userId(),
-                new FxHeartbeat(), ENTITY_NOUN);
-        locks.onStateChanged(this::renderLockState);
-        lockBanner.setOnTakeOver(this::confirmTakeOver);
-    }
-
-    /** Applies a lock state to the editor: banner, read-only fields, save button. */
-    private void renderLockState(EditLockState.Snapshot state) {
-        lockBanner.show(state, ENTITY_NOUN);
-
-        boolean editable = state.isEditable();
-        questionField.setEditable(editable);
-        answerArea.setEditable(editable);
-        saveButton.setDisable(!editable || listView.getSelectionModel().getSelectedItem() == null);
-        if (!editable) {
-            revertButton.setDisable(true);
-        } else {
-            refreshDirtyState();
-        }
-        if (state.offersTakeover()) {
-            // The banner carries the offer; a modal here would interrupt someone who
-            // is reading the question rather than waiting to edit it.
-            statusLabel.setText(LockCopy.TAKEOVER_TITLE);
-        }
-    }
-
-    /** Asks before taking the lock — never a silent grab (E18.3, state c). */
-    private void confirmTakeOver() {
-        EditLockState.Snapshot state = locks.state();
-        boolean confirmed = WarnConfirm.show(window(), WarnConfirm.spec(LockCopy.TAKEOVER_TITLE)
-                .explanation(state.reason() == null ? ""
-                        : LockCopy.takeoverExplanation(state.reason(), ENTITY_NOUN))
-                .confirmText(LockCopy.TAKEOVER_CONFIRM)
-                .cancelText(LockCopy.TAKEOVER_CANCEL)
-                .info());
-        if (confirmed) {
-            locks.takeOver();
-        } else {
-            locks.declineTakeover();
-        }
-    }
-
-    /**
-     * The stale-write dialog (E18.4). Reloading is destructive to what is on
-     * screen, so it is confirmed rather than done automatically.
-     */
-    private void confirmReloadAfterConflict() {
-        boolean reload = WarnConfirm.show(window(), WarnConfirm.spec(LockCopy.CONFLICT_TITLE)
-                .explanation(LockCopy.CONFLICT_EXPLANATION)
-                .confirmText(LockCopy.CONFLICT_CONFIRM)
-                .cancelText(LockCopy.CONFLICT_CANCEL)
-                .warn());
-        if (reload) {
-            requestAllQuestions();
-        }
-    }
-
-    private javafx.stage.Window window() {
-        return view().getScene() == null ? null : view().getScene().getWindow();
-    }
-
-    /**
-     * Takes the lock on the newly selected question and gives back the previous
-     * one. Selecting nothing releases: a lock must not survive a user who has
-     * stopped looking at what it protects.
-     */
-    private void openLockFor(Question q) {
-        if (locks == null) {
-            return;
-        }
-        if (q == null) {
-            locks.close();
-            lockBanner.hide();
-            return;
-        }
-        locks.open(EntityRef.question(q.getId()));
-    }
 
     // ===== Outbound requests =============================================
 
@@ -290,37 +205,23 @@ public class QuestionsView extends AbstractScreen {
                         onFxThread().run(() -> onQuestionList(response, failure, false)));
     }
 
+    /**
+     * Kept, and deliberately empty: this screen no longer writes (E6.14 condition).
+     *
+     * <p>The button is hidden and this method cannot be reached from the UI, but
+     * {@code QuestionsView.fxml} binds it by name in {@code onAction="#onSave"} and the
+     * FXMLLoader fails to load a controller that does not have it. The FXML is outside
+     * Member A's scope, so the method outlives its button until the retirement PR takes both.
+     */
     @FXML
     private void onSave() {
-        Question selected = listView.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            return;
-        }
-        // The values the editor was based on go with the edit, so the server can
-        // refuse a write that would overwrite somebody else's save (E18.4).
-        QuestionUpdate update = new QuestionUpdate(copyWithEdits(selected), originalQuestion, originalAnswer);
-
-        clearSavedBadge();
-        statusLabel.setText("Saving update…");
-        dispatcher().send(Verb.UPDATE_QUESTION, update)
-                .whenComplete((response, failure) ->
-                        onFxThread().run(() -> onQuestionList(response, failure, true)));
+        // Intentionally nothing. See the class javadoc: the versioned editor owns writing.
     }
 
-    /**
-     * The edited values on a detached copy: the list's own instance must not
-     * change until the server confirms, or a rejected save would leave the list
-     * showing text that was never written.
-     */
-    private Question copyWithEdits(Question selected) {
-        return new Question(selected.getId(), questionField.getText(), answerArea.getText());
-    }
-
+    /** Kept for the same reason as {@link #onSave()}: {@code onAction="#onRevert"} in the FXML. */
     @FXML
     private void onRevert() {
-        questionField.setText(originalQuestion);
-        answerArea.setText(originalAnswer);
-        statusLabel.setText("Reverted to last saved values.");
+        // Intentionally nothing.
     }
 
     // ===== Inbound responses (posted back onto the JavaFX thread) =========
@@ -336,10 +237,11 @@ public class QuestionsView extends AbstractScreen {
             return;
         }
         if (response.getErrorCode() == ErrorCode.CONFLICT) {
-            // Somebody else saved first (E18.4). Not a failure to apologise for: the
-            // user is offered the newer version, and keeps their text if they decline.
-            statusLabel.setText("Not saved. This question changed while you were editing.");
-            confirmReloadAfterConflict();
+            // Unreachable now that this screen never writes: CONFLICT was the stale-write
+            // answer to UPDATE_QUESTION. Kept as a plain message rather than deleted, because
+            // this method still serves GET_ALL_QUESTIONS and swallowing an unexpected error
+            // code would leave the list silently empty.
+            statusLabel.setText("That did not load. Open the question bank instead.");
             return;
         }
         if (response.isError()) {
@@ -422,10 +324,9 @@ public class QuestionsView extends AbstractScreen {
         saveButton.setDisable(!hasSelection);
         refreshDirtyState();
 
-        // The lock has the last word, so it goes last: acquiring is answered on this
-        // very thread when the server is quick, and doing it first would let the
-        // lines above re-enable a Save that read-only mode had just switched off.
-        openLockFor(q);
+        // No lock is taken here any more, and the ordering note that used to live at the end
+        // of this method went with it: nothing on this screen can re-enable a Save, because
+        // there is no Save.
     }
 
     /** Reacts to a manual edit of either field. */
