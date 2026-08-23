@@ -27,6 +27,8 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -183,6 +185,15 @@ public final class GradingQueueView extends AbstractScreen {
                 table.setItems(java.util.List.of());
             });
 
+            // The session is this screen's source of truth for what is selected, so the table's
+            // visible selection is driven FROM it rather than merely reported TO it. Without
+            // this, "Select all" ticked rows in the session and highlighted nothing — the
+            // button enabled and the confirmation counted correctly, but a teacher could not
+            // see what she was about to approve, on the one action that cannot be undone.
+            // Found by walking acceptance case 8.5; invisible to the session tests, because
+            // there the selection genuinely is correct.
+            syncTableSelection();
+
             String message = session.error().orElse("");
             error.setText(message);
             show(error, !message.isEmpty());
@@ -199,6 +210,39 @@ public final class GradingQueueView extends AbstractScreen {
 
     private Optional<StudentGradeRow> selectedRow() {
         return Optional.ofNullable(table.table().getSelectionModel().getSelectedItem());
+    }
+
+    /**
+     * Makes the table show what the session has selected.
+     *
+     * <p>Runs inside {@link #render()}'s {@code selecting} guard, so setting the selection here
+     * cannot re-enter the listener that reads it back — the same guard the queue rail uses, and
+     * the reason a two-way binding on this screen does not loop.
+     *
+     * <p>Does nothing when the two already agree. That is not an optimisation: reselecting the
+     * same rows on every render would fight a teacher mid-click, because a render happens on
+     * every session change including the one her click caused.
+     */
+    private void syncTableSelection() {
+        var model = table.table().getSelectionModel();
+        List<Long> wanted = session.selection();
+
+        List<Long> showing = new ArrayList<>();
+        for (StudentGradeRow row : model.getSelectedItems()) {
+            if (row != null) {
+                showing.add(row.gradeId());
+            }
+        }
+        if (showing.size() == wanted.size() && showing.containsAll(wanted)) {
+            return;
+        }
+
+        model.clearSelection();
+        for (StudentGradeRow row : session.rows()) {
+            if (wanted.contains(row.gradeId())) {
+                model.select(row);
+            }
+        }
     }
 
     // ===================== Actions =======================================
