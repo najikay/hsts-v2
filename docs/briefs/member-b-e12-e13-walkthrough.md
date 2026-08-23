@@ -85,11 +85,13 @@ cannot be forgotten.*
 
 The one unscoped read is named `findByIdUnscoped` so every call site confesses at review time —
 the same mechanism as the `ForAuthoring` and `ForGrading` suffixes on reads that carry an answer
-key. **If anyone greps for `ForCheckedForm`:** it is a sanctioned suffix in
-`CorrectnessLeakGuardTest` with **no readers**. The contract anticipated a dedicated read; the
+key. **If anyone greps for `ForCheckedForm`:** it was a sanctioned suffix in
+`CorrectnessLeakGuardTest` with **no readers**, and it was **withdrawn on 2026-08-23** by the
+lead's ruling (contract amendment A4). The contract anticipated a dedicated read; the
 implementation shares the grading assembler instead, with a second gate in front of it. That is
-the better design — one place an answer key becomes rows — and whether the now-unused suffix
-comes out of the guard's list is with Naji.
+the better design — one place an answer key becomes rows — and a sanctioned name nobody reads
+through is a permission standing open, so it came out of the list with a test asserting it
+stays out.
 
 **2. Every refusal is the same answer.** Not yours, not approved yet, sitting still open, never
 existed — all one `NOT_FOUND` with one sentence. Four distinguishable answers would let a student

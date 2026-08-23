@@ -380,6 +380,12 @@
                              in ReportsCopy (the six summary cards, the median band and every
                              sentence), and both are measured. -->
                         <exclude>client/features/reports/ReportsView*</exclude>
+<!-- E15.2 principal data browser: the one thin FX view. Every decision it renders
+                             is made in DataSession (which tab loads when, both filters, the
+                             course options, which empty panel) or in DataCopy (every sentence,
+                             the count line and every row label), and both are measured. The
+                             tab enum beside them is measured too. -->
+                        <exclude>client/features/data/DataView*</exclude>
 <!-- E16 study bot: the four screens plus the three FX-only widgets they draw
      with. Every decision these render is made in BotChatModel, the four session
      classes and BotCopy, all of which are covered. Listed one by one, never a

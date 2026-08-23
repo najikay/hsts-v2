@@ -32,7 +32,21 @@ import java.util.Optional;
  * {@code CONFLICT}: the student has already been told the result (C-3), and quietly changing a
  * published mark is a different act from correcting an unpublished one. Re-opening an approved
  * grade is a real workflow and a deliberate v1 non-goal — the contract says so, and it says so
- * because the alternative is a second notification path nobody has designed.
+ * because the alternative is a second notification path nobody has designed. The comment is
+ * refused with it: it travels on the override, so it lives or dies with the override.
+ *
+ * <h2>The comment, and the one rule that is not obvious (S-22, amendment A3)</h2>
+ *
+ * <p>A comment for the student is written in the same transaction as the score it explains, and
+ * <b>only when one was sent</b>. An override carrying no comment leaves any existing comment
+ * exactly where it is rather than clearing it.
+ *
+ * <p>That asymmetry is deliberate and it is the reason this paragraph exists. Correcting a
+ * score twice is ordinary — a teacher fixes a mark, then fixes it again after re-reading
+ * question four — and the second dialog opens with an empty comment box. If null meant "clear
+ * it", her second correction would silently delete the sentence she wrote to the student on the
+ * first, and nothing on any screen would say so. Null therefore means "leave it", and there is
+ * no way to clear a comment on this wire at all; removing one waits for the v2 verb.
  *
  * <h2>What it answers with</h2>
  *
@@ -89,7 +103,7 @@ public class OverrideService {
      *
      * @param session   the current session, inside a transaction
      * @param teacherId the authenticated caller — never taken from the payload
-     * @param request   the grade, the new score and the reason
+     * @param request   the grade, the new score, the reason and optionally the comment
      * @return what happened, with the refreshed review when the score moved
      * @throws NullPointerException if any argument is null
      */
@@ -114,8 +128,16 @@ public class OverrideService {
         }
 
         grade.override(request.newScore(), request.justification());
-        log.info("Teacher {} overrode grade {}: auto {} -> {}",
-                teacherId, request.gradeId(), grade.getAutoScore(), request.newScore());
+        if (request.hasComment()) {
+            // Same transaction as the score, because the comment explains that score and a
+            // student must never be able to read one without the other. Guarded on presence,
+            // not written unconditionally: null preserves, it does not clear (see the class
+            // javadoc and the contract's A3).
+            grade.setTeacherComment(request.teacherComment());
+        }
+        log.info("Teacher {} overrode grade {}: auto {} -> {}{}",
+                teacherId, request.gradeId(), grade.getAutoScore(), request.newScore(),
+                request.hasComment() ? ", with a comment for the student" : "");
 
         // Read back through the same assembler the review verb uses, so the teacher sees the
         // write rather than an echo of the request.

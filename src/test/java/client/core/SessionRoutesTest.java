@@ -149,9 +149,11 @@ class SessionRoutesTest {
         @DisplayName("a principal gets no authoring route either (S-7)")
         void principal() {
             assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
-                    .as("her one feature route is a read: REPORT_SUBJECTS_GET and REPORT_GET, "
-                            + "and there is no third verb behind it (S-7)")
-                    .containsExactly(Routes.HOME_PRINCIPAL, Routes.SETTINGS, Routes.REPORTS);
+                    .as("both of her feature routes are reads: REPORT_SUBJECTS_GET and "
+                            + "REPORT_GET behind Reports, and BANK_LIST, DATA_EXAMS_GET and "
+                            + "DATA_RESULTS_GET behind Data. There is no sixth verb (S-7)")
+                    .containsExactly(Routes.HOME_PRINCIPAL, Routes.SETTINGS, Routes.REPORTS,
+                            Routes.DATA);
         }
 
         @Test

@@ -6,9 +6,16 @@ import common.dto.grading.StudentGradeRow;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -20,6 +27,9 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  * sentence a teacher reads before a class of students can see their marks, and
  * {@code adjustedMarker} is the one that would tell a whole class their papers were hand-changed
  * if it keyed on the wrong thing.
+ *
+ * <p>The §4.1 rules — no em dash, no shouting, sentence case — are run over the catalogue by a
+ * <b>scan</b> rather than a list, so a string added later is covered the moment it is written.
  */
 class GradingCopyTest {
 
@@ -141,7 +151,75 @@ class GradingCopyTest {
         }
     }
 
-    // ===================== The justification label =========================
+    // ===================== The scan ======================================
+
+    /**
+     * Every public String constant that is copy, found by scanning rather than by list.
+     *
+     * <p>Two constants on this class are not copy and are skipped, each for a stated reason
+     * rather than because it was inconvenient. {@code STYLE_CLASS} is a CSS selector — it is
+     * lower case because that is what a class name is, and asking it to start with a capital
+     * would be asking the stylesheet to read like a sentence. {@code COLUMN_ADJUSTED} is
+     * <b>deliberately empty</b>: the adjusted column's heading is blank so the marker column
+     * carries no title above a mostly-empty column.
+     *
+     * <p>A scan rather than a list, for the reason {@code ReleaseCopyTest} is one: a rule that
+     * only checks the strings somebody remembered to enumerate is a rule a new string walks
+     * past — and the two strings this amendment adds are exactly that case.
+     */
+    static List<String> allCopy() {
+        List<String> copy = new ArrayList<>();
+        for (Field field : GradingCopy.class.getDeclaredFields()) {
+            if (!Modifier.isPublic(field.getModifiers())
+                    || !Modifier.isStatic(field.getModifiers())
+                    || field.getType() != String.class
+                    || "STYLE_CLASS".equals(field.getName())) {
+                continue;
+            }
+            try {
+                String value = (String) field.get(null);
+                if (!value.isEmpty()) {
+                    copy.add(value);
+                }
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("could not read " + field.getName(), e);
+            }
+        }
+        return copy;
+    }
+
+    @Test
+    @DisplayName("the scan really finds the copy, so a green run means something")
+    void theScanHasTeeth() {
+        assertThat(allCopy()).hasSizeGreaterThanOrEqualTo(20);
+        assertThat(allCopy())
+                .as("the amendment's two new strings are in the scan, not beside it")
+                .contains(GradingCopy.COMMENT_LABEL, GradingCopy.COMMENT_PROMPT);
+    }
+
+    @ParameterizedTest
+    @MethodSource("allCopy")
+    @DisplayName("no line contains an em dash (PRD section 4.1)")
+    void noEmDashes(String line) {
+        assertThat(line).doesNotContain("—").doesNotContain("–");
+    }
+
+    @ParameterizedTest
+    @MethodSource("allCopy")
+    @DisplayName("nothing shouts")
+    void noShouting(String line) {
+        assertThat(line).isNotBlank();
+        assertThat(line).isNotEqualTo(line.toUpperCase(Locale.ROOT));
+    }
+
+    @ParameterizedTest
+    @MethodSource("allCopy")
+    @DisplayName("sentence case: every line starts with a capital and is not Title Case")
+    void sentenceCase(String line) {
+        assertThat(line.charAt(0)).isUpperCase();
+    }
+
+    // ===================== The two labels in the dialog ===================
 
     @Test
     @DisplayName("the justification label says both that it is stored and that she does not see it")
@@ -153,6 +231,32 @@ class GradingCopyTest {
         assertThat(label).contains("Stored with the grade");
         assertThat(label).contains("does not");
         assertThat(label).contains("comment");
+    }
+
+    @Test
+    @DisplayName("the comment label says it is optional, that the student reads it, and that "
+            + "leaving it empty keeps what is saved (S-22)")
+    void commentLabelSaysAllThreeThings() {
+        String label = GradingCopy.COMMENT_LABEL;
+
+        // Optional, so she is not made to write to move a score. Read by the student, which is
+        // the entire difference from the box above it. And empty-keeps-what-is-saved, because
+        // the box opens empty on a second correction and the server's null-preserves rule is
+        // otherwise invisible to her (contract A3).
+        assertThat(label).contains("Optional");
+        assertThat(label).contains("she will see it");
+        assertThat(label).contains("keeps any comment already saved");
+    }
+
+    @Test
+    @DisplayName("the two labels are not the same sentence with a word changed")
+    void theTwoLabelsSayOppositeThings() {
+        // The whole reason the dialog has two boxes. If these ever converge, a teacher has no
+        // way to tell which piece of writing she is doing.
+        assertThat(GradingCopy.JUSTIFICATION_LABEL).isNotEqualTo(GradingCopy.COMMENT_LABEL);
+        assertThat(GradingCopy.JUSTIFICATION_LABEL).contains("for the record");
+        assertThat(GradingCopy.COMMENT_LABEL).doesNotContain("for the record");
+        assertThat(GradingCopy.JUSTIFICATION_PROMPT).isNotEqualTo(GradingCopy.COMMENT_PROMPT);
     }
 
     @Test

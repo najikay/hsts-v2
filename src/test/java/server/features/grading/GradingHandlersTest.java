@@ -353,6 +353,71 @@ class GradingHandlersTest {
             assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
             assertThat(errorText(response)).isEqualTo(GradingMessages.NO_SUCH_GRADE);
         }
+
+        @Test
+        @DisplayName("the comment travels the wire and reaches the service unaltered (S-22, A3)")
+        void commentReachesTheService() {
+            // The handler is where the payload could quietly be rebuilt without its fourth
+            // component — the shared gate casts and forwards, and a forward that dropped the
+            // comment would leave every other test on this verb green.
+            when(overrides.override(any(), anyLong(), any())).thenReturn(
+                    new OverrideService.OverrideOutcome(
+                            OverrideService.Outcome.OVERRIDDEN, aReview()));
+
+            Message response = handlers.override(teacher(), request(Verb.GRADE_OVERRIDE,
+                    new GradeOverrideRequest(GRADE_ID, 80, "question 3 was ambiguous",
+                            "שיפור ניכר.")));
+
+            assertThat(response.isOk()).isTrue();
+            verify(overrides).override(session, TEACHER_ID,
+                    new GradeOverrideRequest(GRADE_ID, 80, "question 3 was ambiguous",
+                            "שיפור ניכר."));
+        }
+
+        @Test
+        @DisplayName("a comment adds no gate of its own: an override without one is accepted")
+        void commentIsOptionalAtTheHandler() {
+            when(overrides.override(any(), anyLong(), any())).thenReturn(
+                    new OverrideService.OverrideOutcome(
+                            OverrideService.Outcome.OVERRIDDEN, aReview()));
+
+            Message response = handlers.override(teacher(), request(Verb.GRADE_OVERRIDE,
+                    new GradeOverrideRequest(GRADE_ID, 80, "question 3 was ambiguous")));
+
+            assertThat(response.isOk()).isTrue();
+            verify(overrides).override(session, TEACHER_ID,
+                    new GradeOverrideRequest(GRADE_ID, 80, "question 3 was ambiguous", null));
+        }
+
+        @Test
+        @DisplayName("a comment does not rescue a blank justification (S-23 is unchanged)")
+        void commentDoesNotSubstituteForTheJustification() {
+            // The two are for different readers and one of them is the audit trail. Writing
+            // something kind to a student is not an explanation of why a mark moved.
+            Message response = handlers.override(teacher(), request(Verb.GRADE_OVERRIDE,
+                    new GradeOverrideRequest(GRADE_ID, 80, "  ", "כל הכבוד!")));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+            assertThat(errorText(response)).isEqualTo(GradingMessages.JUSTIFICATION_REQUIRED);
+            verify(overrides, never()).override(any(), anyLong(), any());
+            assertThat(wiring.tx().committed()).isFalse();
+        }
+
+        @Test
+        @DisplayName("a comment on an already-approved grade is refused with the override")
+        void commentInheritsTheConflict() {
+            when(overrides.override(any(), anyLong(), any())).thenReturn(
+                    new OverrideService.OverrideOutcome(
+                            OverrideService.Outcome.ALREADY_APPROVED, null));
+
+            Message response = handlers.override(teacher(), request(Verb.GRADE_OVERRIDE,
+                    new GradeOverrideRequest(GRADE_ID, 80, "question 3 was ambiguous",
+                            "משהו לתלמידה")));
+
+            // Riding the override means inheriting its gates, CONFLICT included. This is the
+            // behaviour a standalone GRADE_COMMENT_SET would have had to reproduce.
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+        }
     }
 
     // ===================== GRADE_REVIEW_GET ===============================

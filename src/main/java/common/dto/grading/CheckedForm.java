@@ -12,8 +12,10 @@ import java.util.Objects;
  * <p>The only way correctness reaches a student, and it reaches them only when all three of
  * the contract's conditions hold: the grade is theirs, it is {@link GradeState#APPROVED}, and
  * the execution is closed. The E13.1 authorization tests are what license this type to exist
- * at all, and they are also what licenses the {@code …ForCheckedForm} repository reads behind
- * it (see {@code CorrectnessLeakGuardTest}).
+ * at all, and they are the whole licence: the read behind it is the shared {@code …ForGrading}
+ * one, because this form is assembled by {@code GradeReviewService} rather than by a student
+ * path of its own. The {@code …ForCheckedForm} suffix reserved for it at the freeze was
+ * withdrawn on 2026-08-23 for exactly that reason (see {@code CorrectnessLeakGuardTest}).
  *
  * <p>It reuses {@link AnswerReviewRow} rather than declaring a student-shaped copy. One row
  * shape for both audiences, gated by verb, means there is exactly one place an answer key is

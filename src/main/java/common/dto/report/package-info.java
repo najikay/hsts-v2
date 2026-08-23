@@ -1,17 +1,29 @@
 /**
  * The E15 principal report wire contract (Common tier, F9.4 / S-37).
  *
- * <h2>Draft</h2>
+ * <h2>Frozen v1, additively amended</h2>
  *
  * <p>Every type in this package is specified by
- * {@code docs/contracts/REPORTS_WIRE_CONTRACT.md}, marked <b>DRAFT</b> until the lead freezes
- * it. Once it is frozen the same rule applies as to {@code common.dto.results}: record names,
- * component names, their order and their types <em>are</em> the wire, Java serialization reads
- * records back through their canonical constructor, and a rename here is a protocol break
- * between two separately-built JARs rather than a refactor.
+ * {@code docs/contracts/REPORTS_WIRE_CONTRACT.md}, <b>FROZEN v1</b> since 2026-08-23. The same
+ * rule now applies as to {@code common.dto.results}: record names, component names, their order
+ * and their types <em>are</em> the wire, Java serialization reads records back through their
+ * canonical constructor, and a rename here is a protocol break between two separately-built JARs
+ * rather than a refactor. Changes are additive only and are recorded as amendments.
  *
- * <p>The two verbs these types travel on live in {@link common.protocol.Verb}, grouped under its
- * "Principal reports (E15)" section, and both are gated on the {@code PRINCIPAL} role alone.
+ * <p>The two report verbs these types travel on live in {@link common.protocol.Verb}, grouped
+ * under its "Principal reports (E15)" section, and both are gated on the {@code PRINCIPAL} role
+ * alone.
+ *
+ * <h2>The data browser's types (amendment A1, E15.2)</h2>
+ *
+ * <p>{@link common.dto.report.DataExams} and {@link common.dto.report.DataResults} are the
+ * principal's <em>browse</em> rather than her comparison, and they live here because this
+ * contract owns her role: the rule below — the role gate is the whole authorization, because her
+ * scope is the school — is the one they need, and restating it in a fourth contract would be a
+ * second place for it to drift. {@code DataResults} carries
+ * {@link common.dto.report.ReportRow} unchanged, for the same reason {@code ReportRow} carries
+ * {@code ResultStatistics} unchanged: a sitting she browses and a sitting a report compares are
+ * the same thing seen twice.
  *
  * <h2>One mechanism, parameterised</h2>
  *

@@ -292,6 +292,61 @@ class GradingDtoTest {
         }
     }
 
+    @Nested
+    @DisplayName("the override request's comment (amendment A3, S-22)")
+    class OverrideComment {
+
+        @Test
+        @DisplayName("blank collapses to null, so there is one shape for 'she wrote nothing'")
+        void blankBecomesNull() {
+            // Null is not cosmetic here: the service acts on it. A comment of three spaces
+            // reaching the server as a non-null value would overwrite a real comment with
+            // whitespace, which is the null-preserves rule failing by the back door.
+            assertThat(new GradeOverrideRequest(9L, 80, "why", "   ").teacherComment()).isNull();
+            assertThat(new GradeOverrideRequest(9L, 80, "why", "").teacherComment()).isNull();
+            assertThat(new GradeOverrideRequest(9L, 80, "why", null).teacherComment()).isNull();
+            assertThat(new GradeOverrideRequest(9L, 80, "why", "\t\n ").teacherComment())
+                    .as("strip, not trim: whitespace is more than the ASCII control range")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("a real comment is kept, stripped of the whitespace around it")
+        void realCommentIsStripped() {
+            GradeOverrideRequest ask =
+                    new GradeOverrideRequest(9L, 80, "why", "  שיפור ניכר. \n");
+
+            assertThat(ask.teacherComment()).isEqualTo("שיפור ניכר.");
+            assertThat(ask.hasComment()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the v1 three-component constructor still means what it meant")
+        void oldArityStillCompilesAndMeansNoComment() {
+            // Every call site written before the amendment goes through this. If it ever
+            // stopped delegating with null, the null-preserves rule would silently become
+            // "every legacy override clears the comment".
+            GradeOverrideRequest ask = new GradeOverrideRequest(9L, 80, "Question 4 was ambiguous");
+
+            assertThat(ask.teacherComment()).isNull();
+            assertThat(ask.hasComment()).isFalse();
+            assertThat(ask.justification()).isEqualTo("Question 4 was ambiguous");
+            assertThat(ask).isEqualTo(new GradeOverrideRequest(9L, 80, "Question 4 was ambiguous",
+                    null));
+        }
+
+        @Test
+        @DisplayName("the justification is left exactly as sent; only the comment is normalised")
+        void justificationIsUntouched() {
+            // The frozen semantics: a blank justification is the handler's VALIDATION answer,
+            // not something this record quietly turns into null. Normalising it here would
+            // move a refusal a teacher can read into an NPE she cannot.
+            GradeOverrideRequest ask = new GradeOverrideRequest(9L, 80, "  ", "a comment");
+
+            assertThat(ask.justification()).isEqualTo("  ");
+        }
+    }
+
     private static StudentGradeRow approvedRow() {
         return new StudentGradeRow(9L, 2001L, "Maya Levi", 72, null, 72,
                 GradeState.APPROVED, null, "Well done", APPROVED_AT);

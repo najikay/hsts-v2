@@ -161,12 +161,19 @@ public final class ReportEngine {
      * course with thirty sittings costs two queries rather than thirty-one, and every count is
      * from the same moment as every other.
      *
+     * <p>Package-private rather than private since E15.2, because the data browser lists the same
+     * sittings and has to map them the same way. One mapping with two callers, on the same
+     * reasoning that widened {@code FrozenStatistics} rather than letting E15 copy it: a sitting
+     * that read one way on the browse and another way in a report would be two answers to one
+     * question, and the unusable-column rule and the participant count are decisions rather than
+     * plumbing.
+     *
      * @param data       this transaction's reads
-     * @param executions the strategy's selection, oldest first
+     * @param executions the selected sittings, in the order they should be rendered
      * @return the rows, in the order they were selected, minus any whose stored statistics are
      *         unusable
      */
-    private static List<ReportRow> toRows(ReportData data, List<ExecutionReport> executions) {
+    static List<ReportRow> toRows(ReportData data, List<ExecutionReport> executions) {
         if (executions.isEmpty()) {
             return List.of();
         }

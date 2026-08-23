@@ -86,14 +86,37 @@ public final class GradingCopy {
      * <p>It says the reason is stored and that the student will not see it. Both halves matter:
      * a teacher who thinks it is private writes something careless, and one who thinks the
      * student reads it writes nothing useful for the audit trail (S-23).
+     *
+     * <p>It names the comment box as the place for anything meant for the student, which is the
+     * half that stops the justification being written to the wrong reader.
      */
     public static final String JUSTIFICATION_LABEL =
             "Why are you changing it? Stored with the grade for the record. The student does not "
-                    + "see this — use the comment for anything meant for her.";
+                    + "see this. Use the comment below for anything meant for her.";
+
+    /** The prompt inside the justification box, so an empty dialog says which box is which. */
+    public static final String JUSTIFICATION_PROMPT = "Reason for the record";
 
     /** Refusal shown when the teacher leaves the justification blank. */
     public static final String JUSTIFICATION_REQUIRED =
             "Please say why you are changing this score.";
+
+    /**
+     * The label on the comment field (S-22), and the sentence the whole feature turns on.
+     *
+     * <p>Three things, in the order a teacher needs them. That it is <b>optional</b>, so she is
+     * not made to write something to move a score. That <b>the student reads it</b>, which is
+     * the entire difference from the box above and the reason the two are separated rather than
+     * being one note. And that <b>leaving it empty keeps what is already saved</b>, because the
+     * second time she corrects a paper this box opens empty and she would otherwise have to
+     * guess whether pressing OK erases what she wrote the first time. It does not.
+     */
+    public static final String COMMENT_LABEL =
+            "Add a comment for the student? Optional, and she will see it with her grade. "
+                    + "Leaving it empty keeps any comment already saved.";
+
+    /** The prompt inside the comment box, in the second person she should be writing in. */
+    public static final String COMMENT_PROMPT = "Comment the student will read";
 
     /** Refusal shown when the score is outside 0..100. */
     public static final String SCORE_OUT_OF_RANGE = "A score must be between 0 and 100.";

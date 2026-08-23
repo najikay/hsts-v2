@@ -14,14 +14,14 @@ import java.util.Map;
  * seam that makes {@code GradingService} provable without a database, exactly as
  * {@link AutoGrader} and {@link ScoreStatistics} are.
  *
- * <p><b>An open naming decision.</b> {@link #pinnedQuestions} returns an answer key, and
+ * <p><b>A naming decision, now settled.</b> {@link #pinnedQuestions} returns an answer key, and
  * {@code CorrectnessLeakGuardTest} requires every repository read that does so to be named with
- * a sanctioned suffix — currently only {@code ForAuthoring} and {@code ForCheckedForm}. Grading
- * is neither: a teacher auto-grading an attempt is not authoring a question, and is not a
- * student looking at their own marked paper. The frozen contract needs this read and
- * {@code GRADE_REVIEW_GET} needs another like it, so a third audience exists whether or not it
- * has a name yet. Keeping the port here means the decision changes one adapter class and
- * nothing in the grading logic.
+ * a sanctioned suffix. Grading was not {@code ForAuthoring} — a teacher auto-grading an attempt
+ * is not authoring a question — so {@code ForGrading} was sanctioned for it, and it is what the
+ * adapter's read is called. It serves {@code GRADE_REVIEW_GET} too, and E13.4's checked form
+ * through the shared assembler; that last one is gated by its three conditions rather than by a
+ * name, which is why the {@code ForCheckedForm} suffix was withdrawn on 2026-08-23. Keeping the
+ * port here means such a decision changes one adapter class and nothing in the grading logic.
  */
 public interface GradingReads {
 

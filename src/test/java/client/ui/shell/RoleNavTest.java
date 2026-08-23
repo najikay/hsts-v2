@@ -111,10 +111,11 @@ class RoleNavTest {
             // disabled "Arrives with E13" since E5.4.
             assertThat(enabledLabels(Role.STUDENT))
                     .containsExactly("Dashboard", "My Grades", "Study Bot", "Settings");
-            // Reports went live with E15.4; the rail item had reserved the slot as a disabled
-            // "Arrives with E15" since E5.4. Data is still E15.2's and still disabled.
+            // Reports went live with E15.4 and Data with E15.2; both rail items had reserved
+            // their slots as disabled "Arrives with E15" entries since E5.4. Her rail now has
+            // nothing disabled on it, and nothing on it that writes (S-7).
             assertThat(enabledLabels(Role.PRINCIPAL))
-                    .containsExactly("Dashboard", "Reports", "Settings");
+                    .containsExactly("Dashboard", "Data", "Reports", "Settings");
         }
 
         @Test

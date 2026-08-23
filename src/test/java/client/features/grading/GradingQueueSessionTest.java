@@ -333,6 +333,76 @@ class GradingQueueSessionTest {
         }
 
         @Test
+        @DisplayName("sends the comment beside the reason when she wrote one (S-22)")
+        void sendsTheComment() {
+            givenOpenSitting();
+            connection.clearSent();
+            connection.replyOk(Verb.GRADE_OVERRIDE, null);
+
+            boolean sent = session.override(1, 80, "question 3 was ambiguous", "שיפור ניכר.");
+
+            assertThat(sent).isTrue();
+            assertThat(connection.sentMessages().get(0).getPayload())
+                    .isEqualTo(new GradeOverrideRequest(1, 80, "question 3 was ambiguous",
+                            "שיפור ניכר."));
+        }
+
+        @Test
+        @DisplayName("the comment is optional: neither a missing nor a blank one is refused")
+        void commentIsOptional() {
+            // The reason has a client-side check and the comment deliberately has none. A
+            // teacher who only wants to move a mark is never made to write to the student.
+            givenOpenSitting();
+            connection.replyOk(Verb.GRADE_OVERRIDE, null);
+
+            assertThat(session.override(1, 80, "question 3 was ambiguous", null)).isTrue();
+            assertThat(session.override(1, 80, "question 3 was ambiguous", "   ")).isTrue();
+            assertThat(session.error()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a blank comment becomes null rather than blanking what is saved")
+        void blankCommentTravelsAsNull() {
+            // The screen does not check this and must not: the record collapses it, so both
+            // tiers agree about what "she wrote nothing" is. Null then preserves server-side,
+            // which is what GradingCopy.COMMENT_LABEL promises her.
+            givenOpenSitting();
+            connection.clearSent();
+            connection.replyOk(Verb.GRADE_OVERRIDE, null);
+
+            session.override(1, 80, "question 3 was ambiguous", "   ");
+
+            assertThat(connection.sentMessages().get(0).getPayload())
+                    .isEqualTo(new GradeOverrideRequest(1, 80, "question 3 was ambiguous", null));
+        }
+
+        @Test
+        @DisplayName("the reason is still mandatory even when she wrote a comment (S-23)")
+        void commentDoesNotExcuseABlankReason() {
+            givenOpenSitting();
+            connection.clearSent();
+
+            boolean sent = session.override(1, 80, "  ", "כל הכבוד!");
+
+            assertThat(sent).isFalse();
+            assertThat(connection.sentCount()).isZero();
+            assertThat(session.error()).contains(GradingCopy.JUSTIFICATION_REQUIRED);
+        }
+
+        @Test
+        @DisplayName("the three-argument call still means an override with no comment")
+        void theOldCallStillWorks() {
+            givenOpenSitting();
+            connection.clearSent();
+            connection.replyOk(Verb.GRADE_OVERRIDE, null);
+
+            session.override(1, 80, "question 3 was ambiguous");
+
+            assertThat(connection.sentMessages().get(0).getPayload())
+                    .isEqualTo(new GradeOverrideRequest(1, 80, "question 3 was ambiguous", null));
+        }
+
+        @Test
         @DisplayName("re-reads the whole sitting, not just the row that changed")
         void overrideRereadsTheSitting() {
             givenOpenSitting();

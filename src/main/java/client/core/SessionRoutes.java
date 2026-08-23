@@ -8,6 +8,7 @@ import client.features.bot.BotAnalyticsView;
 import client.features.bot.BotChatView;
 import client.features.bot.BotHistoryView;
 import client.features.bot.BotManagerView;
+import client.features.data.DataView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exam.TakeExamView;
 import client.features.home.CoordinatorHomeView;
@@ -124,12 +125,16 @@ public final class SessionRoutes {
             routes.add(Routes.CHECKED_FORM);
         }
         if (role == Role.PRINCIPAL) {
-            // Her comparison reports (E15.4). The only feature route this role gets, and it is
-            // a read: REPORT_SUBJECTS_GET and REPORT_GET are the two verbs behind it and there
-            // is no third. S-7's "literally zero mutating verbs" is enforced on the server by
-            // the role gate; this list is what stops the client offering a trip that would be
-            // refused.
+            // Her comparison reports (E15.4). A read: REPORT_SUBJECTS_GET and REPORT_GET are the
+            // two verbs behind it and there is no third. S-7's "literally zero mutating verbs"
+            // is enforced on the server by the role gate; this list is what stops the client
+            // offering a trip that would be refused.
             routes.add(Routes.REPORTS);
+            // Her data browser (E15.2). The second and last feature route this role gets, and
+            // it is a read as well: BANK_LIST, DATA_EXAMS_GET and DATA_RESULTS_GET, all three
+            // gated on her role and none of them able to change a row. Between this and the
+            // line above, every route she has is a read, which is S-7 expressed as a list.
+            routes.add(Routes.DATA);
         }
         return List.copyOf(routes);
     }
@@ -215,6 +220,9 @@ public final class SessionRoutes {
         }
         if (Routes.REPORTS.id().equals(route.id())) {
             return ReportsView::new;
+        }
+        if (Routes.DATA.id().equals(route.id())) {
+            return DataView::new;
         }
         return homeBuilder(role);
     }

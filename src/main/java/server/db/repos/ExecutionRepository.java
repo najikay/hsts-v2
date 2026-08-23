@@ -497,6 +497,39 @@ public final class ExecutionRepository {
         }
     }
 
+    // ===================== The principal's data browser (E15.2) ===========
+
+    /**
+     * Newest first, because a browse is a filing cabinet rather than a trend: the sitting
+     * somebody is looking for is usually the most recent one. See {@link #OLDEST_FIRST}, which
+     * is the opposite ordering for the opposite reason.
+     */
+    private static final String NEWEST_FIRST = " order by ex.openAt desc, ex.id desc";
+
+    /**
+     * Every reportable sitting in the school (E15.2 - F9.3, H15.2 ⚑).
+     *
+     * <p>The same {@link #REPORTABLE} clause the three report populations share, with no subject
+     * filter appended to it at all. That shared clause is the point of adding this read here
+     * rather than writing a fifth query somewhere else: "closed, with statistics frozen" is one
+     * definition with one home, so the principal's browse and her reports cannot disagree about
+     * which sittings exist. In particular the H15.2 exclusion of cancelled runs is inherited
+     * rather than restated.
+     *
+     * <p>Unscoped by caller, like its four neighbours above, and for the same reason: the only
+     * caller is the principal, whose scope is the school (spec 7.3.1, F9.3).
+     *
+     * <p>Consumer: E15.2's {@code DATA_RESULTS_GET}.
+     *
+     * @param session the current session
+     * @return every closed sitting carrying frozen statistics, newest first
+     */
+    public List<ExecutionReport> findAllReportRows(Session session) {
+        return session.createQuery(REPORT_ROW + REPORTABLE + NEWEST_FIRST, ExecutionReport.class)
+                .setParameter("closed", ExecutionStatus.CLOSED)
+                .getResultList();
+    }
+
     public List<Long> findExecutionIdsWithLiveAttempts(Session session) {
         return session.createQuery("""
                         select distinct a.executionId from ExamAttempt a where a.status = :status

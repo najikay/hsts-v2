@@ -15,9 +15,12 @@ import java.util.Objects;
  * <p>The reuse is deliberate. Two audiences reading two nearly identical records would mean
  * two places correctness is serialized, and the second one would be the one nobody re-read.
  * One row shape gated by verb leaves exactly one place, with two guards in front of it. The
- * repository reads that build it are named {@code …ForCheckedForm} for the same reason the
- * authoring reads are named {@code …ForAuthoring}: so a student-facing caller cannot reach
- * for one by accident (see {@code CorrectnessLeakGuardTest}).
+ * read that builds it for both audiences is named {@code …ForGrading}, for the same reason the
+ * authoring reads are named {@code …ForAuthoring}: so a caller serving somebody else cannot
+ * reach for one by accident (see {@code CorrectnessLeakGuardTest}). The student's copy is
+ * gated by E13.4's three conditions rather than by a name of its own — the once-sanctioned
+ * {@code …ForCheckedForm} suffix was withdrawn on 2026-08-23 because sharing the assembler
+ * left nothing named for it.
  *
  * <p>{@code chosen} is a boxed {@link Byte} because {@code null} means the student never
  * answered — a real outcome, scored zero (§6), and distinct from choosing option 0.

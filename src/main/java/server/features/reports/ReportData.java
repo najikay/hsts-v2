@@ -3,6 +3,7 @@ package server.features.reports;
 import server.db.projections.CourseSummary;
 import server.db.projections.ExecutionReport;
 import server.db.projections.PersonRef;
+import server.db.projections.SchoolExam;
 
 import java.util.Collection;
 import java.util.List;
@@ -147,4 +148,33 @@ public interface ReportData {
      * @return execution id to attempts started; an execution nobody sat is absent
      */
     Map<Long, Integer> participantsByExecution(Collection<Long> executionIds);
+
+    // ===================== The data browser (E15.2) ======================
+    //
+    // Two more reads, on this interface rather than on a second seam of their own, and that is
+    // the point. S-7's structural claim is "the principal's whole feature is an interface with
+    // no write method on it", and it stays true only for as long as everything her role can
+    // reach arrives through here. A second data interface beside this one would be a second
+    // file to check, and the first place a write could appear without anybody noticing.
+
+    /**
+     * Every exam in the school, for the data browser's Exams tab (E15.2 - F9.3).
+     *
+     * <p>School-wide and unfiltered. The screen narrows what it shows; nothing the client sends
+     * decides what is read (spec 7.3.1).
+     *
+     * @return the exams ordered by display id; empty only before any exam is written
+     */
+    List<SchoolExam> allExams();
+
+    /**
+     * Every closed sitting in the school that has its statistics frozen (E15.2 - F9.3).
+     *
+     * <p>The same {@code REPORTABLE} definition the three report populations use, so the browse
+     * and the reports cannot disagree about which sittings exist. Cancelled runs are excluded
+     * here because they are excluded there (H15.2 ⚑).
+     *
+     * @return the sittings, newest first; empty when nothing has been sat and fully marked
+     */
+    List<ExecutionReport> allClosedSittings();
 }

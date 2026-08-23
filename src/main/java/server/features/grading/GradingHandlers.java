@@ -241,7 +241,13 @@ public class GradingHandlers {
     // ===================== GRADE_OVERRIDE ================================
 
     /**
-     * {@code GRADE_OVERRIDE} — move a score by hand, with a reason (E12.3).
+     * {@code GRADE_OVERRIDE} — move a score by hand, with a reason and optionally a comment
+     * for the student (E12.3, S-22/S-23).
+     *
+     * <p>The comment adds no gate of its own. It is optional, it has already collapsed to null
+     * if it was blank ({@link GradeOverrideRequest}'s compact constructor), and it is refused
+     * with the override in every case the override is refused — including {@code CONFLICT},
+     * which is the point of it riding the same verb rather than having one of its own.
      *
      * @param caller  the authenticated teacher
      * @param request the request, carrying a {@link GradeOverrideRequest}

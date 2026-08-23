@@ -279,3 +279,105 @@ fault. `NOT_FOUND` is reserved for an id that names no subject at all.
 - **No export.** The print-friendly layout is a layout mode, as E14.4's is. A real export is a
   separate piece of work and is not claimed here.
 - **No pagination.** School-sized lists (PRD section 6).
+
+---
+
+## Additive amendments
+
+Everything below was added **after** the 2026-08-23 freeze, under the additive-only rule this
+contract opened with: no verb renamed, no payload component removed or reordered, no semantics
+changed for any existing field, and not one line of sections 1-9 touched. A client built against
+v1 still works against a server that implements the amendments, and vice versa — that is the test
+each amendment has to pass to be allowed in.
+
+### A1 — data browser reads (E15.2 / F9.3, T-11, added 2026-08-23)
+
+| Verb | Caller | Request payload | OK payload |
+|---|---|---|---|
+| `DATA_EXAMS_GET` | principal | *(none)* | `DataExams` |
+| `DATA_RESULTS_GET` | principal | *(none)* | `DataResults` |
+
+**Why this contract owns them.** F9.3 gives the principal a read of "question bank, exams,
+results" and this contract already owns her role: section 2's rule — `requireRole(PRINCIPAL)` and
+nothing else, because spec 7.3.1 gives her the whole school — is exactly the rule these two need,
+and restating it in a fourth contract would be a second place for it to drift. The DTOs live
+beside the report DTOs in `common/dto/report` for the same reason.
+
+**Only two verbs were added, and the third tab needed none ⚑.** The screen's Questions tab calls
+`BANK_LIST`, unchanged and unwidened. The principal has been on that verb's role list since E6 and
+reaches every course through it (BANK_WIRE_CONTRACT section 2's read/write table, and its section
+7 ruling 2). A `DATA_QUESTIONS_GET` beside it would have been a second answer to a question that
+already has one, and `VerbTest` asserts that no such verb exists. What genuinely did not exist was
+a school-wide **exam** listing and a school-wide **results** listing: `RESULTS_EXAMS_GET` and
+`RESULTS_EXECUTION_GET` are scoped to the exams the caller *wrote* (S-35), which is a scope the
+principal does not have and must not be given by loosening theirs. Two new queries, two new
+handlers, nothing existing widened.
+
+**Neither request has a payload.** Not "an empty record" — `null`. Her scope is the school, so
+there is nothing for a request to narrow, and a field a client could set is a field a client could
+widen (section 4's reasoning for `ReportSubjectsRequest`). The practical consequence is that
+neither verb has a `VALIDATION` path: a request that carries something anyway is answered rather
+than refused, because nothing in it could have changed what was read.
+
+**The filters are the screen's, not the wire's.** The text filter and the course picker on all
+three tabs run client-side over rows already in hand. School-sized lists (PRD section 6), so a
+round trip per keystroke buys nothing, and the course dropdown is *derived from the loaded rows*,
+which is also why it can never offer a course that would filter the list to nothing.
+
+#### DTOs (`common/dto/report`)
+
+- **`DataExamRow(String displayId6, String examName, String courseCode, String courseName,
+  String authorName, int versions, Instant lastVersionAt)`** — one exam in the catalogue.
+  - `examName` is the **latest version's**, because this row answers "which exams exist", which
+    is a question about the exam. A sitting is labelled with the *released* version's name
+    (`ReportRow.examName`), so the two lists deliberately disagree about a renamed exam and each
+    is right about its own question.
+  - `versions` is the latest version number, which is also how many versions exist. Positive by
+    construction: an exam always has at least one version, so a zero is a broken query rather
+    than a state to draw.
+  - `authorName` and no author **id**. This row is read; an id would be the beginning of a
+    request that acted on her.
+  - **No questions, no answer key, no instructions and — a decision, flagged — no approval
+    status.** See 6.2 below.
+- **`DataExams(List<DataExamRow> exams)`** — ordered by display id, unpaginated. `EMPTY` for a
+  school that has written none, which is an empty state to draw and never an error.
+- **`DataResults(List<ReportRow> sittings)`** — **`ReportRow` is reused unchanged.** A sitting the
+  principal browses and a sitting a report compares are the same thing seen twice, and a second
+  row record would be a second place for a divisor, a pass mark or a decile width to be chosen —
+  precisely what section 4 refused when it reused `ResultStatistics` rather than restating it.
+  `EMPTY` for a school where nothing has closed and been marked.
+  - **Newest first**, which is the opposite of `ReportResult`'s ordering and deliberate: a browse
+    is a filing cabinet and the row being looked for is usually the most recent, while a report is
+    a trend and reads left to right from the oldest.
+  - A sitting appears only when it is **CLOSED with its statistics frozen** — the same
+    `ExecutionRepository.REPORTABLE` clause the three report populations share, so the browse and
+    the reports cannot disagree about which sittings exist, and **cancelled runs are absent from
+    both (H15.2 ⚑)**. The screen says this once, above the table, rather than showing four kinds
+    of blank row for a reader to interpret.
+
+#### Error codes
+
+`FORBIDDEN` role gate · `UNAUTHORIZED` no session. Nothing else: there is no payload to validate,
+no id to fail to find, and neither verb writes.
+
+#### 6.2 What a principal's exam row may carry ⚑ — RULED (lead, 2026-08-23): omission stands
+
+`DataExamRow` **omits the exam's approval status**, and this was decided conservatively rather
+than confidently. The argument for omitting it: approval is a workflow between an author and her
+coordinator (F4.1), and "rejected, twice, and here is the reason" is a fact about two members of
+staff rather than a fact about the school's exam catalogue. The argument against: spec 7.3.1 gives
+the principal read-only access to all data *as entered*, and a version's status is entered data —
+which is the same argument that decided BANK's section 7 ruling 2 in the opposite direction, for
+the answer key.
+
+The two are not obviously alike: an answer key is content, a rejection reason is a judgement about
+a colleague. **If the answer is ever that she sees it, the change is one component appended to
+`DataExamRow` and one column on the Exams tab; nothing else moves.**
+
+**Lead ruling (2026-08-23): the omission stands.** The distinction the pass drew is the right
+one: BANK ruling 2 admits the answer key because it is the question's own content, entered by its
+author for the catalogue; an approval status drags in a rejection, and a rejection is F4.1's
+conversation between two colleagues, not catalogue data. Spec 7.3.1's "all data as entered" is
+about the school's *content*, and the principal already learns what matters operationally from
+the Results tab: a sitting exists only for an exam that was approved and released. If the defense
+asks, that is the answer: she sees every consequence of approval, and none of the judgement.

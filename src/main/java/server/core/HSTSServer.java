@@ -63,6 +63,7 @@ import server.features.release.JpaReleaseStore;
 import server.features.release.ReleaseScheduler;
 import server.features.release.ReleaseService;
 import server.features.release.ReleaseStore;
+import server.features.reports.DataBrowseService;
 import server.features.reports.JpaReportStore;
 import server.features.reports.ReportEngine;
 import server.features.reports.ReportService;
@@ -239,8 +240,15 @@ public class HSTSServer extends AbstractServer {
         // procedural. The dimensions it serves come from ReportStrategies.all(), which is the
         // one list a fourth report type is added to (S-37); this line does not name any of them
         // and does not change when one arrives.
-        new ReportService(new ReportEngine(new JpaReportStore(sessionFactory),
-                ReportStrategies.all())).registerOn(router);
+        JpaReportStore reportStore = new JpaReportStore(sessionFactory);
+        new ReportService(new ReportEngine(reportStore, ReportStrategies.all()))
+                .registerOn(router);
+        // The principal's data browser (E15.2). Its two verbs share the store above rather than
+        // opening a second one: "closed with statistics frozen" is one definition, and the
+        // browse and the reports must not be able to disagree about which sittings exist
+        // (H15.2). Her third tab needed no verb at all - BankReadHandlers below already serves
+        // her the bank school-wide (F9.3), and reusing it is the point rather than a shortcut.
+        new DataBrowseService(reportStore).registerOn(router);
         registerApprovalFeature(router, notifications, sessionFactory);
         // The question bank's write verbs (E6.1, E6.3, E6.4). Assembled last, and the only
         // things above it that it uses are the sessionFactory and clock locals: its guards ask

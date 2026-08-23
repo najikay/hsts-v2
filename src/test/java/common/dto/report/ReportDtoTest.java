@@ -422,6 +422,110 @@ class ReportDtoTest {
         }
     }
 
+    // ===================== The data browser's shapes (A1, E15.2) =========
+
+    @Nested
+    @DisplayName("the data browser's wire shapes (amendment A1)")
+    class DataBrowseShapes {
+
+        private DataExamRow exam(int versions) {
+            return new DataExamRow("101101", "מבחן אמצע", "11", "אלגברה", "דנה כהן", versions,
+                    OPENED);
+        }
+
+        @Test
+        @DisplayName("an exam row needs an identity, because a catalogue row without one is noise")
+        void identityIsRequired() {
+            assertThatNullPointerException().isThrownBy(() ->
+                    new DataExamRow(null, "מבחן", "11", "אלגברה", "דנה כהן", 1, OPENED));
+            assertThatNullPointerException().isThrownBy(() ->
+                    new DataExamRow("101101", "מבחן", null, "אלגברה", "דנה כהן", 1, OPENED));
+        }
+
+        @Test
+        @DisplayName("an exam cannot have no versions: that is a broken query, not a state to draw")
+        void versionsMustBePositive() {
+            assertThatExceptionOfType(IllegalArgumentException.class)
+                    .isThrownBy(() -> exam(0))
+                    .withMessageContaining("0 versions");
+            assertThatExceptionOfType(IllegalArgumentException.class)
+                    .isThrownBy(() -> exam(-2));
+        }
+
+        @Test
+        @DisplayName("the optional labels fold to empty, so no cell ever prints the word null")
+        void missingLabelsFoldToEmpty() {
+            DataExamRow row = new DataExamRow("101101", null, "11", null, null, 1, OPENED);
+
+            assertThat(row.examName()).isEmpty();
+            assertThat(row.courseName()).isEmpty();
+            assertThat(row.authorName()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an exam written once has not been revised; one written twice has")
+        void revisionIsReadOffTheCount() {
+            assertThat(exam(1).hasBeenRevised()).isFalse();
+            assertThat(exam(2).hasBeenRevised()).isTrue();
+        }
+
+        @Test
+        @DisplayName("both lists fold null to empty and are copied, so a served answer is frozen")
+        void listsAreDefensive() {
+            List<DataExamRow> mutableExams = new ArrayList<>(List.of(exam(1)));
+            List<ReportRow> mutableRows =
+                    new ArrayList<>(List.of(row(1, "4821", 8, seededExecutionOne())));
+            DataExams exams = new DataExams(mutableExams);
+            DataResults results = new DataResults(mutableRows);
+
+            mutableExams.clear();
+            mutableRows.clear();
+
+            assertThat(exams.exams()).hasSize(1);
+            assertThat(results.sittings()).hasSize(1);
+            assertThatExceptionOfType(UnsupportedOperationException.class)
+                    .isThrownBy(() -> exams.exams().clear());
+            assertThat(new DataExams(null).exams()).isEmpty();
+            assertThat(new DataResults(null).sittings()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("EMPTY is an empty state to draw rather than an error to report")
+        void emptyConstants() {
+            assertThat(DataExams.EMPTY.isEmpty()).isTrue();
+            assertThat(DataResults.EMPTY.isEmpty()).isTrue();
+            assertThat(new DataExams(List.of(exam(1))).isEmpty()).isFalse();
+            assertThat(new DataResults(List.of(row(1, "4821", 8, seededExecutionOne())))
+                    .isEmpty()).isFalse();
+        }
+
+        @Test
+        @DisplayName("both payloads survive a round trip through Java serialization")
+        void roundTrips() throws Exception {
+            DataExams exams = roundTrip(new DataExams(List.of(exam(3))));
+            DataResults results = roundTrip(
+                    new DataResults(List.of(row(1, "4821", 8, seededExecutionOne()))));
+
+            assertThat(exams.exams().get(0).examName()).isEqualTo("מבחן אמצע");
+            assertThat(exams.exams().get(0).versions()).isEqualTo(3);
+            assertThat(results.sittings().get(0).statistics().standardDeviation())
+                    .as("the frozen sigma crosses the wire untouched, browse or report")
+                    .isEqualTo(17.5);
+        }
+
+        @Test
+        @DisplayName("the value semantics records give for free really are there")
+        void valueSemantics() {
+            assertThat(exam(2)).isEqualTo(exam(2)).hasSameHashCodeAs(exam(2));
+            assertThat(exam(2)).isNotEqualTo(exam(3));
+            assertThat(exam(2).toString()).contains("101101");
+            assertThat(DataExams.EMPTY).isEqualTo(new DataExams(List.of()));
+            assertThat(DataResults.EMPTY).isEqualTo(new DataResults(List.of()));
+            assertThat(DataExams.EMPTY.hashCode()).isEqualTo(new DataExams(List.of()).hashCode());
+            assertThat(DataResults.EMPTY.toString()).contains("sittings");
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static <T> T roundTrip(T value) throws IOException, ClassNotFoundException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();

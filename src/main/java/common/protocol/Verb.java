@@ -719,6 +719,51 @@ public enum Verb {
      */
     REPORT_GET,
 
+    // ============= Principal data browser (E15.2) ==========================
+    // Amendment A1 of docs/contracts/REPORTS_WIRE_CONTRACT.md (2026-08-23), which
+    // owns the principal's role. Payload types live in {@code common.dto.report};
+    // the handler is {@code server.features.reports.DataBrowseService} over the
+    // same read-only {@code ReportData} seam the report engine uses.
+    //
+    // These two are what T-11's "read-only browse of question bank, exams,
+    // results" was missing. The bank half needed NO new verb: the principal has
+    // been on BANK_LIST / QUESTION_GET / QUESTION_VERSIONS / QUESTION_IMAGE_GET
+    // since E6 and reaches every course through them (F9.3, BANK contract section
+    // 3). What did not exist was a school-wide EXAM listing and a school-wide
+    // RESULTS listing - RESULTS_EXAMS_GET and RESULTS_EXECUTION_GET are scoped to
+    // the exams the caller WROTE (S-35), which is a scope she does not have and
+    // must not be given by widening theirs.
+    //
+    // Both are requireRole(PRINCIPAL) and nothing else, for the reason the E15
+    // block above gives. Both take NO payload: there is no field a client could
+    // set, so there is nothing to widen and no VALIDATION path.
+    //
+    // Neither verb writes. Neither verb pushes. Statistics travel exactly as they
+    // were frozen (F8.5) through the same mapping the reports use, and cancelled
+    // sittings are absent from both (H15.2).
+
+    /**
+     * Every exam in the school, as a catalogue (F9.3, T-11.2).
+     * Caller: principal. Request payload: {@code null}; response:
+     * {@code DataExams}. Ordered by display id, unpaginated (PRD section 6). Each
+     * row carries the exam's identity, its course, its author's name and its
+     * latest version; it carries no questions, no answer key, no instructions and
+     * no approval status.
+     */
+    DATA_EXAMS_GET,
+
+    /**
+     * Every closed sitting in the school with its frozen statistics (F9.3,
+     * T-11.2).
+     * Caller: principal. Request payload: {@code null}; response:
+     * {@code DataResults}, whose rows are {@code ReportRow} reused unchanged.
+     * Newest first, which is the opposite of a report's ordering and deliberate:
+     * a browse is a filing cabinet, a report is a trend. Scheduled, live,
+     * cancelled and unmarked sittings are all absent - a sitting appears once its
+     * last grade is approved.
+     */
+    DATA_RESULTS_GET,
+
     // ===================== Study bot (E16) =================================
     // The draft wire contract: docs/contracts/BOT_WIRE_CONTRACT.md. Payload types
     // live in {@code common.dto.bot}; the handlers are

@@ -314,6 +314,29 @@ class DtoSerializationTest {
         assertThat(review.answers()).containsExactly(answer);
         assertThat(override.newScore()).isEqualTo(80);
         assertThat(override.justification()).isEqualTo("Question 4 was ambiguous");
+        assertThat(override.teacherComment())
+                .as("the v1 shape still travels, and still carries no comment")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("an override carries its comment across the wire, Hebrew and all (A3, S-22)")
+    void overrideCommentRoundTrips() throws Exception {
+        GradeOverrideRequest sent = new GradeOverrideRequest(9L, 80,
+                "Question 4 was ambiguous", "  שיפור ניכר מאז המבחן הקודם.  ");
+
+        GradeOverrideRequest received = roundTrip(sent);
+
+        // A record deserializes through its canonical constructor, so the strip-and-collapse
+        // runs again on the receiving side. That is the only code standing between a padded
+        // comment and the database.
+        assertThat(received.teacherComment()).isEqualTo("שיפור ניכר מאז המבחן הקודם.");
+        assertThat(received.justification()).isEqualTo("Question 4 was ambiguous");
+        assertThat(received).isEqualTo(sent);
+
+        assertThat(roundTrip(new GradeOverrideRequest(9L, 80, "why", "   ")).teacherComment())
+                .as("a blank comment arrives as null on the far side too")
+                .isNull();
     }
 
     @Test

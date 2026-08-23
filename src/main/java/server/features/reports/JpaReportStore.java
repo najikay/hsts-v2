@@ -7,8 +7,10 @@ import server.db.entities.UserRole;
 import server.db.projections.CourseSummary;
 import server.db.projections.ExecutionReport;
 import server.db.projections.PersonRef;
+import server.db.projections.SchoolExam;
 import server.db.repos.AttemptRepository;
 import server.db.repos.CourseRepository;
+import server.db.repos.ExamRepository;
 import server.db.repos.ExecutionRepository;
 import server.db.repos.UserRepository;
 
@@ -43,6 +45,7 @@ public final class JpaReportStore implements ReportStore {
     private final AttemptRepository attempts = new AttemptRepository();
     private final UserRepository users = new UserRepository();
     private final CourseRepository courseRepository = new CourseRepository();
+    private final ExamRepository exams = new ExamRepository();
 
     /** @param factory the session factory to open transactions on */
     public JpaReportStore(SessionFactory factory) {
@@ -117,6 +120,16 @@ public final class JpaReportStore implements ReportStore {
         @Override
         public Map<Long, Integer> participantsByExecution(Collection<Long> executionIds) {
             return attempts.countAttemptsByExecution(session, executionIds);
+        }
+
+        @Override
+        public List<SchoolExam> allExams() {
+            return exams.findAllSummaries(session);
+        }
+
+        @Override
+        public List<ExecutionReport> allClosedSittings() {
+            return executions.findAllReportRows(session);
         }
     }
 }

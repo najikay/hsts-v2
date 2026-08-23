@@ -29,7 +29,7 @@ package server.db.projections;
  * path.
  *
  * <p>That is also why the read that returns it needs none of the sanctioned
- * {@code ForAuthoring} / {@code ForCheckedForm} suffixes that
+ * {@code ForAuthoring} / {@code ForGrading} suffixes that
  * {@code CorrectnessLeakGuardTest} requires. Those suffixes exist to mark reads
  * that <em>do</em> carry a key, so a caller serving the wrong audience cannot pick
  * one up by accident. This read carries no key, so there is no audience to
