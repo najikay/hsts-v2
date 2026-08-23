@@ -313,23 +313,6 @@ public final class GradingQueueSession {
         onChange.run();
     }
 
-    /**
-     * Ticks every row that can still be approved.
-     *
-     * <p>Approved rows are skipped rather than included and refused: re-approving is harmless by
-     * contract, but a "select all" that counted rows already done would make the confirmation
-     * overstate what is about to happen.
-     */
-    public void selectAllApprovable() {
-        selected.clear();
-        for (StudentGradeRow row : rows()) {
-            if (GradingCopy.canOverride(row)) {
-                selected.add(row.gradeId());
-            }
-        }
-        onChange.run();
-    }
-
     /** Unticks everything. */
     public void clearSelection() {
         selected.clear();

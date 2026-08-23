@@ -242,23 +242,6 @@ class GradingQueueSessionTest {
         }
 
         @Test
-        @DisplayName("select-all ticks only the rows that can still be approved")
-        void selectAllSkipsApproved() {
-            connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of(summary(2, 1))));
-            session.load();
-            connection.replyOk(Verb.GRADING_EXECUTION_GET, new ExecutionGrades(summary(2, 1),
-                    List.of(row(1, "מאיה לוי", 100, GradeState.AUTO),
-                            row(2, "עומר כץ", 40, GradeState.APPROVED))));
-            session.openExecution(summary(2, 1));
-
-            session.selectAllApprovable();
-
-            // Counting rows already done would make the confirmation overstate what is about
-            // to happen.
-            assertThat(session.selection()).containsExactly(1L);
-        }
-
-        @Test
         @DisplayName("a failed approval says so and does not clear what she chose")
         void failedApprovalKeepsSelection() {
             givenOpenSitting();

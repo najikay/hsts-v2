@@ -1584,6 +1584,38 @@
     -fx-border-width: 0 0 0 3px;
 }
 
+/* ---- Print layout (E14.4 / E13.5) ----
+   `.results-print` was added to two roots in Java and never given a single rule,
+   so both toggles were silent no-ops: the teacher's results screen and the
+   student's checked form. Found by clicking the checked form's toggle during the
+   scenario 9 walk; E15's print rules below reference "the same modest thing E14.4
+   built", which is what sent me looking for it.
+
+   Modest on purpose, and the same idea as `.reports-print`: drop the chrome,
+   flatten the cards, keep the content. What either audience wants from "print" is
+   the numbers or the marked paper without the application around them. */
+.results-print .results-exam-rail,
+.results-print .hsts-segmented,
+.results-print .toggle-button {
+    visibility: hidden;
+    -fx-min-width: 0;
+    -fx-pref-width: 0;
+    -fx-max-width: 0;
+    -fx-min-height: 0;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+}
+.results-print .hsts-card,
+.results-print .checked-form-card,
+.results-print .results-stat-card {
+    -fx-background-color: transparent;
+    -fx-border-color: -hsts-border;
+    -fx-effect: null;
+}
+/* A marked paper reads down one column on paper, whatever it does on screen. */
+.results-print .checked-form-option { -fx-padding: 2px 0 2px 0; }
+.results-print .hsts-stat-chart { -fx-padding: 8px 0 0 0; }
+
 /* ---- Print layout (E15.4) ----
    The same modest thing E14.4 built: drop the chrome, flatten the cards, keep
    the comparison. The heading stays, because a printed page of numbers about
