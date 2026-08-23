@@ -43,8 +43,17 @@ public final class TestDatabases {
     /**
      * Schema the repository suite owns. Deliberately not {@link MySqlAvailability#TEST_SCHEMA}:
      * the migration tests drop and recreate that one on every test method.
+     *
+     * <p>Derived from {@code HSTS_TEST_SCHEMA} when set (suffix {@code _repo}), for the same
+     * reason the migration schema honors it: parallel builds on one machine each wipe this
+     * schema, and a hardcoded name made every review build a coin-flip against every agent
+     * build. Three phantom failures earned this line (E21.0b; lead's edit under rule 5,
+     * flagged for the owner's pass, 2026-08-23).
      */
-    static final String REPO_SCHEMA = "hsts_e2_repo_test";
+    static final String REPO_SCHEMA =
+            System.getenv("HSTS_TEST_SCHEMA") == null
+                    ? "hsts_e2_repo_test"
+                    : System.getenv("HSTS_TEST_SCHEMA") + "_repo";
 
     private static TestDatabase sharedMySql;
 

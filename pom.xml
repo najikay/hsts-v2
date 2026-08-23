@@ -376,7 +376,15 @@
                         <exclude>client/ui/components/EmptyState*</exclude>
                         <exclude>client/ui/components/FormField*</exclude>
                         <exclude>client/ui/components/Icons*</exclude>
+                        <!-- E6.10's two components. Note what these patterns do NOT reach:
+                             client/ui/components/logic/ImagePickerLogic and
+                             client/ui/components/logic/RadioGroupLogic sit one package deeper
+                             and stay measured, which is the entire point of the split. The
+                             ImageAction state machine in particular is the piece a defect
+                             would hide in, and it is unit tested rather than excluded. -->
+                        <exclude>client/ui/components/ImagePicker*</exclude>
                         <exclude>client/ui/components/ProgressOverlay*</exclude>
+                        <exclude>client/ui/components/RadioGroup*</exclude>
                         <exclude>client/ui/components/ReconnectBanner*</exclude>
                         <exclude>client/ui/components/RoleBadge*</exclude>
                         <exclude>client/ui/components/Skeletons*</exclude>

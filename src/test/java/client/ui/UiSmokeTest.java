@@ -122,6 +122,12 @@ class UiSmokeTest extends ApplicationTest {
         // nothing would still pass a lookup on the container alone.
         assertThat(lookupOne(scene, ".hsts-stat-chart")).isNotNull();
         assertThat(scene.getRoot().lookupAll(".stat-bar")).isNotEmpty();
+        // E6.10's two components, including their contents: a radio group that built no
+        // options and a picker that drew no frame would both survive a lookup on the shell.
+        assertThat(lookupOne(scene, ".hsts-radio-group")).isNotNull();
+        assertThat(scene.getRoot().lookupAll(".radio-option")).isNotEmpty();
+        assertThat(lookupOne(scene, ".hsts-image-picker")).isNotNull();
+        assertThat(lookupOne(scene, ".picker-frame")).isNotNull();
     }
 
     @Test

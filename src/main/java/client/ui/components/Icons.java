@@ -64,6 +64,12 @@ public final class Icons {
     public static final String CLOUD_OFF = "mdoal-cloud_off";
     public static final String REFRESH = "mdomz-refresh";
     public static final String LOGOUT = "mdoal-logout";
+    /** A question's illustration (E6.6): the ImagePicker's empty state and its Choose button. */
+    public static final String IMAGE = "mdoal-image";
+    /** The same picture, struck through: the ImagePicker's removed state. */
+    public static final String IMAGE_OFF = "mdoal-image_not_supported";
+    public static final String UPLOAD = "mdoal-file_upload";
+    public static final String DELETE = "mdoal-delete_outline";
 
     private Icons() {
     }

@@ -9,6 +9,8 @@ import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
 import client.ui.components.FormField;
 import client.ui.components.Icons;
+import client.ui.components.ImagePicker;
+import client.ui.components.RadioGroup;
 import client.ui.components.Logo;
 import client.ui.components.ProgressOverlay;
 import client.ui.components.ReconnectBanner;
@@ -65,6 +67,20 @@ public final class GalleryScreen extends AbstractScreen {
     public record DemoRow(String id, String name, String status, String updated) {
     }
 
+    /**
+     * A real 48x32 PNG, so the ImagePicker section shows an actual thumbnail.
+     *
+     * <p>Inline rather than a resource file: 122 bytes of three-band blue is not an asset the
+     * app ships, it is a fixture for one dev screen, and a binary in {@code src/main/resources}
+     * would be one more thing in the jar that nothing at runtime ever reads. It is a genuine
+     * PNG, header and all, because the picker's whole validation path sniffs the leading bytes
+     * and a fake would be refused by the component this section exists to demonstrate.
+     */
+    private static final byte[] DEMO_PNG = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAAQUlEQVR42u3OMQ0AIBAEMG"
+            + "QihQEhLwQtCEAAGthRcEOTCmjrc0dpQkJCQkJfaNSJIiQkJCQUH6p1owgJCQkJpYcePpi6"
+            + "Jo2YGCoAAAAASUVORK5CYII=");
+
     private final ThemeState theme;
     private final ToastStack toasts = new ToastStack();
     private final ProgressOverlay overlay = new ProgressOverlay("Generating exam…");
@@ -82,6 +98,7 @@ public final class GalleryScreen extends AbstractScreen {
                 section("Status chips", chipsSection()),
                 section("Role badges", badgesSection()),
                 section("Form fields & validation", formSection()),
+                section("Question editor components (E6.10 · F2.1, C-8)", questionEditorSection()),
                 section("Countdown timer (E4.18)", countdownSection()),
                 section("Score histogram (E14.3 · F9.2)", statChartSection()),
                 section("Empty states", emptySection()),
@@ -222,6 +239,110 @@ public final class GalleryScreen extends AbstractScreen {
         HBox row = new HBox(16, pristine, valid, invalid, required);
         row.setAlignment(Pos.TOP_LEFT);
         return row;
+    }
+
+    /**
+     * The two components E6.10 is blocked on, in every state that has a designed appearance.
+     *
+     * <p>Worth looking at with the palette switcher: the radio group's selected row is
+     * {@code -hsts-accent-soft} and its focus ring is {@code -hsts-accent}, so it is one of the
+     * fastest places to see a palette actually land. The picker's removed state is the other
+     * thing to check by eye, because it must read as <i>different from empty</i> rather than
+     * merely dimmer.
+     *
+     * <p>The two rejection buttons drive the real validation path with real bytes: they are the
+     * only place in the app where a reviewer can read the refusal sentences without going to
+     * find a 3MB photo first.
+     */
+    private Node questionEditorSection() {
+        List<String> answers = List.of(
+                "Because the discriminant is negative",
+                "Because the leading coefficient is zero",
+                "Because the roots are complex conjugates",
+                "Because the parabola opens downwards");
+
+        RadioGroup<Integer> chosen = RadioGroup.indexed("Correct answer", answers).required();
+        chosen.select(3);
+
+        RadioGroup<Integer> partly = RadioGroup.indexed("Correct answer", answers);
+        partly.select(1);
+        partly.setOptionDisabled(2, true);
+        partly.setOptionDisabled(4, true);
+
+        RadioGroup<Integer> errored = RadioGroup.indexed("Correct answer", answers).required();
+        errored.showError("Choose which of the four answers is the correct one.");
+
+        RadioGroup<Integer> allDisabled = RadioGroup.indexed("Correct answer (read only)", answers);
+        allDisabled.select(2);
+        allDisabled.setDisable(true);
+
+        HBox groups = new HBox(24, box("Selected · arrow keys move and select", chosen),
+                box("Two options disabled · arrows skip them", partly),
+                box("Invalid", errored),
+                box("Whole group disabled", allDisabled));
+        groups.setAlignment(Pos.TOP_LEFT);
+
+        HBox pickers = new HBox(24,
+                box("KEEP · new question, nothing chosen", picker(false, false, false)),
+                box("KEEP · the version's own picture", picker(true, false, false)),
+                box("REPLACE · a new file chosen", picker(true, true, false)),
+                box("REMOVE · explicitly cleared", picker(true, false, true)));
+        pickers.setAlignment(Pos.TOP_LEFT);
+
+        ImagePicker live = new ImagePicker("Illustration");
+        live.loadExisting(DEMO_PNG);
+        Label state = caption("Action: " + live.action());
+        live.setOnChange(action -> state.setText("Action: " + action));
+
+        Button tooBig = Buttons.secondary("Offer a 3 MB file");
+        tooBig.setOnAction(e -> live.chooseBytes(oversizedPng(), "huge.png"));
+        Button wrongType = Buttons.secondary("Offer a renamed text file");
+        wrongType.setOnAction(e -> live.chooseBytes(
+                "this is not an image".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                "diagram.png"));
+        Button cancelled = Buttons.secondary("Simulate a cancelled chooser");
+        cancelled.setOnAction(e -> live.chooseBytes(null, null));
+        Button good = Buttons.secondary("Offer a valid PNG");
+        good.setOnAction(e -> live.chooseBytes(DEMO_PNG, "diagram.png"));
+
+        VBox liveBox = new VBox(10, live, state,
+                flow(good, tooBig, wrongType, cancelled));
+        liveBox.setMaxWidth(320);
+
+        return new VBox(18,
+                caption("RadioGroup · exactly one correct answer (C-8)"), groups,
+                caption("ImagePicker · the three ImageAction states"), pickers,
+                caption("ImagePicker · live, including the refusals and the cancel path"),
+                liveBox);
+    }
+
+    /** @param loaded whether the version arrived with a picture; then a chosen file, then Remove. */
+    private static ImagePicker picker(boolean loaded, boolean replaced, boolean removed) {
+        ImagePicker picker = new ImagePicker("Illustration");
+        if (loaded) {
+            picker.loadExisting(DEMO_PNG);
+        }
+        if (replaced) {
+            picker.chooseBytes(DEMO_PNG, "new-diagram.png");
+        }
+        if (removed) {
+            picker.remove();
+        }
+        picker.setMaxWidth(300);
+        return picker;
+    }
+
+    /** @return bytes that open with PNG's signature and are one byte over the 2MB ceiling. */
+    private static byte[] oversizedPng() {
+        byte[] bytes = new byte[common.dto.bank.QuestionImage.MAX_BYTES + 1];
+        System.arraycopy(DEMO_PNG, 0, bytes, 0, DEMO_PNG.length);
+        return bytes;
+    }
+
+    private static Node box(String label, Node body) {
+        VBox box = new VBox(8, caption(label), body);
+        box.setAlignment(Pos.TOP_LEFT);
+        return box;
     }
 
     private Node countdownSection() {
