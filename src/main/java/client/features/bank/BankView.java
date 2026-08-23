@@ -47,12 +47,17 @@ import java.util.List;
  * measured and tested. This class owns nodes and nothing else, which is why it is on the
  * coverage exclusion list by name.
  *
- * <h2>There is no Edit button yet, deliberately</h2>
+ * <h2>The two ways into the editor, and the one that can be closed</h2>
  *
- * <p>The editor is E6.10 and lands in the next PR with the lock integration it needs. A button
- * wired to nothing would be worse than its absence: a teacher who presses it and gets nothing
- * learns that the screen is broken, which is a slower thing to unlearn than a screen that has
- * not grown the control yet.
+ * <p><b>Edit question</b> is disabled until an illustrated question's bytes have arrived, because
+ * {@link QuestionEditorSession#forEdit} takes them as a required argument. This button is the
+ * only route from a question into the editor, so the components report's remaining screen-level
+ * trap is closed here rather than remembered: there is no state from which the editor can be
+ * opened before its picture exists.
+ *
+ * <p><b>New question</b> needs a course, because {@code QUESTION_CREATE} carries one and the
+ * server refuses a course she does not teach. It uses the course filter rather than guessing, and
+ * says so when nothing is filtered.
  *
  * <h2>The topic picker is absent until it can be populated</h2>
  *
@@ -88,6 +93,8 @@ public final class BankView extends AbstractScreen {
     private final Button historyToggle = Buttons.outline(BankCopy.HISTORY_OPEN);
     private final Button delete = Buttons.danger(BankCopy.DELETE);
     private final Button retry = Buttons.outline(BankCopy.RETRY);
+    private final Button edit = Buttons.secondary(QuestionEditorCopy.EDIT_QUESTION);
+    private final Button newQuestion = Buttons.primary(QuestionEditorCopy.NEW_QUESTION);
 
     private BankSession session;
 
@@ -216,6 +223,7 @@ public final class BankView extends AbstractScreen {
         topicPicker.setManaged(false);
 
         clearFilters.setOnAction(event -> session.clearFilters());
+        newQuestion.setOnAction(event -> openEditorForNewQuestion());
 
         List<DifficultyOption> difficultyOptions = new ArrayList<>();
         difficultyOptions.add(new DifficultyOption(null));
@@ -225,7 +233,7 @@ public final class BankView extends AbstractScreen {
         difficultyPicker.getItems().setAll(difficultyOptions);
 
         HBox row = new HBox(12, search, coursePicker, difficultyPicker, topicPicker,
-                Buttons.spacer(), clearFilters);
+                Buttons.spacer(), clearFilters, newQuestion);
         row.setAlignment(Pos.CENTER_LEFT);
         row.getStyleClass().add("bank-filter-row");
         return row;
@@ -234,6 +242,7 @@ public final class BankView extends AbstractScreen {
     private void buildDetail() {
         historyToggle.setOnAction(event -> session.toggleHistory());
         retry.setOnAction(event -> session.retrySelected());
+        edit.setOnAction(event -> openEditorForSelected());
         retry.getStyleClass().add("bank-retry");
         retry.setVisible(false);
         retry.setManaged(false);
@@ -424,7 +433,11 @@ public final class BankView extends AbstractScreen {
         historyToggle.setText(session.isHistoryOpen()
                 ? BankCopy.HISTORY_CLOSE : BankCopy.HISTORY_OPEN);
         delete.setDisable(session.isDeleting());
-        HBox actions = new HBox(10, historyToggle, Buttons.spacer(), delete);
+        // Editing is offered only once the illustration has settled, which is what makes the
+        // components report's trap unreachable from this screen: the editor takes the bytes as a
+        // required argument, so a button that could open it early would be the only way in.
+        edit.setDisable(!canEdit(detail));
+        HBox actions = new HBox(10, historyToggle, edit, Buttons.spacer(), delete);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.getStyleClass().add("bank-actions");
         nodes.add(actions);
@@ -570,6 +583,60 @@ public final class BankView extends AbstractScreen {
     }
 
     // ===================== Odds and ends ==================================
+
+    /**
+     * Whether the editor can be opened on what is on screen.
+     *
+     * <p>An illustrated question is editable only once its bytes have arrived, because
+     * {@code QuestionEditorSession.forEdit} takes them as a required argument. That is the
+     * components report's trap made unreachable rather than remembered: this button is the only
+     * route into the editor from a question, and it cannot fire early.
+     */
+    private boolean canEdit(QuestionDetail detail) {
+        if (detail == null || session.isDeleting()) {
+            return false;
+        }
+        // The bytes, and enough of them. Three states have to agree here and two of them are
+        // easy to miss: QuestionImage normalises a null blob to an EMPTY array, so a non-null
+        // check passes for a picture that is not there; and this view already renders that
+        // state as a failure in imageNode. forEdit refuses it, so a laxer test here would
+        // enable a button whose only outcome is an IllegalArgumentException.
+        byte[] bytes = session.image();
+        return !detail.hasImage() || (bytes != null && bytes.length > 0);
+    }
+
+    private void openEditorForSelected() {
+        QuestionDetail detail = session.detail();
+        if (!canEdit(detail)) {
+            return;
+        }
+        NavParams params = NavParams.of(QuestionEditorView.PARAM_DETAIL, detail);
+        byte[] image = session.image();
+        if (image != null) {
+            params = params.with(QuestionEditorView.PARAM_IMAGE, image);
+        }
+        navigator().navigate(BankRoutes.EDITOR, params);
+    }
+
+    /**
+     * Opens the editor on a new question in the course the filter is set to.
+     *
+     * <p>The course has to be known before the editor opens, because {@code QUESTION_CREATE}
+     * carries it and the server refuses a course she does not teach. With no course filter set
+     * there is nothing to guess at, so the button asks her to pick one rather than choosing on
+     * her behalf.
+     */
+    private void openEditorForNewQuestion() {
+        String course = session.selectedCourse();
+        if (course == null) {
+            if (toasts() != null) {
+                toasts().info(QuestionEditorCopy.NEW_QUESTION, BankCopy.PICK_A_COURSE_FIRST);
+            }
+            return;
+        }
+        navigator().navigate(BankRoutes.EDITOR,
+                NavParams.of(QuestionEditorView.PARAM_COURSE, course));
+    }
 
     private static List<CourseRef> coursesOfSignedInUser() {
         LoginResult user = ScreenManager.getInstance().signedInUser();

@@ -78,7 +78,7 @@ public class QuestionsView extends AbstractScreen {
     private static final String LEGACY_STYLESHEET = "/css/app.css";
 
     /** The versioned bank's route id, until this class is retired (E6.9, temporary). */
-    private static final String NEW_BANK_ROUTE = "bank";
+    private static final String NEW_BANK_ROUTE = BankRoutes.LIST;
 
     @FXML private ListView<Question> listView;
     @FXML private TextArea questionField;

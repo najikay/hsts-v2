@@ -80,8 +80,14 @@ public final class QuestionValidator {
     /**
      * One thing that can be wrong, and which field it is about.
      *
-     * @param field   the wire field name, so E6.11's editor can highlight the right box without
-     *                matching on message text
+     * @param field   the field name. <b>Server-internal: it does not reach the wire.</b>
+     *                {@code BankHandlers.fieldProblem} keeps only the message, because the
+     *                contract's error shape is a single sentence and nothing carries a field
+     *                beside it. This javadoc said the opposite until 2026-08-23, and E6.11's
+     *                editor had been written against the sentence: it maps a refusal to a box by
+     *                exact equality against {@link BankMessages}, which works because client and
+     *                server are one artifact. Adding the field to the wire is an amendment to a
+     *                FROZEN contract and is raised in PR-B's report rather than done here
      * @param message the sentence shown to the teacher, from {@link BankMessages}
      */
     public record Violation(String field, String message) {

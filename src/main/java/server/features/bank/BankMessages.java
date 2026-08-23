@@ -23,8 +23,14 @@ import java.util.stream.Collectors;
  * sentences. That is the visible reason. The invisible one is E6.11: the editor maps a server
  * error back onto the field that caused it, so a message that says only "answers are invalid"
  * leaves the client guessing which of four boxes to highlight. Every sentence below that can
- * name a position does, and {@link server.features.bank.QuestionValidator.Violation} carries
- * the field name beside it so the client never has to match on text.
+ * name a position does, which is what lets a client put a refusal under the right box.
+ *
+ * <p><b>The client does match on text, and this paragraph used to say it did not.</b>
+ * {@link server.features.bank.QuestionValidator.Violation} carries a field name, but
+ * {@code BankHandlers} keeps only the message, so the wire has never carried one. E6.11's editor
+ * maps a refusal to a box by <b>exact equality against the constants below</b>, which is sound
+ * because both tiers ship in one artifact, and which is why nothing here may be reworded without
+ * checking {@code QuestionEditorSession.locate}. Corrected 2026-08-23 after a cold read.
  */
 public final class BankMessages {
 

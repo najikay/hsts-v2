@@ -74,6 +74,16 @@ public final class BankCopy {
     /** The topic picker's "do not filter" entry. */
     public static final String ALL_TOPICS = "Any topic";
 
+    /**
+     * Why the New question button did nothing.
+     *
+     * <p>QUESTION_CREATE carries a course and the server refuses one she does not teach, so the
+     * course has to be known before the editor opens. With no course filter set there is nothing
+     * to guess at, and guessing would put her question in the wrong bank.
+     */
+    public static final String PICK_A_COURSE_FIRST =
+            "Choose a course first, so the question knows which bank it belongs to.";
+
     /** The button that puts every filter back. */
     public static final String CLEAR_FILTERS = "Clear filters";
 

@@ -77,12 +77,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BankScreenWiringGuardTest {
 
     /**
-     * The id the assembly PR must register, declared once.
+     * The id the assembly PR must register, read from the feature's own constant.
      *
-     * <p>Named in this PR's body under "route id" so the assembly and this constant are two
-     * copies of one decision that a reviewer can compare in one glance.
+     * <p>Not a literal: {@link BankRoutes#LIST} is what every button and every navigation in the
+     * feature uses, so pinning the constant is what makes this guard prove the screens are
+     * reachable rather than that somebody typed the same string twice.
      */
-    private static final String BANK_ROUTE_ID = "bank";
+    private static final String BANK_ROUTE_ID = BankRoutes.LIST;
+
+    /** The editor's id, on the same terms. */
+    private static final String EDITOR_ROUTE_ID = BankRoutes.EDITOR;
 
     /** The rail id the legacy screen keeps until the retirement PR (the lead's ruling). */
     private static final String LEGACY_ROUTE_ID = "questions";
@@ -156,6 +160,36 @@ class BankScreenWiringGuardTest {
                         + "The server would refuse the trip, and F1.2 says the client should not "
                         + "have offered it.")
                 .isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"TEACHER", "COORDINATOR"})
+    @DisplayName("the editor is offered to the two roles that may write, and to nobody else")
+    void theEditorIsOfferedToAuthorsOnly(Role role) {
+        assertThat(offers(role, EDITOR_ROUTE_ID))
+                .as("%s may write into the bank under BANK_WIRE_CONTRACT section 2, so she needs "
+                        + "the editor route. Without it the Edit button navigates nowhere.", role)
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("the principal is never offered the editor, because she may never write ⚑")
+    void thePrincipalIsNotOfferedTheEditor() {
+        assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
+                .as("guard against vacuity: she does have routes")
+                .isNotEmpty();
+        assertThat(offers(Role.PRINCIPAL, EDITOR_ROUTE_ID))
+                .as("F9.3 gives her zero mutating verbs, ever. She is on the bank's four READ "
+                        + "verbs and on none of the three writes, so offering her an editor would "
+                        + "be a screen whose every Save is refused. This is the one row of "
+                        + "section 2's table that a client can get wrong on its own.")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("a student is offered neither screen")
+    void studentsAreOfferedNeither() {
+        assertThat(offers(Role.STUDENT, EDITOR_ROUTE_ID)).isFalse();
     }
 
     @Test

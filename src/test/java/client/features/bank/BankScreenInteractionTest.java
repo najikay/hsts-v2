@@ -215,6 +215,89 @@ class BankScreenInteractionTest extends ApplicationTest {
                 .isFalse();
     }
 
+    // ===================== The editor's door ⚑ ============================
+
+    @Test
+    @DisplayName("⚑ Edit stays disabled while an illustrated question's picture is still coming")
+    void editIsClosedUntilTheImageArrives() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, new QuestionDetail("11005", "11", "Algebra",
+                    2, 2, "Read the diagram", List.of("A", "B", "C", "D"), 1, "Geometry",
+                    Difficulty.HARD, true, "Dana Cohen", SPRING));
+            // No responder for QUESTION_IMAGE_GET: the picture never arrives, which is the
+            // state the components report warns about.
+        });
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled())
+                .as("QuestionEditorSession.forEdit takes the bytes as a required argument, and "
+                        + "this button is the only route into it from a question. If it fired "
+                        + "now, the editor would open showing 'No illustration' about a question "
+                        + "that has one, and a Remove she pressed would be silently ignored.")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("Edit opens as soon as the picture is in hand")
+    void editOpensOnceTheImageIsThere() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, new QuestionDetail("11005", "11", "Algebra",
+                    2, 2, "Read the diagram", List.of("A", "B", "C", "D"), 1, "Geometry",
+                    Difficulty.HARD, true, "Dana Cohen", SPRING));
+            connection.replyOk(Verb.QUESTION_IMAGE_GET,
+                    new QuestionImage("11005", 2, "image/png", onePixelPng()));
+        });
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled())
+                .as("otherwise the gate would be a button nobody can ever press")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("⚑ an empty blob is not a picture, so Edit stays shut rather than crashing")
+    void editIsClosedOnAnEmptyBlob() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, new QuestionDetail("11005", "11", "Algebra",
+                    2, 2, "Read the diagram", List.of("A", "B", "C", "D"), 1, "Geometry",
+                    Difficulty.HARD, true, "Dana Cohen", SPRING));
+            // QuestionImage normalises a null blob to an empty array, so this is a well-formed
+            // OK carrying no picture. The response arrives, the state goes READY, and a check
+            // that asked the state enum or merely non-null would open the editor here.
+            connection.replyOk(Verb.QUESTION_IMAGE_GET,
+                    new QuestionImage("11005", 2, "image/png", new byte[0]));
+        });
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled())
+                .as("forEdit refuses an illustrated question with no bytes, so enabling the "
+                        + "button here would make pressing it throw")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("a question with no illustration is editable immediately")
+    void editOpensWithNoImageAtAll() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, GEOMETRY_V2);
+        });
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled()).isFalse();
+    }
+
     // ===================== Fixture and harness ============================
 
     private void bankHasTwoQuestions(FakeClientConnection connection) {
@@ -266,6 +349,16 @@ class BankScreenInteractionTest extends ApplicationTest {
         });
         WaitForAsyncUtils.waitForFxEvents();
         return holder[0];
+    }
+
+    /** One button by its label, so a test cannot pass by finding a different control. */
+    private static javafx.scene.control.Button buttonNamed(Scene scene, String label) {
+        return scene.getRoot().lookupAll(".button").stream()
+                .filter(javafx.scene.control.Button.class::isInstance)
+                .map(javafx.scene.control.Button.class::cast)
+                .filter(button -> label.equals(button.getText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no button labelled " + label));
     }
 
     /** The table row whose cells contain {@code text}, so a click lands on a real row. */
