@@ -415,6 +415,22 @@
                              ImageAction state machine in particular is the piece a defect
                              would hide in, and it is unit tested rather than excluded. -->
                         <exclude>client/ui/components/ImagePicker*</exclude>
+<!-- UI wave 2's four new widgets, on exactly the terms the rest of this
+                             list uses: each is a node builder over a measured logic class one
+                             package deeper. Kicker is four lines over
+                             components/logic/KickerText (the uppercase and the tracking JavaFX
+                             CSS cannot do); Sparkbars is a loop over
+                             components/logic/SparkbarSpec (which bar is the mode, how tall each
+                             is); ProgressRing positions two arcs whose angles are
+                             components/logic/RingGeometry's; NumberRoll clips two labels and
+                             plays one timeline whose duration is Motion's. All four logic
+                             classes stay measured and are unit tested, which is the entire
+                             point of the split. Listed one by one, never a wildcard: a single
+                             '*' crosses path separators in JaCoCo. -->
+                        <exclude>client/ui/components/Kicker*</exclude>
+                        <exclude>client/ui/components/NumberRoll*</exclude>
+                        <exclude>client/ui/components/ProgressRing*</exclude>
+                        <exclude>client/ui/components/Sparkbars*</exclude>
                         <exclude>client/ui/components/ProgressOverlay*</exclude>
                         <exclude>client/ui/components/RadioGroup*</exclude>
                         <exclude>client/ui/components/ReconnectBanner*</exclude>

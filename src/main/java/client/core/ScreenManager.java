@@ -234,7 +234,10 @@ public final class ScreenManager {
             shell.setContent(view);
         } else {
             setRoot(view);
-            Animations.fadeIn(view, Motion.BASE_MS);
+            // UI wave 2: the incoming screen fades and rises 8px. Incoming only —
+            // cross-fading two screens shows neither, and moving the outgoing one
+            // moves content a user may still be reading.
+            Animations.riseIn(view, Motion.RISE_DISTANCE, Motion.ROUTE_MS);
         }
         primaryStage.setTitle("HSTS · " + target.route().title());
         log.debug("navigated {} → {}", event.previous().map(NavEntry::routeId).orElse("(none)"),

@@ -39,13 +39,23 @@ public final class PrincipalHomeView extends AbstractScreen {
 
     @Override
     public void onShow(NavParams params) {
-        headerHost.getChildren().setAll(
-                DashboardPage.header(DashboardPage.currentDisplayName(), LocalDateTime.now()));
+        renderHeader();
         render();
         session.load();
     }
 
     private void render() {
         DashboardPage.fillCardGrid(cards, session.cards(), navigator()::navigate);
+        renderHeader();
+    }
+
+    /**
+     * Rebuilt on every settle, not only on show: the summary sentence is
+     * composed from the numbers the cards loaded, so it is wrong until they
+     * have, and a header that only rendered once would keep saying so.
+     */
+    private void renderHeader() {
+        headerHost.getChildren().setAll(DashboardPage.header(
+                DashboardPage.currentDisplayName(), LocalDateTime.now(), session.summary()));
     }
 }

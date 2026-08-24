@@ -130,7 +130,8 @@ public final class MyApprovalsView extends AbstractScreen {
                 .column(statusColumn())
                 // Exam and Status carry their own widths above; the rest are sized to
                 // their content so a date is never clipped to "23 Au…" (F-9).
-                .columnWidths(260, 150, 110, 170, 180);
+                .columnWidths(260, 150, 110, 170, 180)
+                .numericColumns(2);
     }
 
     private static TableColumn<ApprovalRow, ApprovalRow> statusColumn() {

@@ -104,7 +104,10 @@ public final class ApprovalQueueView extends AbstractScreen {
                 .column(statusColumn())
                 // Exam and Status carry their own widths above; the rest are sized
                 // to their content so a teacher's name and a date are never clipped.
-                .columnWidths(260, 150, 190, 110, 170, 220);
+                .columnWidths(260, 150, 190, 110, 170, 220)
+                // UI wave 2: a question count is a number, so it is right
+                // aligned in tabular figures like every other number in the app.
+                .numericColumns(3);
     }
 
     /**

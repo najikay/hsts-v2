@@ -200,4 +200,175 @@ class MotionTest {
             assertThat(Motion.pulseCycles(1000, -5)).isZero();
         }
     }
+
+    // ===================== UI wave 2 =====================================
+
+    @Nested
+    @DisplayName("the wave-2 motion spec")
+    class WaveTwoSpec {
+
+        @Test
+        @DisplayName("every transition in the spec is inside the 250ms budget")
+        void everyTransitionIsInBudget() {
+            assertThat(Motion.ROUTE_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.POPOVER_OPEN_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.POPOVER_CLOSE_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.DIALOG_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.CARD_HOVER_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.ROW_HOVER_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.NUMBER_ROLL_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+            assertThat(Motion.REDUCED_FADE_MS).isLessThanOrEqualTo(Motion.MAX_MS);
+        }
+
+        @Test
+        @DisplayName("⚑ the two ambient loops are the ONLY things over budget, and both are loops")
+        void onlyTheAmbientLoopsExceedTheBudget() {
+            // These are exempt on the same terms Animations.shimmer is: ambience
+            // rather than a transition, nothing waits on either, and both stop
+            // when what they annotate goes away. The exemption is asserted here
+            // so a third one cannot be added quietly by copying a constant.
+            assertThat(Motion.BREATHE_MS).isGreaterThan(Motion.MAX_MS);
+            assertThat(Motion.LIVE_PULSE_MS).isGreaterThan(Motion.MAX_MS);
+            assertThat(Motion.BREATHE_SCALE)
+                    .as("breathing, not pulsing")
+                    .isEqualTo(Motion.clampScale(Motion.BREATHE_SCALE))
+                    .isLessThan(1.1);
+        }
+
+        @Test
+        @DisplayName("leaving is quicker than arriving")
+        void dismissalIsShorterThanEntrance() {
+            assertThat(Motion.POPOVER_CLOSE_MS).isLessThan(Motion.POPOVER_OPEN_MS);
+        }
+
+        @Test
+        @DisplayName("a dialog starts near its final size, so it settles rather than pops")
+        void theDialogEntranceIsSubtle() {
+            assertThat(Motion.DIALOG_FROM_SCALE).isBetween(0.95, 1.0);
+        }
+
+        @Test
+        @DisplayName("card stagger grows one step per card")
+        void cardStaggerGrowsPerCard() {
+            assertThat(Motion.cardStaggerDelay(0)).isZero();
+            assertThat(Motion.cardStaggerDelay(1)).isEqualTo(Motion.CARD_STAGGER_STEP_MS);
+            assertThat(Motion.cardStaggerDelay(3)).isEqualTo(3 * Motion.CARD_STAGGER_STEP_MS);
+        }
+
+        @Test
+        @DisplayName("⚑ past six cards the rest share the last slot")
+        void cardStaggerCapsByCount() {
+            // Capped by COUNT rather than by time, unlike a list stagger: past
+            // half a dozen items nobody is reading in order any more, they are
+            // waiting.
+            int last = Motion.cardStaggerDelay(Motion.CARD_STAGGER_MAX - 1);
+            assertThat(Motion.cardStaggerDelay(Motion.CARD_STAGGER_MAX)).isEqualTo(last);
+            assertThat(Motion.cardStaggerDelay(200)).isEqualTo(last);
+        }
+
+        @Test
+        @DisplayName("row stagger is finer than card stagger and still capped in time")
+        void rowStaggerIsBoundedInTime() {
+            assertThat(Motion.ROW_STAGGER_STEP_MS).isLessThan(Motion.CARD_STAGGER_STEP_MS);
+            assertThat(Motion.rowStaggerDelay(0)).isZero();
+            assertThat(Motion.rowStaggerDelay(2)).isEqualTo(2 * Motion.ROW_STAGGER_STEP_MS);
+            // A 400-row data browser still finishes arriving within a blink.
+            assertThat(Motion.rowStaggerDelay(400)).isEqualTo(Motion.STAGGER_CAP_MS);
+        }
+
+        @Test
+        @DisplayName("negative indices are treated as the first item")
+        void negativeIndicesAreSafe() {
+            assertThat(Motion.cardStaggerDelay(-3)).isZero();
+            assertThat(Motion.rowStaggerDelay(-3)).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("reduced motion")
+    class ReducedMotion {
+
+        @org.junit.jupiter.api.AfterEach
+        void restore() {
+            // A static switch: leaving it on would silently disarm every other
+            // animation assertion in the build.
+            Motion.setReducedMotion(false);
+        }
+
+        @Test
+        @DisplayName("off by default, so nothing about the app changes until it is asked for")
+        void offByDefault() {
+            assertThat(Motion.isReducedMotion()).isFalse();
+        }
+
+        @Test
+        @DisplayName("⚑ every duration collapses to one short fade")
+        void everyDurationCollapses() {
+            Motion.setReducedMotion(true);
+
+            for (int requested : new int[]{0, 40, Motion.ROUTE_MS, Motion.DIALOG_MS,
+                    Motion.NUMBER_ROLL_MS, 5000}) {
+                assertThat(Motion.effectiveMillis(requested))
+                        .as("a reader who asked for less motion gets one duration, not a scale")
+                        .isEqualTo(Motion.REDUCED_FADE_MS);
+            }
+        }
+
+        @Test
+        @DisplayName("⚑ travel becomes zero: a fade has no distance")
+        void travelCollapses() {
+            Motion.setReducedMotion(true);
+
+            assertThat(Motion.effectiveDistance(Motion.RISE_DISTANCE)).isZero();
+            assertThat(Motion.effectiveDistance(Motion.SLIDE_DISTANCE)).isZero();
+        }
+
+        @Test
+        @DisplayName("⚑ staggers collapse: a list arrives at once rather than trickling")
+        void staggersCollapse() {
+            Motion.setReducedMotion(true);
+
+            assertThat(Motion.cardStaggerDelay(4)).isZero();
+            assertThat(Motion.rowStaggerDelay(9)).isZero();
+            assertThat(Motion.effectiveDelay(400)).isZero();
+        }
+
+        @Test
+        @DisplayName("⚑ the ambient loops do not run at all")
+        void loopsDoNotStart() {
+            // The breathing empty state and the live halo never end on their own,
+            // which makes them the two a reader who asked for less motion would
+            // notice most. Shortening them is not the answer; not starting is.
+            Motion.setReducedMotion(true);
+            assertThat(Motion.ambientLoopsAllowed()).isFalse();
+
+            Motion.setReducedMotion(false);
+            assertThat(Motion.ambientLoopsAllowed()).isTrue();
+        }
+
+        @Test
+        @DisplayName("turning it off restores the spec exactly")
+        void itIsReversible() {
+            Motion.setReducedMotion(true);
+            Motion.setReducedMotion(false);
+
+            assertThat(Motion.effectiveMillis(Motion.ROUTE_MS)).isEqualTo(Motion.ROUTE_MS);
+            assertThat(Motion.effectiveDistance(Motion.RISE_DISTANCE))
+                    .isEqualTo(Motion.RISE_DISTANCE);
+            assertThat(Motion.cardStaggerDelay(2)).isEqualTo(2 * Motion.CARD_STAGGER_STEP_MS);
+        }
+
+        @Test
+        @DisplayName("the budget still applies when reduced motion is off")
+        void theBudgetSurvives() {
+            assertThat(Motion.effectiveMillis(5000)).isEqualTo(Motion.MAX_MS);
+            assertThat(Motion.effectiveMillis(-20)).isZero();
+        }
+
+        @Test
+        @DisplayName("the system property that turns it on is named, so a demo can start calm")
+        void thePropertyIsNamed() {
+            assertThat(Motion.REDUCED_MOTION_PROPERTY).isEqualTo("hsts.motion.reduced");
+        }
+    }
 }

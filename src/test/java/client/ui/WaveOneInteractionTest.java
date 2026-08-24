@@ -139,9 +139,9 @@ class WaveOneInteractionTest extends ApplicationTest {
         clickOn(manager.scene().getRoot().lookup(".hsts-rail"));
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(panel(manager))
+        assertThat(closed(manager))
                 .as("clicking away dismisses it; before F-6 nothing did")
-                .isNull();
+                .isTrue();
     }
 
     @Test
@@ -156,7 +156,7 @@ class WaveOneInteractionTest extends ApplicationTest {
         press(KeyCode.ESCAPE).release(KeyCode.ESCAPE);
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(panel(manager)).isNull();
+        assertThat(closed(manager)).isTrue();
     }
 
     @Test
@@ -173,8 +173,7 @@ class WaveOneInteractionTest extends ApplicationTest {
         // filter closes and the action immediately reopens, so the control can
         // never be switched off.
         clickOn(manager.shell().bell());
-        WaitForAsyncUtils.waitForFxEvents();
-        assertThat(panel(manager)).as("second click closes").isNull();
+        assertThat(closed(manager)).as("second click closes").isTrue();
 
         clickOn(manager.shell().bell());
         WaitForAsyncUtils.waitForFxEvents();
@@ -264,6 +263,32 @@ class WaveOneInteractionTest extends ApplicationTest {
 
     private static Node panel(ScreenManager manager) {
         return manager.scene().getRoot().lookup(".hsts-notification-panel");
+    }
+
+    /**
+     * Waits for the popover to leave the scene graph.
+     *
+     * <p><b>Updated in UI wave 2, and deliberately rather than to make a red
+     * test green.</b> Wave 1 asserted the panel was gone immediately after
+     * {@code waitForFxEvents()}, because {@code Popover.close()} unmounted it on
+     * the spot. The wave-2 motion spec gives dismissal a 100ms fade, so the node
+     * now leaves when the fade ends rather than when the gesture lands.
+     *
+     * <p>The assertion is not weaker: it still demands the panel goes away, and
+     * it fails just as loudly if it does not. What changed is that it tolerates
+     * the exit the design now specifies instead of pinning the frame the old
+     * implementation happened to remove it on. {@code Popover.isOpen()} already
+     * answers {@code false} the instant close is called, so nothing about
+     * behaviour waits on this — only the node's removal does.
+     */
+    private static boolean closed(ScreenManager manager) {
+        try {
+            WaitForAsyncUtils.waitFor(2, java.util.concurrent.TimeUnit.SECONDS,
+                    () -> panel(manager) == null);
+            return true;
+        } catch (java.util.concurrent.TimeoutException notClosed) {
+            return false;
+        }
     }
 
     /** Boots the app, attaches a scripted server, and enters Rina's shell. */

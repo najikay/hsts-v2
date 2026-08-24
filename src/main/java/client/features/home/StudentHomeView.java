@@ -78,8 +78,7 @@ public final class StudentHomeView extends AbstractScreen {
 
     @Override
     public void onShow(NavParams params) {
-        headerHost.getChildren().setAll(
-                DashboardPage.header(DashboardPage.currentDisplayName(), LocalDateTime.now()));
+        renderHeader();
         session.clear();
         codeField.textField().clear();
         renderCards();
@@ -88,6 +87,17 @@ public final class StudentHomeView extends AbstractScreen {
 
     private void renderCards() {
         DashboardPage.fillCardGrid(cards, dashboard.cards(), navigator()::navigate);
+        renderHeader();
+    }
+
+    /**
+     * Rebuilt on every settle, not only on show: the summary sentence is
+     * composed from what the grades read returned, so it is provisional until
+     * that lands.
+     */
+    private void renderHeader() {
+        headerHost.getChildren().setAll(DashboardPage.header(
+                DashboardPage.currentDisplayName(), LocalDateTime.now(), dashboard.summary()));
     }
 
     private void submitCode() {

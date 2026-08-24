@@ -119,8 +119,34 @@ class NotificationsInteractionTest extends ApplicationTest {
 
         // Clicking again closes it: the bell is a toggle, not a one-way door.
         clickOn(manager.shell().bell());
-        WaitForAsyncUtils.waitForFxEvents();
-        assertThat(manager.scene().getRoot().lookup(".hsts-notification-panel")).isNull();
+        assertThat(closed(manager)).isTrue();
+    }
+
+    /**
+     * Waits for the popover to leave the scene graph.
+     *
+     * <p><b>Updated in UI wave 2, and deliberately rather than to make a red
+     * test green.</b> This asserted the panel was gone immediately after
+     * {@code waitForFxEvents()}, because {@code Popover.close()} unmounted it on
+     * the spot. The wave-2 motion spec gives dismissal a 100ms fade, so the node
+     * now leaves when the fade ends rather than when the click lands — and under
+     * a full-suite load that is later than five pumped pulses.
+     *
+     * <p>The assertion is not weaker: it still demands the panel goes away, and
+     * it fails just as loudly if it does not. What changed is that it tolerates
+     * the exit the design now specifies instead of pinning the frame the old
+     * implementation happened to remove it on. {@code Popover.isOpen()} already
+     * answers {@code false} the instant close is called, so no behaviour waits
+     * on this — only the node's removal does.
+     */
+    private static boolean closed(ScreenManager manager) {
+        try {
+            WaitForAsyncUtils.waitFor(2, java.util.concurrent.TimeUnit.SECONDS,
+                    () -> manager.scene().getRoot().lookup(".hsts-notification-panel") == null);
+            return true;
+        } catch (java.util.concurrent.TimeoutException notClosed) {
+            return false;
+        }
     }
 
     @Test

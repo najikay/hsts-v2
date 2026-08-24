@@ -3,6 +3,8 @@ package client.features.home;
 import client.core.Routes;
 import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
+import client.ui.components.logic.ChipSpec;
+import client.ui.components.logic.ChipTone;
 import common.dto.approval.ApprovalQueue;
 import common.dto.approval.ApprovalRow;
 import common.protocol.Message;
@@ -39,6 +41,9 @@ public final class CoordinatorDashboardSession {
     private DashboardCard approvals = loadingApprovals();
     private DashboardCard teachers = loadingTeachers();
 
+    private int waitingCount;
+    private int teacherCount;
+
     public CoordinatorDashboardSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -55,10 +60,22 @@ public final class CoordinatorDashboardSession {
         return List.of(approvals, teachers);
     }
 
+    /**
+     * @return the one sentence under the greeting, composed from the numbers
+     *         these two cards already loaded
+     */
+    public String summary() {
+        return DashboardSummary.coordinator(waitingCount, teacherCount,
+                approvals.state() == DashboardCard.State.LOADING,
+                approvals.state() == DashboardCard.State.FAILED);
+    }
+
     /** Sends the one read both cards are built from. */
     public void load() {
         approvals = loadingApprovals();
         teachers = loadingTeachers();
+        waitingCount = 0;
+        teacherCount = 0;
         onChange.run();
 
         dispatcher.send(Verb.APPROVALS_QUEUE_GET, null)
@@ -67,17 +84,29 @@ public final class CoordinatorDashboardSession {
 
     private void settle(Message response, Throwable failure) {
         if (!(TeacherDashboardSession.payloadOf(response, failure) instanceof ApprovalQueue queue)) {
-            approvals = DashboardCard.failed(DashboardCopy.APPROVALS_TITLE, Routes.APPROVALS.id());
-            teachers = DashboardCard.failed(DashboardCopy.TEACHERS_TITLE, Routes.APPROVALS.id());
+            approvals = DashboardCard.failed(DashboardCopy.APPROVALS_KICKER,
+                    DashboardCopy.APPROVALS_TITLE, DashboardCopy.APPROVALS_LINK,
+                    Routes.APPROVALS.id());
+            teachers = DashboardCard.failed(DashboardCopy.TEACHERS_KICKER,
+                    DashboardCopy.TEACHERS_TITLE, DashboardCopy.TEACHERS_LINK,
+                    Routes.APPROVALS.id());
             onChange.run();
             return;
         }
-        approvals = DashboardCard.counted(DashboardCopy.APPROVALS_TITLE, queue.rows().size(),
-                DashboardCopy.APPROVALS_HINT, DashboardCopy.APPROVALS_EMPTY,
+        waitingCount = queue.rows().size();
+        teacherCount = distinctAuthors(queue.rows());
+
+        approvals = DashboardCard.counted(DashboardCopy.APPROVALS_KICKER,
+                DashboardCopy.APPROVALS_TITLE, waitingCount, DashboardCopy.APPROVALS_HINT,
+                DashboardCopy.APPROVALS_EMPTY, DashboardCopy.APPROVALS_LINK,
                 Routes.APPROVALS.id());
-        teachers = DashboardCard.counted(DashboardCopy.TEACHERS_TITLE,
-                distinctAuthors(queue.rows()), DashboardCopy.TEACHERS_HINT,
-                DashboardCopy.TEACHERS_EMPTY, Routes.APPROVALS.id());
+        approvals = approvals.withChip(waitingCount > 0
+                ? ChipSpec.of(DashboardCopy.CHIP_TO_DO, ChipTone.WARN)
+                : ChipSpec.of(DashboardCopy.CHIP_DONE, ChipTone.OK));
+        teachers = DashboardCard.counted(DashboardCopy.TEACHERS_KICKER,
+                DashboardCopy.TEACHERS_TITLE, teacherCount, DashboardCopy.TEACHERS_HINT,
+                DashboardCopy.TEACHERS_EMPTY, DashboardCopy.TEACHERS_LINK,
+                Routes.APPROVALS.id());
         onChange.run();
     }
 
@@ -99,12 +128,13 @@ public final class CoordinatorDashboardSession {
     }
 
     private static DashboardCard loadingApprovals() {
-        return DashboardCard.loading(DashboardCopy.APPROVALS_TITLE, DashboardCopy.APPROVALS_HINT,
-                Routes.APPROVALS.id());
+        return DashboardCard.loading(DashboardCopy.APPROVALS_KICKER,
+                DashboardCopy.APPROVALS_TITLE, DashboardCopy.APPROVALS_HINT,
+                DashboardCopy.APPROVALS_LINK, Routes.APPROVALS.id());
     }
 
     private static DashboardCard loadingTeachers() {
-        return DashboardCard.loading(DashboardCopy.TEACHERS_TITLE, DashboardCopy.TEACHERS_HINT,
-                Routes.APPROVALS.id());
+        return DashboardCard.loading(DashboardCopy.TEACHERS_KICKER, DashboardCopy.TEACHERS_TITLE,
+                DashboardCopy.TEACHERS_HINT, DashboardCopy.TEACHERS_LINK, Routes.APPROVALS.id());
     }
 }

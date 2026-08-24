@@ -100,6 +100,78 @@ class DashboardCopyTest {
     }
 
     @Test
+    @DisplayName("⚑ every card's kicker is stored in sentence case, never shouting")
+    void kickersAreStoredQuietly() {
+        // The uppercase is a rendering decision, made once by KickerText. A
+        // constant stored as "LIVE NOW" would fail the house scan above, and
+        // would also be un-reusable anywhere the caps are wrong.
+        for (String kicker : List.of(DashboardCopy.LIVE_KICKER, DashboardCopy.GRADING_KICKER,
+                DashboardCopy.NEXT_RELEASE_KICKER, DashboardCopy.LAST_CLOSED_KICKER,
+                DashboardCopy.APPROVALS_KICKER, DashboardCopy.TEACHERS_KICKER,
+                DashboardCopy.LATEST_GRADE_KICKER, DashboardCopy.BOT_KICKER,
+                DashboardCopy.SCHOOL_EXAMS_KICKER, DashboardCopy.SCHOOL_SITTINGS_KICKER)) {
+            assertThat(kicker).isNotEqualTo(kicker.toUpperCase(Locale.ROOT));
+        }
+    }
+
+    @Test
+    @DisplayName("every card's link line names a screen rather than saying 'open'")
+    void linksNameTheirDestination() {
+        for (String link : List.of(DashboardCopy.LIVE_LINK, DashboardCopy.GRADING_LINK,
+                DashboardCopy.NEXT_RELEASE_LINK, DashboardCopy.LAST_CLOSED_LINK,
+                DashboardCopy.APPROVALS_LINK, DashboardCopy.TEACHERS_LINK,
+                DashboardCopy.LATEST_GRADE_LINK, DashboardCopy.BOT_LINK,
+                DashboardCopy.SCHOOL_EXAMS_LINK, DashboardCopy.SCHOOL_SITTINGS_LINK)) {
+            assertThat(link).startsWith("Open ").hasSizeGreaterThan("Open ".length());
+        }
+    }
+
+    // ===================== The live card's composed lines =================
+
+    @Test
+    @DisplayName("the code line reads as the canvas wrote it")
+    void theCodeLineMatchesTheCanvas() {
+        assertThat(DashboardCopy.codeLine("4B7Q", "10:30"))
+                .isEqualTo("Code 4B7Q · closes 10:30")
+                .doesNotContain("—");
+    }
+
+    @Test
+    @DisplayName("the progress caption counts submitted out of sitting")
+    void theSubmittedLineCounts() {
+        assertThat(DashboardCopy.submittedLine(3, 8)).isEqualTo("3 of 8 submitted");
+    }
+
+    @Test
+    @DisplayName("a negative count is clamped rather than printed onto a card")
+    void countsAreClamped() {
+        assertThat(DashboardCopy.submittedLine(-2, -5)).isEqualTo("0 of 0 submitted");
+        assertThat(DashboardCopy.passedLine(-1, -1)).isEqualTo("0 of 0 passed");
+    }
+
+    @Test
+    @DisplayName("⚑ zero minutes left reads as closing, not as a number to act on")
+    void theLastMinuteIsNotAZero() {
+        // "0 minutes left" is a number a teacher would walk on. A sitting that
+        // is closing is not a sitting with no time left.
+        assertThat(DashboardCopy.timeLeftLine(0)).isEqualTo(DashboardCopy.LIVE_CLOSING);
+        assertThat(DashboardCopy.timeLeftLine(-4)).isEqualTo(DashboardCopy.LIVE_CLOSING);
+    }
+
+    @Test
+    @DisplayName("the time-left line agrees with itself in the singular")
+    void oneMinuteIsAMinute() {
+        assertThat(DashboardCopy.timeLeftLine(1)).isEqualTo("1 minute left");
+        assertThat(DashboardCopy.timeLeftLine(18)).isEqualTo("18 minutes left");
+    }
+
+    @Test
+    @DisplayName("the pass line counts passes out of papers marked")
+    void thePassedLineCounts() {
+        assertThat(DashboardCopy.passedLine(12, 18)).isEqualTo("12 of 18 passed");
+    }
+
+    @Test
     @DisplayName("⚑ the failure line blames the connection, never the data")
     void theFailureLineBlamesTheConnection() {
         // A card that cannot reach the server must not leave the reader believing

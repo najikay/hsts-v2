@@ -278,7 +278,9 @@ public final class AppShell extends BorderPane {
     public void setContent(Node content) {
         Objects.requireNonNull(content, "content");
         contentHost.getChildren().setAll(content);
-        Animations.fadeIn(content, Motion.BASE_MS);
+        // UI wave 2's route transition. Every shell-hosted screen arrives through
+        // here, which is why the spec is applied in one place rather than per screen.
+        Animations.riseIn(content, Motion.RISE_DISTANCE, Motion.ROUTE_MS);
     }
 
     /** Re-renders the rail and the bell badge from the model. */

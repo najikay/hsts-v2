@@ -182,6 +182,71 @@ public final class MyGradesSession {
         return Optional.ofNullable(error);
     }
 
+    // ===================== UI wave 2: the hero band ======================
+
+    /**
+     * The term average shown in the hero's ring.
+     *
+     * <p>A plain mean of the effective scores, unweighted. Weighting by anything
+     * — credit, hours, difficulty — would be inventing a rule the school has not
+     * given us, and a number a student quotes at a teacher must be a number the
+     * school would recognise. It is derived from the rows already loaded and
+     * costs no read.
+     *
+     * @return the mean, or {@code 0} when there is nothing to average
+     */
+    public double termAverage() {
+        return termAverage(grades);
+    }
+
+    /**
+     * @param rows the published grades
+     * @return their unweighted mean, or {@code 0} for an empty list rather than
+     *         a NaN that would render as "NaN" inside the ring
+     */
+    public static double termAverage(List<StudentGradeRow> rows) {
+        Objects.requireNonNull(rows, "rows");
+        if (rows.isEmpty()) {
+            return 0;
+        }
+        return rows.stream().mapToInt(StudentGradeRow::effectiveScore).average().orElse(0);
+    }
+
+    /**
+     * @return how many different courses the loaded grades span. Case
+     *         insensitive and blank-tolerant, so a row that arrived unlabelled
+     *         does not become a course of its own
+     */
+    public int courseCount() {
+        return (int) grades.stream()
+                .map(StudentGradeRow::courseCode)
+                .filter(code -> code != null && !code.isBlank())
+                .map(code -> code.trim().toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .count();
+    }
+
+    /**
+     * The hero's right-hand "next exam" slot.
+     *
+     * <p><b>Always empty in this build, and that is a wire fact rather than an
+     * omission.</b> No verb answers "which sitting is next for this student":
+     * she reaches a sitting by typing the four-character code her teacher reads
+     * out ({@code EXAM_JOIN}, S-18), and there is no "list the sittings I could
+     * join" read to ask. Wave 1 dropped the same card from the student dashboard
+     * for the same reason and recorded it on {@code StudentDashboardSession}.
+     *
+     * <p>The slot is built and driven from here anyway rather than left out of
+     * the design: the hero hides it gracefully when this is empty, so the day a
+     * verb exists this becomes a one-line change in a measured class instead of
+     * a layout change in an excluded one.
+     *
+     * @return the next exam's name and when it opens, or empty
+     */
+    public Optional<String> nextExam() {
+        return Optional.empty();
+    }
+
     /** @return the sentence for the empty state, when there is one to show. */
     public Optional<String> emptyMessage() {
         return state == AsyncViewState.EMPTY ? Optional.of(NOTHING_YET) : Optional.empty();

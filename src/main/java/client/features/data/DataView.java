@@ -205,6 +205,7 @@ public final class DataView extends AbstractScreen {
         // F-9: the question stem needs the room, the id and the version need almost
         // none, and "Written" is a date that was truncating at the default width.
         questions.columnWidths(90, 380, 180, 120, 190, 100, 150);
+        questions.numericColumns(5);
         questions.getStyleClass().add("data-questions");
 
         exams.column("Id", DataExamRow::displayId6);
@@ -215,6 +216,7 @@ public final class DataView extends AbstractScreen {
         exams.column("Last written", row -> DataCopy.rowDate(row.lastVersionAt(), ZONE));
         // F-9: exam name and author are the wide ones; "Last written" is a date.
         exams.columnWidths(90, 300, 190, 200, 110, 160);
+        exams.numericColumns(4);
         exams.getStyleClass().add("data-exams");
 
         sittings.column("Sitting", DataCopy::sittingLabel);
@@ -228,6 +230,7 @@ public final class DataView extends AbstractScreen {
         // F-9: the sitting label carries an exam name and a code, and "Closed" is a
         // date; the four statistics columns need far less than an even split.
         sittings.columnWidths(300, 190, 150, 100, 100, 100, 130, 130);
+        sittings.numericColumns(3, 4, 5, 6, 7);
         sittings.getStyleClass().add("data-sittings");
 
         tables.put(DataTab.QUESTIONS, questions);

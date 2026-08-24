@@ -41,6 +41,9 @@ public final class PrincipalDashboardSession {
     private DashboardCard exams = loadingExams();
     private DashboardCard sittings = loadingSittings();
 
+    private int examCount;
+    private int sittingCount;
+
     public PrincipalDashboardSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -57,10 +60,24 @@ public final class PrincipalDashboardSession {
         return List.of(exams, sittings);
     }
 
+    /**
+     * @return the one sentence under the greeting, composed from the two counts
+     *         these cards already loaded
+     */
+    public String summary() {
+        boolean unloaded = exams.state() == DashboardCard.State.LOADING
+                || sittings.state() == DashboardCard.State.LOADING;
+        boolean allFailed = exams.state() == DashboardCard.State.FAILED
+                && sittings.state() == DashboardCard.State.FAILED;
+        return DashboardSummary.principal(examCount, sittingCount, unloaded, allFailed);
+    }
+
     /** Sends both catalogue reads. */
     public void load() {
         exams = loadingExams();
         sittings = loadingSittings();
+        examCount = 0;
+        sittingCount = 0;
         onChange.run();
 
         dispatcher.send(Verb.DATA_EXAMS_GET, null)
@@ -73,36 +90,45 @@ public final class PrincipalDashboardSession {
 
     private void settleExams(Message response, Throwable failure) {
         if (!(TeacherDashboardSession.payloadOf(response, failure) instanceof DataExams answer)) {
-            exams = DashboardCard.failed(DashboardCopy.SCHOOL_EXAMS_TITLE, Routes.DATA.id());
+            exams = DashboardCard.failed(DashboardCopy.SCHOOL_EXAMS_KICKER,
+                    DashboardCopy.SCHOOL_EXAMS_TITLE, DashboardCopy.SCHOOL_EXAMS_LINK,
+                    Routes.DATA.id());
             onChange.run();
             return;
         }
-        exams = DashboardCard.counted(DashboardCopy.SCHOOL_EXAMS_TITLE, answer.exams().size(),
-                DashboardCopy.SCHOOL_EXAMS_HINT, DashboardCopy.SCHOOL_EXAMS_EMPTY,
+        examCount = answer.exams().size();
+        exams = DashboardCard.counted(DashboardCopy.SCHOOL_EXAMS_KICKER,
+                DashboardCopy.SCHOOL_EXAMS_TITLE, examCount, DashboardCopy.SCHOOL_EXAMS_HINT,
+                DashboardCopy.SCHOOL_EXAMS_EMPTY, DashboardCopy.SCHOOL_EXAMS_LINK,
                 Routes.DATA.id());
         onChange.run();
     }
 
     private void settleSittings(Message response, Throwable failure) {
         if (!(TeacherDashboardSession.payloadOf(response, failure) instanceof DataResults answer)) {
-            sittings = DashboardCard.failed(DashboardCopy.SCHOOL_SITTINGS_TITLE,
+            sittings = DashboardCard.failed(DashboardCopy.SCHOOL_SITTINGS_KICKER,
+                    DashboardCopy.SCHOOL_SITTINGS_TITLE, DashboardCopy.SCHOOL_SITTINGS_LINK,
                     Routes.REPORTS.id());
             onChange.run();
             return;
         }
-        sittings = DashboardCard.counted(DashboardCopy.SCHOOL_SITTINGS_TITLE,
-                answer.sittings().size(), DashboardCopy.SCHOOL_SITTINGS_HINT,
-                DashboardCopy.SCHOOL_SITTINGS_EMPTY, Routes.REPORTS.id());
+        sittingCount = answer.sittings().size();
+        sittings = DashboardCard.counted(DashboardCopy.SCHOOL_SITTINGS_KICKER,
+                DashboardCopy.SCHOOL_SITTINGS_TITLE, sittingCount,
+                DashboardCopy.SCHOOL_SITTINGS_HINT, DashboardCopy.SCHOOL_SITTINGS_EMPTY,
+                DashboardCopy.SCHOOL_SITTINGS_LINK, Routes.REPORTS.id());
         onChange.run();
     }
 
     private static DashboardCard loadingExams() {
-        return DashboardCard.loading(DashboardCopy.SCHOOL_EXAMS_TITLE,
-                DashboardCopy.SCHOOL_EXAMS_HINT, Routes.DATA.id());
+        return DashboardCard.loading(DashboardCopy.SCHOOL_EXAMS_KICKER,
+                DashboardCopy.SCHOOL_EXAMS_TITLE, DashboardCopy.SCHOOL_EXAMS_HINT,
+                DashboardCopy.SCHOOL_EXAMS_LINK, Routes.DATA.id());
     }
 
     private static DashboardCard loadingSittings() {
-        return DashboardCard.loading(DashboardCopy.SCHOOL_SITTINGS_TITLE,
-                DashboardCopy.SCHOOL_SITTINGS_HINT, Routes.REPORTS.id());
+        return DashboardCard.loading(DashboardCopy.SCHOOL_SITTINGS_KICKER,
+                DashboardCopy.SCHOOL_SITTINGS_TITLE, DashboardCopy.SCHOOL_SITTINGS_HINT,
+                DashboardCopy.SCHOOL_SITTINGS_LINK, Routes.REPORTS.id());
     }
 }

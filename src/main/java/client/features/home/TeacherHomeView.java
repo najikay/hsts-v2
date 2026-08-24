@@ -1,7 +1,6 @@
 package client.features.home;
 
 import client.core.NavParams;
-import client.ui.anim.Animations;
 import client.ui.screen.AbstractScreen;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -9,6 +8,8 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -50,13 +51,43 @@ public final class TeacherHomeView extends AbstractScreen {
     public void onShow(NavParams params) {
         // The screen instance is cached and revisited, so the greeting is
         // recomputed per visit rather than frozen at build time.
-        headerHost.getChildren().setAll(
-                DashboardPage.header(DashboardPage.currentDisplayName(), LocalDateTime.now()));
+        renderHeader();
         render();
         session.load();
     }
 
+    /**
+     * Renders the four cards, handing two of them the richer body the session
+     * built for them (UI wave 2).
+     *
+     * <p>The bodies are positional and deliberately so: index 0 is the live
+     * card and index 3 is the last closed one, which is the order
+     * {@link TeacherDashboardSession#cards()} documents. A body is present only
+     * when its detail read answered, so a live sitting whose monitor is slow
+     * shows the plain count for a moment and then fills in — never a hole.
+     */
     private void render() {
-        DashboardPage.fillCardGrid(cards, session.cards(), navigator()::navigate);
+        List<Node> bodies = new ArrayList<>();
+        bodies.add(session.liveDetail()
+                .map(detail -> (Node) DashboardPage.liveBody(detail, ZoneId.systemDefault(),
+                        DashboardPage.submittedRoll(cards)))
+                .orElse(null));
+        bodies.add(null);
+        bodies.add(null);
+        bodies.add(session.closedDetail().map(detail -> (Node) DashboardPage.closedBody(detail))
+                .orElse(null));
+
+        DashboardPage.fillCardGrid(cards, session.cards(), navigator()::navigate, bodies);
+        renderHeader();
+    }
+
+    /**
+     * Rebuilt on every settle, not only on show: the summary sentence is
+     * composed from the numbers the cards loaded, so it is provisional until
+     * they have landed.
+     */
+    private void renderHeader() {
+        headerHost.getChildren().setAll(DashboardPage.header(
+                DashboardPage.currentDisplayName(), LocalDateTime.now(), session.summary()));
     }
 }

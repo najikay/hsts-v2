@@ -234,6 +234,8 @@ public final class TeacherResultsView extends AbstractScreen {
         // F-9: the student name is the only wide column here; four numeric ones and
         // the unheaded marker were each being given a sixth of the width.
         table.columnWidths(260, 110, 110, 110, 150, 60);
+        // UI wave 2: the three score columns are numbers and line up as such.
+        table.numericColumns(1, 2, 3);
         table.searchable("Find a student",
                 (row, needle) -> row.studentName().toLowerCase(java.util.Locale.ROOT)
                         .contains(needle));

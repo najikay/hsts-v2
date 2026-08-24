@@ -178,7 +178,11 @@ public final class WarnConfirm {
         inheritStyles(owner, scene);
         stage.setScene(scene);
 
-        Animations.scaleIn(dialog, Motion.SLOW_MS);
+        // UI wave 2: 160ms, scale 0.98 to 1, with the scrim fading in parallel.
+        // A dialog is already the thing the user asked for, so it settles into
+        // place rather than arriving from somewhere.
+        Animations.fadeIn(scrim, Motion.DIALOG_MS);
+        Animations.scaleIn(dialog, Motion.DIALOG_FROM_SCALE, Motion.DIALOG_MS);
         stage.showAndWait();
         return Optional.of(confirmed[0]);
     }

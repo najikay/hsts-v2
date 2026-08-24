@@ -285,7 +285,7 @@ public final class CreateReleaseDialog {
         inheritStyles(owner, scene);
         stage.setScene(scene);
 
-        Animations.scaleIn(form.node(), Motion.SLOW_MS);
+        Animations.scaleIn(form.node(), Motion.DIALOG_FROM_SCALE, Motion.DIALOG_MS);
         stage.showAndWait();
         return Optional.ofNullable(answer[0]);
     }

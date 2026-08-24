@@ -57,8 +57,14 @@ import java.util.Objects;
  */
 public final class Popover {
 
-    /** Entrance travel: shorter than a screen transition, this is a small thing. */
-    private static final double ENTRANCE_TRAVEL = 8;
+    /**
+     * Entrance travel: shorter than a screen transition, this is a small thing.
+     *
+     * <p>6px after the wave-2 motion pass, down from 8. A popover is anchored to
+     * the control that opened it, so it has a shorter distance to travel than a
+     * screen arriving from nowhere.
+     */
+    private static final double ENTRANCE_TRAVEL = 6;
 
     private final StackPane host;
     private final Region content;
@@ -68,6 +74,16 @@ public final class Popover {
     private final EventHandler<KeyEvent> escape = this::onSceneKey;
 
     private Scene watched;
+
+    /**
+     * True from the moment {@link #close()} is called until the exit fade has
+     * unmounted the panel.
+     *
+     * <p>{@link #isOpen()} reports {@code false} for that window, which is what
+     * keeps the bell a toggle: a second click during the fade must open a fresh
+     * panel, not be treated as a click on an open one.
+     */
+    private boolean closing;
 
     /**
      * @param host    the layer the panel is mounted into ({@code AppShell.popovers()})
@@ -82,9 +98,9 @@ public final class Popover {
         this.anchor = anchor;
     }
 
-    /** @return {@code true} while the panel is on screen. */
+    /** @return {@code true} while the panel is on screen and not on its way out. */
     public boolean isOpen() {
-        return host.getChildren().contains(content);
+        return !closing && host.getChildren().contains(content);
     }
 
     /** Opens if closed, closes if open. This is what an anchor button is wired to. */
@@ -98,7 +114,11 @@ public final class Popover {
 
     /** Mounts the panel, anchors it, plays the entrance and arms light dismissal. */
     public void open() {
-        if (!isOpen()) {
+        // Cancels an exit that is still fading: a reopen during the fade must
+        // start from a fully visible panel, not from wherever the fade got to.
+        closing = false;
+        Animations.stop(content);
+        if (!host.getChildren().contains(content)) {
             host.getChildren().add(content);
         }
         StackPane.setAlignment(content, Pos.TOP_RIGHT);
@@ -106,14 +126,35 @@ public final class Popover {
         armDismissal();
         // Quick fade plus a short drop from above: the panel reads as coming out
         // of the control rather than appearing over the page.
-        Animations.slideInY(content, true, ENTRANCE_TRAVEL, Motion.FAST_MS);
+        Animations.slideInY(content, true, ENTRANCE_TRAVEL, Motion.POPOVER_OPEN_MS);
     }
 
-    /** Unmounts the panel and disarms light dismissal. Safe when already closed. */
+    /**
+     * Fades the panel out, unmounts it and disarms light dismissal. Safe when
+     * already closed.
+     *
+     * <p>Shorter than the entrance (UI wave 2 motion spec): arriving is worth
+     * watching, leaving is not, and a dismissal that takes as long as an opening
+     * makes the app feel reluctant to let go.
+     *
+     * <p>Dismissal is disarmed and {@link #isOpen()} starts answering
+     * {@code false} <b>immediately</b>, before the fade has finished. Only the
+     * node's removal waits. Anything else would leave 100ms in which a second
+     * ESC or a click reached a panel the user has already dismissed.
+     */
     public void close() {
+        if (closing || !host.getChildren().contains(content)) {
+            return;
+        }
+        closing = true;
         disarmDismissal();
-        Animations.stop(content);
-        host.getChildren().remove(content);
+        Animations.fadeOut(content, Motion.POPOVER_CLOSE_MS).setOnFinished(event -> {
+            if (closing) {
+                host.getChildren().remove(content);
+                content.setOpacity(1);
+                closing = false;
+            }
+        });
     }
 
     // ===================== Anchoring =====================================

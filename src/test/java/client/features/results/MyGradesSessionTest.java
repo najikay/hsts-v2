@@ -305,6 +305,84 @@ class MyGradesSessionTest {
         }
     }
 
+    // ===================== UI wave 2: the hero band ======================
+
+    @Nested
+    @DisplayName("The hero band")
+    class Hero {
+
+        private static StudentGradeRow scored(long id, int score, String courseCode) {
+            return new StudentGradeRow(id, 11, "Maya Levi", score, score, score,
+                    GradeState.APPROVED, null, null, Instant.parse("2026-08-06T09:00:00Z"),
+                    "Algebra midterm", courseCode);
+        }
+
+        @Test
+        @DisplayName("the term average is the plain mean of the effective scores")
+        void theAverageIsUnweighted() {
+            // Unweighted deliberately: weighting by credit, hours or difficulty
+            // would be inventing a rule the school has not given us, and a number
+            // a student quotes at a teacher must be one the school recognises.
+            assertThat(MyGradesSession.termAverage(List.of(
+                    scored(1, 60, "11"), scored(2, 80, "11"), scored(3, 70, "12"))))
+                    .isEqualTo(70.0);
+        }
+
+        @Test
+        @DisplayName("⚑ an average of nothing is zero, not a NaN in the ring")
+        void anEmptyTranscriptAveragesZero() {
+            // A student with no grades is the first-run case, and it is the one
+            // that would put "NaN" inside the hero of the screen that is entirely
+            // hero.
+            assertThat(MyGradesSession.termAverage(List.of())).isZero();
+        }
+
+        @Test
+        @DisplayName("an overridden grade counts at the score that counts")
+        void theEffectiveScoreIsWhatAverages() {
+            assertThat(MyGradesSession.termAverage(List.of(ADJUSTED))).isEqualTo(55.0);
+        }
+
+        @Test
+        @DisplayName("the session's own average follows what it loaded")
+        void theSessionAveragesWhatItHas() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(
+                    scored(1, 60, "11"), scored(2, 90, "11"))));
+
+            session.load();
+
+            assertThat(session.termAverage()).isEqualTo(75.0);
+        }
+
+        @Test
+        @DisplayName("courses are counted distinctly, case insensitively, blanks ignored")
+        void courseCountIsHonest() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(
+                    scored(1, 60, "11"), scored(2, 70, "11 "), scored(3, 80, "12"),
+                    scored(4, 90, "  "), scored(5, 55, null))));
+
+            session.load();
+
+            // A row that arrived unlabelled is a data problem, not a course.
+            assertThat(session.courseCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ the next-exam slot is empty, because no verb answers it")
+        void theNextExamSlotIsHonestlyEmpty() {
+            // Recorded as a test rather than only as a comment: the day a verb
+            // exists, this is the assertion that has to change, which is how the
+            // next person finds out the slot was built and waiting.
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            session.load();
+
+            assertThat(session.nextExam())
+                    .as("EXAM_JOIN takes a code a teacher reads out; there is no "
+                            + "'list the sittings I could join' read on the wire")
+                    .isEmpty();
+        }
+    }
+
     @Test
     @DisplayName("every state change asks the screen to re-render exactly once")
     void notifiesOnEveryTransition() {

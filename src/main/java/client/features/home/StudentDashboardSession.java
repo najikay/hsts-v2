@@ -2,9 +2,13 @@ package client.features.home;
 
 import client.core.Routes;
 import client.events.FxThreadPoster;
+import client.features.results.MyGradesCopy;
 import client.net.RequestDispatcher;
+import client.ui.components.logic.ChipSpec;
+import client.ui.components.logic.ChipTone;
 import common.dto.grading.MyGrades;
 import common.dto.grading.StudentGradeRow;
+import common.dto.results.ResultStatistics;
 import common.protocol.Message;
 import common.protocol.Verb;
 
@@ -55,6 +59,9 @@ public final class StudentDashboardSession {
 
     private DashboardCard latestGrade = loadingGrade();
 
+    private int gradeCount;
+    private String newestExam;
+
     public StudentDashboardSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -76,13 +83,27 @@ public final class StudentDashboardSession {
 
     /** The study bot entry. Always ready: it is a door, not a number. */
     static DashboardCard botCard() {
-        return new DashboardCard(DashboardCopy.BOT_TITLE, "Ask", DashboardCopy.BOT_HINT,
+        return new DashboardCard(DashboardCopy.BOT_KICKER, DashboardCopy.BOT_TITLE,
+                DashboardCopy.BOT_VALUE, DashboardCopy.BOT_HINT, DashboardCopy.BOT_LINK, null,
                 Routes.BOT_CHAT.id(), DashboardCard.State.READY);
+    }
+
+    /**
+     * @return the one sentence under the greeting, composed from the grades this
+     *         session already read. The bot card contributes nothing: it asks the
+     *         server nothing, so it has no news
+     */
+    public String summary() {
+        return DashboardSummary.student(gradeCount, newestExam,
+                latestGrade.state() == DashboardCard.State.LOADING,
+                latestGrade.state() == DashboardCard.State.FAILED);
     }
 
     /** Sends the grades read. */
     public void load() {
         latestGrade = loadingGrade();
+        gradeCount = 0;
+        newestExam = null;
         onChange.run();
 
         dispatcher.send(Verb.MY_GRADES_GET, null)
@@ -91,18 +112,24 @@ public final class StudentDashboardSession {
 
     private void settle(Message response, Throwable failure) {
         if (!(TeacherDashboardSession.payloadOf(response, failure) instanceof MyGrades answer)) {
-            latestGrade = DashboardCard.failed(DashboardCopy.LATEST_GRADE_TITLE,
+            latestGrade = DashboardCard.failed(DashboardCopy.LATEST_GRADE_KICKER,
+                    DashboardCopy.LATEST_GRADE_TITLE, DashboardCopy.LATEST_GRADE_LINK,
                     Routes.MY_GRADES.id());
             onChange.run();
             return;
         }
+        gradeCount = answer.grades().size();
+        newestExam = newest(answer.grades()).map(StudentGradeRow::examName).orElse(null);
         latestGrade = newest(answer.grades())
-                .map(row -> new DashboardCard(DashboardCopy.LATEST_GRADE_TITLE,
+                .map(row -> new DashboardCard(DashboardCopy.LATEST_GRADE_KICKER,
+                        DashboardCopy.LATEST_GRADE_TITLE,
                         Integer.toString(row.effectiveScore()), row.examName(),
+                        DashboardCopy.LATEST_GRADE_LINK, chipFor(row.effectiveScore()),
                         Routes.MY_GRADES.id(), DashboardCard.State.READY))
-                .orElseGet(() -> new DashboardCard(DashboardCopy.LATEST_GRADE_TITLE, "0",
-                        DashboardCopy.LATEST_GRADE_EMPTY, Routes.MY_GRADES.id(),
-                        DashboardCard.State.EMPTY));
+                .orElseGet(() -> new DashboardCard(DashboardCopy.LATEST_GRADE_KICKER,
+                        DashboardCopy.LATEST_GRADE_TITLE, "0",
+                        DashboardCopy.LATEST_GRADE_EMPTY, DashboardCopy.LATEST_GRADE_LINK, null,
+                        Routes.MY_GRADES.id(), DashboardCard.State.EMPTY));
         onChange.run();
     }
 
@@ -112,8 +139,20 @@ public final class StudentDashboardSession {
                 row -> row.approvedAt() == null ? Instant.EPOCH : row.approvedAt()));
     }
 
+    /**
+     * @return the pass or fail pill for a mark, from the frozen pass mark the
+     *         server marks against ({@code ResultStatistics.PASS_MARK}) rather
+     *         than from a second copy of the number in the client
+     */
+    static ChipSpec chipFor(int score) {
+        return score >= ResultStatistics.PASS_MARK
+                ? ChipSpec.of(MyGradesCopy.CHIP_PASSED, ChipTone.OK)
+                : ChipSpec.of(MyGradesCopy.CHIP_BELOW, ChipTone.WARN);
+    }
+
     private static DashboardCard loadingGrade() {
-        return DashboardCard.loading(DashboardCopy.LATEST_GRADE_TITLE,
-                DashboardCopy.LATEST_GRADE_HINT, Routes.MY_GRADES.id());
+        return DashboardCard.loading(DashboardCopy.LATEST_GRADE_KICKER,
+                DashboardCopy.LATEST_GRADE_TITLE, DashboardCopy.LATEST_GRADE_HINT,
+                DashboardCopy.LATEST_GRADE_LINK, Routes.MY_GRADES.id());
     }
 }

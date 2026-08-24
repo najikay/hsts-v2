@@ -17,6 +17,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Circle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,8 +48,20 @@ public final class NotificationsPanel extends VBox {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationsPanel.class);
 
-    /** Wide enough for two lines of body text without becoming a second screen. */
-    private static final double WIDTH = 380;
+    /**
+     * Wide enough for two lines of body text without becoming a second screen.
+     *
+     * <p>360 after the wave-2 pass, down from 380: the row now carries a 34px
+     * badge on its left, and the same body text in the same panel width would
+     * have wrapped a line further.
+     */
+    private static final double WIDTH = 360;
+
+    /** The rounded square behind a row's type icon. */
+    private static final double BADGE = 34;
+
+    /** The unread marker's diameter. */
+    private static final double UNREAD_DOT = 7;
 
     /** Taller than this and the panel would cover the content it is annotating. */
     private static final double MAX_LIST_HEIGHT = 420;
@@ -161,9 +174,24 @@ public final class NotificationsPanel extends VBox {
             return;
         }
         items.forEach(item -> list.getChildren().add(row(item)));
-        Animations.staggerIn(List.copyOf(list.getChildren()));
+        // The rows stagger, not the panel: the panel's own entrance belongs to
+        // Popover, and two entrances on one open read as a stutter.
+        Animations.staggerRows(List.copyOf(list.getChildren()));
     }
 
+    /**
+     * One row (UI wave 2 visual pass).
+     *
+     * <p>Four parts, left to right: a rounded badge whose soft background says
+     * what kind of news this is, the title and body, the relative time, and — on
+     * an unread row — a small accent dot. The dot is a second signal beside the
+     * tinted background rather than a replacement for it, because a tint alone
+     * is a distinction some readers cannot make (PRD §4.1: state is never colour
+     * only).
+     *
+     * <p>The behaviour is untouched from wave 1: the row still marks itself read
+     * and deep-links, and the store behind it never knew this class changed.
+     */
     private Node row(NotificationDto item) {
         Label title = new Label(item.title());
         title.getStyleClass().add("row-title");
@@ -176,21 +204,43 @@ public final class NotificationsPanel extends VBox {
             body.setWrapText(true);
             text.getChildren().add(body);
         }
+
         Label age = new Label(NotificationPresenter.ageOf(item, clock.instant()));
         age.getStyleClass().add("row-age");
-        text.getChildren().add(age);
 
-        HBox row = new HBox(10,
-                Icons.of(NotificationPresenter.iconFor(item.type()), Icons.SIZE_DEFAULT, "row-icon"),
-                text);
+        VBox trailing = new VBox(6, age);
+        trailing.setAlignment(Pos.TOP_RIGHT);
+        if (item.isUnread()) {
+            Circle unread = new Circle(UNREAD_DOT / 2);
+            unread.getStyleClass().add("row-unread-dot");
+            VBox dotBox = new VBox(unread);
+            dotBox.setAlignment(Pos.CENTER_RIGHT);
+            trailing.getChildren().add(dotBox);
+        }
+
+        HBox row = new HBox(10, badge(item), text, trailing);
         row.getStyleClass().add("panel-row");
         if (item.isUnread()) {
             row.getStyleClass().add("unread");
         }
+        row.setAlignment(Pos.TOP_LEFT);
         HBox.setHgrow(text, Priority.ALWAYS);
         row.setOnMouseClicked(e -> activate(item));
         row.setAccessibleText(NotificationPresenter.accessibleTextOf(item, clock.instant()));
         return row;
+    }
+
+    /** @return the rounded icon square, tinted by the notification's kind. */
+    private static StackPane badge(NotificationDto item) {
+        StackPane badge = new StackPane(
+                Icons.of(NotificationPresenter.iconFor(item.type()), Icons.SIZE_DEFAULT,
+                        "row-icon"));
+        badge.getStyleClass().addAll("row-badge",
+                NotificationPresenter.badgeToneFor(item.type()));
+        badge.setMinSize(BADGE, BADGE);
+        badge.setPrefSize(BADGE, BADGE);
+        badge.setMaxSize(BADGE, BADGE);
+        return badge;
     }
 
     /**

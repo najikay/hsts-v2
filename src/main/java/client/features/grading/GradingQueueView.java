@@ -148,7 +148,8 @@ public final class GradingQueueView extends AbstractScreen {
                 .column(GradingCopy.COLUMN_ADJUSTED, GradingCopy::adjustedMarker)
                 // F-9: "Auto" and "Score" hold two or three digits; the student name
                 // holds a full name and was clipping at the default window size.
-                .columnWidths(260, 110, 130, 150, 60);
+                .columnWidths(260, 110, 130, 150, 60)
+                .numericColumns(1, 2);
 
         // Selection drives the bulk approve. Multiple selection rather than a checkbox column:
         // it is the platform's own idiom and needs no extra column to explain itself.

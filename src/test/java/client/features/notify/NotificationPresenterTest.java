@@ -131,9 +131,53 @@ class NotificationPresenterTest {
                 .isEqualTo("Extra time added. just now");
     }
 
+    // ===================== UI wave 2: the row's icon badge ===============
+
+    @ParameterizedTest
+    @EnumSource(NotificationType.class)
+    @DisplayName("every type gets a badge tone, so no row renders an untinted square")
+    void everyTypeHasABadgeTone(NotificationType type) {
+        assertThat(NotificationPresenter.badgeToneFor(type))
+                .isIn("ok", "danger", "accent");
+    }
+
+    @Test
+    @DisplayName("⚑ the badge agrees with the toast: one event never gets two colours")
+    void theBadgeAndTheToastAgree() {
+        // The push arrives as a toast and is then listed in the popover. A green
+        // toast followed by a red badge has told the reader two different things
+        // about one event, and the reader believes the second one.
+        for (NotificationType type : NotificationType.values()) {
+            ToastSpec toast = NotificationPresenter.toastFor(row(type, "Title", "Body"));
+            String badge = NotificationPresenter.badgeToneFor(type);
+
+            String expected = switch (toast.variant()) {
+                case SUCCESS -> "ok";
+                case WARN -> "danger";
+                default -> "accent";
+            };
+            assertThat(badge).as("%s", type).isEqualTo(expected);
+        }
+    }
+
+    @Test
+    @DisplayName("good news is a green badge and a decision is a red one")
+    void thePairingIsTheObviousOne() {
+        assertThat(NotificationPresenter.badgeToneFor(NotificationType.GRADE_PUBLISHED))
+                .isEqualTo("ok");
+        assertThat(NotificationPresenter.badgeToneFor(NotificationType.APPROVAL_REJECTED))
+                .isEqualTo("danger");
+        assertThat(NotificationPresenter.badgeToneFor(NotificationType.INTEGRITY_ALERT))
+                .isEqualTo("danger");
+        assertThat(NotificationPresenter.badgeToneFor(NotificationType.APPROVAL_REQUESTED))
+                .isEqualTo("accent");
+    }
+
     @Test
     @DisplayName("null arguments are refused")
     void nullsAreRefused() {
+        assertThatNullPointerException()
+                .isThrownBy(() -> NotificationPresenter.badgeToneFor(null));
         assertThatNullPointerException().isThrownBy(() -> NotificationPresenter.iconFor(null));
         assertThatNullPointerException().isThrownBy(() -> NotificationPresenter.toastFor(null));
         assertThatNullPointerException().isThrownBy(() -> NotificationPresenter.ageOf(null, NOW));

@@ -7,6 +7,11 @@ import client.net.RequestDispatcher;
 import common.dto.approval.ApprovalQueue;
 import common.dto.approval.ApprovalRow;
 import common.dto.approval.ApprovalState;
+import client.ui.components.logic.ChipTone;
+import common.dto.exam.AttemptState;
+import common.dto.exam.ExecutionMonitor;
+import common.dto.exam.MonitorCounts;
+import common.dto.exam.MonitorRow;
 import common.dto.grading.ExecutionGradingSummary;
 import common.dto.grading.GradeState;
 import common.dto.grading.GradingQueue;
@@ -18,6 +23,10 @@ import common.dto.release.ReleaseState;
 import common.dto.report.DataExams;
 import common.dto.report.DataResults;
 import common.dto.results.ExamResultRow;
+import common.dto.results.ExecutionResultRow;
+import common.dto.results.ExecutionResults;
+import common.dto.results.ExecutionState;
+import common.dto.results.ResultStatistics;
 import common.dto.results.TeacherResults;
 import common.protocol.ErrorCode;
 import common.protocol.Verb;
@@ -41,9 +50,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the whole failure mode of a summary screen is that it renders "0 waiting" when
  * it means "I could not ask". A coordinator who trusts that number stops checking.
  *
- * <p><b>Cards settle independently.</b> The teacher's three reads are three verbs
- * and one of them failing must not blank the other two. The test drives exactly
- * that: answer two, refuse one, assert the survivors still carry their numbers.
+ * <p><b>Cards settle independently.</b> The teacher's reads are separate verbs and
+ * one of them failing must not blank the others. The test drives exactly that:
+ * answer two, refuse one, assert the survivors still carry their numbers.
+ *
+ * <p>UI wave 2 added two cards that need a second, conditional read — the live
+ * sitting's monitor and the last closed sitting's frozen statistics — and the
+ * nested classes for those hold the rules that only exist because the detail is
+ * separate from the count: a failed detail read must leave a true number alone,
+ * and a card that is still loading its detail must not look broken.
  */
 class DashboardSessionTest {
 
@@ -91,9 +106,18 @@ class DashboardSessionTest {
     @DisplayName("Teacher")
     class Teacher {
 
+        /**
+         * <b>Updated deliberately in UI wave 2, not weakened.</b> Wave 1's teacher
+         * dashboard had one card counting live and scheduled sittings together,
+         * which answered "is anything of mine running or about to" in a single
+         * number and therefore answered neither: a teacher reading "2" could not
+         * tell whether to walk to a classroom. The canvas splits it into LIVE NOW
+         * and NEXT RELEASE, so the assertion below splits with it and now pins
+         * both numbers where it used to pin their sum.
+         */
         @Test
-        @DisplayName("counts live and scheduled sittings, and ignores the finished ones")
-        void countsOnlyCurrentSittings() {
+        @DisplayName("separates what is live from what is merely scheduled")
+        void countsLiveAndScheduledApart() {
             connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW, List.of(
                     release(1, ReleaseState.LIVE),
                     release(2, ReleaseState.SCHEDULED),
@@ -106,10 +130,38 @@ class DashboardSessionTest {
                     new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
             session.load();
 
-            // A card that counted last term's closed sittings would answer a question
-            // nobody asked; "today and next" is the one a teacher opens the app for.
-            assertThat(session.cards().get(0).value()).isEqualTo("2");
+            assertThat(session.cards().get(0).value()).as("one is live").isEqualTo("1");
             assertThat(session.cards().get(0).state()).isEqualTo(DashboardCard.State.READY);
+            assertThat(session.cards().get(2).value()).as("one is scheduled").isEqualTo("1");
+            // Closed and cancelled are on neither card: a teacher who released four
+            // exams last term does not want that number on her home screen.
+        }
+
+        @Test
+        @DisplayName("a live sitting puts a live chip on the card")
+        void aLiveSittingIsChipped() {
+            connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW,
+                    List.of(release(1, ReleaseState.LIVE))));
+
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+            session.load();
+
+            assertThat(session.cards().get(0).statusChip()).isPresent();
+            assertThat(session.cards().get(0).statusChip().orElseThrow().tone())
+                    .isEqualTo(ChipTone.LIVE);
+        }
+
+        @Test
+        @DisplayName("nothing live means no chip, rather than a chip saying nothing")
+        void nothingLiveMeansNoChip() {
+            connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW, List.of()));
+
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+            session.load();
+
+            assertThat(session.cards().get(0).statusChip()).isEmpty();
         }
 
         @Test
@@ -125,14 +177,24 @@ class DashboardSessionTest {
 
             assertThat(session.cards()).extracting(DashboardCard::routeId)
                     .containsExactly(Routes.RELEASES.id(), Routes.GRADING.id(),
-                            Routes.RESULTS.id());
+                            Routes.RELEASES.id(), Routes.RESULTS.id());
         }
 
         @Test
-        @DisplayName("⚑ one failing read leaves the other two cards intact")
+        @DisplayName("every card names the screen its link opens")
+        void everyCardNamesItsDestination() {
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+
+            assertThat(session.cards()).allSatisfy(card ->
+                    assertThat(card.linkText()).isNotBlank());
+        }
+
+        @Test
+        @DisplayName("⚑ one failing read leaves the other cards intact")
         void oneFailureDoesNotBlankThePage() {
-            connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW,
-                    List.of(release(1, ReleaseState.LIVE))));
+            connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW, List.of(
+                    release(1, ReleaseState.LIVE), release(2, ReleaseState.SCHEDULED))));
             connection.replyError(Verb.GRADING_QUEUE_GET, ErrorCode.INTERNAL, "no");
             connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of(exam(1))));
 
@@ -177,8 +239,10 @@ class DashboardSessionTest {
             session.load();
 
             assertThat(session.cards().get(0).state()).isEqualTo(DashboardCard.State.EMPTY);
-            assertThat(session.cards().get(0).hint()).isEqualTo(DashboardCopy.SITTINGS_EMPTY);
+            assertThat(session.cards().get(0).hint()).isEqualTo(DashboardCopy.LIVE_EMPTY);
             assertThat(session.cards().get(1).hint()).isEqualTo(DashboardCopy.GRADING_EMPTY);
+            assertThat(session.cards().get(2).hint())
+                    .isEqualTo(DashboardCopy.NEXT_RELEASE_EMPTY);
         }
 
         @Test
@@ -191,6 +255,199 @@ class DashboardSessionTest {
 
             assertThat(session.cards()).allSatisfy(card ->
                     assertThat(card.state()).isEqualTo(DashboardCard.State.LOADING));
+        }
+    }
+
+    // ===================== Teacher, the wave-2 detail cards ==============
+
+    @Nested
+    @DisplayName("The live card's detail")
+    class LiveCard {
+
+        private static ExecutionMonitor monitor(List<MonitorRow> rows, long finished) {
+            return new ExecutionMonitor(1, "Algebra midterm", "11", "4B7Q", true,
+                    NOW, NOW.plusSeconds(1800), 0, 60,
+                    new MonitorCounts(rows.size(), finished, 0), rows);
+        }
+
+        private static MonitorRow attempt(String name, AttemptState state) {
+            return new MonitorRow(1, name, state, NOW, null, 0, 3, 10, null, null);
+        }
+
+        @Test
+        @DisplayName("⚑ the three rows shown are the students still sitting")
+        void stillSittingStudentsComeFirst() {
+            // A card with three slots spent on students who handed in twenty
+            // minutes ago has told the teacher nothing she can act on.
+            var detail = TeacherDashboardSession.detailOf(monitor(List.of(
+                    attempt("Amit", AttemptState.SUBMITTED),
+                    attempt("Noa", AttemptState.IN_PROGRESS),
+                    attempt("Yael", AttemptState.SUBMITTED),
+                    attempt("Dana", AttemptState.IN_PROGRESS)), 2));
+
+            assertThat(detail.students()).extracting(TeacherDashboardSession.StudentLine::name)
+                    .containsExactly("Dana", "Noa", "Amit");
+        }
+
+        @Test
+        @DisplayName("more students than slots is said, not silently dropped")
+        void theRestAreAnnounced() {
+            var detail = TeacherDashboardSession.detailOf(monitor(List.of(
+                    attempt("A", AttemptState.IN_PROGRESS),
+                    attempt("B", AttemptState.IN_PROGRESS),
+                    attempt("C", AttemptState.IN_PROGRESS),
+                    attempt("D", AttemptState.IN_PROGRESS)), 0));
+
+            assertThat(detail.students()).hasSize(TeacherDashboardSession.LIVE_STUDENT_ROWS);
+            assertThat(detail.more()).isTrue();
+        }
+
+        @Test
+        @DisplayName("exactly as many students as slots is not 'and more'")
+        void noPhantomRemainder() {
+            var detail = TeacherDashboardSession.detailOf(monitor(List.of(
+                    attempt("A", AttemptState.IN_PROGRESS),
+                    attempt("B", AttemptState.IN_PROGRESS),
+                    attempt("C", AttemptState.IN_PROGRESS)), 0));
+
+            assertThat(detail.more()).isFalse();
+        }
+
+        @Test
+        @DisplayName("the progress bar is submitted over sitting, and never divides by zero")
+        void progressIsSafe() {
+            var nobody = TeacherDashboardSession.detailOf(monitor(List.of(), 0));
+            assertThat(nobody.progress()).isEqualTo(0);
+
+            var half = TeacherDashboardSession.detailOf(monitor(List.of(
+                    attempt("A", AttemptState.SUBMITTED),
+                    attempt("B", AttemptState.IN_PROGRESS)), 1));
+            assertThat(half.progress()).isEqualTo(0.5);
+        }
+
+        @Test
+        @DisplayName("⚑ time left is measured against the server's clock, not the workstation's")
+        void timeLeftUsesTheServerClock() {
+            // The card is handed serverNow with the answer, precisely so a
+            // teacher whose laptop clock is ten minutes fast is not told the
+            // sitting closes ten minutes sooner than it does.
+            var detail = TeacherDashboardSession.detailOf(monitor(List.of(), 0));
+            assertThat(detail.minutesLeft()).isEqualTo(30);
+        }
+
+        @Test
+        @DisplayName("a sitting past its closing time reads as closing, not as negative")
+        void pastClosingIsNotNegative() {
+            var detail = new TeacherDashboardSession.LiveDetail("Algebra", "4B7Q",
+                    NOW.minusSeconds(60), NOW, 0, 0, List.of(), false);
+            assertThat(detail.minutesLeft()).isZero();
+        }
+
+        @Test
+        @DisplayName("a failed monitor read leaves the count card alone")
+        void aFailedDetailDoesNotBlankTheCount() {
+            connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW,
+                    List.of(release(1, ReleaseState.LIVE))));
+            connection.replyError(Verb.EXECUTION_MONITOR_GET, ErrorCode.INTERNAL, "no");
+
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+            session.load();
+
+            assertThat(session.liveDetail()).isEmpty();
+            assertThat(session.cards().get(0).value())
+                    .as("the number was true before the detail read and still is")
+                    .isEqualTo("1");
+        }
+    }
+
+    @Nested
+    @DisplayName("The last closed card")
+    class LastClosedCard {
+
+        private static ExecutionResultRow execution(long id, ExecutionState state,
+                                                    Instant closeAt, boolean stats) {
+            return new ExecutionResultRow(id, "4B7Q", NOW, closeAt, state, 8, 8, stats, false);
+        }
+
+        private static ExamResultRow examWith(ExecutionResultRow... executions) {
+            return new ExamResultRow(1, "101101", "Algebra midterm", "11", "Algebra",
+                    List.of(executions));
+        }
+
+        @Test
+        @DisplayName("⚑ the newest CLOSED sitting wins, and cancelled ones are not candidates")
+        void picksTheNewestClosed() {
+            TeacherResults results = new TeacherResults(List.of(examWith(
+                    execution(1, ExecutionState.CLOSED, NOW.minusSeconds(7200), true),
+                    execution(2, ExecutionState.CANCELLED, NOW, true),
+                    execution(3, ExecutionState.CLOSED, NOW.minusSeconds(60), true))));
+
+            assertThat(TeacherDashboardSession.newestClosed(results))
+                    .get().extracting(ExecutionResultRow::executionId).isEqualTo(3L);
+        }
+
+        @Test
+        @DisplayName("a closed sitting with no frozen statistics is not a candidate")
+        void unmarkedIsNotACandidate() {
+            TeacherResults results = new TeacherResults(List.of(examWith(
+                    execution(1, ExecutionState.CLOSED, NOW, false))));
+
+            assertThat(TeacherDashboardSession.newestClosed(results)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("no closed sitting is EMPTY and says what will fill it")
+        void nothingClosedYet() {
+            connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of(exam(1))));
+
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+            session.load();
+
+            assertThat(session.cards().get(3).state()).isEqualTo(DashboardCard.State.EMPTY);
+            assertThat(session.cards().get(3).hint())
+                    .isEqualTo(DashboardCopy.LAST_CLOSED_EMPTY);
+        }
+
+        @Test
+        @DisplayName("the mean is rounded onto the card and the deciles reach the sparkline")
+        void statisticsReachTheCard() {
+            ResultStatistics stats = new ResultStatistics(8, 72.4, 71, 9.1, 55, 91, 6, 0.75,
+                    List.of(0, 0, 0, 0, 0, 1, 2, 4, 1, 0));
+            connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of(examWith(
+                    execution(9, ExecutionState.CLOSED, NOW, true)))));
+            connection.replyOk(Verb.RESULTS_EXECUTION_GET, new ExecutionResults(
+                    execution(9, ExecutionState.CLOSED, NOW, true), "Algebra midterm", "11",
+                    "Algebra", List.of(), stats));
+
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+            session.load();
+
+            assertThat(session.cards().get(3).value()).isEqualTo("72");
+            assertThat(session.closedDetail()).isPresent();
+            assertThat(session.closedDetail().orElseThrow().passed()).isEqualTo(6);
+            assertThat(session.closedDetail().orElseThrow().deciles()).hasSize(10);
+        }
+
+        @Test
+        @DisplayName("⚑ a closed sitting whose marking is unfinished is a state, not an error")
+        void unfinishedMarkingIsCalm() {
+            connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of(examWith(
+                    execution(9, ExecutionState.CLOSED, NOW, true)))));
+            connection.replyOk(Verb.RESULTS_EXECUTION_GET, new ExecutionResults(
+                    execution(9, ExecutionState.CLOSED, NOW, true), "Algebra midterm", "11",
+                    "Algebra", List.of(), null));
+
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster());
+            session.load();
+
+            assertThat(session.cards().get(3).state()).isEqualTo(DashboardCard.State.EMPTY);
+            assertThat(session.cards().get(3).hint())
+                    .isEqualTo(DashboardCopy.LAST_CLOSED_UNMARKED);
+            assertThat(session.closedDetail()).isEmpty();
         }
     }
 

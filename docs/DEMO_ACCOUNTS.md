@@ -68,16 +68,40 @@ only in the `coordinators` table. If every coordinator also taught a course, an 
 that derived the role from `course_teachers` by mistake would look correct. Rina is the account
 that catches it, which is worth knowing if the login role is ever questioned in review.
 
-Names are stored in Hebrew, which is what the UI shows; the Latin transliterations above are for
-reading this file. Course codes are the 2-character `courses.code2` values from ARCHITECTURE §5
-(Mathematics 10 → Algebra 11, Calculus 12; Computer Science 20 → Java 21, Databases 22).
+**Names are stored and displayed in English** (language ruling, 2026-08-24: everything in
+English — UI copy and seed content both; the Hebrew display names were translated in UI wave 1
+and this file's earlier claim to the contrary was corrected the same day). Course codes are the
+2-character `courses.code2` values from ARCHITECTURE §5 (Mathematics 10 → Algebra 11,
+Calculus 12; Computer Science 20 → Java 21, Databases 22).
 
-## The other thirteen
+## The full roster — eighteen accounts, all `demo123`
 
-These five are the ones the demo script names. The seed loads **eighteen** users in total: one
-principal, five teachers and twelve students, listed in `docs/seed/SEED_CONTENT.md` §3. All of
-them sign in with `demo123`. The extras exist so class rosters, approval queues and grade
-distributions look like a school rather than a fixture. Notable ones:
+The five above are the ones the demo script names. The complete seeded roster
+(authoritative order = `UsersSection`; content story in `docs/seed/SEED_CONTENT.md` §3):
+
+| Username | Name | Role | Note |
+|---|---|---|---|
+| `principal.avia` | Avia Shalev | PRINCIPAL | school-wide read-only (S-7) |
+| `dana.cohen` | Dana Cohen | TEACHER | Algebra 11 + Calculus 12; Calculus solo |
+| `rina.barak` | Rina Barak | TEACHER → wire COORDINATOR | the PURE coordinator: Mathematics 10, teaches nothing |
+| `avi.mizrahi` | Avi Mizrahi | TEACHER | Java 21 co-teacher; the grading-demo teacher |
+| `tamar.shani` | Tamar Shani | TEACHER | Java 21 co-teacher (the two-teachers-one-course case) |
+| `michal.sharon` | Michal Sharon | TEACHER → wire COORDINATOR | dual-hat: teaches Databases 22, coordinates CS 20 |
+| `noa.friedman` | Noa Friedman | STUDENT | |
+| `itay.regev` | Itay Regev | STUDENT | |
+| `shira.dahan` | Shira Dahan | STUDENT | |
+| `omer.katz` | Omer Katz | STUDENT | the TIMED-OUT attempt (S-19); four questions "Not answered" |
+| `maya.levi` | Maya Levi | STUDENT | the demo student: two exams sat, one published (C-3 in one screen) |
+| `noam.peretz` | Noam Peretz | STUDENT | enrolled in neither Algebra nor Databases; the 9.4 outsider probe |
+| `yael.azulay` | Yael Azulay | STUDENT | the manual-override grade with a written justification (T-8.3) |
+| `daniel.shapira` | Daniel Shapira | STUDENT | |
+| `lior.gabay` | Lior Gabay | STUDENT | |
+| `tal.harari` | Tal Harari | STUDENT | |
+| `roni.malka` | Roni Malka | STUDENT | |
+| `eitan.solomon` | Eitan Solomon | STUDENT | |
+
+The unannotated students exist so class rosters, approval queues and grade distributions look
+like a school rather than a fixture. Notable ones, expanded:
 
 - `michal.sharon` — teaches Databases 22 **and** coordinates Computer Science 20, so she
   approves the Java exams. The dual-hat counterpart to `rina.barak`.

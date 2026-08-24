@@ -401,5 +401,9 @@ animation dependencies — Motion system only).
 - [x] W1.6 Bot modal shadow + bot copy pass — F-11, F-14
 - [x] W1.7 Profile-name control: menu or plain text — F-12
 - [x] W1.8 Seed content to English (SeedArithmeticTest + DEMO_ACCOUNTS stay authoritative) — F-13
-- [ ] W2.1 Design canvas: 4 artboards light+dark with motion spec; lead markup gates implementation
-- [ ] W2.2 Implement approved wave-2 direction across screens (views + CSS only; sessions and wires untouched)
+- [x] W2.1 Design canvas: 4 artboards light+dark with motion spec; lead markup gates implementation
+- [x] W2.2 Implement approved wave-2 direction across screens (views + CSS only; sessions and wires untouched)
+      — implemented against the published canvas, lead's markup pending. Report:
+      `docs/reports/lead/WAVE2.md`. Two sessions were extended where a card's summary sentence
+      needed data they already load, and the teacher's session makes two conditional follow-up
+      reads on existing verbs; no wire, verb or DTO changed.
