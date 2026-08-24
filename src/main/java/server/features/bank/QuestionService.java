@@ -6,6 +6,7 @@ import common.dto.bank.QuestionDeleteRequest;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionDraft;
 import common.dto.bank.QuestionEdit;
+import common.dto.lock.LockHolder;
 import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,7 @@ import server.db.projections.ReferencingExam;
 import server.db.repos.CourseRepository;
 import server.db.repos.QuestionRepository;
 import server.db.repos.UserRepository;
+import server.features.locks.EditLockGuard;
 
 import java.time.Clock;
 import java.util.List;
@@ -47,6 +49,11 @@ import java.util.Optional;
  *       exists and which course it belongs to. Unknown, soft-deleted and out of scope are one
  *       answer on purpose.</li>
  * </ul>
+ *
+ * <p>Both write verbs also consult {@link EditLockGuard} between the scope check and the version
+ * check, which is what makes section 6's second {@code CONFLICT} - "the question is edit-locked by
+ * someone else" - a rule rather than a sentence with no issuer. {@link #lockHolderOtherThan}
+ * carries the ordering argument, and it is not only about locks.
  *
  * <p>The read guard {@code reachesCourse} is deliberately absent: this class writes, and section 3
  * gives the writes no coordinator-wide scope. A coordinator authors only in courses she teaches,
@@ -93,7 +100,10 @@ public class QuestionService {
         NOT_FOUND,
 
         /** Somebody else wrote a version after this editor opened hers. */
-        STALE
+        STALE,
+
+        /** Another teacher holds a live edit lock on the question. The outcome names her. */
+        LOCKED
     }
 
     /** How {@link #delete} finished. */
@@ -106,17 +116,44 @@ public class QuestionService {
         NOT_FOUND,
 
         /** Somebody else wrote a version after this editor opened hers. */
-        STALE
+        STALE,
+
+        /** Another teacher holds a live edit lock on the question. The resolution names her. */
+        LOCKED
     }
 
     /**
      * What {@link #update} did.
      *
-     * @param status what happened
-     * @param detail the new version, or {@code null} for anything other than {@link
-     *               EditStatus#UPDATED}
+     * <p>The two payload components are each tied to exactly one status by the compact
+     * constructor below, so no caller can build a {@link EditStatus#LOCKED} outcome that cannot
+     * name the holder. That matters more than it looks: {@code BankMessages.lockedBy} takes a
+     * name and would otherwise be one null dereference away from turning a polite refusal into a
+     * {@code NullPointerException} on a write path. A required component that accepts null is
+     * required in name only.
+     *
+     * @param status   what happened
+     * @param detail   the new version, or {@code null} for anything other than {@link
+     *                 EditStatus#UPDATED}
+     * @param lockedBy who holds the edit lock, and {@code null} unless the status is {@link
+     *                 EditStatus#LOCKED}
      */
-    public record EditOutcome(EditStatus status, QuestionDetail detail) {
+    public record EditOutcome(EditStatus status, QuestionDetail detail, LockHolder lockedBy) {
+
+        public EditOutcome {
+            Objects.requireNonNull(status, "status");
+            requireHolderIff(status == EditStatus.LOCKED, lockedBy, status);
+        }
+
+        /** The shape every non-lock path uses, so those call sites stay two arguments. */
+        public EditOutcome(EditStatus status, QuestionDetail detail) {
+            this(status, detail, null);
+        }
+
+        /** A refusal that can always name the teacher who has the question open. */
+        public static EditOutcome lockedBy(LockHolder holder) {
+            return new EditOutcome(EditStatus.LOCKED, null, holder);
+        }
     }
 
     /**
@@ -126,11 +163,49 @@ public class QuestionService {
      * with {@code OK} carrying a {@link DeleteOutcome}, because being told which exams use a
      * question is a successful answer to "may I delete this", not an error.
      *
-     * @param status  what happened
-     * @param outcome the wire answer, or {@code null} for anything other than {@link
-     *                DeleteStatus#RESOLVED}
+     * @param status   what happened
+     * @param outcome  the wire answer, or {@code null} for anything other than {@link
+     *                 DeleteStatus#RESOLVED}
+     * @param lockedBy who holds the edit lock, and {@code null} unless the status is {@link
+     *                 DeleteStatus#LOCKED}
      */
-    public record DeleteResolution(DeleteStatus status, DeleteOutcome outcome) {
+    public record DeleteResolution(DeleteStatus status, DeleteOutcome outcome,
+                                   LockHolder lockedBy) {
+
+        public DeleteResolution {
+            Objects.requireNonNull(status, "status");
+            requireHolderIff(status == DeleteStatus.LOCKED, lockedBy, status);
+        }
+
+        /** The shape every non-lock path uses, so those call sites stay two arguments. */
+        public DeleteResolution(DeleteStatus status, DeleteOutcome outcome) {
+            this(status, outcome, null);
+        }
+
+        /** A refusal that can always name the teacher who has the question open. */
+        public static DeleteResolution lockedBy(LockHolder holder) {
+            return new DeleteResolution(DeleteStatus.LOCKED, null, holder);
+        }
+    }
+
+    /**
+     * The one statement of "this component belongs to exactly this status", shared by both
+     * outcome records so the two cannot drift into different answers about the same invariant.
+     *
+     * <p>Both directions are enforced. A missing holder on a lock refusal is the dereference the
+     * handler would take; a holder attached to any other status is a caller who believes it is
+     * saying something the handler will never read, which is the quieter half of the same bug.
+     */
+    private static void requireHolderIff(boolean isLockRefusal, LockHolder holder, Object status) {
+        if (isLockRefusal && holder == null) {
+            throw new IllegalArgumentException(
+                    "a lock refusal has to name its holder: the caller's sentence is built from "
+                            + "the holder's display name");
+        }
+        if (!isLockRefusal && holder != null) {
+            throw new IllegalArgumentException(
+                    "only a lock refusal carries a holder, but this one is " + status);
+        }
     }
 
     private final QuestionRepository questions;
@@ -138,18 +213,24 @@ public class QuestionService {
     private final UserRepository users;
     private final QuestionIdAllocator ids;
     private final Clock clock;
+    private final EditLockGuard locks;
     private final BankDetails details;
 
     public QuestionService(QuestionRepository questions,
                            CourseRepository courses,
                            UserRepository users,
                            QuestionIdAllocator ids,
-                           Clock clock) {
+                           Clock clock,
+                           EditLockGuard locks) {
         this.questions = Objects.requireNonNull(questions, "questions");
         this.courses = Objects.requireNonNull(courses, "courses");
         this.users = Objects.requireNonNull(users, "users");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.clock = Objects.requireNonNull(clock, "clock");
+        // Required rather than optional. A null guard would make "locks are not enforced here"
+        // a runtime state nobody declares, and the one deployment where it was null is the one
+        // where two teachers overwrite each other with the banner showing on both screens.
+        this.locks = Objects.requireNonNull(locks, "locks");
         // Built here rather than injected: the constructor signature is what HSTSServer's
         // assembly line and every existing test call, and a shared mapper over two repositories
         // this class already holds is not a seam worth widening that for.
@@ -216,6 +297,11 @@ public class QuestionService {
             return new EditOutcome(EditStatus.NOT_FOUND, null);
         }
         Question question = found.get();
+
+        Optional<LockHolder> heldByAnother = lockHolderOtherThan(caller, question);
+        if (heldByAnother.isPresent()) {
+            return EditOutcome.lockedBy(heldByAnother.get());
+        }
 
         Optional<QuestionVersion> latest =
                 questions.findLatestVersionForAuthoring(session, question.getId());
@@ -284,6 +370,11 @@ public class QuestionService {
         }
         Question question = found.get();
 
+        Optional<LockHolder> heldByAnother = lockHolderOtherThan(caller, question);
+        if (heldByAnother.isPresent()) {
+            return DeleteResolution.lockedBy(heldByAnother.get());
+        }
+
         Optional<QuestionVersion> latest =
                 questions.findLatestVersionForAuthoring(session, question.getId());
         if (latest.isEmpty() || latest.get().getVersionNo() != ask.baseVersionNo()) {
@@ -309,6 +400,58 @@ public class QuestionService {
     }
 
     // ===================== Shared ========================================
+
+    /**
+     * The edit lock consult behind the contract's second {@code CONFLICT} (E6.14, F2.6).
+     *
+     * <p>One method for both write verbs, for the same reason {@link #reachableForWriting} is one
+     * method: an edit and a delete racing each other must reach the same answer about the same
+     * question, and two copies of this call are two chances to key one of them differently.
+     *
+     * <h2>Why it takes the stored row rather than the request</h2>
+     *
+     * <p><b>It is handed the {@link Question} the scope check already resolved, and never the
+     * {@code displayId5} the caller sent.</b> Nothing validates that string's shape on the write
+     * path - {@code QuestionValidator} does not look at it and neither does {@code BankHandlers} -
+     * so {@link QuestionLockKey#of} over request data can throw {@code IllegalArgumentException}
+     * on input a caller chooses. Taking the entity closes that by construction rather than by
+     * ordering: there is no signature here that a raw request id fits into.
+     *
+     * <p>It also settles a subtler question that ordering alone would not. The lookup behind the
+     * scope check compares under the column's collation, and {@code utf8mb4_unicode_ci} calls
+     * strings equal that {@code Long.parseLong} does not accept, so "it matched a row" does not by
+     * itself mean "it parses". The stored id does both, always.
+     *
+     * <p>Worth being accurate about what the throw would have cost, because an overstated hazard
+     * is how the real one gets skipped: {@code MessageRouter} catches every exception a handler
+     * raises and answers {@code INTERNAL}, so it would have been an unhelpful error rather than
+     * the killed read thread this class's header warns about for a different case. The reason
+     * below is the one that actually carries the ordering.
+     *
+     * <h2>Why it is called after the scope check</h2>
+     *
+     * <p><b>Because a lock refusal issued earlier would leak.</b> Answering "Rina Barak is editing
+     * this" about a question in a course the caller does not teach confirms the question exists
+     * <em>and</em> names a colleague. The contract's section 2 folds unknown, soft-deleted and
+     * out-of-scope into one indistinguishable answer precisely so display ids cannot be probed,
+     * and a lock refusal in front of that check is a hole straight through it. That holds for
+     * {@link #delete} exactly as it holds for {@link #update}, and both are pinned.
+     *
+     * <p>The version check then runs <b>after</b> this, as ruled: the lock is the polite refusal
+     * and {@code baseVersionNo} is the correctness guarantee, so a question that is both locked
+     * and stale is answered with the sentence that tells her what to do about it.
+     *
+     * <p><b>Per-process, and not durable.</b> {@code EditLockService} holds its locks in a map, so
+     * this consult is only as wide as the one running server. That matches a single-server HSTS,
+     * and the version check below it is what still holds in a world where it does not.
+     *
+     * @param caller   the authenticated author
+     * @param question the stored question, already proven reachable for this caller
+     * @return the other teacher holding the question, or empty when nobody else does
+     */
+    private Optional<LockHolder> lockHolderOtherThan(CallerContext caller, Question question) {
+        return locks.heldByAnother(QuestionLockKey.of(question.getDisplayId()), caller.userId());
+    }
 
     /**
      * The stored question a write may touch, or empty when the caller may not know it exists.

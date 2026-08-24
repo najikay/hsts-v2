@@ -1,6 +1,6 @@
 package client.features.bank;
 
-import client.core.AppArgs;
+import client.core.FxTestHarness;
 import client.core.NavParams;
 import client.core.ScreenManager;
 import client.events.ClientEventBus;
@@ -95,11 +95,8 @@ class QuestionEditorInteractionTest extends ApplicationTest {
     }
 
     @AfterEach
-    void resetGlobalState() throws Exception {
-        java.lang.reflect.Method reset = ScreenManager.class.getDeclaredMethod("resetForTests");
-        reset.setAccessible(true);
-        reset.invoke(null);
-        System.clearProperty(AppArgs.PROP_GALLERY);
+    void resetGlobalState() {
+        FxTestHarness.resetGlobalState();
     }
 
     // ===================== The wiring claims =============================
@@ -227,18 +224,31 @@ class QuestionEditorInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ a question somebody else is editing opens read-only, and names her")
     void lockedByAnotherTeacher() {
+        List<EntityRef> lockedEntities = new java.util.ArrayList<>();
         Scene scene = openEditor(connection -> connection.respondTo(Verb.LOCK_ACQUIRE,
-                        request -> Message.ok(request, LockResponse.refused(BANK_LOCK,
-                                new LockHolder(9, "Avi Mizrahi"),
-                                Instant.now().plusSeconds(120)))),
+                        request -> {
+                            lockedEntities.add(((common.dto.lock.LockRequest) request.getPayload())
+                                    .entity());
+                            return Message.ok(request, LockResponse.refused(BANK_LOCK,
+                                    new LockHolder(9, "Avi Mizrahi"),
+                                    Instant.now().plusSeconds(120)));
+                        }),
                 NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
 
+        // ⚑ The half of the key agreement that lives on this side of the wire. Every other test
+        // of this feature builds its own EntityRef, so keying the editor on anything else - the
+        // primary key, a second entityType - would leave the server consulting a slot nobody
+        // ever locks and the whole consult silently refusing nothing, with every suite green.
+        assertThat(lockedEntities)
+                .as("the editor has to lock the key QuestionService consults: display id 11005 "
+                        + "under the shared question type")
+                .containsExactly(server.features.bank.QuestionLockKey.of("11005"));
+
         assertThat(buttonNamed(scene, QuestionEditorCopy.SAVE).isDisabled())
-                .as("this is a CLIENT claim and only a client claim. The contract lists CONFLICT "
-                        + "for an edit-locked question, but nothing implements it, so greying "
-                        + "Save is the whole of the mutual exclusion rather than a courtesy in "
-                        + "front of a server check. Stated exactly because an earlier version of "
-                        + "this sentence told the next reader the server had been verified.")
+                .as("a client claim, and since 2026-08-24 a courtesy in front of a real server "
+                        + "check rather than the whole of the mutual exclusion: QuestionService "
+                        + "consults EditLockGuard on both write verbs. Greying Save still earns "
+                        + "its place by telling her before she types, not after she saves.")
                 .isTrue();
         assertThat(labelTexts(scene))
                 .as("and the banner names who has it, because 'locked' without a name leaves her "

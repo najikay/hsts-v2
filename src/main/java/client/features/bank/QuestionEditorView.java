@@ -16,6 +16,7 @@ import client.ui.components.logic.ValidationState;
 import client.ui.screen.AbstractScreen;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
+import server.features.bank.QuestionLockKey;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -145,10 +146,12 @@ public final class QuestionEditorView extends AbstractScreen {
      * <p>Edit mode only: a question that does not exist yet cannot be locked, and there is
      * nothing for another teacher to collide with.
      *
-     * <p>The key comes from {@link BankLocks}, which is the one place the display-id numbering
-     * lives. Skipped without a session, because this screen is reachable from the gallery and
-     * from tests with no signed-in user, and refusing to build there would be worse than being
-     * unlocked there.
+     * <p>The key comes from {@link QuestionLockKey}, which is the one place the display-id
+     * numbering lives. It sits in the server tier because {@code QuestionService}'s write-path
+     * consult has to arrive at the same key this call locks under, and one rule with two
+     * implementations is the drift that ruling exists to prevent. Skipped without a session,
+     * because this screen is reachable from the gallery and from tests with no signed-in user,
+     * and refusing to build there would be worse than being unlocked there.
      */
     private void openLock(QuestionDetail detail) {
         if (detail == null) {
@@ -162,7 +165,7 @@ public final class QuestionEditorView extends AbstractScreen {
                 QuestionEditorCopy.LOCK_NOUN);
         locks.onStateChanged(this::renderLockState);
         lockBanner.setOnTakeOver(this::takeOver);
-        locks.open(BankLocks.of(detail.displayId5()));
+        locks.open(QuestionLockKey.of(detail.displayId5()));
     }
 
     /**

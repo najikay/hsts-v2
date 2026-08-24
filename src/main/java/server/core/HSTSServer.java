@@ -55,6 +55,7 @@ import server.features.grading.GradingReads;
 import server.features.grading.GradingService;
 import server.features.grading.OverrideService;
 import server.features.grading.RepositoryGradingReads;
+import server.features.locks.EditLockGuard;
 import server.features.locks.EditLockService;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
@@ -268,9 +269,13 @@ public class HSTSServer extends AbstractServer {
         // BankWiringGuardTest reads these statements out of the source and fails if either stops
         // constructing-and-registering in one expression. It is literal on purpose: extracting
         // this into a registerBankFeature helper will fail it even if the helper is called.
+        // The guard wraps the SAME EditLockService instance registered above, not a second one:
+        // locks live in that object's map, so a copy would consult an empty world and refuse
+        // nothing while looking exactly like this line.
         new BankHandlers(sessionFactory,
                 new QuestionService(new QuestionRepository(), new CourseRepository(),
-                        new UserRepository(), new QuestionIdAllocator(), clock))
+                        new UserRepository(), new QuestionIdAllocator(), clock,
+                        new EditLockGuard(locks)))
                 .registerOn(router);
         // The bank's read verbs (E6.3, E6.5, E6.6), separate from the writes above because they
         // carry a different guard over a wider role set: reachesCourse, and the principal reads

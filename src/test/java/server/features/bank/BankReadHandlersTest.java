@@ -280,7 +280,15 @@ class BankReadHandlersTest {
                     new server.db.repos.CourseRepository(),
                     new server.db.repos.UserRepository(),
                     new server.db.ids.QuestionIdAllocator(),
-                    java.time.Clock.systemUTC()));
+                    java.time.Clock.systemUTC(),
+                    // Nobody holds anything: the role gate has to refuse her before the write
+                    // path gets far enough to consult a lock, so an empty lock world is the
+                    // honest fixture. If this ever starts mattering, the gate has moved.
+                    new server.features.locks.EditLockGuard(
+                            new server.features.locks.EditLockService(
+                                    new server.realtime.PushGateway(
+                                            new server.core.SessionManager()),
+                                    server.features.locks.DisplayNames.NONE))));
 
             assertThatExceptionOfType(AuthorizationException.class).isThrownBy(() ->
                     writes.delete(principal(), request(Verb.QUESTION_DELETE,

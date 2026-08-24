@@ -182,19 +182,18 @@ public final class BankMessages {
                     + "typed was lost, but reopen the question to edit the newest version.";
 
     /**
-     * E6.14, F2.6: the advisory edit lock is held by another teacher.
+     * E6.14, F2.6: the edit lock is held by another teacher.
      *
-     * <p><b>NO CALLER, and that is the finding rather than an oversight in this file.</b> The
-     * contract's section 6 lists {@code CONFLICT} for "the question is edit-locked by someone
-     * else", but no handler ever issues it: {@code BankHandlers} produces {@code CONFLICT} only
-     * from the two {@code case STALE} branches on {@code baseVersionNo}, and
-     * {@code QuestionService} never reads the lock table. So the mutual exclusion E6.14's editor
-     * shows on screen is enforced by the client alone, and two teachers holding current base
-     * versions can both write.
+     * <p><b>It has an issuer now, which it did not when it was written.</b> Raised 2026-08-23 as
+     * a gap rather than a wording problem: the contract's section 6 listed {@code CONFLICT} for
+     * "the question is edit-locked by someone else" and nothing ever produced it, so the mutual
+     * exclusion the editor showed on screen was enforced by the client alone and two teachers
+     * holding current base versions could both write. Ruled on 2026-08-24, and
+     * {@code QuestionService} now consults {@code EditLockGuard} on both write verbs.
      *
-     * <p>Kept rather than deleted because the sentence is correct and the decision is the lead's:
-     * the contract is FROZEN v1, so either this gains an issuer or section 6 loses that line.
-     * Raised 2026-08-23. Deleting it first would remove the evidence that the gap exists.
+     * <p>Says the question is readable and when it frees up, because the honest answer is "not
+     * now, and here is who to ask" - a refusal that names nobody leaves her with no route
+     * forward, which is the same standard {@link #deleteBlocked} is held to.
      */
     public static String lockedBy(String editorName) {
         return "This question is being edited by " + editorName + " right now. You can read it, "

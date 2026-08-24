@@ -9,6 +9,7 @@ import common.dto.bank.QuestionDeleteRequest;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionDraft;
 import common.dto.bank.QuestionEdit;
+import common.dto.lock.LockHolder;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -385,6 +386,45 @@ class BankHandlersTest {
         }
 
         @Test
+        @DisplayName("⚑ a locked question is CONFLICT, and a DIFFERENT sentence from stale")
+        void lockedIsConflictWithItsOwnSentence() {
+            // Both are CONFLICT and they are not the same event. STALE_EDIT tells her to reopen
+            // the question and edit the newest version, which is an instruction she cannot
+            // follow while somebody else has it open. Collapsing the two would be invisible to a
+            // test that checked only the error code, which is why this one checks the text.
+            when(questions.update(any(), any(), any())).thenReturn(
+                    QuestionService.EditOutcome.lockedBy(new LockHolder(9, "Rina Barak")));
+
+            Message response = handlers.update(teacher(), request(Verb.QUESTION_UPDATE, anEdit()));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+            assertThat(errorText(response))
+                    .isEqualTo(BankMessages.lockedBy("Rina Barak"))
+                    .isNotEqualTo(BankMessages.STALE_EDIT)
+                    .as("and it names her, because a refusal with nobody in it has no route "
+                            + "forward")
+                    .contains("Rina Barak");
+        }
+
+        @Test
+        @DisplayName("a field problem on an EDIT is VALIDATION, the same as on a draft")
+        void aFieldProblemOnAnEditIsRefused() {
+            // Found by reading the JaCoCo report rather than by reasoning: checkEdit's field
+            // branch was the one uncovered line in this class. The create path had this case
+            // and the update path did not, so the two verbs' shared validator was proven on
+            // one of them only - and QUESTION_UPDATE is the verb a teacher uses far more often.
+            QuestionEdit blankText = new QuestionEdit(DISPLAY_ID, 2, "   ", ANSWERS, 1, "OOP",
+                    Difficulty.MEDIUM, ImageAction.KEEP, null);
+
+            Message response = handlers.update(teacher(),
+                    request(Verb.QUESTION_UPDATE, blankText));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+            assertThat(errorText(response)).isEqualTo(BankMessages.TEXT_REQUIRED);
+            verify(questions, never()).update(any(), any(), any());
+        }
+
+        @Test
         @DisplayName("KEEP with no bytes is not an image violation")
         void keepWithoutBytesIsFine() {
             // Every edit of an unillustrated question arrives this way. Check the image
@@ -511,6 +551,21 @@ class BankHandlersTest {
                             QuestionService.DeleteStatus.STALE, null));
 
             assertThat(send().getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+        }
+
+        @Test
+        @DisplayName("⚑ deleting a question somebody has open is CONFLICT, and names her")
+        void lockedIsConflictWithItsOwnSentence() {
+            when(questions.delete(any(), any(), any()))
+                    .thenReturn(QuestionService.DeleteResolution.lockedBy(
+                            new LockHolder(9, "Rina Barak")));
+
+            Message response = send();
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+            assertThat(errorText(response))
+                    .isEqualTo(BankMessages.lockedBy("Rina Barak"))
+                    .isNotEqualTo(BankMessages.STALE_EDIT);
         }
     }
 }
