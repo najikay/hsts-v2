@@ -4,6 +4,7 @@ import client.features.approval.ApprovalQueueView;
 import client.features.approval.ExamPreviewView;
 import client.features.approval.MyApprovalsView;
 import client.features.bank.BankView;
+import client.features.bank.QuestionEditorView;
 import client.features.bank.QuestionsView;
 import client.features.bot.BotAnalyticsView;
 import client.features.bot.BotChatView;
@@ -77,6 +78,10 @@ public final class SessionRoutes {
             // (the lead's ruling on #41). Off the rail until the retirement PR; reached
             // from the legacy screen's banner.
             routes.add(Routes.BANK);
+            // The question editor (E6.10). Registered with the bank, reached from it; the
+            // server re-checks the write scope and the edit lock on every save, so this
+            // list decides what is offered and never what is permitted.
+            routes.add(Routes.QUESTION_EDIT);
             // The release manager (E9). Teaching roles only. It is also the screen the
             // monitor is normally reached from, which is why the two are registered
             // together: a monitor route with no way in would be a dead end.
@@ -184,6 +189,9 @@ public final class SessionRoutes {
         }
         if (Routes.BANK.id().equals(route.id())) {
             return BankView::new;
+        }
+        if (Routes.QUESTION_EDIT.id().equals(route.id())) {
+            return QuestionEditorView::new;
         }
         if (Routes.APPROVALS.id().equals(route.id())) {
             return ApprovalQueueView::new;

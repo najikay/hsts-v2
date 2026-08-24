@@ -67,6 +67,15 @@ public final class Routes {
     public static final Route BANK = Route.shell("bank", "Question bank");
 
     /**
+     * The question editor (E6.10/E6.11, F2.1/F2.2, C-8). Teaching roles only, for the
+     * bank's reason exactly. Not on any rail: it is a view of one question (or of one
+     * about to exist), reached from the bank list's New and Edit buttons, which carry
+     * what it needs through nav parameters. The id is spelled for the end state
+     * ({@code questions.edit}) so the retirement PR renames nothing.
+     */
+    public static final Route QUESTION_EDIT = Route.shell("questions.edit", "Edit question");
+
+    /**
      * Taking an exam: code, identity, paper, and the ending takeover (E10, F6).
      *
      * <p>One route for the whole flow, so "the exam is unreachable once it is
@@ -241,7 +250,7 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING, REPORTS, DATA, BANK);
+                CHECKED_FORM, GRADING, REPORTS, DATA, BANK, QUESTION_EDIT);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */
