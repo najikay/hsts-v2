@@ -1,5 +1,14 @@
 # E7 exam builder wire contract — DRAFT
 
+> **§7 IS HELD OPEN, 2026-08-24.** A cold read before the handlers were written found that §7 does
+> not determine what to report for quotas whose candidate pools **cross** rather than nest, and
+> that §7.4's most-constrained-first rule is a greedy order rather than a matching, so it can emit
+> a shortfall the teacher can disprove. Both are in the lead's hands; the question and three priced
+> options went to him on 2026-08-24. Until he rules, **`AutoComposer` is not written and
+> `EXAM_AUTO_COMPOSE` is registered nowhere** - `ExamHandlers` serves the other six verbs and
+> `ExamHandlersTest.Registration` asserts the absence as a set, so restoring it takes a test change
+> rather than a quiet addition. §7 does not freeze with the rest of this document.
+
 **Status: DRAFT, 2026-08-23 — types landed 2026-08-23; freeze on the handlers PR.** The verbs and
 the DTO package are built, tested and on `main`; §12 records the five rulings applied while landing
 them, and the in-place corrections they required are marked where they sit. Still DRAFT, and
@@ -156,6 +165,25 @@ for a lock.
 ---
 
 ## 4. DTOs (`common/dto/authoring`)
+
+> **⚑ `ExamList`'s row order is UNRESOLVED and does not freeze with the rest of §4** *(opened
+> 2026-08-24, found by a cold read of this document against the store)*. This section and
+> `ExamList`'s own javadoc both say **"newest exam first"**. The store does something else and
+> does it deliberately: `ExamBuildRepository.findAuthoredExams` ends `order by e.displayId`, and
+> `ExamBuildRepositoryContract.examListIsOrderedByDisplayId` pins that on both engines with a
+> comment explaining the choice. It landed in #44 and was reviewed. The two cannot both be right.
+>
+> It is not a near-miss: `displayId6` is `subjectCode + courseCode + a per-course serial`
+> (`ExamIdAllocator`), so ascending display id sorts by subject, then course, then **oldest first
+> within a course**. A teacher with exams in two courses gets neither ordering.
+>
+> `ExamService.list` currently serves whatever the store returns, so today the wire answer
+> contradicts this line. **The lead's call**, and it is one line either way: change the `order by`
+> to `e.id desc` and amend the two-engine test, or change this sentence and `ExamList`'s javadoc.
+> My recommendation is newest-first, because that is what both wire documents already promise and
+> what a teacher looking for the exam she just wrote expects at the top. Raised as ask 5 rather
+> than fixed here, because reversing a reviewed decision in someone else's absence is how the two
+> documents got out of step in the first place.
 
 ```
 ExamList(List<ExamListRow> rows)
@@ -340,12 +368,20 @@ carries no rules of its own in the DTO — its compact constructor normalises an
 (§4's inbound rule) — so both of these are `ExamValidator`'s, and both answer `VALIDATION` naming
 the field:
 
-- **`TopicQuota` topics must be distinct within one request.** Two quotas naming one topic break
-  the disjointness that makes §7.4's most-constrained-first selection produce **true** shortfalls:
-  the two buckets would compete for one candidate pool, and the report could then name a shortfall
-  the teacher can disprove by filtering her own bank to the same topic. §7.2 property 2 calls that
-  the worst possible failure here. Comparison is on the **normalised** topic, since the record
-  folds blank to `null`, so `""` and `null` are one bucket and not two.
+- **`TopicQuota` topics must be distinct within one request.** Two quotas naming one topic are two
+  buckets drawing on one pool with no rule saying which of them is short, so the report could name
+  a shortfall the teacher can disprove by filtering her own bank to the same topic. §7.2 property
+  2 calls that the worst possible failure here. Comparison is on the **normalised** topic, since
+  the record folds blank to `null`, so `""` and `null` are one bucket and not two.
+
+  **This rule does not buy disjointness, and an earlier draft of it said so wrongly** *(corrected
+  2026-08-24, found by a cold read of this document against the code)*. Distinct topics still
+  overlap: `quotaProblem` deliberately permits one course-wide quota alongside every topic quota,
+  and within a single `TopicQuota` the `any` bucket overlaps `easy`/`medium`/`hard`. §7.3 says as
+  much outright - "quotas draw from overlapping supply" - which is the whole reason its aggregate
+  row exists. The rule is kept because two buckets over one pool have no defined answer; what it
+  must not be read as is a licence for the generator to assume disjoint pools. It is not one, and
+  §7.4's selection rule is the open question that follows from that.
 - **Every quota bucket is `>= 0`, and the total across all quotas is `>= 1`.** A negative bucket
   would subtract from a sibling quota's demand and make the derived total a lie; a request for
   nothing at all is not a composition, and answering it with an empty proposal would violate
@@ -373,6 +409,22 @@ the field:
 `EXAM_SUBMIT`'s handler calls **`ApprovalService.versionSubmitted(examVersionId)`** once its
 transaction has committed and `ExamService.submitForApproval` returned `OK`.
 `ExamService.submitForApproval` owns the transition and sends no notification of its own.
+
+**"After the service returned `OK`" is not sufficient on its own, and the difference is the whole
+bug** *(added while writing the handler, 2026-08-24)*. `ExamService.submitForApproval` does not
+own a transaction: it takes a `Session` and the boundary is the handler's
+`Transactions.inTx(...)`. So a call placed *inside* that lambda satisfies both halves of the
+sentence above - the service has returned `OK`, and nothing has committed - while reproducing
+exactly the failure this amendment exists to kill. **The call goes outside `Transactions.inTx`, on
+the returned outcome.** `ExamHandlersTest.theHookRunsAfterTheCommit` is what holds it there: it
+asserts what had happened to the transaction *at the moment of the call*, not that the call
+happened, because a call that happens and notifies nobody is the thing being prevented.
+
+**A hook that throws does not turn a committed submission into an error.** By the time it runs the
+transaction is committed, so propagating would tell her the submit failed when it did not, and she
+would submit again over a version that is already `PENDING`. It is logged at error and the answer
+stays `OK`. That is the window the next paragraph but two states, entered deliberately rather than
+by accident.
 
 The original text below said the *service* makes that call from inside the transaction. **That
 notifies nobody**, and it was found by a cold read rather than by a test.
