@@ -1,23 +1,34 @@
-# E7 exam builder wire contract — DRAFT
+# E7 exam builder wire contract — FROZEN v1 (§1-§6, §8), §7 DRAFT
 
-> **§7 IS HELD OPEN, 2026-08-24.** A cold read before the handlers were written found that §7 does
-> not determine what to report for quotas whose candidate pools **cross** rather than nest, and
-> that §7.4's most-constrained-first rule is a greedy order rather than a matching, so it can emit
-> a shortfall the teacher can disprove. Both are in the lead's hands; the question and three priced
-> options went to him on 2026-08-24. Until he rules, **`AutoComposer` is not written and
-> `EXAM_AUTO_COMPOSE` is registered nowhere** - `ExamHandlers` serves the other six verbs and
-> `ExamHandlersTest.Registration` asserts the absence as a set, so restoring it takes a test change
-> rather than a quiet addition. §7 does not freeze with the rest of this document.
+**Status: FROZEN v1 as of 2026-08-25, for sections 1 to 6 and section 8. Section 7 alone stays
+DRAFT.** The freeze condition the lead set was handlers existing against the text, and they do:
+`server.features.exambuild.ExamHandlers` serves six of the seven verbs. **Additive-only from here**
+for the frozen sections, same as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) and
+[BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md).
 
-**Status: DRAFT, 2026-08-23 — types landed 2026-08-23; freeze on the handlers PR.** The verbs and
-the DTO package are built, tested and on `main`; §12 records the five rulings applied while landing
-them, and the in-place corrections they required are marked where they sit. Still DRAFT, and
-deliberately: the freeze happens on Member A's handlers PR, exactly as BANK froze. Written for the
-lead to land the verbs and DTOs from, on the same
-handoff as [BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md): Member A drafts, the lead freezes and
-lands `common/protocol/Verb.java` and the DTO package himself. Not binding until this header says
-FROZEN. Additive-only terms from that point, same as
-[EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md).
+The partial freeze is the lead's decision of 2026-08-24, approved and then enlarged by him: the
+proposal was to hold §2 and §3 open alongside §7, and his ruling settled §2 in the same message, so
+only §7 remains. Freezing a section whose code does not exist is the thing a freeze is supposed to
+prevent.
+
+> **§7 STAYS DRAFT UNTIL PR B.** A cold read before the handlers were written found that §7 did not
+> determine what to report for quotas whose candidate pools **cross** rather than nest, and that
+> §7.4's most-constrained-first rule is a greedy order rather than a matching, so it could emit a
+> shortfall the teacher can disprove. **Ruled 2026-08-24: option (a), the laminar restriction** -
+> see §7.3. The lead checked the argument independently rather than taking it: topic quotas are
+> pairwise disjoint, a topic's difficulty buckets nest inside it, the course-wide `any` bucket is a
+> superset of all of them, so Hall's condition collapses to exactly the per-bucket checks §7.3
+> already makes and deepest-first greedy is exact.
+>
+> It stays DRAFT anyway, because **no code exercises it yet**: `AutoComposer` is not written and
+> `EXAM_AUTO_COMPOSE` is registered nowhere. `ExamHandlersTest.Registration` asserts the six-verb
+> set, so restoring the seventh takes a deliberate test change rather than a quiet addition. §7
+> freezes on PR B, on the same condition every other section just met.
+
+*Types landed 2026-08-23; §12 records the five rulings applied while landing them, and the in-place
+corrections they required are marked where they sit. Written for the lead to land the verbs and
+DTOs from, on the same handoff as BANK: Member A drafts, the lead freezes and lands
+`common/protocol/Verb.java` and the DTO package himself.*
 
 Package: **`common/dto/authoring`** (ruling 1 below — `common/dto/exam` is taken by E10/E11's
 take-exam surface and reusing it would put a student's paper and a teacher's composition in one
@@ -99,9 +110,17 @@ section 3 shapes it:
     never `FORBIDDEN`. Naming the exam would tell a caller probing ids that it exists and who owns
     it, which is the existence oracle P-5 is about and which both frozen contracts already refuse.
 
-- **`NOT_FOUND` is the only answer for anything the caller cannot reach.** Unknown id, another
-  teacher's exam, and an exam whose course she has stopped teaching are one answer, indistinguishable
-  on purpose.
+- **`NOT_FOUND` is the only answer for anything the caller cannot reach.** Unknown id and another
+  teacher's exam are one answer, indistinguishable on purpose.
+
+  **Two cases, not three** *(corrected 2026-08-25, the lead's ruling)*. This sentence used to end
+  "and an exam whose course she has stopped teaching". `ExamService.authoredHeader` filters on the
+  author id and nothing else, so that third case never existed: the document was describing a
+  guard the code does not have, and §3's own table said only "author" the whole time. The ruling
+  is that **the code is right and this section overreached.** An exam is authored work rather than
+  course-scoped data, so a teacher who stops teaching a course keeps the exams she wrote there,
+  including the right to submit a new version into that course's coordinator queue. That
+  consequence is stated here so it can be found on purpose rather than discovered.
 
 - **No payload carries a caller id.** Authorship is `CallerContext.userId()` (S-12), so an exam
   cannot be created in somebody else's name and an edit cannot be attributed to somebody else.
@@ -166,24 +185,24 @@ for a lock.
 
 ## 4. DTOs (`common/dto/authoring`)
 
-> **⚑ `ExamList`'s row order is UNRESOLVED and does not freeze with the rest of §4** *(opened
-> 2026-08-24, found by a cold read of this document against the store)*. This section and
-> `ExamList`'s own javadoc both say **"newest exam first"**. The store does something else and
-> does it deliberately: `ExamBuildRepository.findAuthoredExams` ends `order by e.displayId`, and
-> `ExamBuildRepositoryContract.examListIsOrderedByDisplayId` pins that on both engines with a
-> comment explaining the choice. It landed in #44 and was reviewed. The two cannot both be right.
+> **`ExamList`'s row order: newest exam first, and the store has to change** *(ruled 2026-08-25;
+> the disagreement was found by a cold read of this document against the store)*. This section and
+> `ExamList`'s own javadoc both say "newest exam first". The store did something else and did it
+> deliberately: `ExamBuildRepository.findAuthoredExams` ends `order by e.displayId`, pinned on both
+> engines by `ExamBuildRepositoryContract.examListIsOrderedByDisplayId`, landed in #44 and
+> reviewed. Both could not be right.
 >
-> It is not a near-miss: `displayId6` is `subjectCode + courseCode + a per-course serial`
-> (`ExamIdAllocator`), so ascending display id sorts by subject, then course, then **oldest first
-> within a course**. A teacher with exams in two courses gets neither ordering.
+> **The contract wins.** A teacher opens this list looking for the exam she touched yesterday, both
+> wire documents already promise recency, and display id is a *filing* order rather than a recency
+> one: `displayId6` is `subjectCode + courseCode + a per-course serial` (`ExamIdAllocator`), so
+> ascending sorts by subject, then course, then oldest first within a course. A teacher with exams
+> in two courses got neither ordering.
 >
-> `ExamService.list` currently serves whatever the store returns, so today the wire answer
-> contradicts this line. **The lead's call**, and it is one line either way: change the `order by`
-> to `e.id desc` and amend the two-engine test, or change this sentence and `ExamList`'s javadoc.
-> My recommendation is newest-first, because that is what both wire documents already promise and
-> what a teacher looking for the exam she just wrote expects at the top. Raised as ask 5 rather
-> than fixed here, because reversing a reviewed decision in someone else's absence is how the two
-> documents got out of step in the first place.
+> **The fix is the query and its pinning test, not a sort in `ExamService.list`** - one rule with
+> one home, so the screen cannot disagree with the store about what "newest" means. It lands in
+> whichever PR next touches the store: PR B or the E7.10 screen. Until then the wire answer is the
+> store's order, and this paragraph is the record of why that is a known gap rather than a
+> surprise.
 
 ```
 ExamList(List<ExamListRow> rows)
@@ -570,6 +589,31 @@ This is a rule about which row to emit, not a new field.
 every shortfall, not the first - extends to the aggregate row rather than being replaced by it: a
 teacher short on Recursion Hard *and* over her course's total supply is told both, because fixing
 one does not fix the other.
+
+### 7.3a The shape rule that makes all of the above true *(ruled 2026-08-24)*
+
+**If any topic quota is present, the course-wide quota may use `any` only. A course-wide quota with
+graded buckets stands alone.** `ExamValidator.quotaProblem` refuses any other combination.
+
+Everything §7.3 says about which row to emit, and everything §7.4 says about selection order, is
+true **because of this rule and not without it.** The pools then form a nesting hierarchy: topic
+quotas are pairwise disjoint, a topic's difficulty buckets nest inside that topic, and the
+course-wide `any` bucket is a superset of all of them. On a family that nests, Hall's condition
+collapses to exactly the per-bucket comparisons §7.3 already makes, so bucket checking is complete
+rather than approximate, and deepest-first (most-constrained-first) greedy is exact rather than
+merely reasonable.
+
+**Without the rule, both properties fail, and the failures were reproduced rather than imagined.**
+A topic quota drawing on `any` crosses a course-wide quota drawing on `hard`: neither nests inside
+the other, no bucket is short, and yet the request is infeasible - so §7.3 names no row to emit,
+`AutoComposeResult`'s compact constructor refuses the empty report, and the teacher gets
+`INTERNAL` on the one verb F3.3 exists for. Separately, greedy loses on crossing pools and emits a
+shortfall whose `missing()` is zero, which renders as a shortfall claiming nothing is missing.
+
+**The refusal must name the two legal shapes** *(the lead's condition on accepting this rule)*. A
+sentence saying only "that combination is not allowed" leaves her guessing which half to delete.
+It names both: quotas per topic with a course-wide **total**, or one course-wide quota split by
+difficulty on its own. `ExamBuildMessages` owns the wording; the client composes nothing (ruling 4).
 
 ### 7.4 Selection, when it is feasible
 
