@@ -369,6 +369,34 @@ the field:
 
 ### 5.5 Submit hands off to E8, and emits nothing itself
 
+**Amended 2026-08-24 (lead ruling, freeze text): the hook is the handler's, after commit.**
+`EXAM_SUBMIT`'s handler calls **`ApprovalService.versionSubmitted(examVersionId)`** once its
+transaction has committed and `ExamService.submitForApproval` returned `OK`.
+`ExamService.submitForApproval` owns the transition and sends no notification of its own.
+
+The original text below said the *service* makes that call from inside the transaction. **That
+notifies nobody**, and it was found by a cold read rather than by a test.
+`JpaApprovalStore.inTx` goes through `Transactions.inTx(factory, ...)`, which opens a fresh
+session, so the hook runs on another connection, cannot see the uncommitted status flip, takes its
+own `if (!version.isPending())` guard, reads the row as still `DRAFT` and returns
+`Superseded.none()` before either notification. E7 was the hook's first production caller, which is
+why nothing had exercised it.
+
+**The session-joining alternative is worse, and that is the lead's reason rather than mine.**
+`versionSubmitted` already notifies *outside* its own transaction, so a variant that joined the
+caller's session would push bells about a submit that has not committed, and rolling the outer
+transaction back would leave phantom notifications. Doing that correctly needs post-commit callback
+machinery, which is a phase-2 shape.
+
+**The one window, stated honestly because somebody will probe it.** A crash between the commit and
+the hook loses the supersede and the notifications. **It never loses the submission**: the version
+is `PENDING` in a committed transaction, and the coordinator's queue reads *status*, not bells, so
+the row still appears. A re-submit re-fires the hook.
+
+---
+
+*Original text, kept because the division of ownership it states is unchanged:*
+
 `ExamService.submitForApproval` calls **`ApprovalService.versionSubmitted(examVersionId)`** and
 sends no notification of its own. This is not a suggestion; the approval contract's E8.2 section
 names it as an instruction to Member A, and gives the reason: that one hook supersedes the other
@@ -456,6 +484,40 @@ describes the way she asked for.
 
 Topic matching is **exact equality**, inherited from the bank contract's ruling 7.6 (option A) so
 that the auto-composer and the bank's own filter can never disagree about what a topic is.
+
+**`available` never changes meaning, and which row is emitted does** *(lead ruling, 2026-08-24,
+freeze text)*. It is always the **raw** count above: what she gets by filtering the bank screen to
+that same topic and difficulty. Section 7.2's property 2 is non-negotiable, and a count net of what
+another quota consumed would break it, because the number in the sentence would no longer be a
+number she can check.
+
+That leaves the case this rule exists for. **Every quota can be satisfiable on its own while the
+request as a whole is not**, because quotas draw from overlapping supply. Three Recursion and eight
+course-wide against a bank of ten: neither row is short, eleven questions are asked for, ten exist.
+Reporting either quota alone produces a true count paired with a demand it does not belong to, and
+"Requested 8 questions, bank has 10" is a sentence she can disprove.
+
+So when every individual quota is satisfiable against raw supply but the union is not, the
+shortfall is emitted at the **smallest enclosing bucket whose summed demand exceeds its raw
+supply**:
+
+- `requested` is the total demanded across every quota inside that bucket;
+- `available` is that bucket's own raw supply, unchanged in meaning.
+
+The example above emits `(null, null, 11, 10)` - **"Requested 11 questions, bank has 10."** Both
+numbers are verifiable against her own bank and the pairing is coherent.
+
+The same rule applies one level down. Topic-internal overlap, where a topic's difficulty buckets
+and its `any` bucket compete for one supply, reports `(topic, null, topicDemand, topicSupply)`.
+
+**No wire change.** The four `Shortfall` shapes in section 7.1 already express exactly these
+levels: a `null` difficulty is the topic-wide bucket and a `null` topic is the course-wide one.
+This is a rule about which row to emit, not a new field.
+
+**Raw-short quotas keep their own rows beside the aggregate one.** Section 7.2's property 1 -
+every shortfall, not the first - extends to the aggregate row rather than being replaced by it: a
+teacher short on Recursion Hard *and* over her course's total supply is told both, because fixing
+one does not fix the other.
 
 ### 7.4 Selection, when it is feasible
 
