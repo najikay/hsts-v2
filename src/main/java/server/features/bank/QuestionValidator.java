@@ -192,7 +192,19 @@ public final class QuestionValidator {
      *   resume / résumé      Strasse / Straße      oeuvre / œuvre
      *   file / &#xfb01;le         A / &#xff21;                 &#x3c4;&#x3ad;&#x3bb;&#x3bf;&#x3c2; / &#x3c4;&#x3ad;&#x3bb;&#x3bf;&#x3c3;
      *   &#x5e9;&#x5dc;&#x5d5;&#x5dd; / &#x5e9;&#x5b8;&#x5c1;&#x5dc;&#x5d5;&#x5b9;&#x5dd;   (Hebrew, unpointed vs pointed)
+     *   &#x5de;&#x5d9;&#x5dd; / &#x5de;&#x5d9;&#x5de;         (Hebrew, final form vs base letter)
      * </pre>
+     *
+     * <p><b>That last row was a real divergence and not a hypothetical one</b> <i>(found
+     * 2026-08-25 by the first test in this codebase to execute the comparison against MySQL)</i>.
+     * Java's {@link Collator} at {@link Collator#PRIMARY} treats the five Hebrew final forms as
+     * distinct letters from their bases; {@code utf8mb4_unicode_ci} gives them the same primary
+     * weight and calls the strings equal. So this method was <em>looser</em> than the constraint
+     * on the one language the system is written in: a teacher typing {@code &#x5de;&#x5d9;&#x5dd;} and
+     * {@code &#x5de;&#x5d9;&#x5de;} as two answers passed validation and hit
+     * {@code ck_question_versions_distinct}, and the exception came out of
+     * {@code QuestionService.create} as a generic internal error. {@link #foldedForm} now folds
+     * the five, which is step 3 below.
      *
      * <p>Any pair the service accepts and the constraint rejects becomes a raw
      * {@code SQLIntegrityConstraintViolationException} and a generic internal error, which is
@@ -228,7 +240,25 @@ public final class QuestionValidator {
     }
 
     /**
-     * The three normalisation steps that run before collation.
+     * The five Hebrew final forms, and the base letters MySQL weighs them as.
+     *
+     * <p>Parallel strings rather than a {@code Map}: the pairing is the whole content, and two
+     * aligned literals show it at a glance where a map of five entries would not. Index i of one
+     * folds to index i of the other.
+     *
+     * <p>{@code kaf, mem, nun, pe, tsadi}. Each final form happens to sit one code point below its
+     * base, and this does <b>not</b> rely on that: an arithmetic version would read as a trick and
+     * would silently mis-fold if anyone extended it to a script where the pattern does not hold.
+     */
+    private static final String HEBREW_FINAL_FORMS = "ךםןףץ";
+    private static final String HEBREW_BASE_LETTERS = "כמנפצ";
+
+    /**
+     * The four normalisation steps that run before collation.
+     *
+     * <p>Step 3 is Hebrew-specific and is the one that was missing. See {@link #sameAnswer} for
+     * what its absence cost; in short, {@code Collator} splits ם from מ and the collation does not,
+     * so without this the service accepted pairs {@code ck_question_versions_distinct} rejects.
      *
      * @param answer one answer as typed, possibly null
      * @return the folded form, never null
@@ -239,8 +269,37 @@ public final class QuestionValidator {
         }
         String stripped = Normalizer.normalize(answer, Normalizer.Form.NFKD)
                 .replaceAll("\\p{M}+", "");
-        String cased = stripped.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
+        String hebrewFolded = foldHebrewFinalForms(stripped);
+        String cased = hebrewFolded.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
         return cased.trim().replaceAll("\\s+", " ");
+    }
+
+    /**
+     * Folds each Hebrew final form onto its base letter, so this side agrees with the collation.
+     *
+     * <p>Applied everywhere rather than only at the end of a word, deliberately. The collation
+     * weighs the character, not its position, so {@code &#x5de;&#x5d9;&#x5dd;} and {@code &#x5de;&#x5d9;&#x5de;} are equal to MySQL
+     * whether or not the final form is where Hebrew orthography would put it. Folding positionally
+     * would reintroduce the gap for exactly the mistyped input this exists to catch.
+     *
+     * <p>Allocates nothing when there is no final form to fold, which is every non-Hebrew answer
+     * and most Hebrew ones.
+     *
+     * @param text the text after decomposition and mark-stripping
+     * @return the same text with the five final forms replaced by their base letters
+     */
+    private static String foldHebrewFinalForms(String text) {
+        StringBuilder folded = null;
+        for (int i = 0; i < text.length(); i++) {
+            int at = HEBREW_FINAL_FORMS.indexOf(text.charAt(i));
+            if (at >= 0) {
+                if (folded == null) {
+                    folded = new StringBuilder(text);
+                }
+                folded.setCharAt(i, HEBREW_BASE_LETTERS.charAt(at));
+            }
+        }
+        return folded == null ? text : folded.toString();
     }
 
     // ===================== The rules ======================================
