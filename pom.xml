@@ -298,7 +298,9 @@
                              would silently un-instrument whole logic subpackages. -->
                         <exclude>client/features/connect/ConnectView*</exclude>
                         <exclude>client/features/login/LoginView*</exclude>
-                        <exclude>client/features/bank/QuestionsView*</exclude>
+                        <!-- client/features/bank/QuestionsView* stood here; the legacy screen
+                             retired with its FXML, its scoped app.css and its two verbs. The
+                             versioned bank's own view is excluded further down. -->
                         <exclude>client/features/settings/SettingsView*</exclude>
                         <exclude>client/features/home/DashboardPage*</exclude>
                         <exclude>client/features/home/TeacherHomeView*</exclude>
@@ -483,9 +485,14 @@
                         <exclude>server/console/ConsoleView*</exclude>
                         <exclude>server/console/ConsoleTheme*</exclude>
                         <exclude>server/console/ServerConsoleApp*</exclude>
-                        <!-- legacy prototype pair only — retired in E6; all other server/db/** code
-                             (E2 entities, repositories, DbBootstrap, allocators) IS measured -->
-                        <exclude>server/db/QuestionDAO*</exclude>
+                        <!-- server/db/QuestionDAO* stood here as the first half of the legacy
+                             prototype pair; it is deleted. DatabaseConfig is the second half and
+                             is now UNREACHABLE: QuestionDAO.getConnection() was its only caller,
+                             and the v2 stack opens connections through HibernateUtil. Kept rather
+                             than deleted because it is the lead's call (it hardcodes hsts_db and
+                             may still be wanted for a manual pass) — see
+                             docs/reports/lead/RETIREMENT.md. All other server/db/** code (E2
+                             entities, repositories, DbBootstrap, allocators) IS measured. -->
                         <exclude>server/db/DatabaseConfig*</exclude>
                     </excludes>
                 </configuration>

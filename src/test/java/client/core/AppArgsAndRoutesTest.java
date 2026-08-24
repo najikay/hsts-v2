@@ -174,8 +174,11 @@ class AppArgsAndRoutesTest {
             // live monitor; E16 added the study bot's four screens; E14 added results; E8 added the approval
             // queue, the exam preview and the teacher's own approval-status list; E13 added
             // the student's own grades and E13.4 the checked form behind them; E12 added the
-            // teacher's grading queue. Per-role registration and the role→home mapping are
-            // covered in SessionRoutesTest.
+            // teacher's grading queue. E6 added the question editor, and the retirement PR
+            // removed the interim id "bank": the versioned bank moved onto "questions", which
+            // is the id that was already here and which the rail has spelled since E5.4, so
+            // the table lost a row rather than gaining one. Per-role registration and the
+            // role→home mapping are covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
@@ -183,7 +186,7 @@ class AppArgsAndRoutesTest {
                             "attempt", "release", "monitor",
                             "approvals", "approvals.preview", "exams",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
-                            "grades", "grades.checked", "grading", "reports", "data", "bank",
+                            "grades", "grades.checked", "grading", "reports", "data",
                             "questions.edit");
         }
 

@@ -8,7 +8,6 @@ import org.hibernate.SessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import server.db.HibernateUtil;
-import server.db.QuestionDAO;
 import server.db.Transactions;
 import server.db.ids.QuestionIdAllocator;
 import server.db.repos.AttemptRepository;
@@ -27,7 +26,6 @@ import server.features.auth.UserRecord;
 import server.features.bank.BankBrowseService;
 import server.features.bank.BankHandlers;
 import server.features.bank.BankReadHandlers;
-import server.features.bank.LegacyQuestionHandlers;
 import server.features.bank.QuestionService;
 import server.features.bot.AskRateLimiter;
 import server.features.bot.BotAdminService;
@@ -122,7 +120,7 @@ public class HSTSServer extends AbstractServer {
     private UserDirectory userDirectory;
 
     /**
-     * Production wiring: session map + router + the auth, notify, lock and legacy
+     * Production wiring: session map + router + the auth, notify, lock and feature
      * handlers, all reading through the database.
      *
      * <p><b>Requires a migrated database.</b> Constructing this opens the Hibernate
@@ -215,7 +213,6 @@ public class HSTSServer extends AbstractServer {
         Clock clock = Clock.systemUTC();
         new AuthService(directory, sessions, clock, notifications::unreadCount)
                 .registerOn(router);
-        new LegacyQuestionHandlers(new QuestionDAO()).registerOn(router);
 
         // Grading first, because take-exam is assembled with the grader rather than the other
         // way round: the seam points from submission to marking and never back.
@@ -257,14 +254,13 @@ public class HSTSServer extends AbstractServer {
         // process-wide COURSE_TEACHERS seam, so it holds no snapshot that could go stale
         // against an ordering change.
         //
-        // This does NOT replace LegacyQuestionHandlers above. The two answer disjoint verbs
-        // (GET_ALL_QUESTIONS / UPDATE_QUESTION against QUESTION_CREATE / UPDATE / DELETE), and
-        // the legacy pair is retired in its own PR (contract §7.4). Keep them disjoint:
-        // MessageRouter.register throws on a duplicate verb rather than overwriting, and it
-        // throws here, inside the HSTSServer(port) constructor, which no test calls and which
-        // JaCoCo excludes. A collision is therefore not a red build, it is a server that will
-        // not boot, found by a human. The read line below is the second bank registration this
-        // comment anticipated; its verbs are disjoint from both of the others.
+        // These verbs and the read line below must stay disjoint: MessageRouter.register throws
+        // on a duplicate verb rather than overwriting, and it throws here, inside the
+        // HSTSServer(port) constructor, which no test calls and which JaCoCo excludes. A
+        // collision is therefore not a red build, it is a server that will not boot, found by a
+        // human. The prototype's LegacyQuestionHandlers was the third registration this comment
+        // used to warn about; it and its two verbs retired with the legacy screen (contract
+        // §7.4), so the bank's own writes and reads are now the whole question flow.
         //
         // BankWiringGuardTest reads these statements out of the source and fails if either stops
         // constructing-and-registering in one expression. It is literal on purpose: extracting

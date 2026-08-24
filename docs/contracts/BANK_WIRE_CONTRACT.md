@@ -58,17 +58,26 @@ on screen when somebody shares a screenshot. The key is fetched one question at 
 that names a single question. That costs one extra round trip when the detail pane opens, which
 the lazy image fetch was going to cost anyway (F2.4, NFR-18).
 
-**What the guard does NOT cover, stated rather than left to be discovered.** `common/dto/bank`
-already holds the legacy `Question` and `QuestionUpdate` (§7.4). `Question.answer` is a real
-answer key, and it is invisible to the scan twice over: `answer` matches nothing in
-`CorrectnessNames`, and `Question` is a mutable class rather than a record. So for as long as the
-legacy pair lives in this package, "the build says so" is false about the only types in it that
-already carry a key.
+**What the guard did NOT cover, stated rather than left to be discovered.** `common/dto/bank`
+also held the legacy `Question` and `QuestionUpdate` (§7.4). `Question.answer` was a real
+answer key, and it was invisible to the scan twice over: `answer` matches nothing in
+`CorrectnessNames`, and `Question` was a mutable class rather than a record. So for as long as the
+legacy pair lived in this package, "the build says so" was false about the only types in it that
+already carried a key.
 
-**Ruled 2026-08-21, and the ruling closes that hole rather than accepting it (§7.4):** the two
-legacy types go on the allow-list with a dated `LEGACY, RETIREMENT SCHEDULED` comment naming the
+**Ruled 2026-08-21, and the ruling closed that hole rather than accepting it (§7.4):** the two
+legacy types went on the allow-list with a dated `LEGACY, RETIREMENT SCHEDULED` comment naming the
 follow-up's whole scope. A named, dated exception is honest; silence was the problem. When the
-retirement PR lands the allow-list shrinks by two, and that diff is the proof.
+retirement PR landed the allow-list would shrink by two, and that diff would be the proof.
+
+> **DISCHARGED 2026-08-24 (retirement PR).** Both types, both verbs (`GET_ALL_QUESTIONS`,
+> `UPDATE_QUESTION`), `LegacyQuestionHandlers`, `QuestionDAO`, the legacy screen and the E18.4
+> guarded-update flow are deleted. `BankWireLeakGuardTest`'s `LEGACY_NOT_COVERED` list and its
+> three skip clauses are gone, `BankWiringGuardTest`'s third `Wiring` entry is gone, and the
+> claim above is now unqualified: every type in `common/dto/bank` is a record and every one of
+> them is inside the scan. **This retires nothing the freeze covers** — the frozen v1 surface is
+> E6's seven verbs and sixteen DTOs, and the legacy pair was never part of it; §7.4 scheduled
+> exactly this removal. See `docs/reports/lead/RETIREMENT.md`.
 
 ## 2. Roles and scope
 
@@ -416,6 +425,15 @@ questions were.
    His reasoning, which is stronger than my flag was: *"a named, dated exception is honest; silence
    was the problem. When the retirement PR lands, the allow-list shrinks by two and that diff is
    the proof."* The entry lands with `BankWireLeakGuardTest`, which needs the DTOs.
+
+   **Discharged 2026-08-24.** The retirement PR landed and both allow-lists shrank. One thing the
+   ruling assumed turned out not to hold, and it is recorded here because it changes what hardening
+   day has to do: **the prototype's `Questions` table was never carried into the v2 schema.** No
+   migration V1–V7 creates a table with `question_text` and `answer` columns — V2's `questions` is
+   the versioned bank's identity row and has a different shape entirely — so `QuestionDAO`'s four
+   statements referenced columns that did not exist, and the legacy screen had been answering an
+   empty list against any migrated database. **There is therefore no V8 drop migration to write
+   and no schema decision left for the lead.** Full detail in `docs/reports/lead/RETIREMENT.md`.
 
 5. **Server-side stem truncation approved**, the constant documented, and the detail verb carries
    the full stem.

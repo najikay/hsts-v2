@@ -89,8 +89,11 @@ class SessionRoutesTest {
         @Test
         @DisplayName("a teacher gets home, settings, the bank, the monitor, the bot, results and her exams")
         void teacher() {
+            // One bank route, not two. Routes.QUESTIONS is the versioned bank since the
+            // retirement PR: the id stayed and the screen behind it changed, so the interim
+            // Routes.BANK that used to sit beside it here is gone rather than renamed.
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
-                    .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS, Routes.BANK, Routes.QUESTION_EDIT,
+                    .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
                             Routes.EXAMS);
@@ -100,7 +103,7 @@ class SessionRoutesTest {
         @DisplayName("a coordinator gets the same plus the approvals pair (E8)")
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
-                    .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS, Routes.BANK, Routes.QUESTION_EDIT,
+                    .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
                             Routes.EXAMS, Routes.APPROVALS, Routes.EXAM_PREVIEW);
@@ -151,7 +154,11 @@ class SessionRoutesTest {
             assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
                     .as("both of her feature routes are reads: REPORT_SUBJECTS_GET and "
                             + "REPORT_GET behind Reports, and BANK_LIST, DATA_EXAMS_GET and "
-                            + "DATA_RESULTS_GET behind Data. There is no sixth verb (S-7)")
+                            + "DATA_RESULTS_GET behind Data. There is no sixth verb (S-7). "
+                            + "Routes.QUESTIONS was absent before the retirement PR and is "
+                            + "absent after it, and the reason got stronger rather than weaker: "
+                            + "the id now serves BankView, which carries Delete and Edit, so "
+                            + "her bank read stays the Data screen (ruling on #41)")
                     .containsExactly(Routes.HOME_PRINCIPAL, Routes.SETTINGS, Routes.REPORTS,
                             Routes.DATA);
         }

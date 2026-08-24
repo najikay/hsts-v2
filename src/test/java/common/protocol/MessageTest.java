@@ -1,7 +1,7 @@
 package common.protocol;
 
 import common.dto.ErrorPayload;
-import common.dto.bank.Question;
+import common.dto.bank.QuestionRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -36,11 +36,11 @@ class MessageTest {
         @Test
         @DisplayName("request() mints a UUID requestId and REQUEST status")
         void requestMintsAnId() {
-            Question payload = new Question(7, "2 + 2 = ?", "4");
+            QuestionRequest payload = new QuestionRequest("21014");
 
-            Message request = Message.request(Verb.UPDATE_QUESTION, payload);
+            Message request = Message.request(Verb.QUESTION_UPDATE, payload);
 
-            assertThat(request.getVerb()).isEqualTo(Verb.UPDATE_QUESTION);
+            assertThat(request.getVerb()).isEqualTo(Verb.QUESTION_UPDATE);
             assertThat(request.getStatus()).isEqualTo(Status.REQUEST);
             assertThat(request.getErrorCode()).isNull();
             assertThat(request.getPayload()).isSameAs(payload);
@@ -50,8 +50,8 @@ class MessageTest {
         @Test
         @DisplayName("two requests never share a requestId")
         void requestIdsAreUnique() {
-            Message first = Message.request(Verb.GET_ALL_QUESTIONS, null);
-            Message second = Message.request(Verb.GET_ALL_QUESTIONS, null);
+            Message first = Message.request(Verb.BANK_LIST, null);
+            Message second = Message.request(Verb.BANK_LIST, null);
 
             assertThat(first.getRequestId()).isNotEqualTo(second.getRequestId());
         }
@@ -65,11 +65,11 @@ class MessageTest {
         @Test
         @DisplayName("ok(request, payload) echoes verb and requestId")
         void okEchoesCorrelation() {
-            Message request = Message.request(Verb.GET_ALL_QUESTIONS, null);
+            Message request = Message.request(Verb.BANK_LIST, null);
 
             Message response = Message.ok(request, List.of());
 
-            assertThat(response.getVerb()).isEqualTo(Verb.GET_ALL_QUESTIONS);
+            assertThat(response.getVerb()).isEqualTo(Verb.BANK_LIST);
             assertThat(response.getRequestId()).isEqualTo(request.getRequestId());
             assertThat(response.getStatus()).isEqualTo(Status.OK);
             assertThat(response.getErrorCode()).isNull();
@@ -97,11 +97,11 @@ class MessageTest {
         @Test
         @DisplayName("error() echoes correlation and wraps the text in an ErrorPayload")
         void errorCarriesCodeAndPayload() {
-            Message request = Message.request(Verb.UPDATE_QUESTION, null);
+            Message request = Message.request(Verb.QUESTION_UPDATE, null);
 
             Message response = Message.error(request, ErrorCode.VALIDATION, "Answer is required.");
 
-            assertThat(response.getVerb()).isEqualTo(Verb.UPDATE_QUESTION);
+            assertThat(response.getVerb()).isEqualTo(Verb.QUESTION_UPDATE);
             assertThat(response.getRequestId()).isEqualTo(request.getRequestId());
             assertThat(response.getStatus()).isEqualTo(Status.ERROR);
             assertThat(response.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
@@ -225,7 +225,7 @@ class MessageTest {
         @Test
         @DisplayName("the requestId survives, so correlation works across the socket")
         void requestIdSurvives() throws Exception {
-            Message request = Message.request(Verb.GET_ALL_QUESTIONS, null);
+            Message request = Message.request(Verb.BANK_LIST, null);
 
             assertThat(roundTrip(request).getRequestId()).isEqualTo(request.getRequestId());
         }
@@ -233,18 +233,18 @@ class MessageTest {
         @Test
         @DisplayName("a list payload survives intact")
         void listPayloadRoundTrips() throws Exception {
-            List<Question> questions = List.of(
-                    new Question(1, "Capital of France?", "Paris"),
-                    new Question(2, "√81 = ?", "9"));
+            List<QuestionRequest> questions = List.of(
+                    new QuestionRequest("21014"),
+                    new QuestionRequest("21015"));
 
-            Message restored = roundTrip(Message.ok(Message.request(Verb.GET_ALL_QUESTIONS, null), questions));
+            Message restored = roundTrip(Message.ok(Message.request(Verb.BANK_LIST, null), questions));
 
             assertThat(restored.isOk()).isTrue();
             @SuppressWarnings("unchecked")
-            List<Question> payload = (List<Question>) restored.getPayload();
+            List<QuestionRequest> payload = (List<QuestionRequest>) restored.getPayload();
             assertThat(payload).hasSize(2);
-            assertThat(payload.get(0).getQuestionText()).isEqualTo("Capital of France?");
-            assertThat(payload.get(1).getAnswer()).isEqualTo("9");
+            assertThat(payload.get(0).displayId5()).isEqualTo("21014");
+            assertThat(payload.get(1).displayId5()).isEqualTo("21015");
         }
 
         @Test

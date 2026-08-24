@@ -103,13 +103,13 @@ class BankWiringGuardTest {
             new Wiring("BankHandlers",
                     "no teacher can add, edit or delete a question - #25 exactly"),
             new Wiring("BankReadHandlers",
-                    "the bank list, the detail pane and the version history all answer nothing"),
-            // Legacy, and on the list precisely because it is. It is a bank handler in this
-            // assembly, it answers GET_ALL_QUESTIONS and UPDATE_QUESTION, and its Question.answer
-            // is a real key that the leak scan cannot see (contract section 1). When the
-            // retirement PR lands (section 7.4) this entry comes out and that diff is the proof.
-            new Wiring("LegacyQuestionHandlers",
-                    "the pre-E6 question screens stop answering, before their retirement PR"));
+                    "the bank list, the detail pane and the version history all answer nothing"));
+    // A third entry stood here: LegacyQuestionHandlers, on the list precisely because it was
+    // legacy. It was a bank handler in this assembly, it answered GET_ALL_QUESTIONS and
+    // UPDATE_QUESTION, and its Question.answer was a real key the leak scan could not see
+    // (contract section 1). The entry was written to fail the build the day the pair retired,
+    // so that its own removal could not be forgotten. The retirement PR landed (section 7.4)
+    // and this shrink is that diff. Two entries, and both of them are live code.
 
     @Test
     @DisplayName("defaultRouter constructs each bank handler and calls registerOn on it")
@@ -188,11 +188,12 @@ class BankWiringGuardTest {
         // is asked instead of the author being trusted.
         //
         // The first version of this pattern was `new (Bank\w*Handlers)\(` and a cold audit found
-        // its counterexample sitting in the very method it scans: LegacyQuestionHandlers is a
-        // bank handler in this assembly and the pattern could not see it, so the universal in
+        // its counterexample sitting in the very method it scans: LegacyQuestionHandlers was a
+        // bank handler in that assembly and the pattern could not see it, so the universal in
         // the DisplayName was false on the day it was written. Widened to anything named for the
-        // bank or for questions, singular or plural, which also catches the BankTopicsHandler
-        // that section 7.6 has already ruled is coming.
+        // bank or for questions, singular or plural. That handler has since retired, but the
+        // widening stays: it is what will catch the BankTopicsHandler section 7.6 has already
+        // ruled is coming, and narrowing it back would re-open the hole the audit found.
         Matcher found = Pattern.compile("new (\\w*(?:Bank|Question)\\w*Handlers?)\\(")
                 .matcher(defaultRouterBody());
 

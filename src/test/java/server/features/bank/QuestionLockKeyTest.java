@@ -80,11 +80,14 @@ class QuestionLockKeyTest {
     @Test
     @DisplayName("an id of the wrong width is refused, which is the @throws clause and no more")
     void wrongWidthIsRefused() {
-        // Deliberately NOT claiming this separates the key space from the legacy screen's
-        // primary keys. It does not: leadingZeroIsNotLost above keys 01003 as question#1003,
-        // which any auto-increment column reaches. The separation comes from the legacy screen
-        // taking no lock at all (LegacyScreenIsReadOnlyTest), and stating it here instead would
-        // be a second, false, home for that guarantee.
+        // Deliberately NOT claiming this carves out a key space of its own. It does not:
+        // leadingZeroIsNotLost above keys 01003 as question#1003, which any auto-increment
+        // column reaches. That overlap mattered while the legacy screen keyed the same
+        // EntityRef.QUESTION by primary key, and what kept the two apart was that screen taking
+        // no lock at all - never this width check. The retirement PR deleted the screen, so
+        // displayId5 is the sole scheme and there is nothing left to separate from; the point of
+        // this comment is that the check must not be mistaken for a licence to key something
+        // else through here.
         assertThatThrownBy(() -> QuestionLockKey.of("7"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("5 digits");

@@ -7,9 +7,11 @@ import common.dto.lock.EntityRef;
  *
  * <p>Edit locks are generic: {@link EntityRef} is a {@code (type, long id)} pair and the lock
  * service holds no domain knowledge at all. So somebody has to decide which number identifies a
- * question, and <b>there are two candidates</b>: the {@code questions} primary key, which the
- * legacy screen used, and the five-digit display id, which is the only identifier the versioned
- * bank's wire carries. {@code BankQuestionRow} and {@code QuestionDetail} have no PK on them.
+ * question. There were <b>two candidates</b>: the {@code questions} primary key, which the E0
+ * prototype screen used, and the five-digit display id, which is the only identifier the
+ * versioned bank's wire carries — {@code BankQuestionRow} and {@code QuestionDetail} have no PK
+ * on them. The retirement PR deleted the screen that held the first, so there is one candidate
+ * left and this file is where it is applied.
  *
  * <h2>The lead's ruling, and why it is a ruling rather than a preference</h2>
  *
@@ -17,8 +19,9 @@ import common.dto.lock.EntityRef;
  * can hold two different locks and never see each other. Asked on 2026-08-23 whether to add a
  * second {@code entityType} for the versioned bank, the lead ruled <b>no</b>: a second type would
  * keep that hazard alive for exactly as long as both screens exist, which is the window we would
- * be demoing in. The legacy retirement therefore folded into E6's last PR, and
- * {@code EntityRef.QUESTION} now numbers by {@code displayId5} with no second scheme anywhere.
+ * be demoing in. The legacy retirement therefore folded into E6's endgame, and since that PR
+ * {@code EntityRef.QUESTION} numbers by {@code displayId5} with no second scheme anywhere — the
+ * screen that held the other one no longer exists.
  *
  * <h2>Why this lives in the server tier</h2>
  *
@@ -74,13 +77,13 @@ public final class QuestionLockKey {
         // The length check the javadoc above promises, and which was missing: without it
         // of("7") returned question#7 and the @throws clause was false.
         //
-        // It does NOT make the key space disjoint from the legacy screen's primary keys, and an
-        // earlier version of this comment claimed it did. A five-digit display id does not start
-        // at 10000: course codes may lead with a zero, so 01003 keys question#1003, squarely
-        // inside auto-increment range - QuestionLockKeyTest.leadingZeroIsNotLost measures it.
-        // What actually keeps the two schemes apart is that the legacy screen takes no lock at
-        // all, which LegacyScreenIsReadOnlyTest.takesNoLock asserts against the source. Do not
-        // reach for this check as a licence to key something else through here.
+        // It does NOT carve out a disjoint key space, and an earlier version of this comment
+        // claimed it did. A five-digit display id does not start at 10000: course codes may lead
+        // with a zero, so 01003 keys question#1003, squarely inside primary-key auto-increment
+        // range - QuestionLockKeyTest.leadingZeroIsNotLost measures it. That overlap was harmless
+        // only because the prototype screen took no lock, and is moot now that it is deleted and
+        // displayId5 is the sole scheme. Do not reach for this check as a licence to key
+        // something else through here.
         if (trimmed.length() != DISPLAY_ID_LENGTH) {
             throw new IllegalArgumentException(
                     "question display id '" + trimmed + "' is not " + DISPLAY_ID_LENGTH

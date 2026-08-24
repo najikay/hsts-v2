@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
@@ -23,19 +28,23 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link SessionRoutes}, which is outside Member A's scope, so the code in this feature can be
  * complete, green and unreachable at the same time.
  *
- * <p><b>So this test is expected to fail until the assembly lands.</b> That is the point. A
+ * <p><b>This test was expected to fail until the assembly landed</b>, and that was the point. A
  * feature PR that goes green while its screen is not on any rail is the failure; a feature PR
- * that refuses to go green until somebody wires it is the guard working.
+ * that refuses to go green until somebody wires it is the guard working. Both assemblies have
+ * since landed and the retirement after them, so every case below now guards rather than waits.
  *
  * <h2>Why it reads {@link BankRoutes} and not {@code client.core.Routes}</h2>
  *
- * <p>{@code Routes.BANK} does not exist yet, and naming it would make this a <b>compile</b> error
- * rather than a test failure: the whole build would go down and tell a reader nothing about what
- * is missing. {@link BankRoutes} is the feature's own copy of the two spellings, used by every
- * button and every navigation in the package, so pinning it proves the screens are reachable
- * rather than that somebody typed one string twice.
+ * <p>Written when {@code Routes.BANK} did not exist: naming it would have made this a
+ * <b>compile</b> error rather than a test failure, taking the whole build down and telling a
+ * reader nothing about what was missing. {@link BankRoutes} is the feature's own copy of the two
+ * spellings, used by every button and every navigation in the package, so pinning it proves the
+ * screens are reachable rather than that somebody typed one string twice.
  * {@code AppArgsAndRoutesTest.notificationRoutesLineUp} pins the notification route ids for the
  * same reason.
+ *
+ * <p>The end-state case at the bottom is the exception and reads literals instead — see its own
+ * note. A constant that would move along with the mistake cannot pin the mistake.
  *
  * <h2>The mutations it has to reject</h2>
  *
@@ -53,11 +62,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       on the editor that can only be refused.</li>
  * </ol>
  *
- * <p>Plus one that belongs to the sequencing rather than to either screen: the legacy screen
- * leaving the rail before its replacement is on it, which would take the question bank away from
- * every teacher for the length of the gap. That is the one this PR stack actually risks, and it
- * is why the lead ruled that rail id {@code questions} keeps serving the legacy screen until the
- * retirement PR.
+ * <p>Plus one that belonged to the sequencing rather than to either screen: the legacy screen
+ * leaving the rail before its replacement was on it, which would have taken the question bank
+ * away from every teacher for the length of the gap. That is what the lead's ruling of
+ * 2026-08-23 prevented — rail id {@code questions} kept serving the legacy screen until the
+ * retirement PR swapped the screen and left the id alone. The sequencing case has been replaced
+ * by the end-state case it was protecting: the rail id resolves to {@code BankView}, and the
+ * interim id is gone.
  *
  * <h2>Why the principal is a negative case, when the contract lets her read the bank</h2>
  *
@@ -72,11 +83,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * offering-versus-permission distinction case 3 above already makes about students, applied
  * inconsistently one role over.
  *
- * <p><b>All four negative cases pass vacuously until the assembly lands</b>, because neither
- * route is offered to anybody yet. Said out loud rather than left for a reader to assume
- * otherwise: they are green today for the same reason the positives are red, and they only start
- * guarding anything the moment the routes exist. The vacuity assertion in each is the most that
- * can be checked before then.
+ * <p><b>The four negative cases passed vacuously until the assembly landed</b>, because neither
+ * route was offered to anybody. They are live now — both routes exist and are offered to the two
+ * authoring roles — so the vacuity assertion in each has stopped being the only thing it checks.
+ * The assertions are kept rather than removed: they are what would catch a future role list that
+ * lost its shape, and a guard against vacuity costs one line.
  */
 class BankScreenWiringGuardTest {
 
@@ -92,8 +103,25 @@ class BankScreenWiringGuardTest {
     /** The editor's id, on the same terms. */
     private static final String EDITOR_ROUTE_ID = BankRoutes.EDITOR;
 
-    /** The rail id the legacy screen keeps until the retirement PR (the lead's ruling). */
-    private static final String LEGACY_ROUTE_ID = "questions";
+    /**
+     * The rail id, spelled as a literal on purpose.
+     *
+     * <p>{@link #BANK_ROUTE_ID} now reads {@code "questions"} too, and pinning the end state
+     * against a constant that would move with a mistake proves nothing. This is the id a
+     * teacher's rail item has carried since E5.4 and the one the lead's ruling of 2026-08-23
+     * protected through the retirement; if {@code BankRoutes.LIST} is ever pointed somewhere
+     * else, the assertions below must fail rather than follow it.
+     */
+    private static final String RAIL_ROUTE_ID = "questions";
+
+    /**
+     * The interim id, kept as a literal so its absence is checkable.
+     *
+     * <p>It was {@code BankRoutes.LIST}'s value while the legacy screen held the rail, and there
+     * is no constant left to read it from — which is the point: a retired id has to be named to
+     * be asserted gone.
+     */
+    private static final String INTERIM_ROUTE_ID = "bank";
 
     /**
      * Everyone this SCREEN is for: the two roles that may write into the bank.
@@ -202,14 +230,79 @@ class BankScreenWiringGuardTest {
         assertThat(offers(Role.STUDENT, BANK_ROUTE_ID)).isFalse();
     }
 
+    /**
+     * The end state, pinned so the two ids cannot quietly split again (retirement PR).
+     *
+     * <p>This replaces {@code theLegacyScreenIsStillReachable}, which asserted the same rail id
+     * was serving the <em>legacy</em> screen and existed to stop that screen leaving the rail
+     * before its replacement arrived. Both halves of that ruling are now discharged: the rail id
+     * survived and the screen behind it is the versioned bank.
+     *
+     * <p>Three assertions rather than one, because "the id is offered" was true before this PR
+     * too and would be true again under any future re-split. What is new is <b>which class</b>
+     * answers to it, and that the interim id is gone — a change that re-introduced {@code "bank"}
+     * as a second bank route would pass the first assertion and fail the third.
+     */
     @Test
-    @DisplayName("the legacy screen keeps its rail id until the retirement PR")
-    void theLegacyScreenIsStillReachable() {
-        assertThat(offers(Role.TEACHER, LEGACY_ROUTE_ID))
-                .as("Rail id '%s' must keep serving the legacy screen until E6's last PR swaps "
-                        + "it (the lead's ruling, 2026-08-23). Removing it before the "
-                        + "replacement is on the rail takes the question bank away from every "
-                        + "teacher for the length of the gap.", LEGACY_ROUTE_ID)
+    @DisplayName("⚑ rail id 'questions' resolves to BankView for both teaching roles")
+    void theRailIdServesTheVersionedBank() {
+        for (Role role : MAY_BROWSE) {
+            assertThat(offers(role, RAIL_ROUTE_ID))
+                    .as("Rail id '%s' is the question bank's, and has been since E5.4. The "
+                            + "retirement PR swapped the screen behind it and left the id alone, "
+                            + "so %s must still be offered it.", RAIL_ROUTE_ID, role)
+                    .isTrue();
+
+        }
+
+        assertThat(buildsTheVersionedBank())
+                .as("Rail id '%s' must map to BankView in SessionRoutes.builderFor. Before the "
+                        + "retirement PR it mapped to the E0 prototype list; if it is ever pointed "
+                        + "at anything else, every teacher's Question Bank item opens a different "
+                        + "screen while every assertion about the id above still passes.",
+                        RAIL_ROUTE_ID)
                 .isTrue();
+
+        assertThat(SessionRoutes.routesFor(Role.TEACHER)).extracting(Route::id)
+                .as("The interim id '%s' existed only so the versioned bank could be reached "
+                        + "while the legacy screen still held the rail. Both are retired, and a "
+                        + "second live id for one screen is how the two drift apart again.",
+                        INTERIM_ROUTE_ID)
+                .doesNotContain(INTERIM_ROUTE_ID)
+                .contains(RAIL_ROUTE_ID);
+    }
+
+    /**
+     * Reads the mapping out of {@link SessionRoutes} rather than building the screen.
+     *
+     * <p>{@code ScreenFactory.get} would answer this directly and is the honest way to ask, but
+     * it <em>builds</em>: {@code BankView} creates its {@code VBox}, its {@code DataTable} and a
+     * dozen controls in field initialisers, so calling it needs a booted JavaFX toolkit. That
+     * would turn a wiring guard into an FX test, for a property that is a line of source.
+     *
+     * <p>So this uses the shape {@code BankWiringGuardTest} uses on the server assembly, for the
+     * same reason and with the same limitation stated: it proves the mapping is <em>written</em>,
+     * not that it runs. {@code BankScreenInteractionTest} drives the built screen and is where
+     * "it actually works" is established. Comments are stripped first, so commenting the branch
+     * out reads as deleting it.
+     */
+    private static boolean buildsTheVersionedBank() {
+        String dense = readSessionRoutes()
+                .replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("//[^\\n]*", "")
+                .replaceAll("\\s+", "");
+
+        return dense.contains("Routes.QUESTIONS.id().equals(route.id())){returnBankView::new;");
+    }
+
+    private static String readSessionRoutes() {
+        Path source = Path.of("src", "main", "java", "client", "core", "SessionRoutes.java");
+        try {
+            return Files.readString(source, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not read " + source.toAbsolutePath()
+                    + "; this guard reads the assembly's own source, so it runs from the "
+                    + "repository root", e);
+        }
     }
 }

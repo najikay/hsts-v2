@@ -49,16 +49,20 @@
  * one that ends up in screenshots, so the key is fetched a question at a time by a verb that
  * names a single question.
  *
- * <h2>What the guard does not cover, said out loud</h2>
+ * <h2>The qualification that used to live here, and why it is gone</h2>
  *
- * <p>{@link common.dto.bank.Question} and {@link common.dto.bank.QuestionUpdate} are the legacy
- * prototype pair, still serving {@code GET_ALL_QUESTIONS} and {@code UPDATE_QUESTION}.
- * {@code Question.answer} is a real answer key and it is invisible to the scan twice over: the
- * name {@code answer} matches nothing in {@code CorrectnessNames} (deliberately, since
- * {@code answer1..answer4} are options a student is meant to see), and {@code Question} is a
- * mutable class rather than a record. They stay for now, on a <b>named, dated allow-list entry</b>
- * in the guard, so "the build says so" is qualified in the one place a reader will look rather
- * than being quietly false. Retirement is a scheduled PR after E6 merges.
+ * <p>{@code Question} and {@code QuestionUpdate} were the legacy prototype pair, serving
+ * {@code GET_ALL_QUESTIONS} and {@code UPDATE_QUESTION}. {@code Question.answer} was a real answer
+ * key invisible to the scan twice over: the name {@code answer} matches nothing in
+ * {@code CorrectnessNames} (deliberately, since {@code answer1..answer4} are options a student is
+ * meant to see), and {@code Question} was a mutable class rather than a record. They sat on a
+ * named, dated allow-list entry in the guard so that "the build says so" was qualified in the one
+ * place a reader would look rather than being quietly false.
+ *
+ * <p><b>The retirement PR deleted both types, both verbs and the screen that sent them</b>, and
+ * took the allow-list entry with them. Every type left in this package is a record and every one
+ * of them is inside the scan, so the claim is now unqualified: the four licensed types are the
+ * only key carriers here and the build checks it.
  *
  * <h2>Conventions, and where the contract left a shape open</h2>
  *

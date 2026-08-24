@@ -71,7 +71,7 @@ class MessageRouterTest {
             assertThat(router.isRegistered(Verb.LOGOUT)).isTrue();
             assertThat(router.isOpen(Verb.LOGOUT)).isFalse();
             assertThat(router.isOpen(Verb.LOGIN)).isTrue();
-            assertThat(router.isRegistered(Verb.GET_ALL_QUESTIONS)).isFalse();
+            assertThat(router.isRegistered(Verb.BANK_LIST)).isFalse();
             assertThat(router.registeredVerbs()).containsExactlyInAnyOrder(Verb.LOGOUT, Verb.LOGIN);
         }
 
@@ -102,13 +102,13 @@ class MessageRouterTest {
         @Test
         @DisplayName("dispatches to the registered handler and echoes the correlation")
         void dispatchesToHandler() {
-            router.registerOpen(Verb.GET_ALL_QUESTIONS, (caller, request) -> reply(request, "questions"));
-            Message request = Message.request(Verb.GET_ALL_QUESTIONS, null);
+            router.registerOpen(Verb.BANK_LIST, (caller, request) -> reply(request, "questions"));
+            Message request = Message.request(Verb.BANK_LIST, null);
 
             Message response = router.route(request, CallerContext.anonymous(connection));
 
             assertThat(response.getStatus()).isEqualTo(Status.OK);
-            assertThat(response.getVerb()).isEqualTo(Verb.GET_ALL_QUESTIONS);
+            assertThat(response.getVerb()).isEqualTo(Verb.BANK_LIST);
             assertThat(response.getRequestId()).isEqualTo(request.getRequestId());
             assertThat(response.getPayload()).isEqualTo("questions");
         }
@@ -177,9 +177,9 @@ class MessageRouterTest {
         @Test
         @DisplayName("an open verb is served without a session (the pre-login prototype flow)")
         void openVerbNeedsNoSession() {
-            router.registerOpen(Verb.GET_ALL_QUESTIONS, (caller, request) -> reply(request, "ok"));
+            router.registerOpen(Verb.BANK_LIST, (caller, request) -> reply(request, "ok"));
 
-            Message response = router.route(Message.request(Verb.GET_ALL_QUESTIONS, null),
+            Message response = router.route(Message.request(Verb.BANK_LIST, null),
                     CallerContext.anonymous(connection));
 
             assertThat(response.isOk()).isTrue();
@@ -265,7 +265,7 @@ class MessageRouterTest {
         void runtimeExceptionIsGeneric() {
             router.registerOpen(Verb.LOGIN, (caller, request) -> {
                 throw new IllegalStateException(
-                        "jdbc:mysql://10.0.0.5/hsts?user=root — NullPointerException at QuestionDAO:42");
+                        "jdbc:mysql://10.0.0.5/hsts?user=root — NullPointerException at QuestionRepository:42");
             });
 
             Message response = router.route(Message.request(Verb.LOGIN, null),
@@ -275,7 +275,7 @@ class MessageRouterTest {
             assertThat(response.errorMessage()).isEqualTo(MessageRouter.GENERIC_INTERNAL_MESSAGE);
             assertThat(response.toString())
                     .doesNotContain("jdbc")
-                    .doesNotContain("QuestionDAO")
+                    .doesNotContain("QuestionRepository")
                     .doesNotContain("IllegalStateException");
         }
 
@@ -301,9 +301,9 @@ class MessageRouterTest {
         @Test
         @DisplayName("writes exactly one response back to the connection")
         void sendsTheResponse() throws IOException {
-            router.registerOpen(Verb.GET_ALL_QUESTIONS, (caller, request) -> reply(request, "list"));
+            router.registerOpen(Verb.BANK_LIST, (caller, request) -> reply(request, "list"));
 
-            router.handle(Message.request(Verb.GET_ALL_QUESTIONS, null), connection);
+            router.handle(Message.request(Verb.BANK_LIST, null), connection);
 
             ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
             verify(connection).sendToClient(captor.capture());

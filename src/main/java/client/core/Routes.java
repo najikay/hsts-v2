@@ -50,28 +50,25 @@ public final class Routes {
     public static final Route SETTINGS = Route.shell("settings", "Settings");
 
     /**
-     * The E0 prototype question list, kept reachable so the app stays runnable
-     * end-to-end while E6 rewrites the real bank screens. Teaching roles only.
+     * The versioned question bank (E6.9, F2.4/F2.5) — the list, the filters and the detail
+     * pane. Teaching roles only; the principal's read of the bank is the Data screen (E15.2),
+     * because this screen carries Delete and Edit (the lead's ruling on #41).
+     *
+     * <p>The id is {@code "questions"} because that is what {@code RoleNav} has spelled since
+     * E5.4 and what the E0 prototype list answered to until the retirement PR. The rail item
+     * survived that PR and the screen behind it did not: the interim id {@code "bank"} existed
+     * only so the two could be live at once, and retired with the screen it was routing around.
+     * Same swap E13 made for My Grades and E14 for Results — a new screen behind a rail id that
+     * never moved.
      */
     public static final Route QUESTIONS = Route.shell("questions", "Question bank");
-
-    /**
-     * The versioned question bank (E6.9, F2.4/F2.5). Teaching roles only; the principal's
-     * read of the bank is the Data screen (E15.2), because this screen carries Delete and,
-     * with E6.10, Edit (the lead's ruling on #41).
-     *
-     * <p>Not on any rail yet: rail id {@code questions} keeps serving the legacy screen until
-     * E6's retirement PR swaps it, so this is reached from the banner on that screen. Two-arg
-     * shell on purpose - when the retirement lands, the rail item moves here.
-     */
-    public static final Route BANK = Route.shell("bank", "Question bank");
 
     /**
      * The question editor (E6.10/E6.11, F2.1/F2.2, C-8). Teaching roles only, for the
      * bank's reason exactly. Not on any rail: it is a view of one question (or of one
      * about to exist), reached from the bank list's New and Edit buttons, which carry
-     * what it needs through nav parameters. The id is spelled for the end state
-     * ({@code questions.edit}) so the retirement PR renames nothing.
+     * what it needs through nav parameters. The id was spelled for the end state
+     * ({@code questions.edit}) from the start, so the retirement PR renamed nothing here.
      */
     public static final Route QUESTION_EDIT = Route.shell("questions.edit", "Edit question");
 
@@ -250,7 +247,7 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING, REPORTS, DATA, BANK, QUESTION_EDIT);
+                CHECKED_FORM, GRADING, REPORTS, DATA, QUESTION_EDIT);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */
