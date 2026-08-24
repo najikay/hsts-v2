@@ -72,84 +72,114 @@ final class BotSection implements SeedSection {
 
     private static final List<SeedBot> BOTS = List.of(
             // Two names carry an em dash in the document; PRD 4.1 forbids it on screen.
-            new SeedBot("11", "עוזר הלימוד: אלגברה", true, "dana.cohen"),
-            new SeedBot("12", "עוזר הלימוד: חדו\"א", true, "dana.cohen"),
+            new SeedBot("11", "Study assistant: Algebra", true, "dana.cohen"),
+            new SeedBot("12", "Study assistant: Calculus", true, "dana.cohen"),
             new SeedBot("21", "Java Study Assistant", true, "avi.mizrahi"),
             // Inactive: the S-31 refusal demo has nothing to show without it.
             new SeedBot("22", "Databases Study Assistant", false, "michal.sharon"));
 
     private static final List<SeedSource> SOURCES = List.of(
-            new SeedSource(1, "משוואות ליניאריות: סיכום",
-                    "משוואה ליניארית היא משוואה שבה המשתנה מופיע בחזקה ראשונה בלבד, ללא חזקות, "
-                            + "שורשים או מכפלות של נעלמים. הצורה הכללית היא ax + b = 0 כאשר a שונה מאפס, "
-                            + "והפתרון היחיד הוא x = -b/a. הפתרון מתבצע על ידי בידוד המשתנה: מעבירים "
-                            + "אגפים תוך שינוי סימן, מכנסים איברים דומים, ולבסוף מחלקים במקדם של המשתנה. "
-                            + "כאשר יש שברים במשוואה נהוג לכפול את שני האגפים במכנה המשותף כדי להיפטר מהם "
-                            + "לפני הבידוד. כאשר יש סוגריים פותחים אותם תחילה לפי חוק הפילוג. מערכת של "
-                            + "שתי משוואות בשני נעלמים נפתרת באחת משתי שיטות. בשיטת ההצבה מבודדים משתנה "
-                            + "אחד מאחת המשוואות ומציבים את הביטוי שהתקבל במשוואה השנייה. בשיטת החיבור "
-                            + "והחיסור כופלים את המשוואות במספרים מתאימים כך שמקדמי אחד המשתנים יהיו "
-                            + "נגדיים, ואז מחברים את המשוואות והמשתנה מצטמצם. שתי השיטות נותנות את אותה "
-                            + "תשובה, והבחירה ביניהן היא עניין של נוחות: הצבה נוחה כשמקדם של אחד המשתנים "
-                            + "הוא אחד, וחיבור וחיסור נוח כשהמקדמים כבר קרובים. לכל מערכת יש שלוש "
-                            + "אפשרויות בלבד, ולכולן יש משמעות גאומטרית. אם הישרים נחתכים בנקודה אחת יש "
-                            + "פתרון יחיד. אם שתי המשוואות מתארות את אותו ישר יש אינסוף פתרונות, ובפתרון "
-                            + "האלגברי יתקבל פסוק אמת כמו 0 = 0. אם הן מתארות ישרים מקבילים אין פתרון "
-                            + "כלל, ובפתרון יתקבל פסוק שקר כמו 0 = 5. הטעות הנפוצה ביותר היא שכחת שינוי "
-                            + "הסימן במעבר אגף."),
-            new SeedSource(1, "פונקציות ריבועיות: פרק 3",
-                    "פונקציה ריבועית היא פונקציה מהצורה y = ax² + bx + c כאשר a שונה מאפס. הגרף "
-                            + "שלה הוא פרבולה, ומקדם a קובע את כיוון הפתיחה: אם a חיובי הפרבולה פותחת "
-                            + "כלפי מעלה ויש לה נקודת מינימום, ואם a שלילי היא פותחת כלפי מטה ויש לה "
-                            + "נקודת מקסימום. ככל שהערך המוחלט של a גדול יותר, הפרבולה צרה יותר. שורשי "
-                            + "הפונקציה, כלומר נקודות החיתוך עם ציר ה-x, נמצאים על ידי הנוסחה x = (-b ± "
-                            + "√(b²-4ac)) / 2a. הביטוי b²-4ac נקרא דיסקרימיננטה ומסומן בדרך כלל באות "
-                            + "דלתא. הוא קובע את מספר השורשים: אם הוא חיובי יש שני שורשים שונים, אם הוא "
-                            + "אפס יש שורש כפול אחד והפרבולה משיקה לציר ה-x, ואם הוא שלילי אין שורשים "
-                            + "ממשיים והפרבולה כולה נמצאת מעל הציר או מתחתיו. נקודת החיתוך עם ציר ה-y "
-                            + "מתקבלת תמיד בהצבת x = 0 ולכן שווה ל-c. ציר הסימטריה של הפרבולה הוא הישר x "
-                            + "= -b/2a, וקודקוד הפרבולה נמצא על ציר זה. הצבת ערך זה בפונקציה נותנת את ערך "
-                            + "הקיצון. כאשר ידועים שני השורשים, ציר הסימטריה נמצא גם באמצע ביניהם, וזו "
-                            + "דרך מהירה יותר לחשב את הקודקוד. ניתן לכתוב את הפונקציה גם בצורת קודקוד y = "
-                            + "a(x-p)² + k, כאשר (p,k) הוא הקודקוד. צורה זו נוחה לשרטוט ולזיהוי הזזות של "
-                            + "הגרף."),
-            new SeedSource(2, "גבולות: הגדרה ושימוש",
-                    "גבול של פונקציה בנקודה מתאר לאן מתקרבים ערכי הפונקציה כאשר המשתנה מתקרב "
-                            + "לנקודה, בלי להתייחס כלל לערך הפונקציה בנקודה עצמה. זו הבחנה מהותית: "
-                            + "פונקציה יכולה להיות לא מוגדרת בנקודה ובכל זאת יהיה לה גבול שם, ולהפך, ערך "
-                            + "הפונקציה בנקודה יכול להיות שונה מהגבול. כאשר הגבול קיים ושווה לערך "
-                            + "הפונקציה בנקודה, אומרים שהפונקציה רציפה באותה נקודה. ניתן להתקרב לנקודה "
-                            + "משני הכיוונים, ולכן מוגדרים גם גבול מימין וגבול משמאל. הגבול קיים אם ורק "
-                            + "אם שני הגבולות החד-צדדיים קיימים ושווים זה לזה. כאשר הם שונים, הפונקציה "
-                            + "קופצת בנקודה ואין לה גבול שם. בחישוב מנסים תחילה הצבה ישירה. אם ההצבה "
-                            + "נותנת מספר, זהו הגבול. כאשר הצבה ישירה נותנת ביטוי מהצורה אפס חלקי אפס "
-                            + "מדובר בגבול לא מוגדר שדורש טיפול אלגברי לפני ההצבה. שלוש השיטות המרכזיות "
-                            + "הן פירוק לגורמים וצמצום הגורם המשותף שמאפס את המכנה, הכפלה בצמוד כאשר "
-                            + "מופיע שורש, ושימוש בגבולות מיוחדים ידועים. אם ההצבה נותנת מספר שונה מאפס "
-                            + "חלקי אפס, הגבול הוא אינסוף או מינוס אינסוף ולפונקציה יש אסימפטוטה אנכית "
-                            + "באותה נקודה. גבול באינסוף מתאר את התנהגות הפונקציה לטווח רחוק. בפונקציה "
-                            + "רציונלית משווים את חזקות המונה והמכנה: אם החזקה במכנה גדולה יותר הגבול הוא "
-                            + "אפס, אם הן שוות הגבול הוא יחס המקדמים המובילים, ואם החזקה במונה גדולה יותר "
-                            + "הגבול הוא אינסוף. גבול סופי באינסוף מציין אסימפטוטה אופקית."),
-            new SeedSource(2, "כללי גזירה",
-                    "הנגזרת מודדת את קצב השינוי של פונקציה, ומבחינה גאומטרית היא שיפוע המשיק "
-                            + "לגרף הפונקציה בנקודה. הגדרתה היא גבול של יחס ההפרשים כאשר ההפרש שואף לאפס, "
-                            + "אך בפועל מחשבים אותה באמצעות כללי גזירה ולא מההגדרה. כללי הגזירה הבסיסיים: "
-                            + "נגזרת של קבוע היא אפס; נגזרת של x בחזקת n היא n כפול x בחזקת n פחות אחת; "
-                            + "נגזרת של סכום היא סכום הנגזרות; ונגזרת של קבוע כפול פונקציה היא הקבוע כפול "
-                            + "הנגזרת. נגזרת של מכפלה נתונה על ידי f'g + fg', ושימו לב שהיא אינה מכפלת "
-                            + "הנגזרות. נגזרת של מנה נתונה על ידי (f'g - fg')/g², והסדר במונה חשוב. כלל "
-                            + "השרשרת קובע שנגזרת של הרכבת פונקציות היא מכפלת הנגזרת החיצונית בנגזרת "
-                            + "הפנימית, והוא הכלל הנחוץ בכל פעם שמופיעה פונקציה בתוך פונקציה. השימוש "
-                            + "המרכזי של הנגזרת הוא חקירת פונקציות. נקודות קיצון חשודות נמצאות היכן "
-                            + "שהנגזרת מתאפסת. כדי לקבוע את סוג הקיצון בודקים את סימן הנגזרת משני צדי "
-                            + "הנקודה: מעבר מחיובי לשלילי מציין מקסימום, ומעבר משלילי לחיובי מציין "
-                            + "מינימום. לחלופין משתמשים במבחן הנגזרת השנייה: אם הנגזרת השנייה בנקודה "
-                            + "חיובית מדובר במינימום, ואם היא שלילית מדובר במקסימום. הפונקציה עולה בקטע "
-                            + "שבו הנגזרת חיובית ויורדת בקטע שבו היא שלילית. נקודות שבהן הנגזרת השנייה "
-                            + "מתאפסת ומחליפה סימן הן נקודות פיתול, שבהן משתנה כיוון הקעירות של הגרף. "
-                            + "חקירה מלאה כוללת תחום הגדרה, נקודות חיתוך עם הצירים, תחומי עלייה וירידה "
-                            + "ונקודות הקיצון."),
+            new SeedSource(1, "Linear equations: a summary",
+                    "A linear equation is an equation in which the variable appears only to the "
+                            + "first power, with no powers, roots or products of unknowns. Its general "
+                            + "form is ax + b = 0 where a is not zero, and its single solution is x = "
+                            + "-b/a. It is solved by isolating the variable: move terms across the equals "
+                            + "sign changing their sign, collect like terms, and finally divide by the "
+                            + "coefficient of the variable. When the equation contains fractions, "
+                            + "multiply both sides by the common denominator to clear them before "
+                            + "isolating. When it contains brackets, open them first using the "
+                            + "distributive law. A system of two equations in two unknowns is solved by "
+                            + "one of two methods. In substitution, isolate one variable in one of the "
+                            + "equations and substitute the resulting expression into the second. In "
+                            + "elimination, multiply the equations by suitable numbers so that the "
+                            + "coefficients of one variable are opposite, then add the equations and that "
+                            + "variable cancels out. Both methods give the same answer, and choosing "
+                            + "between them is a matter of convenience: substitution is easy when one "
+                            + "variable has a coefficient of one, and elimination is easy when the "
+                            + "coefficients are already close. Every system has exactly three "
+                            + "possibilities, and each of them has a geometric meaning. If the lines "
+                            + "cross at one point there is a single solution. If both equations describe "
+                            + "the same line there are infinitely many solutions, and the algebra ends in "
+                            + "a true statement such as 0 = 0. If they describe parallel lines there is "
+                            + "no solution at all, and the algebra ends in a false statement such as 0 = "
+                            + "5. The most common mistake is forgetting to change the sign when moving a "
+                            + "term across."),
+            new SeedSource(1, "Quadratic functions: chapter 3",
+                    "A quadratic function is a function of the form y = ax² + bx + c where a is "
+                            + "not zero. Its graph is a parabola, and the coefficient a decides which way "
+                            + "it opens: if a is positive the parabola opens upwards and has a minimum "
+                            + "point, and if a is negative it opens downwards and has a maximum point. "
+                            + "The larger the absolute value of a, the narrower the parabola. The roots "
+                            + "of the function, meaning the points where it crosses the x axis, are found "
+                            + "with the formula x = (-b ± √(b²-4ac)) / 2a. The expression b²-4ac is "
+                            + "called the discriminant and is usually written as delta. It decides how "
+                            + "many roots there are: if it is positive there are two different roots, if "
+                            + "it is zero there is a single double root and the parabola touches the x "
+                            + "axis, and if it is negative there are no real roots and the whole parabola "
+                            + "lies either above the axis or below it. The point where the graph crosses "
+                            + "the y axis is always found by substituting x = 0 and therefore equals c. "
+                            + "The axis of symmetry of the parabola is the line x = -b/2a, and the vertex "
+                            + "of the parabola lies on that axis. Substituting this value into the "
+                            + "function gives the extreme value. When both roots are known, the axis of "
+                            + "symmetry is also halfway between them, which is a quicker way to compute "
+                            + "the vertex. The function can also be written in vertex form y = a(x-p)² + "
+                            + "k, where (p,k) is the vertex. That form is convenient for sketching and "
+                            + "for recognising translations of the graph."),
+            new SeedSource(2, "Limits: definition and use",
+                    "The limit of a function at a point describes what the values of the "
+                            + "function approach as the variable approaches that point, without referring "
+                            + "at all to the value of the function at the point itself. That distinction "
+                            + "is essential: a function can be undefined at a point and still have a "
+                            + "limit there, and conversely the value of the function at a point can "
+                            + "differ from the limit. When the limit exists and equals the value of the "
+                            + "function at the point, the function is said to be continuous at that "
+                            + "point. A point can be approached from either direction, so a limit from "
+                            + "the right and a limit from the left are defined as well. The limit exists "
+                            + "if and only if both one-sided limits exist and are equal to each other. "
+                            + "When they differ, the function jumps at that point and has no limit there. "
+                            + "To compute one, try direct substitution first. If the substitution gives a "
+                            + "number, that number is the limit. When direct substitution gives an "
+                            + "expression of the form zero over zero, the limit is indeterminate and "
+                            + "needs algebraic work before substituting. The three main techniques are "
+                            + "factorising and cancelling the common factor that makes the denominator "
+                            + "zero, multiplying by the conjugate when a root appears, and using known "
+                            + "special limits. If the substitution gives a number other than zero over "
+                            + "zero, the limit is infinity or minus infinity and the function has a "
+                            + "vertical asymptote at that point. A limit at infinity describes the "
+                            + "behaviour of the function far out. For a rational function, compare the "
+                            + "powers of the numerator and the denominator: if the power in the "
+                            + "denominator is larger the limit is zero, if they are equal the limit is "
+                            + "the ratio of the leading coefficients, and if the power in the numerator "
+                            + "is larger the limit is infinity. A finite limit at infinity indicates a "
+                            + "horizontal asymptote."),
+            new SeedSource(2, "Rules of differentiation",
+                    "The derivative measures the rate of change of a function, and "
+                            + "geometrically it is the slope of the tangent to the graph of the function "
+                            + "at a point. It is defined as the limit of the difference quotient as the "
+                            + "difference tends to zero, but in practice it is computed with the rules of "
+                            + "differentiation rather than from the definition. The basic rules of "
+                            + "differentiation: the derivative of a constant is zero; the derivative of x "
+                            + "to the power n is n times x to the power n minus one; the derivative of a "
+                            + "sum is the sum of the derivatives; and the derivative of a constant times "
+                            + "a function is the constant times the derivative. The derivative of a "
+                            + "product is given by f'g + fg', and note that it is not the product of the "
+                            + "derivatives. The derivative of a quotient is given by (f'g - fg')/g², and "
+                            + "the order in the numerator matters. The chain rule states that the "
+                            + "derivative of a composition of functions is the outer derivative times the "
+                            + "inner derivative, and it is the rule needed every time one function "
+                            + "appears inside another. The main use of the derivative is investigating "
+                            + "functions. Candidate extreme points are found where the derivative is "
+                            + "zero. To decide which kind of extreme point it is, check the sign of the "
+                            + "derivative on both sides of the point: a change from positive to negative "
+                            + "indicates a maximum, and a change from negative to positive indicates a "
+                            + "minimum. Alternatively use the second derivative test: if the second "
+                            + "derivative at the point is positive it is a minimum, and if it is negative "
+                            + "it is a maximum. The function increases on an interval where the "
+                            + "derivative is positive and decreases on an interval where it is negative. "
+                            + "Points where the second derivative is zero and changes sign are inflection "
+                            + "points, where the concavity of the graph changes direction. A full "
+                            + "investigation covers the domain, the intercepts with the axes, the "
+                            + "intervals of increase and decrease, and the extreme points."),
             new SeedSource(3, "OOP Fundamentals: Lecture Notes",
                     "Object-oriented programming in Java rests on four ideas. Encapsulation "
                             + "keeps fields private and exposes behaviour through methods, so an object "
@@ -243,17 +273,17 @@ final class BotSection implements SeedSection {
 
     private static final List<SeedSession> SESSIONS = List.of(
             new SeedSession(1, "noa.friedman", 12, "deepseek",
-                    "איך פותרים משוואה עם שברים?",
-                    "מכפילים את שני האגפים במכנה המשותף כדי להיפטר מהשברים, ואז פותרים כרגיל."),
+                    "How do you solve an equation with fractions?",
+                    "Multiply both sides by the common denominator to clear the fractions, then solve as usual."),
             new SeedSession(1, "maya.levi", 10, "deepseek",
-                    "מה זו דיסקרימיננטה?",
-                    "הביטוי b²-4ac. הסימן שלו קובע כמה שורשים ממשיים יש לפרבולה."),
+                    "What is a discriminant?",
+                    "The expression b²-4ac. Its sign decides how many real roots the parabola has."),
             new SeedSession(1, "noa.friedman", 9, "deepseek",
-                    "מתי לפרבולה אין שורשים?",
-                    "כאשר הדיסקרימיננטה שלילית, הפרבולה כולה מעל ציר x או כולה מתחתיו."),
+                    "When does a parabola have no roots?",
+                    "When the discriminant is negative, the whole parabola lies above the x axis or entirely below it."),
             new SeedSession(2, "tal.harari", 8, "deepseek",
-                    "למה הגבול של sin(x)/x באפס שווה 1?",
-                    "זהו גבול מיוחד שמוכיחים גיאומטרית בעזרת מעגל היחידה וכלל הסנדוויץ."),
+                    "Why is the limit of sin(x)/x at zero equal to 1?",
+                    "It is a special limit, proved geometrically with the unit circle and the squeeze theorem."),
             new SeedSession(3, "omer.katz", 6, "deepseek",
                     "When should I use a LinkedList instead of an ArrayList?",
                     "Only when you insert or remove at the ends far more often than you read by "

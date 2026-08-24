@@ -16,7 +16,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableRow;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -61,7 +60,7 @@ public final class MyApprovalsView extends AbstractScreen {
                 .emptyState(new EmptyState(Icons.EXAMS,
                         ApprovalCopy.MINE_EMPTY_TITLE, ApprovalCopy.MINE_EMPTY_HINT))
                 .onRetry(ApprovalCopy.MINE_LOAD_FAILED, () -> session.load());
-        table.table().setRowFactory(view -> openOnDoubleClick());
+        table.openOnClick(this::openPreview);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         openRejected.setOnAction(e -> session.focused().ifPresent(this::openPreview));
@@ -128,7 +127,10 @@ public final class MyApprovalsView extends AbstractScreen {
                 .column("Course", ApprovalRow::courseLabel)
                 .column("Questions", row -> ApprovalCopy.questions(row.questionCount()))
                 .column("Submitted", row -> ApprovalCopy.submittedAt(row.submittedAt()))
-                .column(statusColumn());
+                .column(statusColumn())
+                // Exam and Status carry their own widths above; the rest are sized to
+                // their content so a date is never clipped to "23 Au…" (F-9).
+                .columnWidths(260, 150, 110, 170, 180);
     }
 
     private static TableColumn<ApprovalRow, ApprovalRow> statusColumn() {
@@ -144,16 +146,6 @@ public final class MyApprovalsView extends AbstractScreen {
             }
         });
         return column;
-    }
-
-    private TableRow<ApprovalRow> openOnDoubleClick() {
-        TableRow<ApprovalRow> row = new TableRow<>();
-        row.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2 && !row.isEmpty()) {
-                openPreview(row.getItem());
-            }
-        });
-        return row;
     }
 
     /**

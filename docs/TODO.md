@@ -380,13 +380,13 @@ Client:
 Register and rulings: `docs/reports/lead/MANUAL-PASS-1.md` (English everywhere; no new
 animation dependencies — Motion system only).
 
-- [ ] W1.1 Notification popover from the bell (one click, click-outside + ESC close) — F-6
-- [ ] W1.2 Back-button convention on every drill-in screen; histogram full view first — F-7
-- [ ] W1.3 Single-click opens rows everywhere — F-8
-- [ ] W1.4 Global table-sizing pass (B-5 treatment on every table) — F-9
-- [ ] W1.5 Dashboard cards v1, all four roles, cards navigate — F-10
-- [ ] W1.6 Bot modal shadow + bot copy pass — F-11, F-14
-- [ ] W1.7 Profile-name control: menu or plain text — F-12
-- [ ] W1.8 Seed content to English (SeedArithmeticTest + DEMO_ACCOUNTS stay authoritative) — F-13
+- [x] W1.1 Notification popover from the bell (one click, click-outside + ESC close) — F-6
+- [x] W1.2 Back-button convention on every drill-in screen; histogram full view first — F-7
+- [x] W1.3 Single-click opens rows everywhere — F-8
+- [x] W1.4 Global table-sizing pass (B-5 treatment on every table) — F-9
+- [x] W1.5 Dashboard cards v1, all four roles, cards navigate — F-10
+- [x] W1.6 Bot modal shadow + bot copy pass — F-11, F-14
+- [x] W1.7 Profile-name control: menu or plain text — F-12
+- [x] W1.8 Seed content to English (SeedArithmeticTest + DEMO_ACCOUNTS stay authoritative) — F-13
 - [ ] W2.1 Design canvas: 4 artboards light+dark with motion spec; lead markup gates implementation
 - [ ] W2.2 Implement approved wave-2 direction across screens (views + CSS only; sessions and wires untouched)

@@ -35,6 +35,9 @@ import java.util.function.Consumer;
  */
 public final class ConnectWiring {
 
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(ConnectWiring.class);
+
     /**
      * The two objects a connected screen needs: the adapter to talk through and
      * the correlator to talk with.
@@ -48,14 +51,49 @@ public final class ConnectWiring {
     /**
      * Creates and wires a client for {@code endpoint}.
      *
-     * @param eventBus where pushes and connection-lost events are published
+     * <p>A {@code null} bus is tolerated rather than fatal, and that is a
+     * deliberate backstop (UI wave 1, item 0). This method is reached from a
+     * {@code runLater} posted by {@code ConnectView}'s discovery sweep, which
+     * runs on a daemon thread and can land after the world it belongs to has
+     * been torn down — in tests, after {@code ScreenManager.resetForTests()}
+     * has replaced the manager with an uninitialised one whose bus is
+     * {@code null}. Throwing there produces an exception on the FX thread with
+     * no test in the stack to attribute it to, so JUnit blames whichever test
+     * runs next. Logging and wiring to a detached bus instead keeps the failure
+     * where it belongs: in the log, next to the reason.
+     *
+     * <p>Nothing is lost by the substitution. This method opens no socket, so a
+     * wiring nobody uses is inert, and events posted to a bus nobody listens to
+     * simply go nowhere. {@code endpoint} stays a hard requirement: there is no
+     * sensible client without one.
+     *
+     * @param eventBus where pushes and connection-lost events are published;
+     *                 {@code null} means the app is being torn down
      * @return the wired pair; the connection is <b>not</b> open yet — the caller
      *         opens it off the FX thread and reports the outcome
      */
     public static Wiring forEndpoint(ServerEndpoint endpoint, ClientEventBus eventBus) {
         Objects.requireNonNull(endpoint, "endpoint");
-        Objects.requireNonNull(eventBus, "eventBus");
 
+        ClientEventBus bus = eventBus;
+        if (bus == null) {
+            LOG.warn("Wiring {} with no event bus: the app was torn down while this "
+                    + "connection was being prepared. Events from it go nowhere.",
+                    endpoint.display());
+            bus = detachedBus();
+        }
+        return wire(endpoint, bus);
+    }
+
+    /**
+     * A bus with no subscribers, for the torn-down case above. Built the same
+     * way the real one is so nothing downstream has to know the difference.
+     */
+    private static ClientEventBus detachedBus() {
+        return new ClientEventBus(ClientEventBus.newBus(), Runnable::run);
+    }
+
+    private static Wiring wire(ServerEndpoint endpoint, ClientEventBus eventBus) {
         HSTSClient client = new HSTSClient(endpoint.host(), endpoint.port());
 
         RequestDispatcher dispatcher = new RequestDispatcher(client);

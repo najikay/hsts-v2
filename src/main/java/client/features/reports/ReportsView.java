@@ -178,6 +178,10 @@ public final class ReportsView extends AbstractScreen {
         table.column(numberColumn("Sigma", row -> row.statistics().standardDeviation()));
         table.column("Pass rate", row -> ReportsCopy.passRate(row.statistics()));
         table.column("Participants", row -> Integer.toString(row.participants()));
+        // F-9: sitting labels and dates are the two that truncated at the default
+        // window size; the five statistics columns need far less room than an even
+        // split gave them.
+        table.columnWidths(300, 150, 100, 100, 100, 130, 130);
         // One node, re-worded per situation: three different facts share the panel, and
         // swapping nodes on every render would churn the scene graph for no reason.
         table.emptyState(tableEmpty);

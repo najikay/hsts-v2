@@ -1,7 +1,7 @@
 package client.ui;
 
-import client.core.AppArgs;
 import client.core.ClientApp;
+import client.core.FxTestHarness;
 import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
@@ -101,11 +101,8 @@ class BotInteractionTest extends ApplicationTest {
     }
 
     @AfterEach
-    void resetGlobalState() throws Exception {
-        java.lang.reflect.Method reset = ScreenManager.class.getDeclaredMethod("resetForTests");
-        reset.setAccessible(true);
-        reset.invoke(null);
-        System.clearProperty(AppArgs.PROP_GALLERY);
+    void resetGlobalState() {
+        FxTestHarness.resetGlobalState();
     }
 
     // ===================== Chat (E16.13) =================================

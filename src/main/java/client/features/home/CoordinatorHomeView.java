@@ -1,41 +1,41 @@
 package client.features.home;
 
 import client.core.NavParams;
-import client.ui.components.EmptyState;
-import client.ui.components.Icons;
 import client.ui.screen.AbstractScreen;
 import javafx.scene.Parent;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDateTime;
 
 /**
- * The coordinator dashboard (Presentation tier, E5.6 — T-1, F4.1).
+ * The coordinator dashboard (Presentation tier, E5.6 - T-1, F4.1; cards from UI
+ * wave 1, F-10).
  *
  * <p>A coordinator is a teacher who additionally approves her subject's exams
- * (PRD §3), and the dashboard says exactly that: the teacher's cards plus the
- * approval queue, which is the item her rail has and a teacher's does not.
+ * (PRD section 3), and the dashboard says exactly that: what is waiting for a
+ * decision, and who it came from. Both numbers are one read of the approval queue
+ * she already has a screen for, and both cards open that screen.
+ *
+ * <p>The four placeholder stats and the disabled "Open the queue" button are gone.
+ * They named E8, E7, E9 and E12; all four have landed, so the honest thing is now
+ * a real count rather than a dash.
  */
 public final class CoordinatorHomeView extends AbstractScreen {
 
     private final VBox headerHost = new VBox();
+    private final GridPane cards = new GridPane();
+
+    private CoordinatorDashboardSession session;
 
     @Override
     protected Parent build() {
-        EmptyState queue = new EmptyState(Icons.APPROVALS, "No exams waiting",
-                "Exams submitted for approval in your subject will queue up here.");
+        session = new CoordinatorDashboardSession(dispatcher(), onFxThread())
+                .onChange(this::render);
 
         return DashboardPage.page(
                 headerHost,
-                DashboardPage.statGrid(
-                        DashboardPage.statCard("Waiting for you", "Arrives with E8"),
-                        DashboardPage.statCard("Exams in the drawer", "Arrives with E7"),
-                        DashboardPage.statCard("Live now", "Arrives with E9"),
-                        DashboardPage.statCard("Awaiting grading", "Arrives with E12")),
-                DashboardPage.card("Approval queue",
-                        "Exams your subject's teachers submitted, newest first.",
-                        new VBox(14, queue,
-                                DashboardPage.pendingAction("Open the queue", "Arrives with E8"))),
+                cards,
                 DashboardPage.coursesCard("Your courses",
                         "You teach these, and you coordinate their subject.",
                         DashboardPage.currentCourses(),
@@ -46,5 +46,11 @@ public final class CoordinatorHomeView extends AbstractScreen {
     public void onShow(NavParams params) {
         headerHost.getChildren().setAll(
                 DashboardPage.header(DashboardPage.currentDisplayName(), LocalDateTime.now()));
+        render();
+        session.load();
+    }
+
+    private void render() {
+        DashboardPage.fillCardGrid(cards, session.cards(), navigator()::navigate);
     }
 }

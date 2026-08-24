@@ -145,7 +145,10 @@ public final class GradingQueueView extends AbstractScreen {
                 .column(GradingCopy.COLUMN_AUTO, row -> String.valueOf(row.autoScore()))
                 .column(GradingCopy.COLUMN_SCORE, row -> row.effectiveScore() + " / 100")
                 .column(GradingCopy.COLUMN_STATE, GradingCopy::state)
-                .column(GradingCopy.COLUMN_ADJUSTED, GradingCopy::adjustedMarker);
+                .column(GradingCopy.COLUMN_ADJUSTED, GradingCopy::adjustedMarker)
+                // F-9: "Auto" and "Score" hold two or three digits; the student name
+                // holds a full name and was clipping at the default window size.
+                .columnWidths(260, 110, 130, 150, 60);
 
         // Selection drives the bulk approve. Multiple selection rather than a checkbox column:
         // it is the platform's own idiom and needs no extra column to explain itself.

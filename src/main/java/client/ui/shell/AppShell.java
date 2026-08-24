@@ -11,11 +11,19 @@ import client.ui.components.ReconnectBanner;
 import client.ui.components.RoleBadge;
 import client.ui.components.ToastStack;
 import client.ui.components.WarnConfirm;
+import client.ui.theme.ThemeMode;
+import client.ui.theme.ThemeState;
 import common.dto.auth.Role;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -64,6 +72,7 @@ public final class AppShell extends BorderPane {
     private final HBox avatarChip = new HBox();
     private final Button railToggle = Buttons.icon(Icons.MENU, "Collapse menu");
     private final Button logoutButton = Buttons.icon(Icons.LOGOUT, "Sign out");
+    private final ContextMenu profileMenu = new ContextMenu();
 
     /**
      * @param navigator routes rail clicks; the shell listens to it for the active
@@ -188,6 +197,81 @@ public final class AppShell extends BorderPane {
     /** @return the sign-out button, for tests and keyboard shortcut wiring. */
     public Button logoutButton() {
         return logoutButton;
+    }
+
+    /**
+     * Turns the avatar chip into a working menu (UI wave 1 — F-12).
+     *
+     * <p>The chip has always been styled as a control: a rounded, bordered,
+     * hoverable pill with a name in it. It did nothing. A thing that looks
+     * pressable and is not is worse than a plain label, because the user spends a
+     * click finding out, and then spends the rest of the session unsure which of
+     * the other pills are real.
+     *
+     * <p>Two decisions, both about scope. The menu carries the <b>theme quick
+     * switch</b>, because "follow the OS / always dark" is the one preference a
+     * user changes often enough to resent a trip to Settings for, and it is the
+     * one the demo shows. It also carries <b>sign out</b>, which already had clean
+     * plumbing — {@link #setOnLogout} owns the confirmation and the caller owns
+     * the sequence — so the menu item runs the button's own action rather than
+     * duplicating either. Nothing else is added: a profile menu that grows a
+     * settings shortcut and an about box is a menu nobody reads.
+     *
+     * <p>A {@link ContextMenu} rather than a hand-built popover, because it
+     * already closes on ESC, on a click outside and on a second click of its
+     * owner, and re-implementing that here would be a second copy of what
+     * {@code Popover} does for the bell.
+     *
+     * @param theme the state the radio items read and write; the menu is not
+     *              installed at all when this is {@code null}, which is what a
+     *              shell built outside the app (a component test) gets
+     */
+    public void installProfileMenu(ThemeState theme) {
+        if (theme == null) {
+            return;
+        }
+        avatarChip.getStyleClass().add("interactive");
+        avatarChip.setAccessibleRole(javafx.scene.AccessibleRole.BUTTON);
+        avatarChip.setOnMouseClicked(event -> {
+            if (profileMenu.isShowing()) {
+                profileMenu.hide();
+                return;
+            }
+            buildProfileMenu(theme);
+            profileMenu.show(avatarChip, Side.BOTTOM, 0, 6);
+        });
+    }
+
+    /**
+     * Rebuilt on every open rather than kept in sync, because the only state it
+     * shows is which theme mode is selected, and re-reading it is cheaper and
+     * safer than listening for changes made on the Settings screen.
+     */
+    private void buildProfileMenu(ThemeState theme) {
+        profileMenu.getItems().clear();
+
+        ToggleGroup modes = new ToggleGroup();
+        for (ThemeMode mode : ThemeMode.values()) {
+            RadioMenuItem item = new RadioMenuItem(mode.displayName());
+            item.setToggleGroup(modes);
+            item.setSelected(theme.mode() == mode);
+            item.setOnAction(event -> theme.setMode(mode));
+            profileMenu.getItems().add(item);
+        }
+
+        // Sign out only when it has somewhere to go. A menu item that is present
+        // and inert is the defect this whole method exists to remove.
+        if (logoutButton.getOnAction() != null) {
+            profileMenu.getItems().add(new SeparatorMenuItem());
+            MenuItem signOut = new MenuItem("Sign out");
+            signOut.setOnAction(event -> logoutButton.fire());
+            profileMenu.getItems().add(signOut);
+        }
+    }
+
+    /** @return the profile menu, for tests. */
+    public ContextMenu profileMenu() {
+        return profileMenu;
     }
 
     /** Swaps the content area, with the house entrance transition. */

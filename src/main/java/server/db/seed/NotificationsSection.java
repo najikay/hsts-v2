@@ -48,21 +48,21 @@ final class NotificationsSection implements SeedSection {
 
     private static final List<Note> NOTIFICATIONS = List.of(
             new Note("dana.cohen", "EXAM_REJECTED",
-                    "מבחן הוחזר לתיקון: גרסה 1 של \"מבחן אמצע: אלגברה\"", true, 24),
+                    "Exam sent back for revision: version 1 of \"Midterm: Algebra\"", true, 24),
             new Note("dana.cohen", "EXAM_PENDING",
-                    "המבחן נשלח לאישור רכזת המקצוע", false, 22),
+                    "The exam was sent to the subject coordinator for approval", false, 22),
             new Note("rina.barak", "APPROVAL_REQUEST",
-                    "מבחן ממתין לאישורך במקצוע מתמטיקה", false, 22),
+                    "An exam is waiting for your approval in Mathematics", false, 22),
             new Note("tamar.shani", "EXAM_REJECTED",
                     "Collections Quiz was returned for revision", false, 20),
             new Note("noa.friedman", "GRADE_PUBLISHED",
-                    "הציון שלך במבחן אמצע: אלגברה זמין לצפייה", true, 13),
+                    "Your grade for Midterm: Algebra is available", true, 13),
             new Note("yael.azulay", "GRADE_PUBLISHED",
-                    "הציון שלך זמין לצפייה, כולל הערת מורה", false, 13),
+                    "Your grade is available, including a teacher's comment", false, 13),
             new Note("avi.mizrahi", "GRADING_DUE",
                     "8 attempts awaiting your grade approval", false, 3),
             new Note("principal.avia", "EXECUTION_CLOSED",
-                    "בחינה הסתיימה: 8 נבחנים, ממוצע 72.5", false, 13));
+                    "Sitting finished: 8 students, average 72.5", false, 13));
 
     @Override
     public String name() {

@@ -1,6 +1,7 @@
 package client.features.home;
 
 import client.core.ScreenManager;
+import client.ui.anim.Animations;
 import client.ui.components.Buttons;
 import client.ui.components.Icons;
 import common.dto.auth.CourseRef;
@@ -8,10 +9,8 @@ import common.dto.auth.LoginResult;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Tooltip;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -19,7 +18,10 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
 
 /**
  * The shared furniture of the four role dashboards (Presentation tier, E5.6).
@@ -29,17 +31,20 @@ import java.util.List;
  * four homes share a layout (greeting header → stat row → content cards) from the
  * approved mockups, and four hand-built copies of it would drift apart by E15.
  *
- * <p><b>Honest empty states.</b> The mockups show numbers; the features that
- * produce those numbers do not exist yet. So {@link #statCard} renders an em dash
- * and names the epic that will fill it in, and list cards get a real
- * {@code EmptyState} rather than invented rows. Nothing on these screens is
- * fabricated data — a fake "3 exams pending" would survive into a demo and be
- * discovered by the audience rather than by us.
+ * <p><b>Honest empty states.</b> Through E15 the mockups showed numbers no feature
+ * could yet produce, so {@link #statCard} rendered a dash and named the epic that
+ * would fill it in. Nothing on these screens was ever fabricated data — a fake
+ * "3 exams pending" would survive into a demo and be discovered by the audience
+ * rather than by us.
+ *
+ * <p>UI wave 1 (F-10) retired the placeholders, because the epics they named have
+ * all landed. {@link #fillCardGrid} renders real counts from the role's dashboard
+ * session, each card opening the screen it counted. The honesty rule did not
+ * change, it moved into {@link DashboardCard.State}: a card that could not reach
+ * the server says "not available" instead of showing a zero, because zero is a
+ * fact about the school and a failed read is a fact about the network.
  */
 public final class DashboardPage {
-
-    /** The value shown by a stat whose feature has not landed. */
-    public static final String NO_VALUE = "–";
 
     private DashboardPage() {
     }
@@ -86,48 +91,39 @@ public final class DashboardPage {
         return new VBox(4, greeting, date);
     }
 
-    /** @return an evenly divided row of stat cards. */
-    public static GridPane statGrid(Node... cards) {
-        GridPane grid = new GridPane();
+    /**
+     * Fills a grid with the cards a dashboard session produced, with the house
+     * staggered entrance (UI wave 1 — F-10).
+     *
+     * <p>Rebuilt rather than patched on every render, because a card's whole
+     * shape changes with its state and there are at most three of them. The
+     * stagger is what makes a settling dashboard read as arriving rather than
+     * flickering: three reads land at three different moments, and without it
+     * each one appears as an abrupt substitution.
+     *
+     * @param grid     the grid to fill, cleared first
+     * @param cards    what to render
+     * @param navigate what a card click does with its route id
+     */
+    public static void fillCardGrid(GridPane grid, List<DashboardCard> cards,
+                                    Consumer<String> navigate) {
+        grid.getChildren().clear();
+        grid.getColumnConstraints().clear();
         grid.setHgap(16);
         grid.setVgap(16);
-        for (int i = 0; i < cards.length; i++) {
+
+        List<Node> nodes = new ArrayList<>();
+        for (int i = 0; i < cards.size(); i++) {
             ColumnConstraints column = new ColumnConstraints();
-            column.setPercentWidth(100.0 / cards.length);
+            column.setPercentWidth(100.0 / cards.size());
             column.setHgrow(Priority.ALWAYS);
             grid.getColumnConstraints().add(column);
-            grid.add(cards[i], i, 0);
+
+            Node node = navCard(cards.get(i), navigate);
+            grid.add(node, i, 0);
+            nodes.add(node);
         }
-        return grid;
-    }
-
-    /**
-     * A stat with no number yet.
-     *
-     * @param label what it will count ("Pending approval")
-     * @param hint  when it starts counting ("Arrives with E8")
-     */
-    public static VBox statCard(String label, String hint) {
-        Label caption = new Label(label);
-        caption.getStyleClass().add("stat-label");
-
-        Label value = new Label(NO_VALUE);
-        value.getStyleClass().add("stat-value");
-
-        Label note = new Label(hint);
-        note.getStyleClass().add("stat-hint");
-        note.setWrapText(true);
-
-        VBox card = new VBox(2, caption, value, note);
-        card.getStyleClass().addAll("hsts-card", "hsts-stat-card");
-        return card;
-    }
-
-    /** A stat that shows a real number this epic can actually produce. */
-    public static VBox statCard(String label, String hint, String realValue) {
-        VBox card = statCard(label, hint);
-        ((Label) card.getChildren().get(1)).setText(realValue);
-        return card;
+        Animations.staggerIn(nodes);
     }
 
     /** @return a titled content card wrapping {@code body}. */
@@ -185,20 +181,34 @@ public final class DashboardPage {
     }
 
     /**
-     * The call-to-action of a card whose screen does not exist yet: present, so
-     * the dashboard reads as designed, and disabled with a tooltip saying why,
-     * so nobody wonders whether they clicked it wrong.
+     * Renders one {@link DashboardCard} as a clickable stat card (UI wave 1 — F-10).
+     *
+     * <p>The whole card is the hit target, not a link inside it. A card that shows
+     * a count of things and does not open the list of those things is a poster,
+     * and the empty placeholders these replaced were exactly that.
+     *
+     * <p>The state drives a style class rather than a different node shape, so a
+     * card that arrives loading and settles to a number does not change size
+     * underneath the pointer.
+     *
+     * @param navigate what a click does with the card's route id
      */
-    public static Node pendingAction(String label, String reason) {
-        Button button = Buttons.styled(label, Buttons.OUTLINE, Buttons.SMALL);
-        button.setDisable(true);
-        button.setAccessibleText(label + ", unavailable: " + reason);
+    public static VBox navCard(DashboardCard card, Consumer<String> navigate) {
+        Label caption = new Label(card.title());
+        caption.getStyleClass().add("stat-label");
 
-        // A disabled Button consumes no hover events, so its own tooltip would
-        // never appear; the wrapper is what the pointer actually hits.
-        HBox holder = new HBox(button);
-        holder.setAlignment(Pos.CENTER_LEFT);
-        Tooltip.install(holder, new Tooltip(reason));
-        return holder;
+        Label value = new Label(card.value());
+        value.getStyleClass().add("stat-value");
+
+        Label hint = new Label(card.hint());
+        hint.getStyleClass().add("stat-hint");
+        hint.setWrapText(true);
+
+        VBox box = new VBox(2, caption, value, hint);
+        box.getStyleClass().addAll("hsts-card", "hsts-stat-card", "hsts-dashboard-card");
+        box.getStyleClass().add("state-" + card.state().name().toLowerCase(Locale.ROOT));
+        box.setOnMouseClicked(event -> navigate.accept(card.routeId()));
+        box.setAccessibleText(card.title() + ", " + card.value() + ". " + card.hint());
+        return box;
     }
 }

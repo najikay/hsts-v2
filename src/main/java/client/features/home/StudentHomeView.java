@@ -3,14 +3,13 @@ package client.features.home;
 import client.core.NavParams;
 import client.core.Routes;
 import client.ui.components.Buttons;
-import client.ui.components.EmptyState;
 import client.ui.components.FormField;
-import client.ui.components.Icons;
 import client.ui.components.logic.ValidationState;
 import client.ui.screen.AbstractScreen;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -25,18 +24,29 @@ import java.time.LocalDateTime;
  * {@link StudentHomeSession}, unit-tested), and a well-formed code navigates there with
  * the code already filled in. Nothing is skipped by that: the screen still joins, still
  * asks for an ID, and the clock still starts there (S-18).
+ *
+ * <p>UI wave 1 (F-10) replaced the three placeholder stats with two real cards from
+ * {@link StudentDashboardSession}: the latest published grade, and the study bot.
+ * A third was asked for and dropped, with the reason recorded on that class: no
+ * verb on the wire answers "which exam is next for me", and a dashboard card is
+ * not where a protocol change gets decided. The code entry above is, and remains,
+ * the real way into a sitting.
  */
 public final class StudentHomeView extends AbstractScreen {
 
     private final VBox headerHost = new VBox();
     private final StudentHomeSession session = new StudentHomeSession();
+    private final GridPane cards = new GridPane();
 
+    private StudentDashboardSession dashboard;
     private FormField codeField;
     private Button enterButton;
 
     @Override
     protected Parent build() {
         session.onChange(this::refreshCodeCard);
+        dashboard = new StudentDashboardSession(dispatcher(), onFxThread())
+                .onChange(this::renderCards);
 
         codeField = FormField.text("Execution code", "e.g. 4B7Q");
         codeField.hint("Your teacher reads the code out at the start of the exam.");
@@ -59,20 +69,11 @@ public final class StudentHomeView extends AbstractScreen {
                 DashboardPage.card("Take an exam",
                         "Enter the 4-character code your teacher gives you.",
                         entry),
-                DashboardPage.statGrid(
-                        DashboardPage.statCard("Exams taken", "Shown once you have sat one"),
-                        DashboardPage.statCard("Average grade", "Arrives with E13"),
-                        DashboardPage.statCard("Courses",
-                                "From your enrolments",
-                                Integer.toString(DashboardPage.currentCourses().size()))),
+                cards,
                 DashboardPage.coursesCard("Your courses",
                         "You are enrolled in these. Each course has a study bot.",
                         DashboardPage.currentCourses(),
-                        "You are not enrolled in any course yet."),
-                DashboardPage.card("Recent grades",
-                        "A grade appears here once your teacher approves it.",
-                        new EmptyState(Icons.RESULTS, "No grades yet",
-                                "Grades show up with the checked exam form, after teacher approval.")));
+                        "You are not enrolled in any course yet."));
     }
 
     @Override
@@ -81,6 +82,12 @@ public final class StudentHomeView extends AbstractScreen {
                 DashboardPage.header(DashboardPage.currentDisplayName(), LocalDateTime.now()));
         session.clear();
         codeField.textField().clear();
+        renderCards();
+        dashboard.load();
+    }
+
+    private void renderCards() {
+        DashboardPage.fillCardGrid(cards, dashboard.cards(), navigator()::navigate);
     }
 
     private void submitCode() {

@@ -2,10 +2,10 @@ package client.features.notify;
 
 import client.core.Navigator;
 import client.ui.anim.Animations;
-import client.ui.anim.Motion;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
+import client.ui.components.Popover;
 import common.dto.notify.NavRef;
 import common.dto.notify.NotificationDto;
 import javafx.geometry.Pos;
@@ -36,6 +36,12 @@ import java.util.Objects;
  * changed, which is what makes "a push lands while the panel is open" work with
  * no code of its own. Every decision it needs — icon, toast flavour, relative
  * time — comes from {@link NotificationPresenter}, which is unit-tested.
+ *
+ * <p>Where it sits and how it is dismissed is not this class's problem either
+ * (UI wave 1, F-6): {@link Popover} anchors it under the bell and closes it on a
+ * click outside, on ESC, and on a second click of the bell. Before that it was
+ * mounted straight into the popover layer, which centres its children, so it
+ * read as a modal with no way out but the bell.
  */
 public final class NotificationsPanel extends VBox {
 
@@ -50,7 +56,7 @@ public final class NotificationsPanel extends VBox {
     private final NotificationsModel model;
     private final NotificationsSession session;
     private final Navigator navigator;
-    private final StackPane host;
+    private final Popover popover;
     private final Clock clock;
 
     private final VBox list = new VBox();
@@ -62,16 +68,21 @@ public final class NotificationsPanel extends VBox {
      * @param host      the shell's popover layer ({@code AppShell.popovers()})
      */
     public NotificationsPanel(NotificationsSession session, Navigator navigator, StackPane host) {
-        this(session, navigator, host, Clock.systemUTC());
+        this(session, navigator, host, null, Clock.systemUTC());
     }
 
-    /** @param clock time source for the relative times; a fixed clock in tests */
+    /**
+     * @param anchor the bell; the panel lines up under it and a click on it is
+     *               not treated as a click outside. {@code null} parks the panel
+     *               in the layer's top-right corner.
+     * @param clock  time source for the relative times; a fixed clock in tests
+     */
     public NotificationsPanel(NotificationsSession session, Navigator navigator,
-                              StackPane host, Clock clock) {
+                              StackPane host, Node anchor, Clock clock) {
         this.session = Objects.requireNonNull(session, "session");
         this.model = session.model();
         this.navigator = Objects.requireNonNull(navigator, "navigator");
-        this.host = Objects.requireNonNull(host, "host");
+        this.popover = new Popover(Objects.requireNonNull(host, "host"), this, anchor);
         this.clock = Objects.requireNonNull(clock, "clock");
 
         getStyleClass().add("hsts-notification-panel");
@@ -101,21 +112,18 @@ public final class NotificationsPanel extends VBox {
      * anything the client missed while disconnected is only ever recovered here.
      */
     public void open() {
-        if (!isOpen()) {
-            host.getChildren().add(this);
-        }
-        Animations.slideInY(this, true, 8, Motion.BASE_MS);
+        popover.open();
         session.refresh();
     }
 
     /** Hides the panel. */
     public void close() {
-        host.getChildren().remove(this);
+        popover.close();
     }
 
     /** @return {@code true} while the panel is on screen. */
     public boolean isOpen() {
-        return host.getChildren().contains(this);
+        return popover.isOpen();
     }
 
     // ===================== Rendering =====================================

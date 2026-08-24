@@ -51,24 +51,24 @@ final class UsersSection implements SeedSection {
     private record SeedUser(String username, String fullName, UserRole role, String nationalId) { }
 
     private static final List<SeedUser> USERS = List.of(
-            new SeedUser("principal.avia", "אביה שלו", UserRole.PRINCIPAL, "301548202"),
-            new SeedUser("dana.cohen", "דנה כהן", UserRole.TEACHER, "214703951"),
-            new SeedUser("rina.barak", "רינה ברק", UserRole.TEACHER, "248190639"),
-            new SeedUser("avi.mizrahi", "אבי מזרחי", UserRole.TEACHER, "273056416"),
-            new SeedUser("tamar.shani", "תמר שני", UserRole.TEACHER, "296481724"),
-            new SeedUser("michal.sharon", "מיכל שרון", UserRole.TEACHER, "315729046"),
-            new SeedUser("noa.friedman", "נועה פרידמן", UserRole.STUDENT, "338106727"),
-            new SeedUser("itay.regev", "איתי רגב", UserRole.STUDENT, "349251082"),
-            new SeedUser("shira.dahan", "שירה דהן", UserRole.STUDENT, "352074611"),
-            new SeedUser("omer.katz", "עומר כץ", UserRole.STUDENT, "361489206"),
-            new SeedUser("maya.levi", "מאיה לוי", UserRole.STUDENT, "374301851"),
-            new SeedUser("noam.peretz", "נועם פרץ", UserRole.STUDENT, "385612098"),
-            new SeedUser("yael.azulay", "יעל אזולאי", UserRole.STUDENT, "390745362"),
-            new SeedUser("daniel.shapira", "דניאל שפירא", UserRole.STUDENT, "402186936"),
-            new SeedUser("lior.gabay", "ליאור גבאי", UserRole.STUDENT, "413860529"),
-            new SeedUser("tal.harari", "טל הררי", UserRole.STUDENT, "425097185"),
-            new SeedUser("roni.malka", "רוני מלכה", UserRole.STUDENT, "436712400"),
-            new SeedUser("eitan.solomon", "איתן סולומון", UserRole.STUDENT, "448521062"));
+            new SeedUser("principal.avia", "Avia Shalev", UserRole.PRINCIPAL, "301548202"),
+            new SeedUser("dana.cohen", "Dana Cohen", UserRole.TEACHER, "214703951"),
+            new SeedUser("rina.barak", "Rina Barak", UserRole.TEACHER, "248190639"),
+            new SeedUser("avi.mizrahi", "Avi Mizrahi", UserRole.TEACHER, "273056416"),
+            new SeedUser("tamar.shani", "Tamar Shani", UserRole.TEACHER, "296481724"),
+            new SeedUser("michal.sharon", "Michal Sharon", UserRole.TEACHER, "315729046"),
+            new SeedUser("noa.friedman", "Noa Friedman", UserRole.STUDENT, "338106727"),
+            new SeedUser("itay.regev", "Itay Regev", UserRole.STUDENT, "349251082"),
+            new SeedUser("shira.dahan", "Shira Dahan", UserRole.STUDENT, "352074611"),
+            new SeedUser("omer.katz", "Omer Katz", UserRole.STUDENT, "361489206"),
+            new SeedUser("maya.levi", "Maya Levi", UserRole.STUDENT, "374301851"),
+            new SeedUser("noam.peretz", "Noam Peretz", UserRole.STUDENT, "385612098"),
+            new SeedUser("yael.azulay", "Yael Azulay", UserRole.STUDENT, "390745362"),
+            new SeedUser("daniel.shapira", "Daniel Shapira", UserRole.STUDENT, "402186936"),
+            new SeedUser("lior.gabay", "Lior Gabay", UserRole.STUDENT, "413860529"),
+            new SeedUser("tal.harari", "Tal Harari", UserRole.STUDENT, "425097185"),
+            new SeedUser("roni.malka", "Roni Malka", UserRole.STUDENT, "436712400"),
+            new SeedUser("eitan.solomon", "Eitan Solomon", UserRole.STUDENT, "448521062"));
 
     @Override
     public String name() {

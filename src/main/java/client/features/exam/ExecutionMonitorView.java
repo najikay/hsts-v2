@@ -1,6 +1,8 @@
 package client.features.exam;
 
 import client.core.NavParams;
+import client.core.Routes;
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
@@ -237,7 +239,10 @@ public final class ExecutionMonitorView extends AbstractScreen {
         HBox controls = new HBox(8, new Label("Add"), minutes, new Label("minutes"), extend);
         controls.setAlignment(Pos.CENTER_LEFT);
 
-        HBox top = new HBox(16, new VBox(2, examName, meta), Buttons.spacer(), controls);
+        HBox top = new HBox(16,
+                new VBox(2, BackLink.to(navigator(), Routes.RELEASES.id(), "Releases"),
+                        examName, meta),
+                Buttons.spacer(), controls);
         top.setAlignment(Pos.CENTER_LEFT);
 
         GridPane counters = new GridPane();

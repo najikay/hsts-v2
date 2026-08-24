@@ -2,6 +2,7 @@ package client.ui;
 
 import client.core.AppArgs;
 import client.core.ClientApp;
+import client.core.FxTestHarness;
 import client.core.ScreenManager;
 import client.ui.theme.AccentPalette;
 import javafx.scene.Node;
@@ -44,11 +45,8 @@ class GalleryInteractionTest extends ApplicationTest {
     }
 
     @AfterEach
-    void reset() throws Exception {
-        java.lang.reflect.Method m = ScreenManager.class.getDeclaredMethod("resetForTests");
-        m.setAccessible(true);
-        m.invoke(null);
-        System.clearProperty(AppArgs.PROP_GALLERY);
+    void reset() {
+        FxTestHarness.resetGlobalState();
     }
 
     @Test

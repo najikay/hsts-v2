@@ -21,14 +21,14 @@ final class SubjectsSection implements SeedSection {
     private record SeedCourse(String code, String subject, String name) { }
 
     private static final List<SeedSubject> SUBJECTS = List.of(
-            new SeedSubject("10", "מתמטיקה"),
-            new SeedSubject("20", "מדעי המחשב"));
+            new SeedSubject("10", "Mathematics"),
+            new SeedSubject("20", "Computer science"));
 
     private static final List<SeedCourse> COURSES = List.of(
-            new SeedCourse("11", "10", "אלגברה"),
-            new SeedCourse("12", "10", "חשבון דיפרנציאלי ואינטגרלי"),
-            new SeedCourse("21", "20", "תכנות מונחה עצמים ב-Java"),
-            new SeedCourse("22", "20", "בסיסי נתונים"));
+            new SeedCourse("11", "10", "Algebra"),
+            new SeedCourse("12", "10", "Calculus"),
+            new SeedCourse("21", "20", "Object oriented programming in Java"),
+            new SeedCourse("22", "20", "Databases"));
 
     @Override
     public String name() {

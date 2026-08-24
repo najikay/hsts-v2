@@ -112,7 +112,10 @@ public final class BotChatView extends AbstractScreen {
         messages.getChildren().clear();
         model.onChange(() -> onFxThread().run(this::render));
         heading.setText(name.isBlank() ? BotCopy.CHAT_TITLE : name + " study bot");
-        subheading.setText(BotCopy.CHAT_EMPTY_HINT);
+        // F-14: the subheading used to repeat the empty state's hint, so it vanished
+        // in meaning the moment the conversation had a message in it. It now says
+        // what the screen is, which stays true all the way down the thread.
+        subheading.setText(BotCopy.CHAT_EXPLAINER);
         render();
     }
 

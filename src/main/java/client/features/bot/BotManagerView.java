@@ -28,7 +28,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
-import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -77,6 +77,7 @@ public final class BotManagerView extends AbstractScreen {
     private final StackPane stack = new StackPane(root);
     private final Label heading = new Label();
     private final Label subheading = new Label();
+    private final Label explainer = new Label(BotCopy.MANAGER_EXPLAINER);
     private final Label status = new Label();
     private final CheckBox active = new CheckBox(BotCopy.ACTIVE_LABEL);
     private final VBox sourceRows = new VBox(8);
@@ -135,9 +136,14 @@ public final class BotManagerView extends AbstractScreen {
     private Parent buildHeader() {
         heading.getStyleClass().add("page-title");
         subheading.getStyleClass().add("page-subtitle");
+        // F-14: the subheading was the course name alone, which named the subject and
+        // never the screen. The explainer says what the sources below actually do.
+        explainer.getStyleClass().addAll("page-subtitle", "muted");
+        explainer.setWrapText(true);
         analytics.setOnAction(e -> navigator().navigate(Routes.BOT_ANALYTICS.id(),
                 NavParams.of(PARAM_COURSE, courseCode)));
-        HBox row = new HBox(12, new VBox(2, heading, subheading), Buttons.spacer(), analytics);
+        HBox row = new HBox(12, new VBox(2, heading, subheading, explainer),
+                Buttons.spacer(), analytics);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(16, 20, 8, 20));
         return row;
@@ -267,21 +273,40 @@ public final class BotManagerView extends AbstractScreen {
      * rule.
      */
     private void renderLockState(EditLockState.Snapshot state) {
-        onFxThread().run(() -> lockBanner.show(state, BotCopy.SOURCE_NOUN));
+        // No hop of our own: LockAwareEditor.publish delivers every snapshot on the FX
+        // thread since 2026-08-24 (the recipe's rule 4). A second hop here would defer the
+        // banner one more pulse and, in tests, past the harness teardown that nulls the bus.
+        lockBanner.show(state, BotCopy.SOURCE_NOUN);
     }
 
     // ===================== Actions =======================================
 
+    /**
+     * Names and creates the bot, in the house dialog (UI wave 1 — F-11).
+     *
+     * <p>This was a raw {@code TextInputDialog}, and it was the only modal in the
+     * app that was. It opened as an OS-decorated window with the platform's own
+     * drop shadow, inherited neither the stylesheet nor the dark-mode root class,
+     * and had no scrim behind it — which is what "broken-looking shadow" was
+     * describing. {@link WarnConfirm} is the house dialog and already solves all
+     * three (transparent stage, copied stylesheets, scrim), so the fix is to stop
+     * having a second kind of dialog rather than to restyle this one.
+     */
     private void createBot() {
         if (session == null) {
             return;
         }
-        TextInputDialog dialog = new TextInputDialog(courseNameOf(courseCode) + " study bot");
-        dialog.setTitle(BotCopy.CREATE_BOT);
-        dialog.setHeaderText(BotCopy.NO_BOT_HINT);
-        dialog.setContentText("Name");
-        Optional<String> name = dialog.showAndWait();
-        name.ifPresent(chosen -> session.create(chosen));
+        TextField name = new TextField(courseNameOf(courseCode) + " study bot");
+        name.setPromptText("Name");
+        boolean confirmed = WarnConfirm.show(window(), WarnConfirm.spec(BotCopy.CREATE_BOT)
+                .explanation(BotCopy.NO_BOT_HINT)
+                .confirmText(BotCopy.CREATE_BOT)
+                .cancelText("Cancel")
+                .detail(name)
+                .info());
+        if (confirmed && !name.getText().isBlank()) {
+            session.create(name.getText().trim());
+        }
     }
 
     private void chooseFile() {

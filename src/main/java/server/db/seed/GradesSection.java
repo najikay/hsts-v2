@@ -63,8 +63,8 @@ final class GradesSection implements SeedSection {
                     new SeedGrade("yael.azulay", 45, 55,
                             // Document writes an em dash; PRD 4.1 forbids it in text a student
                             // reads, and the grade-review screen shows this verbatim.
-                            "בשאלה 11011 נכתב פתרון נכון עם טעות סימן בשורה האחרונה, ניתן ניקוד חלקי.",
-                            "שיפור ניכר באי-שוויונות. כדאי לחזור על תחום ההגדרה."),
+                            "Question 11011 has a correct solution with a sign error on the last line, so partial credit was given.",
+                            "A clear improvement on inequalities. Worth revising the domain of definition."),
                     new SeedGrade("omer.katz", 45, null, null, null))),
 
             new Sitting("7390", false, null, List.of(

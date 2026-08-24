@@ -11,8 +11,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -21,6 +24,7 @@ import javafx.scene.layout.VBox;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -94,6 +98,68 @@ public final class DataTable<T> extends VBox {
     /** Adds a pre-built column (for chip cells, action buttons, custom sorting). */
     public DataTable<T> column(TableColumn<T, ?> column) {
         table.getColumns().add(column);
+        return this;
+    }
+
+    /**
+     * Gives each column a preferred width suited to what it holds (UI wave 1 —
+     * F-9, the B-5 treatment made general).
+     *
+     * <p>Left alone, {@code TableView} divides its width evenly, so a
+     * two-character course code is allotted exactly as much room as "23 Aug
+     * 2026" and the date is the one that loses: it renders as "23 Au…". That is
+     * B-5, found on My Grades, and it was never a My Grades bug — every table in
+     * the app divides its width the same way. The copy tests never see it,
+     * because they check the string and a column is not a string.
+     *
+     * <p><b>Preferred</b>, not fixed: the table still stretches and the user can
+     * still drag a divider. All this does is set the starting proportions from
+     * what the column actually contains, so nothing is truncated at the default
+     * window size.
+     *
+     * @param widths one per column, in the order the columns were added; extra
+     *               values are ignored, missing ones leave that column alone
+     */
+    public DataTable<T> columnWidths(double... widths) {
+        List<TableColumn<T, ?>> columns = table.getColumns();
+        for (int i = 0; i < columns.size() && i < widths.length; i++) {
+            columns.get(i).setPrefWidth(widths[i]);
+        }
+        return this;
+    }
+
+    /**
+     * Opens a row on a single primary click, and on Enter (UI wave 1 — F-8).
+     *
+     * <p>Double click was the house pattern and it was the wrong one. A queue of
+     * exams is a list of links, not a file manager: the row has one obvious
+     * thing it does, there is no second action competing for the gesture, and a
+     * user who single-clicks and gets nothing concludes the row is not
+     * clickable. Selection still happens — it is what the click does first — so
+     * a screen that highlights the selected row keeps doing so.
+     *
+     * <p>Enter is wired for the same reason it always was: a coordinator working
+     * through six submissions should not have to reach for the trackpad.
+     *
+     * @param open what to do with the row that was clicked
+     */
+    public DataTable<T> openOnClick(Consumer<T> open) {
+        Objects.requireNonNull(open, "open");
+        table.setRowFactory(view -> {
+            TableRow<T> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getButton() == MouseButton.PRIMARY
+                        && event.getClickCount() == 1 && !row.isEmpty()) {
+                    open.accept(row.getItem());
+                }
+            });
+            row.setOnKeyPressed(event -> {
+                if (event.getCode() == KeyCode.ENTER && !row.isEmpty()) {
+                    open.accept(row.getItem());
+                }
+            });
+            return row;
+        });
         return this;
     }
 

@@ -248,7 +248,7 @@ Logging: SLF4J + Logback, colorized console pattern for the terminal demo, plus 
 ## 9. Build & packaging
 
 - Single Maven module (simple for the course), Java 21, JavaFX 21 (`javafx-controls`, `javafx-fxml`).
-- Shade: `G<Num>_Server.jar` (main `server.core.ServerMain`, includes MySQL/Hibernate/Flyway/bot deps, excludes JavaFX? — **no**: server console needs JavaFX; include it) and `G<Num>_Client.jar` (main `client.core.Launcher`, excludes DB/Hibernate/bot/server code via shade filters).
+- Shade: `G<Num>_Server.jar` (main `server.core.ServerMain`, includes MySQL/Hibernate/Flyway/bot deps, excludes JavaFX? — **no**: server console needs JavaFX; include it) and `G<Num>_Client.jar` (main `client.core.Launcher`). **The client jar ships the FULL project artifact ON PURPOSE — there are no shade filters excluding server code, and there never were** (corrected 2026-08-24; this line previously described filters the pom has never had). It is now load-bearing: E6.11's editor calls `QuestionValidator`/`BankMessages` across the tier so the live rules and the server's verdict cannot drift, and its import closure was measured (JDK + two annotation-free classes). An E20 packaging pass that "restores" filtering breaks the editor on open and no test on the full classpath can see it — do not add filters.
 - Non-`Application` launcher classes so shaded JavaFX runs by double-click.
 - Build on Windows (JavaFX natives match the demo machines).
 

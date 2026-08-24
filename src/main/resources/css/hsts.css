@@ -1664,3 +1664,81 @@
 /* The three tables share one slot, so each must fill it when it is the one
    showing rather than shrinking to its rows. */
 .principal-data .data-body { -fx-spacing: 0; }
+
+/* =========================================================================
+   UI WAVE 1 · manual pass 1 mechanics (F-6 .. F-14)
+   -------------------------------------------------------------------------
+   Appended as one headed block rather than threaded into the sections above,
+   so the wave can be read (and reverted) as a unit. Colours are tokens;
+   sizes are literals, per the rule the E4.24 smoke test enforces.
+   ========================================================================= */
+
+/* ---- F-7: the back affordance ----
+   One control, one look, top-left of every drill-in. Quiet by construction:
+   it is the way out, not the thing to do, so it must never compete with the
+   screen's primary action for attention. */
+.hsts-back-link {
+    -fx-padding: 2px 10px 2px 4px;
+    -fx-background-radius: 6px;
+    -fx-cursor: hand;
+}
+.hsts-back-link .label    { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+.hsts-back-link .nav-icon { -fx-fill: -hsts-muted; }
+.hsts-back-link:hover           { -fx-background-color: -hsts-accent-soft; }
+.hsts-back-link:hover .label    { -fx-text-fill: -hsts-accent; }
+.hsts-back-link:hover .nav-icon { -fx-fill: -hsts-accent; }
+
+/* A printed page carries no navigation. The two print-capable screens that
+   host a back link hide the node from Java (visible + managed), so this is
+   only the belt to that braces: a stray one never inks the page. */
+.results-print .hsts-back-link,
+.reports-print .hsts-back-link { -fx-opacity: 0; }
+
+/* ---- F-10: dashboard cards ----
+   The whole card is the hit target. It therefore has to look like one: a
+   pointer, a hover lift, and a border that answers on hover. */
+/* The border, radius and surface come from .hsts-card, which every one of these
+   also carries; only the two things that make it a control are set here. */
+.hsts-dashboard-card { -fx-cursor: hand; }
+.hsts-dashboard-card:hover {
+    -fx-border-color: -hsts-accent;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.10), 12, 0.0, 0, 3);
+}
+.root.dark .hsts-dashboard-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.45), 12, 0.0, 0, 3);
+}
+
+/* The four states differ only in the value line, which is the only part that
+   is sometimes not a number. A loading or failed card keeps its size so the
+   row does not reflow as three reads land at three different moments. */
+.hsts-dashboard-card.state-loading .stat-value,
+.hsts-dashboard-card.state-failed  .stat-value { -fx-font-size: 15px; }
+.hsts-dashboard-card.state-loading .stat-value { -fx-text-fill: -hsts-faint; }
+.hsts-dashboard-card.state-failed  .stat-value { -fx-text-fill: -hsts-danger; }
+.hsts-dashboard-card.state-failed  .stat-hint  { -fx-text-fill: -hsts-danger; }
+/* An empty card is not a broken one: the zero stays in the normal colour and
+   only the hint is quieter, so nothing on a new account reads as an error. */
+.hsts-dashboard-card.state-empty   .stat-value { -fx-text-fill: -hsts-muted; }
+
+/* ---- F-12: the avatar chip is a menu ----
+   It already hovered and already showed a hand cursor, which was the defect:
+   it looked pressable and was not. The border is what marks it as a control
+   now that it is one. */
+.hsts-avatar-chip.interactive {
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 999px;
+    -fx-border-width: 1px;
+}
+.hsts-avatar-chip.interactive:hover { -fx-border-color: -hsts-accent; }
+
+/* ---- F-14: the bot screens' explanatory line ----
+   Sits under the course name, quieter than it, wrapping rather than
+   truncating: it is a sentence, and half a sentence explains nothing. */
+.bot-chat .page-subtitle.muted,
+.bot-manager .page-subtitle.muted,
+.bot-history .page-subtitle.muted,
+.bot-analytics .page-subtitle.muted {
+    -fx-font-size: 12px;
+    -fx-text-fill: -hsts-faint;
+    -fx-padding: 2px 0 0 0;
+}

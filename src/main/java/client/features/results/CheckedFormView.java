@@ -1,6 +1,8 @@
 package client.features.results;
 
 import client.core.NavParams;
+import client.core.Routes;
+import client.ui.components.BackLink;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
 import client.ui.screen.AbstractScreen;
@@ -8,6 +10,7 @@ import common.dto.grading.AnswerReviewRow;
 import common.dto.grading.CheckedForm;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -54,6 +57,7 @@ public final class CheckedFormView extends AbstractScreen {
             new EmptyState(Icons.RESULTS, "Not available", CheckedFormSession.NOT_AVAILABLE);
 
     private CheckedFormSession session;
+    private Node back;
 
     @Override
     protected Parent build() {
@@ -74,6 +78,11 @@ public final class CheckedFormView extends AbstractScreen {
         HBox titleRow = new HBox(12, heading, spacer(), printToggle);
         titleRow.setAlignment(Pos.CENTER_LEFT);
 
+        // F-7: this screen is reached from a My Grades row and has no rail entry of
+        // its own, so before this there was no way off it at all. Above the title,
+        // which is the wave-1 convention for every drill-in.
+        back = BackLink.to(navigator(), Routes.MY_GRADES.id(), "My grades");
+
         ScrollPane scroller = new ScrollPane(questions);
         scroller.setFitToWidth(true);
         scroller.getStyleClass().add("edge-to-edge");
@@ -81,7 +90,8 @@ public final class CheckedFormView extends AbstractScreen {
 
         root.getStyleClass().add(CheckedFormCopy.STYLE_CLASS);
         root.setPadding(new Insets(24));
-        root.getChildren().addAll(titleRow, header, attemptLine, noteBox, unavailable, scroller);
+        root.getChildren().addAll(back, titleRow, header, attemptLine, noteBox, unavailable,
+                scroller);
         return root;
     }
 
@@ -200,6 +210,10 @@ public final class CheckedFormView extends AbstractScreen {
         if (printing) {
             root.getStyleClass().add(ResultsCopy.PRINT_STYLE_CLASS);
         }
+        // The back link is navigation, and navigation is what a printed page does not
+        // need — the same rule the rail follows on the two print-capable screens.
+        back.setVisible(!printing);
+        back.setManaged(!printing);
     }
 
     private static HBox spacer() {

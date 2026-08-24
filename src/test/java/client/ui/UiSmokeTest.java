@@ -2,6 +2,7 @@ package client.ui;
 
 import client.core.AppArgs;
 import client.core.ClientApp;
+import client.core.FxTestHarness;
 import client.core.Routes;
 import client.core.ScreenManager;
 import client.features.login.ShellBoot;
@@ -76,10 +77,7 @@ class UiSmokeTest extends ApplicationTest {
     void resetGlobalState() throws Exception {
         // The manager is a Singleton and the gallery flag is a system property:
         // both would otherwise leak from one test into the next.
-        java.lang.reflect.Method reset = ScreenManager.class.getDeclaredMethod("resetForTests");
-        reset.setAccessible(true);
-        reset.invoke(null);
-        System.clearProperty(AppArgs.PROP_GALLERY);
+        FxTestHarness.resetGlobalState();
     }
 
     @Test

@@ -106,44 +106,24 @@ public final class MyGradesView extends AbstractScreen {
                 // property of it, and a column heading would imply every row has a value.
                 .column("", MyGradesCopy::adjustedMarker);
 
-        // Double-click opens the marked paper (E13.4). The server re-checks all three of its
-        // conditions, so a row that opens nothing is a refusal and not a broken link: the
-        // checked form says so itself rather than this table trying to predict it.
-        table.table().setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) {
-                StudentGradeRow row = table.table().getSelectionModel().getSelectedItem();
-                if (row != null) {
-                    navigator().navigate(Routes.CHECKED_FORM.id(),
-                            NavParams.of("gradeId", row.gradeId()));
-                }
-            }
-        });
+        // A single click opens the marked paper (E13.4, and F-8 for the gesture). The server
+        // re-checks all three of its conditions, so a row that opens nothing is a refusal and
+        // not a broken link: the checked form says so itself rather than this table trying to
+        // predict it.
+        table.openOnClick(row -> navigator().navigate(Routes.CHECKED_FORM.id(),
+                NavParams.of("gradeId", row.gradeId())));
 
         // Widths by content, not evenly. Left to itself the table divided the width equally and
         // the two-character Course column got the same share as a date, which truncated
         // "23 Aug 2026" to "23 Au…" — a date column that cannot show a date. Found on a real
         // screen; the copy tests format the string correctly and never see the column.
-        sizeColumns(220, 90, 110, 150, 260, 170);
+        // F-9 generalised this to every table through DataTable.columnWidths.
+        table.columnWidths(220, 90, 110, 150, 260, 170);
 
         table.emptyState(new EmptyState(Icons.RESULTS, "No grades yet", MyGradesSession.NOTHING_YET));
         table.getStyleClass().add("my-grades-table");
         VBox.setVgrow(table, Priority.ALWAYS);
         return table;
-    }
-
-    /**
-     * Gives each column a width suited to what it holds.
-     *
-     * <p>Preferred widths rather than fixed ones, so the table still adapts to the window; the
-     * point is only that a date is not allotted the same room as a two-character course code.
-     *
-     * @param widths one per column, in the order the columns were added
-     */
-    private void sizeColumns(double... widths) {
-        var columns = table.table().getColumns();
-        for (int i = 0; i < columns.size() && i < widths.length; i++) {
-            columns.get(i).setPrefWidth(widths[i]);
-        }
     }
 
     // ===================== Rendering =====================================

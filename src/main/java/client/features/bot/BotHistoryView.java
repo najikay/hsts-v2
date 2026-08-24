@@ -3,6 +3,7 @@ package client.features.bot;
 import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
@@ -46,6 +47,7 @@ public final class BotHistoryView extends AbstractScreen {
     private final BorderPane root = new BorderPane();
     private final Label heading = new Label(BotCopy.HISTORY_TITLE);
     private final Label subheading = new Label();
+    private final Label explainer = new Label(BotCopy.HISTORY_EXPLAINER);
     private final Label status = new Label();
     private final VBox rows = new VBox(8);
     private final EmptyState empty =
@@ -59,6 +61,9 @@ public final class BotHistoryView extends AbstractScreen {
         root.getStyleClass().add("bot-history");
         heading.getStyleClass().add("page-title");
         subheading.getStyleClass().add("page-subtitle");
+        // F-14: one line saying what this list is, since the subheading is the course.
+        explainer.getStyleClass().addAll("page-subtitle", "muted");
+        explainer.setWrapText(true);
         status.getStyleClass().add("bot-status");
         status.setWrapText(true);
         status.setVisible(false);
@@ -68,7 +73,13 @@ public final class BotHistoryView extends AbstractScreen {
         back.setOnAction(e -> navigator().navigate(Routes.BOT_CHAT.id(),
                 NavParams.of(PARAM_COURSE, courseCode)));
 
-        HBox header = new HBox(12, new VBox(2, heading, subheading), Buttons.spacer(), back);
+        // F-7: the named "Study bot" button stays on the right; the convention's
+        // control goes top-left so this screen exits the same way every other
+        // drill-in does.
+        HBox header = new HBox(12,
+                new VBox(2, BackLink.to(navigator(), Routes.BOT_CHAT.id(), "Study bot"),
+                        heading, subheading, explainer),
+                Buttons.spacer(), back);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(16, 20, 8, 20));
 

@@ -47,11 +47,11 @@ Verification goes through the real `BCrypt.verifyer()` path (F1.1, S-38).
 
 | Username | Password | Name | Role | Courses |
 |---|---|---|---|---|
-| `dana.cohen` | `demo123` | Dana Cohen (דנה כהן) | TEACHER | Algebra 11, Calculus 12 — teaches |
-| `rina.barak` | `demo123` | Rina Barak (רינה ברק) | COORDINATOR \* | none; coordinates Mathematics 10 without teaching. The **pure-coordinator** login (roster decision, 2026-08-20); the dual-hat case is `michal.sharon` |
-| `maya.levi` | `demo123` | Maya Levi (מאיה לוי) | STUDENT | Algebra 11, Java Programming 21, Databases 22 — enrolled |
-| `noam.peretz` | `demo123` | Noam Peretz (נועם פרץ) | STUDENT | Calculus 12, Java Programming 21 — enrolled |
-| `principal.avia` | `demo123` | Avia Shalev (אביה שלו) | PRINCIPAL | none (school-wide read-only, S-7) |
+| `dana.cohen` | `demo123` | Dana Cohen | TEACHER | Algebra 11, Calculus 12 — teaches |
+| `rina.barak` | `demo123` | Rina Barak | COORDINATOR \* | none; coordinates Mathematics 10 without teaching. The **pure-coordinator** login (roster decision, 2026-08-20); the dual-hat case is `michal.sharon` |
+| `maya.levi` | `demo123` | Maya Levi | STUDENT | Algebra 11, Java Programming 21, Databases 22 — enrolled |
+| `noam.peretz` | `demo123` | Noam Peretz | STUDENT | Calculus 12, Java Programming 21 — enrolled |
+| `principal.avia` | `demo123` | Avia Shalev | PRINCIPAL | none (school-wide read-only, S-7) |
 
 \* **`COORDINATOR` is a wire role, not a stored one.** `users.role` is
 `ENUM('STUDENT','TEACHER','PRINCIPAL')` and has no COORDINATOR member. `rina.barak` is stored as
