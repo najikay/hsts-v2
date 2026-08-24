@@ -32,6 +32,19 @@ public final class BotCopy {
     /** The chat screen's title. */
     public static final String CHAT_TITLE = "Study bot";
 
+    /**
+     * The one line that says what this screen is (UI wave 1, F-14).
+     *
+     * <p>A student arriving here saw a title, a course name and an empty box, and
+     * nothing on the screen said what the thing in the box knows or whether a
+     * teacher reads it. Both are answered in one sentence, and the second half is
+     * the one that changes behaviour: a student who suspects a teacher is reading
+     * asks nothing.
+     */
+    public static final String CHAT_EXPLAINER =
+            "Ask about this course and the bot answers from the material your teacher "
+                    + "uploaded. Your questions are not shown to your teacher.";
+
     /** The input's placeholder. */
     public static final String ASK_PLACEHOLDER = "Ask about anything in this course";
 
@@ -46,8 +59,8 @@ public final class BotCopy {
 
     /** Its hint, which doubles as an example of what this bot is for. */
     public static final String CHAT_EMPTY_HINT =
-            "The bot answers from the material your teacher uploaded for this course. "
-                    + "Try asking it to explain something you are stuck on.";
+            "Type a question below and press send. The bot explains topics, works through "
+                    + "an example and answers from your course material.";
 
     /** A network or server failure on an ask; the question is still in the box. */
     public static final String ASK_FAILED =
@@ -83,6 +96,10 @@ public final class BotCopy {
     /** The history screen's title. */
     public static final String HISTORY_TITLE = "Bot history";
 
+    /** What the history screen is for (UI wave 1, F-14). */
+    public static final String HISTORY_EXPLAINER =
+            "Every conversation you have had with this course's bot. Reopen one to keep going.";
+
     /** Its empty state. */
     public static final String HISTORY_EMPTY_TITLE = "No conversations yet";
 
@@ -106,13 +123,24 @@ public final class BotCopy {
     /** The manager screen's title. */
     public static final String MANAGER_TITLE = "Bot manager";
 
+    /**
+     * What the manager screen is for (UI wave 1, F-14).
+     *
+     * <p>The screen showed a course name and a table of sources with no statement
+     * of what a source does, so "add a file" read as an upload with no consequence.
+     * Naming the consequence is what makes the table worth filling.
+     */
+    public static final String MANAGER_EXPLAINER =
+            "Your course's study bot answers students from the material you add here. "
+                    + "Switch it on when you are ready for students to use it.";
+
     /** The empty state for a course with no bot. */
     public static final String NO_BOT_TITLE = "This course has no study bot";
 
     /** Its hint. */
     public static final String NO_BOT_HINT =
-            "Create one, then add the material it should answer from. "
-                    + "Students see it as soon as it is switched on.";
+            "Use \"Create the study bot\" below, then add the material it should answer "
+                    + "from. Students see it as soon as it is switched on.";
 
     /** The create button. */
     public static final String CREATE_BOT = "Create the study bot";
@@ -167,6 +195,17 @@ public final class BotCopy {
 
     /** The analytics screen's title. */
     public static final String ANALYTICS_TITLE = "Bot activity";
+
+    /**
+     * What the analytics screen is for (UI wave 1, F-14).
+     *
+     * <p>Says what the numbers are <i>about</i> before the anonymity note says what
+     * they are not. A teacher who reads "anonymous" first spends a moment working
+     * out what was being claimed.
+     */
+    public static final String ANALYTICS_EXPLAINER =
+            "What students are asking this course's bot, so you can see which topics "
+                    + "they are stuck on.";
 
     /**
      * The line that tells the teacher, unprompted, that this view is anonymous.

@@ -56,7 +56,7 @@ public final class ApprovalQueueView extends AbstractScreen {
                 .searchable("Search exam, course or teacher", ApprovalQueueView::matches)
                 .emptyState(empty)
                 .onRetry(ApprovalCopy.QUEUE_LOAD_FAILED, () -> session.load());
-        table.table().setRowFactory(view -> openOnDoubleClick());
+        table.openOnClick(this::openPreview);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         root.getStyleClass().add("approval-queue");
@@ -101,7 +101,13 @@ public final class ApprovalQueueView extends AbstractScreen {
                 .column("Teacher", ApprovalRow::authorName)
                 .column("Questions", row -> ApprovalCopy.questions(row.questionCount()))
                 .column("Submitted", row -> ApprovalCopy.submittedAt(row.submittedAt()))
-                .column(statusColumn());
+                .column(statusColumn())
+                // Exam and Status carry their own widths above; the rest are sized
+                // to their content so a teacher's name and a date are never clipped.
+                .columnWidths(260, 150, 190, 110, 170, 220)
+                // UI wave 2: a question count is a number, so it is right
+                // aligned in tabular figures like every other number in the app.
+                .numericColumns(3);
     }
 
     /**
@@ -135,27 +141,6 @@ public final class ApprovalQueueView extends AbstractScreen {
             }
         });
         return column;
-    }
-
-    /**
-     * Opens the preview on a double click or on Enter.
-     *
-     * <p>Both, because a queue is a keyboard surface as much as a mouse one: a coordinator
-     * working through six submissions should not have to reach for the trackpad.
-     */
-    private TableRow<ApprovalRow> openOnDoubleClick() {
-        TableRow<ApprovalRow> row = new TableRow<>();
-        row.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2 && !row.isEmpty()) {
-                openPreview(row.getItem());
-            }
-        });
-        row.setOnKeyPressed(event -> {
-            if (event.getCode() == javafx.scene.input.KeyCode.ENTER && !row.isEmpty()) {
-                openPreview(row.getItem());
-            }
-        });
-        return row;
     }
 
     private void openPreview(ApprovalRow row) {

@@ -154,4 +154,34 @@ public class ExamVersion {
     public void submitForApproval() {
         this.status = ExamVersionStatus.PENDING;
     }
+
+    /**
+     * Rewrites the metadata of a draft in place (E7.2 — {@code EXAM_VERSION_SAVE}).
+     *
+     * <p>One method rather than four setters, because these four fields are always written
+     * together by the one verb that writes them: a save carries the whole form. Setters would
+     * also make the row look editable from anywhere, and the contract's §5.4 says only a
+     * {@code DRAFT} may be saved.
+     *
+     * <p><b>This method does not check that status.</b> {@code ExamService} does, and answers
+     * {@code CONFLICT} rather than {@code VALIDATION} when the world has moved underneath the
+     * form. Putting the check here as well would put one rule in two places, and the entity is
+     * the copy with no way to produce that answer.
+     *
+     * <p>{@code status}, {@code versionNo} and {@code rejectedReason} are deliberately untouched.
+     * A save never changes what a version <em>is</em>; editing an exam that is no longer a draft
+     * is {@code EXAM_VERSION_REVISE}, which creates a new row.
+     *
+     * @param name            the exam's name on this version
+     * @param durationMinutes the sitting length
+     * @param studentText     the student-facing block, or {@code null}
+     * @param teacherText     the teacher-only block, or {@code null}
+     */
+    public void editDraft(String name, int durationMinutes, String studentText,
+                          String teacherText) {
+        this.name = name;
+        this.durationMinutes = durationMinutes;
+        this.studentText = studentText;
+        this.teacherText = teacherText;
+    }
 }

@@ -44,7 +44,9 @@ import java.util.function.Consumer;
  * // 3. close on screen hide, on navigation, and when the editor is dismissed
  * locks.close();
  *
- * // 4. render: the snapshot says everything
+ * // 4. render: the snapshot says everything. It ALWAYS arrives on the FX
+ * //    thread - publish() hops internally - so render straight to the scene
+ * //    graph with no Platform.runLater of your own.
  * private void renderLockState(EditLockState.Snapshot state) {
  *     form.setDisable(!state.isEditable());
  *     banner.setText(state.bannerText("exam version").orElse(""));
@@ -273,9 +275,26 @@ public final class LockAwareEditor {
         }
     }
 
+    /**
+     * Delivers a snapshot to every listener, <b>always on the FX thread</b>.
+     *
+     * <p>The hop lives here and nowhere else (ruled 2026-08-24, #43's thread): half of the
+     * publishes originate inside {@code dispatcher.send(...).whenComplete(...)}, which runs on
+     * whichever thread delivered the network answer, and both existing consumers had copied
+     * the recipe above without a hop — a scene-graph mutation off the FX thread that never
+     * throws, it just sometimes does not update the banner. Centralising the hop covers every
+     * future consumer too.
+     *
+     * <p>Consequence, deliberate: {@code PlatformFxThreadPoster} is an unconditional
+     * {@code runLater}, so a snapshot that originates ON the FX thread (open, close, decline)
+     * now arrives one pulse deferred rather than inline. For a banner and a disable flag that
+     * is invisible; tests install {@code DirectFxThreadPoster} and stay synchronous.
+     */
     private void publish(EditLockState.Snapshot snapshot) {
-        for (Consumer<EditLockState.Snapshot> listener : List.copyOf(listeners)) {
-            listener.accept(snapshot);
-        }
+        eventBus.poster().run(() -> {
+            for (Consumer<EditLockState.Snapshot> listener : List.copyOf(listeners)) {
+                listener.accept(snapshot);
+            }
+        });
     }
 }

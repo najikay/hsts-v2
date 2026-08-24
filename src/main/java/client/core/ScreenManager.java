@@ -74,8 +74,30 @@ public final class ScreenManager {
     /**
      * Discards the singleton. Test-only seam: the manager holds a Stage and a
      * navigator, and one test's state must not leak into the next.
+     *
+     * <p>The screen that is on screen is <b>hidden first</b>, and that is not
+     * tidiness. Screens that started background work keep a "am I still live?"
+     * flag which {@code onHide} clears; {@code ConnectView}'s two-second
+     * discovery sweep is the one that bites. Dropping the singleton without
+     * hiding leaves that flag true, so a sweep landing after the teardown
+     * believes it is still on screen, asks a brand-new (uninitialised) manager
+     * for its event bus and gets {@code null}. Hiding here is what makes the
+     * late work a no-op instead of an exception thrown into the next test.
+     *
+     * <p>Callers must run this on the FX thread — {@code onHide} stops
+     * animations — and should drain pending {@code Platform.runLater} work
+     * first; {@code client.core.FxTestHarness} does both.
      */
     static synchronized void resetForTests() {
+        if (instance != null && instance.lifecycle != null) {
+            try {
+                instance.lifecycle.hideCurrent();
+            } catch (RuntimeException e) {
+                // Teardown must complete even if a screen's onHide misbehaves;
+                // the alternative is a leaked singleton poisoning every test after.
+                log.debug("A screen failed to hide during test teardown: {}", e.toString());
+            }
+        }
         instance = null;
     }
 
@@ -212,7 +234,10 @@ public final class ScreenManager {
             shell.setContent(view);
         } else {
             setRoot(view);
-            Animations.fadeIn(view, Motion.BASE_MS);
+            // UI wave 2: the incoming screen fades and rises 8px. Incoming only —
+            // cross-fading two screens shows neither, and moving the outgoing one
+            // moves content a user may still be reading.
+            Animations.riseIn(view, Motion.RISE_DISTANCE, Motion.ROUTE_MS);
         }
         primaryStage.setTitle("HSTS · " + target.route().title());
         log.debug("navigated {} → {}", event.previous().map(NavEntry::routeId).orElse("(none)"),

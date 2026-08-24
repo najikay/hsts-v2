@@ -76,6 +76,54 @@ public final class MyGradesCopy {
     /** The style class the screen's root carries, for the stylesheet and for tests. */
     public static final String STYLE_CLASS = "my-grades";
 
+    // ===================== UI wave 2: the hero band and the card grid =====
+
+    /**
+     * The kicker over the hero's ring.
+     *
+     * <p>Sentence case here and uppercase on screen, like every kicker in the
+     * app: the transform belongs to
+     * {@link client.ui.components.logic.KickerText}, not to this file.
+     */
+    public static final String HERO_KICKER = "This term";
+
+    /** The hero's headline, beside the ring. */
+    public static final String HERO_TITLE = "Your term average";
+
+    /**
+     * The hero's one warm sentence, when she has grades.
+     *
+     * <p>Warm and also load-bearing: it repeats, in the one place a student
+     * looks first, that everything on this screen has been through a teacher.
+     * That is the same fact {@link #SUBTITLE} carries, and it is worth saying
+     * twice because it is the fact that makes a missing grade unalarming.
+     */
+    public static final String HERO_WARM =
+            "Every mark here has been checked and approved by your teacher.";
+
+    /** The hero's sentence when nothing has been published yet. */
+    public static final String HERO_WARM_EMPTY =
+            "Nothing has been published to you yet. Your first mark will appear here.";
+
+    /** Label on the hero's right-hand slot, when a next exam is known. */
+    public static final String NEXT_EXAM_LABEL = "Next exam";
+
+    /** The link line at the bottom of a grade card. */
+    public static final String CARD_OPEN = "Open paper";
+
+    /** The dashed placeholder card's heading. */
+    public static final String EMPTY_SLOT_TITLE = "Waiting for a grade";
+
+    /** The dashed placeholder card's sentence. */
+    public static final String EMPTY_SLOT_HINT =
+            "Your grade appears the moment a teacher approves it.";
+
+    /** The chip on a card at or above the pass mark. */
+    public static final String CHIP_PASSED = "Passed";
+
+    /** The chip on a card below it. Names the mark, never the student. */
+    public static final String CHIP_BELOW = "Below the pass mark";
+
     /** "20 Aug 2026" — a date a student reads off a transcript, no clock time. */
     private static final DateTimeFormatter APPROVED_ON =
             DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
@@ -227,6 +275,35 @@ public final class MyGradesCopy {
     public static boolean isApproved(StudentGradeRow row) {
         Objects.requireNonNull(row, "row");
         return row.state() == GradeState.APPROVED;
+    }
+
+    /**
+     * The hero's counting line (UI wave 2).
+     *
+     * @param grades  how many published grades she has
+     * @param courses how many different courses they span
+     * @return for example {@code "4 grades across 2 courses"}; the singular
+     *         forms exist because "1 grades across 1 courses" is the sentence a
+     *         format string would have produced on the demo account with one
+     *         mark in it
+     */
+    public static String heroCount(int grades, int courses) {
+        int safeGrades = Math.max(grades, 0);
+        int safeCourses = Math.max(courses, 0);
+        return safeGrades + (safeGrades == 1 ? " grade across " : " grades across ")
+                + safeCourses + (safeCourses == 1 ? " course" : " courses");
+    }
+
+    /**
+     * @param row a loaded row
+     * @return {@code true} when the mark reached the pass mark the server marks
+     *         against. The number is {@code ResultStatistics.PASS_MARK}, read
+     *         from the contract rather than copied into the client, so a school
+     *         that changes it changes it once
+     */
+    public static boolean passed(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        return row.effectiveScore() >= common.dto.results.ResultStatistics.PASS_MARK;
     }
 
     private static String blankToNull(String text) {

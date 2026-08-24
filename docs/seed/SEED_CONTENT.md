@@ -24,7 +24,7 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 | Passwords BCrypt-hashed | PRD §5 | Plaintext here is **demo-only**; the loader hashes at insert |
 | All `DATETIME` values are UTC | migration README | Relative times below ("T−14d") resolve at load time |
 
-> **National ids are checksum-valid Israeli ת"ז.** S-18 has a student type this to start
+> **National ids are checksum-valid Israeli national id.** S-18 has a student type this to start
 > an attempt; if id validation is ever added, invalid demo data would break the demo
 > rather than the code. Costing nothing now, so they are all valid.
 
@@ -34,17 +34,17 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 
 | code2 | name |
 |---|---|
-| `10` | מתמטיקה |
-| `20` | מדעי המחשב |
+| `10` | Mathematics |
+| `20` | Computer science |
 
 ## 2. Courses (seeded, read-only — S-3)
 
 | code2 | subject | name |
 |---|---|---|
-| `11` | `10` | אלגברה |
-| `12` | `10` | חשבון דיפרנציאלי ואינטגרלי |
-| `21` | `20` | תכנות מונחה עצמים ב-Java |
-| `22` | `20` | בסיסי נתונים |
+| `11` | `10` | Algebra |
+| `12` | `10` | Calculus |
+| `21` | `20` | Object oriented programming in Java |
+| `22` | `20` | Databases |
 
 ## 3. Users (18 — 1 principal, 5 teachers, 12 students)
 
@@ -62,24 +62,24 @@ when the fixture is replaced.
 
 | id | username | full_name | role (stored) | national_id | |
 |---|---|---|---|---|---|
-| 1 | `principal.avia` | אביה שלו | PRINCIPAL | `301548202` | ★ |
-| 2 | `dana.cohen` | דנה כהן | TEACHER | `214703951` | ★ |
-| 3 | `rina.barak` | רינה ברק | TEACHER | `248190639` | ★ |
-| 4 | `avi.mizrahi` | אבי מזרחי | TEACHER | `273056416` | |
-| 5 | `tamar.shani` | תמר שני | TEACHER | `296481724` | |
-| 6 | `michal.sharon` | מיכל שרון | TEACHER | `315729046` | |
-| 7 | `noa.friedman` | נועה פרידמן | STUDENT | `338106727` | |
-| 8 | `itay.regev` | איתי רגב | STUDENT | `349251082` | |
-| 9 | `shira.dahan` | שירה דהן | STUDENT | `352074611` | |
-| 10 | `omer.katz` | עומר כץ | STUDENT | `361489206` | |
-| 11 | `maya.levi` | מאיה לוי | STUDENT | `374301851` | ★ |
-| 12 | `noam.peretz` | נועם פרץ | STUDENT | `385612098` | ★ |
-| 13 | `yael.azulay` | יעל אזולאי | STUDENT | `390745362` | |
-| 14 | `daniel.shapira` | דניאל שפירא | STUDENT | `402186936` | |
-| 15 | `lior.gabay` | ליאור גבאי | STUDENT | `413860529` | |
-| 16 | `tal.harari` | טל הררי | STUDENT | `425097185` | |
-| 17 | `roni.malka` | רוני מלכה | STUDENT | `436712400` | |
-| 18 | `eitan.solomon` | איתן סולומון | STUDENT | `448521062` | |
+| 1 | `principal.avia` | Avia Shalev | PRINCIPAL | `301548202` | ★ |
+| 2 | `dana.cohen` | Dana Cohen | TEACHER | `214703951` | ★ |
+| 3 | `rina.barak` | Rina Barak | TEACHER | `248190639` | ★ |
+| 4 | `avi.mizrahi` | Avi Mizrahi | TEACHER | `273056416` | |
+| 5 | `tamar.shani` | Tamar Shani | TEACHER | `296481724` | |
+| 6 | `michal.sharon` | Michal Sharon | TEACHER | `315729046` | |
+| 7 | `noa.friedman` | Noa Friedman | STUDENT | `338106727` | |
+| 8 | `itay.regev` | Itay Regev | STUDENT | `349251082` | |
+| 9 | `shira.dahan` | Shira Dahan | STUDENT | `352074611` | |
+| 10 | `omer.katz` | Omer Katz | STUDENT | `361489206` | |
+| 11 | `maya.levi` | Maya Levi | STUDENT | `374301851` | ★ |
+| 12 | `noam.peretz` | Noam Peretz | STUDENT | `385612098` | ★ |
+| 13 | `yael.azulay` | Yael Azulay | STUDENT | `390745362` | |
+| 14 | `daniel.shapira` | Daniel Shapira | STUDENT | `402186936` | |
+| 15 | `lior.gabay` | Lior Gabay | STUDENT | `413860529` | |
+| 16 | `tal.harari` | Tal Harari | STUDENT | `425097185` | |
+| 17 | `roni.malka` | Roni Malka | STUDENT | `436712400` | |
+| 18 | `eitan.solomon` | Eitan Solomon | STUDENT | `448521062` | |
 
 > **No stored COORDINATOR role.** `users.role` is `ENUM('STUDENT','TEACHER','PRINCIPAL')`.
 > `DEMO_ACCOUNTS.md` lists `rina.barak` as COORDINATOR because that is the **wire** role:
@@ -90,9 +90,9 @@ when the fixture is replaced.
 
 | course | teacher | note |
 |---|---|---|
-| `11` אלגברה | 2 dana.cohen | ★ `DEMO_ACCOUNTS.md`: dana.cohen teaches Algebra 11 |
-| `12` חדו"א | 2 dana.cohen | ★ same teacher, second course |
-| `12` חדו"א | — | ★ roster change 2026-08-20: rina.barak no longer co-teaches; dana.cohen teaches Calculus alone. Rina is the pure coordinator |
+| `11` Algebra | 2 dana.cohen | ★ `DEMO_ACCOUNTS.md`: dana.cohen teaches Algebra 11 |
+| `12` Calculus | 2 dana.cohen | ★ same teacher, second course |
+| `12` Calculus | — | ★ roster change 2026-08-20: rina.barak no longer co-teaches; dana.cohen teaches Calculus alone. Rina is the pure coordinator |
 | `21` Java | 4 avi.mizrahi | |
 | `21` Java | 5 tamar.shani | co-teacher on Java (PRD §5) |
 | `22` Databases | 6 michal.sharon | |
@@ -107,8 +107,8 @@ divergence from PRD §5 as written, not an accident.
 
 | subject_code | teacher | coordinates courses |
 |---|---|---|
-| `10` מתמטיקה | 3 rina.barak | 11 אלגברה, 12 חדו"א |
-| `20` מדעי המחשב | 6 michal.sharon | 21 Java, 22 Databases |
+| `10` Mathematics | 3 rina.barak | 11 Algebra, 12 Calculus |
+| `20` Computer science | 6 michal.sharon | 21 Java, 22 Databases |
 
 `rina.barak` coordinates Mathematics (10) and teaches nothing (pure coordinator, decided 2026-08-20), so she approves
 `dana.cohen`'s Algebra and Calculus exams. That is the intended demo shape: **the approver is
@@ -168,37 +168,37 @@ hand-written values.
 
 ### 7.1 Algebra (course 11) — 11 questions
 
-Topics: משוואות ליניאריות · פונקציות ריבועיות · אי-שוויונות
+Topics: Linear equations · Quadratic functions · Inequalities
 
 | display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
 |---|---|---|---|---|---|---|---|---|---|
-| 11001 | משוואות ליניאריות | EASY | פתרו: `3x + 6 = 18` | `x = 4` | `x = 6` | `x = 2` | `x = 12` | 1 | |
-| 11002 | משוואות ליניאריות | EASY | פתרו: `5x - 7 = 2x + 8` | `x = 3` | `x = 5` | `x = 15` | `x = 1` | 2 | |
-| 11003 | משוואות ליניאריות | MEDIUM | לאיזה ערך של `k` למערכת `2x + ky = 4`, `4x + 6y = 8` יש אינסוף פתרונות? | `k = 2` | `k = 6` | `k = 3` | `k = 12` | 3 | |
-| 11004 | משוואות ליניאריות | HARD | סכום הספרות של מספר דו-ספרתי הוא 11. אם מחליפים את הספרות, המספר גדל ב-27. מהו המספר? | `29` | `38` | `56` | `47` | 4 | |
-| 11005 | פונקציות ריבועיות | EASY | מהם שורשי `x² - 5x + 6 = 0`? | `2, 3` | `1, 6` | `-2, -3` | `0, 5` | 1 | yes |
-| 11006 | פונקציות ריבועיות | EASY | מהו קודקוד הפרבולה `y = (x - 3)² + 4`? | `(-3, 4)` | `(3, 4)` | `(3, -4)` | `(4, 3)` | 2 | yes |
-| 11007 | פונקציות ריבועיות | MEDIUM | כמה נקודות חיתוך עם ציר `x` יש לפרבולה `y = x² + 2x + 5`? | `שתיים` | `אחת` | `אף אחת` | `אינסוף` | 3 | yes |
-| 11008 | פונקציות ריבועיות | HARD | הפרבולה `y = ax² + bx + c` עוברת דרך `(0,3)`, `(1,2)` ו-`(-1,6)`. מהו `a`? | `3` | `2` | `-1` | `1` | 4 | |
-| 11009 | אי-שוויונות | EASY | פתרו: `2x - 4 > 6` | `x > 5` | `x > 1` | `x < 5` | `x > 10` | 1 | |
-| 11010 | אי-שוויונות | MEDIUM | פתרו: `x² - 4 < 0` | `x < -2` | `-2 < x < 2` | `x > 2` | `כל x ממשי` | 2 | yes |
-| 11011 | אי-שוויונות | HARD | לאילו ערכי `x` מתקיים `(x-1)/(x+2) ≥ 0`? | `x ≥ 1` | `-2 < x ≤ 1` | `x < -2 או x ≥ 1` | `x ≤ -2 או x ≥ 1` | 3 | |
+| 11001 | Linear equations | EASY | Solve: `3x + 6 = 18` | `x = 4` | `x = 6` | `x = 2` | `x = 12` | 1 | |
+| 11002 | Linear equations | EASY | Solve: `5x - 7 = 2x + 8` | `x = 3` | `x = 5` | `x = 15` | `x = 1` | 2 | |
+| 11003 | Linear equations | MEDIUM | For which value of `k` does the system `2x + ky = 4`, `4x + 6y = 8` have infinitely many solutions? | `k = 2` | `k = 6` | `k = 3` | `k = 12` | 3 | |
+| 11004 | Linear equations | HARD | The digits of a two-digit number add up to 11. Swapping the digits increases the number by 27. What is the number? | `29` | `38` | `56` | `47` | 4 | |
+| 11005 | Quadratic functions | EASY | What are the roots of `x² - 5x + 6 = 0`? | `2, 3` | `1, 6` | `-2, -3` | `0, 5` | 1 | yes |
+| 11006 | Quadratic functions | EASY | What is the vertex of the parabola `y = (x - 3)² + 4`? | `(-3, 4)` | `(3, 4)` | `(3, -4)` | `(4, 3)` | 2 | yes |
+| 11007 | Quadratic functions | MEDIUM | How many x-axis intercepts does the parabola `y = x² + 2x + 5` have? | `Two` | `One` | `None` | `Infinitely many` | 3 | yes |
+| 11008 | Quadratic functions | HARD | The parabola `y = ax² + bx + c` passes through `(0,3)`, `(1,2)` and `(-1,6)`. What is `a`? | `3` | `2` | `-1` | `1` | 4 | |
+| 11009 | Inequalities | EASY | Solve: `2x - 4 > 6` | `x > 5` | `x > 1` | `x < 5` | `x > 10` | 1 | |
+| 11010 | Inequalities | MEDIUM | Solve: `x² - 4 < 0` | `x < -2` | `-2 < x < 2` | `x > 2` | `all real x` | 2 | yes |
+| 11011 | Inequalities | HARD | For which values of `x` does `(x-1)/(x+2) ≥ 0` hold? | `x ≥ 1` | `-2 < x ≤ 1` | `x < -2 or x ≥ 1` | `x ≤ -2 or x ≥ 1` | 3 | |
 
 ### 7.2 Calculus (course 12) — 9 questions
 
-Topics: גבולות · נגזרות · אינטגרלים
+Topics: Limits · Derivatives · Integrals
 
 | display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
 |---|---|---|---|---|---|---|---|---|---|
-| 12001 | גבולות | EASY | חשבו: `lim(x→2) (x² - 4)/(x - 2)` | `0` | `לא קיים` | `2` | `4` | 4 | |
-| 12002 | גבולות | MEDIUM | חשבו: `lim(x→∞) (3x² + x)/(x² - 5)` | `3` | `0` | `∞` | `1/3` | 1 |  |
-| 12003 | גבולות | HARD | חשבו: `lim(x→0) sin(3x)/x` | `1` | `3` | `0` | `1/3` | 2 | |
-| 12004 | נגזרות | EASY | מהי הנגזרת של `f(x) = x³`? | `3x` | `x²` | `3x²` | `x⁴/4` | 3 | |
-| 12005 | נגזרות | EASY | מהי הנגזרת של `f(x) = sin(x)`? | `-sin(x)` | `tan(x)` | `-cos(x)` | `cos(x)` | 4 | |
-| 12006 | נגזרות | MEDIUM | מהי הנגזרת של `f(x) = x·e^x`? | `(1 + x)·e^x` | `x·e^x` | `e^x` | `(x - 1)·e^x` | 1 |  |
-| 12007 | נגזרות | HARD | לפונקציה `f(x) = x³ - 3x` יש מינימום מקומי בנקודה: | `x = -1` | `x = 1` | `x = 0` | `x = 3` | 2 | yes |
-| 12008 | אינטגרלים | EASY | חשבו: `∫ 2x dx` | `x²/2 + C` | `2 + C` | `x² + C` | `2x² + C` | 3 | |
-| 12009 | אינטגרלים | MEDIUM | חשבו את השטח מתחת ל-`y = x²` בין `x=0` ל-`x=3` | `6` | `27` | `3` | `9` | 4 | yes |
+| 12001 | Limits | EASY | Evaluate: `lim(x→2) (x² - 4)/(x - 2)` | `0` | `does not exist` | `2` | `4` | 4 | |
+| 12002 | Limits | MEDIUM | Evaluate: `lim(x→∞) (3x² + x)/(x² - 5)` | `3` | `0` | `∞` | `1/3` | 1 |  |
+| 12003 | Limits | HARD | Evaluate: `lim(x→0) sin(3x)/x` | `1` | `3` | `0` | `1/3` | 2 | |
+| 12004 | Derivatives | EASY | What is the derivative of `f(x) = x³`? | `3x` | `x²` | `3x²` | `x⁴/4` | 3 | |
+| 12005 | Derivatives | EASY | What is the derivative of `f(x) = sin(x)`? | `-sin(x)` | `tan(x)` | `-cos(x)` | `cos(x)` | 4 | |
+| 12006 | Derivatives | MEDIUM | What is the derivative of `f(x) = x·e^x`? | `(1 + x)·e^x` | `x·e^x` | `e^x` | `(x - 1)·e^x` | 1 |  |
+| 12007 | Derivatives | HARD | The function `f(x) = x³ - 3x` has a local minimum at: | `x = -1` | `x = 1` | `x = 0` | `x = 3` | 2 | yes |
+| 12008 | Integrals | EASY | Evaluate: `∫ 2x dx` | `x²/2 + C` | `2 + C` | `x² + C` | `2x² + C` | 3 | |
+| 12009 | Integrals | MEDIUM | Find the area under `y = x²` between `x=0` and `x=3` | `6` | `27` | `3` | `9` | 4 | yes |
 
 ### 7.3 Java (course 21) — 11 questions
 
@@ -250,7 +250,7 @@ at v1 while the bank shows v2.
 
 | display_id5 | v1 → v2 change | why it is in the seed |
 |---|---|---|
-| 11005 | v2 rewords the stem to `מצאו את שורשי המשוואה x² - 5x + 6 = 0` (answers unchanged) | The Algebra Midterm's graded execution references **v1** — proof that a released exam is pinned to a version (S-14, C-2) |
+| 11005 | v2 rewords the stem to `Find the roots of the equation x² - 5x + 6 = 0` (answers unchanged) | The Algebra Midterm's graded execution references **v1** — proof that a released exam is pinned to a version (S-14, C-2) |
 | 21003 | v2 corrects answer 4: `AmbiguousMethodError` → `IncompatibleClassChangeError` | A correction that changes an *answer*, not just the stem |
 | 22004 | v2 appends "(assume no NULLs in the join key)" to the stem | A clarification on a HARD question |
 
@@ -268,9 +268,9 @@ sum to **100** (service rule, §5). `status` lives on the *version*, not the exa
 
 | # | display_id6 | course | name | author | versions and status |
 |---|---|---|---|---|---|
-| 1 | `101101` | 11 | מבחן אמצע — אלגברה | 2 dana.cohen | v1 **REJECTED**, v2 **APPROVED** |
-| 2 | `101102` | 11 | בוחן — אי-שוויונות | 2 dana.cohen | v1 **DRAFT** |
-| 3 | `101201` | 12 | מבחן אמצע — חדו"א | 2 dana.cohen | v1 **PENDING** (awaiting 3 rina.barak) |
+| 1 | `101101` | 11 | Midterm — Algebra | 2 dana.cohen | v1 **REJECTED**, v2 **APPROVED** |
+| 2 | `101102` | 11 | Quiz — Inequalities | 2 dana.cohen | v1 **DRAFT** |
+| 3 | `101201` | 12 | Midterm — Calculus | 2 dana.cohen | v1 **PENDING** (awaiting 3 rina.barak) |
 | 4 | `202101` | 21 | Java Fundamentals Exam | 4 avi.mizrahi | v1 **APPROVED** |
 | 5 | `202102` | 21 | Collections Quiz | 5 tamar.shani | v1 **REJECTED** |
 | 6 | `202201` | 22 | Databases Final | 6 michal.sharon | v1 **APPROVED** |
@@ -297,9 +297,9 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 | exam | student_text (S-3 general text) | teacher_text (teacher-only) |
 |---|---|---|
-| 1 | קראו כל שאלה עד הסוף. מותר השימוש במחשבון פשוט בלבד. | מחוון: שאלה 7 — לקבל גם פתרון גרפי מנומק. |
-| 2 | בוחן קצר. משך: 30 דקות. | טיוטה — טרם נבדק מול המחוון. |
-| 3 | יש לנמק כל שלב. תשובה ללא נימוק לא תזכה בניקוד מלא. | להזכיר לרינה: השאלות 12006 ו-12007 חדשות השנה. |
+| 1 | Read each question to the end. Only a basic calculator may be used. | Marking note: question 7 — accept a reasoned graphical solution too. |
+| 2 | A short quiz. Duration: 30 minutes. | A draft — not yet checked against the marking scheme. |
+| 3 | Justify every step. An answer with no justification will not receive full marks. | Remind Rina: questions 12006 and 12007 are new this year. |
 | 4 | Answer all questions. No IDE or documentation allowed. | Q21010 is the give-away question — keep it first. |
 | 5 | Short quiz on the Collections framework. | Draft — needs a fourth question before resubmitting. |
 | 6 | Closed book. Write SQL keywords in uppercase. | Q22007 historically has the lowest success rate — expect a low mean. |
@@ -308,7 +308,7 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 | exam | version | rejected by | reason |
 |---|---|---|---|
-| 1 | v1 | 3 rina.barak (coordinator of subject 10) | חמש שאלות בלבד ל-60 דקות, והציון לכל שאלה גבוה מדי. נדרש פיזור רחב יותר. |
+| 1 | v1 | 3 rina.barak (coordinator of subject 10) | Only five questions for 60 minutes, and each one is worth too much. A wider spread is needed. |
 | 5 | v1 | 6 michal.sharon (coordinator of subject 20) | Three questions is too few for a graded quiz, and all three are from one topic. Add a fourth from Exceptions. |
 
 > Exam 1 is the versioning showpiece: **v1 was rejected with a reason, v2 fixed exactly
@@ -375,8 +375,8 @@ exactly. `extra_minutes = 0`.
 - yael.azulay, 45 → 55, by **2 dana.cohen** — the teacher who wrote and released the exam.
   The coordinator approves *exams*, the teacher approves *grades* (T-8.2 / T-8.3); here they
   are deliberately different people.
-- Reason: `בשאלה 11011 נכתב פתרון נכון עם טעות סימן בשורה האחרונה — ניתן ניקוד חלקי.`
-- Teacher comment to the student (S-22): `שיפור ניכר באי-שוויונות. כדאי לחזור על תחום ההגדרה.`
+- Reason: `Question 11011 has a correct solution with a sign error on the last line — partial credit was given.`
+- Teacher comment to the student (S-22): `A clear improvement on inequalities. Worth revising the domain of definition.`
 
 **Frozen `participation` JSON:** `{"started": 8, "finished": 7, "timed_out": 1}`
 
@@ -553,8 +553,8 @@ every source below carries real body text, not a placeholder.
 
 | bot | course | name | active |
 |---|---|---|---|
-| 1 | 11 | עוזר הלימוד — אלגברה | yes |
-| 2 | 12 | עוזר הלימוד — חדו"א | yes |
+| 1 | 11 | Study assistant — Algebra | yes |
+| 2 | 12 | Study assistant — Calculus | yes |
 | 3 | 21 | Java Study Assistant | yes |
 | 4 | 22 | Databases Study Assistant | **no** — inactive, for the S-31 refusal demo |
 
@@ -570,9 +570,15 @@ this section and that file are one artefact in two places: **changing a body her
 without changing it there is a contract break**, and `SeedLoadedDbTest` fails when they
 disagree.
 
-**Volume, stated plainly:** the corpus is **1781 words across eight sources**, roughly
-222 words each. Per bot that is 410 words for Algebra, 417 for Calculus, 480 for Java and
+**Volume, stated plainly:** the corpus is **2171 words across eight sources**, roughly
+271 words each. Per bot that is 562 words for Algebra, 655 for Calculus, 480 for Java and
 474 for Databases.
+
+The four mathematics sources were **translated from Hebrew to English in UI wave 1**
+(F-13), against the ruling in `docs/reports/lead/MANUAL-PASS-1.md`. Only the language
+changed: each body still teaches the same syllabus in the same order, and the counts
+above were recomputed from the translated text rather than carried over. The Java and
+Databases sources were written in English and are untouched.
 
 These were expanded on 2026-08-22 from an earlier set totalling 546 words. That set was
 written to prove the schema rather than to answer questions, and it showed: a student
@@ -586,17 +592,17 @@ grounded on these plus the question bank (S-28), so anything invented here would
 invented by the bot on stage, under questioning, in front of people who teach the
 subject.
 
-**Source 1** · bot 1 · TEXT · `משוואות ליניאריות — סיכום`
-> משוואה ליניארית היא משוואה שבה המשתנה מופיע בחזקה ראשונה בלבד, ללא חזקות, שורשים או מכפלות של נעלמים. הצורה הכללית היא ax + b = 0 כאשר a שונה מאפס, והפתרון היחיד הוא x = -b/a. הפתרון מתבצע על ידי בידוד המשתנה: מעבירים אגפים תוך שינוי סימן, מכנסים איברים דומים, ולבסוף מחלקים במקדם של המשתנה. כאשר יש שברים במשוואה נהוג לכפול את שני האגפים במכנה המשותף כדי להיפטר מהם לפני הבידוד. כאשר יש סוגריים פותחים אותם תחילה לפי חוק הפילוג. מערכת של שתי משוואות בשני נעלמים נפתרת באחת משתי שיטות. בשיטת ההצבה מבודדים משתנה אחד מאחת המשוואות ומציבים את הביטוי שהתקבל במשוואה השנייה. בשיטת החיבור והחיסור כופלים את המשוואות במספרים מתאימים כך שמקדמי אחד המשתנים יהיו נגדיים, ואז מחברים את המשוואות והמשתנה מצטמצם. שתי השיטות נותנות את אותה תשובה, והבחירה ביניהן היא עניין של נוחות: הצבה נוחה כשמקדם של אחד המשתנים הוא אחד, וחיבור וחיסור נוח כשהמקדמים כבר קרובים. לכל מערכת יש שלוש אפשרויות בלבד, ולכולן יש משמעות גאומטרית. אם הישרים נחתכים בנקודה אחת יש פתרון יחיד. אם שתי המשוואות מתארות את אותו ישר יש אינסוף פתרונות, ובפתרון האלגברי יתקבל פסוק אמת כמו 0 = 0. אם הן מתארות ישרים מקבילים אין פתרון כלל, ובפתרון יתקבל פסוק שקר כמו 0 = 5. הטעות הנפוצה ביותר היא שכחת שינוי הסימן במעבר אגף.
+**Source 1** · bot 1 · TEXT · `Linear equations — a summary`
+> A linear equation is an equation in which the variable appears only to the first power, with no powers, roots or products of unknowns. Its general form is ax + b = 0 where a is not zero, and its single solution is x = -b/a. It is solved by isolating the variable: move terms across the equals sign changing their sign, collect like terms, and finally divide by the coefficient of the variable. When the equation contains fractions, multiply both sides by the common denominator to clear them before isolating. When it contains brackets, open them first using the distributive law. A system of two equations in two unknowns is solved by one of two methods. In substitution, isolate one variable in one of the equations and substitute the resulting expression into the second. In elimination, multiply the equations by suitable numbers so that the coefficients of one variable are opposite, then add the equations and that variable cancels out. Both methods give the same answer, and choosing between them is a matter of convenience: substitution is easy when one variable has a coefficient of one, and elimination is easy when the coefficients are already close. Every system has exactly three possibilities, and each of them has a geometric meaning. If the lines cross at one point there is a single solution. If both equations describe the same line there are infinitely many solutions, and the algebra ends in a true statement such as 0 = 0. If they describe parallel lines there is no solution at all, and the algebra ends in a false statement such as 0 = 5. The most common mistake is forgetting to change the sign when moving a term across.
 
-**Source 2** · bot 1 · PDF · `פונקציות ריבועיות — פרק 3`
-> פונקציה ריבועית היא פונקציה מהצורה y = ax² + bx + c כאשר a שונה מאפס. הגרף שלה הוא פרבולה, ומקדם a קובע את כיוון הפתיחה: אם a חיובי הפרבולה פותחת כלפי מעלה ויש לה נקודת מינימום, ואם a שלילי היא פותחת כלפי מטה ויש לה נקודת מקסימום. ככל שהערך המוחלט של a גדול יותר, הפרבולה צרה יותר. שורשי הפונקציה, כלומר נקודות החיתוך עם ציר ה-x, נמצאים על ידי הנוסחה x = (-b ± √(b²-4ac)) / 2a. הביטוי b²-4ac נקרא דיסקרימיננטה ומסומן בדרך כלל באות דלתא. הוא קובע את מספר השורשים: אם הוא חיובי יש שני שורשים שונים, אם הוא אפס יש שורש כפול אחד והפרבולה משיקה לציר ה-x, ואם הוא שלילי אין שורשים ממשיים והפרבולה כולה נמצאת מעל הציר או מתחתיו. נקודת החיתוך עם ציר ה-y מתקבלת תמיד בהצבת x = 0 ולכן שווה ל-c. ציר הסימטריה של הפרבולה הוא הישר x = -b/2a, וקודקוד הפרבולה נמצא על ציר זה. הצבת ערך זה בפונקציה נותנת את ערך הקיצון. כאשר ידועים שני השורשים, ציר הסימטריה נמצא גם באמצע ביניהם, וזו דרך מהירה יותר לחשב את הקודקוד. ניתן לכתוב את הפונקציה גם בצורת קודקוד y = a(x-p)² + k, כאשר (p,k) הוא הקודקוד. צורה זו נוחה לשרטוט ולזיהוי הזזות של הגרף.
+**Source 2** · bot 1 · PDF · `Quadratic functions — chapter 3`
+> A quadratic function is a function of the form y = ax² + bx + c where a is not zero. Its graph is a parabola, and the coefficient a decides which way it opens: if a is positive the parabola opens upwards and has a minimum point, and if a is negative it opens downwards and has a maximum point. The larger the absolute value of a, the narrower the parabola. The roots of the function, meaning the points where it crosses the x axis, are found with the formula x = (-b ± √(b²-4ac)) / 2a. The expression b²-4ac is called the discriminant and is usually written as delta. It decides how many roots there are: if it is positive there are two different roots, if it is zero there is a single double root and the parabola touches the x axis, and if it is negative there are no real roots and the whole parabola lies either above the axis or below it. The point where the graph crosses the y axis is always found by substituting x = 0 and therefore equals c. The axis of symmetry of the parabola is the line x = -b/2a, and the vertex of the parabola lies on that axis. Substituting this value into the function gives the extreme value. When both roots are known, the axis of symmetry is also halfway between them, which is a quicker way to compute the vertex. The function can also be written in vertex form y = a(x-p)² + k, where (p,k) is the vertex. That form is convenient for sketching and for recognising translations of the graph.
 
-**Source 3** · bot 2 · TEXT · `גבולות — הגדרה ושימוש`
-> גבול של פונקציה בנקודה מתאר לאן מתקרבים ערכי הפונקציה כאשר המשתנה מתקרב לנקודה, בלי להתייחס כלל לערך הפונקציה בנקודה עצמה. זו הבחנה מהותית: פונקציה יכולה להיות לא מוגדרת בנקודה ובכל זאת יהיה לה גבול שם, ולהפך, ערך הפונקציה בנקודה יכול להיות שונה מהגבול. כאשר הגבול קיים ושווה לערך הפונקציה בנקודה, אומרים שהפונקציה רציפה באותה נקודה. ניתן להתקרב לנקודה משני הכיוונים, ולכן מוגדרים גם גבול מימין וגבול משמאל. הגבול קיים אם ורק אם שני הגבולות החד-צדדיים קיימים ושווים זה לזה. כאשר הם שונים, הפונקציה קופצת בנקודה ואין לה גבול שם. בחישוב מנסים תחילה הצבה ישירה. אם ההצבה נותנת מספר, זהו הגבול. כאשר הצבה ישירה נותנת ביטוי מהצורה אפס חלקי אפס מדובר בגבול לא מוגדר שדורש טיפול אלגברי לפני ההצבה. שלוש השיטות המרכזיות הן פירוק לגורמים וצמצום הגורם המשותף שמאפס את המכנה, הכפלה בצמוד כאשר מופיע שורש, ושימוש בגבולות מיוחדים ידועים. אם ההצבה נותנת מספר שונה מאפס חלקי אפס, הגבול הוא אינסוף או מינוס אינסוף ולפונקציה יש אסימפטוטה אנכית באותה נקודה. גבול באינסוף מתאר את התנהגות הפונקציה לטווח רחוק. בפונקציה רציונלית משווים את חזקות המונה והמכנה: אם החזקה במכנה גדולה יותר הגבול הוא אפס, אם הן שוות הגבול הוא יחס המקדמים המובילים, ואם החזקה במונה גדולה יותר הגבול הוא אינסוף. גבול סופי באינסוף מציין אסימפטוטה אופקית.
+**Source 3** · bot 2 · TEXT · `Limits — definition and use`
+> The limit of a function at a point describes what the values of the function approach as the variable approaches that point, without referring at all to the value of the function at the point itself. That distinction is essential: a function can be undefined at a point and still have a limit there, and conversely the value of the function at a point can differ from the limit. When the limit exists and equals the value of the function at the point, the function is said to be continuous at that point. A point can be approached from either direction, so a limit from the right and a limit from the left are defined as well. The limit exists if and only if both one-sided limits exist and are equal to each other. When they differ, the function jumps at that point and has no limit there. To compute one, try direct substitution first. If the substitution gives a number, that number is the limit. When direct substitution gives an expression of the form zero over zero, the limit is indeterminate and needs algebraic work before substituting. The three main techniques are factorising and cancelling the common factor that makes the denominator zero, multiplying by the conjugate when a root appears, and using known special limits. If the substitution gives a number other than zero over zero, the limit is infinity or minus infinity and the function has a vertical asymptote at that point. A limit at infinity describes the behaviour of the function far out. For a rational function, compare the powers of the numerator and the denominator: if the power in the denominator is larger the limit is zero, if they are equal the limit is the ratio of the leading coefficients, and if the power in the numerator is larger the limit is infinity. A finite limit at infinity indicates a horizontal asymptote.
 
-**Source 4** · bot 2 · PDF · `כללי גזירה`
-> הנגזרת מודדת את קצב השינוי של פונקציה, ומבחינה גאומטרית היא שיפוע המשיק לגרף הפונקציה בנקודה. הגדרתה היא גבול של יחס ההפרשים כאשר ההפרש שואף לאפס, אך בפועל מחשבים אותה באמצעות כללי גזירה ולא מההגדרה. כללי הגזירה הבסיסיים: נגזרת של קבוע היא אפס; נגזרת של x בחזקת n היא n כפול x בחזקת n פחות אחת; נגזרת של סכום היא סכום הנגזרות; ונגזרת של קבוע כפול פונקציה היא הקבוע כפול הנגזרת. נגזרת של מכפלה נתונה על ידי f'g + fg', ושימו לב שהיא אינה מכפלת הנגזרות. נגזרת של מנה נתונה על ידי (f'g - fg')/g², והסדר במונה חשוב. כלל השרשרת קובע שנגזרת של הרכבת פונקציות היא מכפלת הנגזרת החיצונית בנגזרת הפנימית, והוא הכלל הנחוץ בכל פעם שמופיעה פונקציה בתוך פונקציה. השימוש המרכזי של הנגזרת הוא חקירת פונקציות. נקודות קיצון חשודות נמצאות היכן שהנגזרת מתאפסת. כדי לקבוע את סוג הקיצון בודקים את סימן הנגזרת משני צדי הנקודה: מעבר מחיובי לשלילי מציין מקסימום, ומעבר משלילי לחיובי מציין מינימום. לחלופין משתמשים במבחן הנגזרת השנייה: אם הנגזרת השנייה בנקודה חיובית מדובר במינימום, ואם היא שלילית מדובר במקסימום. הפונקציה עולה בקטע שבו הנגזרת חיובית ויורדת בקטע שבו היא שלילית. נקודות שבהן הנגזרת השנייה מתאפסת ומחליפה סימן הן נקודות פיתול, שבהן משתנה כיוון הקעירות של הגרף. חקירה מלאה כוללת תחום הגדרה, נקודות חיתוך עם הצירים, תחומי עלייה וירידה ונקודות הקיצון.
+**Source 4** · bot 2 · PDF · `Rules of differentiation`
+> The derivative measures the rate of change of a function, and geometrically it is the slope of the tangent to the graph of the function at a point. It is defined as the limit of the difference quotient as the difference tends to zero, but in practice it is computed with the rules of differentiation rather than from the definition. The basic rules of differentiation: the derivative of a constant is zero; the derivative of x to the power n is n times x to the power n minus one; the derivative of a sum is the sum of the derivatives; and the derivative of a constant times a function is the constant times the derivative. The derivative of a product is given by f'g + fg', and note that it is not the product of the derivatives. The derivative of a quotient is given by (f'g - fg')/g², and the order in the numerator matters. The chain rule states that the derivative of a composition of functions is the outer derivative times the inner derivative, and it is the rule needed every time one function appears inside another. The main use of the derivative is investigating functions. Candidate extreme points are found where the derivative is zero. To decide which kind of extreme point it is, check the sign of the derivative on both sides of the point: a change from positive to negative indicates a maximum, and a change from negative to positive indicates a minimum. Alternatively use the second derivative test: if the second derivative at the point is positive it is a minimum, and if it is negative it is a maximum. The function increases on an interval where the derivative is positive and decreases on an interval where it is negative. Points where the second derivative is zero and changes sign are inflection points, where the concavity of the graph changes direction. A full investigation covers the domain, the intercepts with the axes, the intervals of increase and decrease, and the extreme points.
 
 **Source 5** · bot 3 · DOCX · `OOP Fundamentals — Lecture Notes`
 > Object-oriented programming in Java rests on four ideas. Encapsulation keeps fields private and exposes behaviour through methods, so an object controls its own invariants. A class that lets callers write its fields directly cannot guarantee anything about its own state, because every caller becomes responsible for rules the class was supposed to enforce. Accessors are not the point; control over change is. Inheritance lets a class extend another and reuse its behaviour, establishing an is-a relationship. It is powerful and easy to overuse. Composition, where a class holds another as a field and delegates to it, is usually the better default: it can be changed at runtime, it does not expose a superclass's internals to its subclasses, and it avoids deep hierarchies that are hard to follow. Prefer inheritance only when a subtype genuinely is a kind of its supertype. Polymorphism means a reference of a supertype can hold any subtype, and the call dispatches to the subtype's implementation at runtime rather than at compile time. This is what lets one loop over a list of shapes call area on each without knowing which shapes are in it. Abstraction hides how something works behind an interface or an abstract class, so callers depend on what a type promises rather than on how it delivers. An interface declares behaviour with no state; an abstract class may provide shared fields and partial implementation. A class implements many interfaces but extends only one class.
@@ -618,10 +624,10 @@ Without it the provider column is a constant and demonstrates nothing.
 
 | # | bot | student | asked | provider | question | answer sketch |
 |---|---|---|---|---|---|---|
-| 1 | 1 | 7 noa.friedman | T−12d | `deepseek` | איך פותרים משוואה עם שברים? | מכפילים את שני האגפים במכנה המשותף כדי להיפטר מהשברים, ואז פותרים כרגיל. |
-| 2 | 1 | 11 maya.levi | T−10d | `deepseek` | מה זו דיסקרימיננטה? | הביטוי b²-4ac. הסימן שלו קובע כמה שורשים ממשיים יש לפרבולה. |
-| 3 | 1 | 7 noa.friedman | T−9d | `deepseek` | מתי לפרבולה אין שורשים? | כאשר הדיסקרימיננטה שלילית — הפרבולה כולה מעל ציר x או כולה מתחתיו. |
-| 4 | 2 | 16 tal.harari | T−8d | `deepseek` | למה הגבול של sin(x)/x באפס שווה 1? | זהו גבול מיוחד שמוכיחים גיאומטרית בעזרת מעגל היחידה וכלל הסנדוויץ. |
+| 1 | 1 | 7 noa.friedman | T−12d | `deepseek` | How do you solve an equation with fractions? | Multiply both sides by the common denominator to clear the fractions, then solve as usual. |
+| 2 | 1 | 11 maya.levi | T−10d | `deepseek` | What is a discriminant? | The expression b²-4ac. Its sign decides how many real roots the parabola has. |
+| 3 | 1 | 7 noa.friedman | T−9d | `deepseek` | When does a parabola have no roots? | When the discriminant is negative — the whole parabola lies above the x axis or entirely below it. |
+| 4 | 2 | 16 tal.harari | T−8d | `deepseek` | Why is the limit of sin(x)/x at zero equal to 1? | It is a special limit, proved geometrically with the unit circle and the squeeze theorem. |
 | 5 | 3 | 10 omer.katz | T−6d | `deepseek` | When should I use a LinkedList instead of an ArrayList? | Only when you insert or remove at the ends far more often than you read by index. |
 | 6 | 3 | 17 roni.malka | T−5d | `anthropic` | What is the difference between an interface and an abstract class? | An interface declares a contract and a class may implement many; an abstract class can hold state and a class may extend only one. |
 | 7 | 3 | 10 omer.katz | T−4d | `deepseek` | Why did my for-each loop throw ConcurrentModificationException? | The list was structurally modified during iteration. Use an Iterator and call its remove method, or use removeIf. |
@@ -654,7 +660,7 @@ the eight rows below and is what a re-load actually matches on.
 The `seed_id` column stays because that composite key is useless in a sentence — an acceptance
 case, a demo script or a failing assertion needs to say *which* notification, and
 `N-EXEC-CLOSED-ALG` does that where "the row for user 1 with type EXECUTION_CLOSED and title
-'בחינה הסתיימה…'" does not. It is documentation vocabulary, and every id here maps to exactly one
+'Sitting finished…'" does not. It is documentation vocabulary, and every id here maps to exactly one
 row.
 
 **The moment that stops being true is a real column.** The key holds only because no recipient
@@ -666,14 +672,14 @@ The `#` column is presentation order only and carries no meaning.
 
 | seed_id | # | recipient | type | title | read |
 |---|---|---|---|---|---|
-| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | EXAM_REJECTED | מבחן הוחזר לתיקון — גרסה 1 של "מבחן אמצע — אלגברה" | read |
-| `N-EXAM-PENDING-CALC` | 2 | 2 dana.cohen | EXAM_PENDING | המבחן נשלח לאישור רכזת המקצוע | unread |
-| `N-APPROVAL-REQ-MATH` | 3 | 3 rina.barak | APPROVAL_REQUEST | מבחן ממתין לאישורך במקצוע מתמטיקה | unread |
+| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | EXAM_REJECTED | Exam sent back for revision — version 1 of "Midterm — Algebra" | read |
+| `N-EXAM-PENDING-CALC` | 2 | 2 dana.cohen | EXAM_PENDING | The exam was sent to the subject coordinator for approval | unread |
+| `N-APPROVAL-REQ-MATH` | 3 | 3 rina.barak | APPROVAL_REQUEST | An exam is waiting for your approval in Mathematics | unread |
 | `N-EXAM-REJECTED-JAVA` | 4 | 5 tamar.shani | EXAM_REJECTED | Collections Quiz was returned for revision | unread |
-| `N-GRADE-NOA` | 5 | 7 noa.friedman | GRADE_PUBLISHED | הציון שלך במבחן אמצע — אלגברה זמין לצפייה | read |
-| `N-GRADE-YAEL` | 6 | 13 yael.azulay | GRADE_PUBLISHED | הציון שלך זמין לצפייה, כולל הערת מורה | unread |
+| `N-GRADE-NOA` | 5 | 7 noa.friedman | GRADE_PUBLISHED | Your grade for Midterm — Algebra is available | read |
+| `N-GRADE-YAEL` | 6 | 13 yael.azulay | GRADE_PUBLISHED | Your grade is available, including a teacher's comment | unread |
 | `N-GRADING-DUE-JAVA` | 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
-| `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | בחינה הסתיימה — 8 נבחנים, ממוצע 72.5 | unread |
+| `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | Sitting finished — 8 students, average 72.5 | unread |
 
 `N-EXEC-CLOSED-ALG` exists so the principal's first screen is not empty at login: S-7 makes
 her read-only, so she can never generate her own activity. **Its title quotes the mean, so it is
@@ -701,4 +707,4 @@ thing that only shows up when a reviewer opens the screen at the defense.
 | 3 | Is `rina.barak` seeded as TEACHER plus a `coordinators` row? | Omar → Naji | **Yes, confirmed against the schema** — `role ENUM('STUDENT','TEACHER','PRINCIPAL')` has no COORDINATOR value and `coordinators` has its PK on `subject_code` alone. Omar's reading is right; §5 is built on it. No answer needed. |
 | 4 | Population or sample standard deviation in the stored stats? | me (E14) → Naji | Population, divisor `n`. Recorded in §9.1 so the seeded stats and E14's recomputation cannot drift by a point and look like a bug. |
 | 5 | Illustration images — real assets or NULL to start? | Omar | 10 questions are marked `img` but I have supplied no bytes. `image MEDIUMBLOB NULL` accepts NULL, so the loader can start with NULL; I will add real assets under `docs/seed/img/` in a follow-up. Flagged so nobody blocks on it. |
-| 6 | Does anything validate the national-id check digit? | Naji | Nothing in the PRD says so. Mine are all checksum-valid Israeli ת"ז anyway, so the answer cannot break the demo either way. |
+| 6 | Does anything validate the national-id check digit? | Naji | Nothing in the PRD says so. Mine are all checksum-valid Israeli national id anyway, so the answer cannot break the demo either way. |

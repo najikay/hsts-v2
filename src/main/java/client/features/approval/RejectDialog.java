@@ -111,7 +111,7 @@ public final class RejectDialog {
         inheritStyles(owner, scene);
         stage.setScene(scene);
 
-        Animations.scaleIn(dialog, Motion.SLOW_MS);
+        Animations.scaleIn(dialog, Motion.DIALOG_FROM_SCALE, Motion.DIALOG_MS);
         input.requestFocus();
         stage.showAndWait();
         return Optional.ofNullable(answer[0]);

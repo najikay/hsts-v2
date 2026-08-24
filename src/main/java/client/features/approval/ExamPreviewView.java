@@ -3,6 +3,7 @@ package client.features.approval;
 import client.core.NavParams;
 import client.core.Routes;
 import client.features.exam.QuestionCardView;
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.StatusChip;
 import client.ui.components.WarnConfirm;
@@ -271,7 +272,11 @@ public final class ExamPreviewView extends AbstractScreen {
         HBox top = new HBox(16, new VBox(2, examName, meta), Buttons.spacer(), statusRow);
         top.setAlignment(Pos.CENTER_LEFT);
 
-        VBox header = new VBox(10, top, banner, error);
+        // F-7: the footer already had "Back to approvals", but the footer sits under a
+        // paper that scrolls, so on a long exam the only exit was off screen. The
+        // convention puts one above the title too; both go to the same place.
+        VBox header = new VBox(10, BackLink.to(navigator(), Routes.APPROVALS.id(), "Approvals"),
+                top, banner, error);
         header.setPadding(new Insets(24, 28, 12, 28));
         return header;
     }

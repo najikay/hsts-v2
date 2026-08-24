@@ -30,20 +30,32 @@ class SeedDatasetMySqlTest extends SeedDatasetContract {
     @Test
     @DisplayName("Hebrew and RTL text round-trips through the real utf8mb4 columns")
     void hebrewSurvivesTheRoundTrip() {
-        // The seed is half Hebrew on purpose: Algebra and Calculus are Hebrew so RTL is
-        // proven, Java and Databases are English so code does not read reversed. Every screen
-        // in the demo shows both.
-        String courseName = inTx(session -> session.createQuery(
+        // This used to read the seed, because half of it was Hebrew. UI wave 1 (F-13)
+        // translated the seed to English, and the lazy response would have been to delete
+        // this test with the content it happened to read. That would have thrown away the
+        // guarantee rather than the coupling: the columns are utf8mb4 so that a teacher can
+        // type a Hebrew comment on a student's paper, and nothing else in the suite proves
+        // the connection does not mangle one on the way in or out.
+        //
+        // So it now writes its own sample and reads it back. The test is about the column
+        // and the connection charset; what the demo dataset happens to be written in is a
+        // separate decision that can change again without touching this.
+        String sample = "שלום עולם - RTL עם מספרים 123 ורווחים";
+        inTx(session -> session.createMutationQuery(
+                        "update Course c set c.name = :name where c.code = '12'")
+                .setParameter("name", sample)
+                .executeUpdate());
+
+        String stored = inTx(session -> session.createQuery(
                         "select c.name from Course c where c.code = '12'", String.class)
                 .getSingleResult());
-        String questionText = inTx(session -> session.createQuery("""
-                        select qv.text from QuestionVersion qv, Question q
-                        where q.id = qv.questionId and q.displayId = '11004' and qv.versionNo = 1
-                        """, String.class).getSingleResult());
 
-        assertThat(courseName).isEqualTo("חשבון דיפרנציאלי ואינטגרלי");
-        assertThat(questionText).contains("סכום הספרות של מספר דו-ספרתי");
-        assertThat(questionText).hasSize(questionText.length());
+        assertThat(stored)
+                .as("a Hebrew string survives the write and the read byte for byte")
+                .isEqualTo(sample);
+        assertThat(stored.length())
+                .as("no character was expanded or truncated by the charset")
+                .isEqualTo(sample.length());
     }
 
     @Test

@@ -70,13 +70,13 @@ final class ExamsSection implements SeedSection {
     }
 
     private static final List<SeedExam> EXAMS = List.of(
-            new SeedExam("101101", "מבחן אמצע: אלגברה", "dana.cohen",
-                    "קראו כל שאלה עד הסוף. מותר השימוש במחשבון פשוט בלבד.",
-                    "מחוון: שאלה 7, לקבל גם פתרון גרפי מנומק.",
+            new SeedExam("101101", "Midterm: Algebra", "dana.cohen",
+                    "Read each question to the end. Only a basic calculator may be used.",
+                    "Marking note: question 7, accept a reasoned graphical solution too.",
                     List.of(
                             new Version(1, 60, ExamVersionStatus.REJECTED,
-                                    "חמש שאלות בלבד ל-60 דקות, והציון לכל שאלה גבוה מדי. "
-                                            + "נדרש פיזור רחב יותר.",
+                                    "Only five questions for 60 minutes, and each one is worth too much. "
+                                            + "A wider spread is needed.",
                                     List.of(
                                             latest("11001", 20),
                                             latest("11002", 20),
@@ -94,18 +94,18 @@ final class ExamsSection implements SeedSection {
                                             latest("11010", 15),
                                             latest("11011", 10))))),
 
-            new SeedExam("101102", "בוחן: אי-שוויונות", "dana.cohen",
-                    "בוחן קצר. משך: 30 דקות.",
-                    "טיוטה, טרם נבדק מול המחוון.",
+            new SeedExam("101102", "Quiz: Inequalities", "dana.cohen",
+                    "A short quiz. Duration: 30 minutes.",
+                    "A draft, not yet checked against the marking scheme.",
                     List.of(new Version(1, 30, ExamVersionStatus.DRAFT, null,
                             List.of(
                                     latest("11009", 40),
                                     latest("11010", 30),
                                     latest("11011", 30))))),
 
-            new SeedExam("101201", "מבחן אמצע: חדו\"א", "dana.cohen",
-                    "יש לנמק כל שלב. תשובה ללא נימוק לא תזכה בניקוד מלא.",
-                    "להזכיר לרינה: השאלות 12006 ו-12007 חדשות השנה.",
+            new SeedExam("101201", "Midterm: Calculus", "dana.cohen",
+                    "Justify every step. An answer with no justification will not receive full marks.",
+                    "Remind Rina: questions 12006 and 12007 are new this year.",
                     List.of(new Version(1, 90, ExamVersionStatus.PENDING, null,
                             List.of(
                                     latest("12001", 15),

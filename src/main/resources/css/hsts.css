@@ -591,29 +591,78 @@
     -fx-border-radius: 12px;
     -fx-border-width: 1px;
 }
+/* --- UI wave 2: the global table treatment ---------------------------
+   Applied here rather than on nine screens, because a treatment written
+   nine times is a treatment that is eight-ninths applied by the next
+   epic. Everything below is reached by using DataTable; no screen opts
+   in and no screen can opt out by forgetting. -------------------------- */
+
+/* Comfortable rows. 44px is the canvas's number and it is not decoration:
+   a 30px row is a spreadsheet, and this is a list of things you open. */
+.hsts-table { -fx-fixed-cell-size: 44px; }
+
+/* The header row carries the barest tint away from the surface, so the
+   headings read as a band without a rule under every one of them. */
 .hsts-table .column-header-background {
     -fx-background-color: -hsts-bg;
     -fx-background-radius: 11px 11px 0 0;
 }
 .hsts-table .column-header,
 .hsts-table .filler { -fx-background-color: transparent; -fx-border-color: transparent -hsts-border -hsts-border transparent; }
+.hsts-table .column-header { -fx-padding: 4px 0 4px 0; }
+/* Headings are Kicker labels set as the column's GRAPHIC, because JavaFX
+   CSS has neither text-transform nor letter-spacing; see KickerText. The
+   .label rule still applies to them, and the size/colour comes from
+   .hsts-kicker below. */
 .hsts-table .column-header .label {
-    -fx-text-fill: -hsts-muted;
-    -fx-font-size: 12px;
-    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-faint;
     -fx-alignment: center-left;
 }
+.hsts-table .column-header .hsts-kicker.numeric { -fx-alignment: center-right; }
+.hsts-table .column-header.numeric > .label { -fx-alignment: center-right; }
+
 .hsts-table .table-row-cell {
     -fx-background-color: -hsts-surface;
     -fx-border-color: transparent transparent -hsts-border transparent;
+    -fx-border-width: 0 0 1px 0;
     -fx-table-cell-border-color: transparent;
 }
 .hsts-table .table-row-cell:odd     { -fx-background-color: -hsts-surface; }
+
+/* Full-row hover tint. The row is the hit target, so the whole row lights
+   up; the "Open" affordance the wrapper floats at its end fades in over
+   100ms in Java, because JavaFX 21 CSS has no transitions. */
 .hsts-table .table-row-cell:hover   { -fx-background-color: -hsts-accent-soft; }
-.hsts-table .table-row-cell:selected { -fx-background-color: -hsts-accent-soft; }
+
+/* Selected: soft accent plus a 3px accent bar down the left edge. Two
+   signals rather than one, so the selected row is still findable for a
+   reader who cannot separate the tint from the surface. */
+.hsts-table .table-row-cell:selected {
+    -fx-background-color: -hsts-accent-soft;
+    -fx-border-color: transparent transparent -hsts-border -hsts-accent;
+    -fx-border-width: 0 0 1px 3px;
+}
 .hsts-table .table-row-cell:selected .table-cell { -fx-text-fill: -hsts-text; }
 .hsts-table .table-cell { -fx-text-fill: -hsts-text; -fx-padding: 9px 12px; -fx-border-color: transparent; }
 .hsts-table .table-row-cell:empty { -fx-background-color: transparent; -fx-border-color: transparent; }
+
+/* Numeric columns: right aligned, in the monospace stack. JavaFX exposes
+   no font-feature-settings, so the mono family IS the house's tabular
+   figures — it is the only way a column of three-digit scores lines up. */
+.hsts-table .numeric-cell {
+    -fx-alignment: center-right;
+    -fx-font-family: "Consolas", "SF Mono", "Menlo", monospace;
+}
+
+/* The hover affordance, floated over the wrapper's body by DataTable. */
+.hsts-table-wrapper .row-open-affordance {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-accent;
+    -fx-background-color: -hsts-accent-soft;
+    -fx-background-radius: 999px;
+    -fx-padding: 3px 10px;
+}
 
 /* Toolbar strip above the table: title + search + actions. */
 .hsts-table-toolbar {
@@ -889,14 +938,15 @@
    value, not as an error: it is a real "nothing to count yet".
    ===================================================================== */
 
-.hsts-stat-card { -fx-padding: 14px 16px; -fx-spacing: 2px; }
+.hsts-stat-card { -fx-padding: 16px 18px; -fx-spacing: 6px; }
 .hsts-stat-card .stat-label { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+/* 30px after the wave-2 pass: the number is the reason the card exists. */
 .hsts-stat-card .stat-value {
-    -fx-font-size: 28px;
+    -fx-font-size: 30px;
     -fx-font-weight: bold;
     -fx-text-fill: -hsts-text;
 }
-.hsts-stat-card .stat-hint { -fx-font-size: 11px; -fx-text-fill: -hsts-faint; }
+.hsts-stat-card .stat-hint { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
 
 /* Rail items whose screen arrives in a later epic: visibly not clickable,
    but still hover-sensitive so the tooltip can explain why (E5.4). */
@@ -934,39 +984,55 @@
     -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.55), 18, 0.0, 0, 6);
 }
 
+/* A more generous shadow than a card's: this floats over the page. */
 .hsts-notification-panel .panel-header {
-    -fx-padding: 12px 12px 8px 14px;
+    -fx-padding: 14px 14px 10px 16px;
     -fx-border-color: transparent transparent -hsts-border transparent;
     -fx-border-width: 0 0 1px 0;
 }
 .hsts-notification-panel .panel-title { -fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-notification-panel .panel-header .button.link .label { -fx-text-fill: -hsts-accent; }
 
 .hsts-notification-panel .panel-scroller { -fx-background-color: transparent; }
-.hsts-notification-panel .panel-list { -fx-padding: 6px; -fx-spacing: 2px; }
+.hsts-notification-panel .panel-list { -fx-padding: 8px; -fx-spacing: 2px; }
 
 .hsts-notification-panel .panel-row {
-    -fx-padding: 10px 10px 10px 12px;
-    -fx-background-radius: 8px;
+    -fx-padding: 10px 10px 10px 10px;
+    -fx-background-radius: 10px;
     -fx-background-color: transparent;
     -fx-cursor: hand;
     -fx-alignment: top-left;
 }
 .hsts-notification-panel .panel-row:hover { -fx-background-color: -hsts-accent-soft; }
-.hsts-notification-panel .row-icon  { -fx-fill: -hsts-muted; }
-.hsts-notification-panel .row-title { -fx-font-size: 13px; -fx-text-fill: -hsts-text; }
-.hsts-notification-panel .row-body  { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
-.hsts-notification-panel .row-age   { -fx-font-size: 11px; -fx-text-fill: -hsts-faint; }
 
-/* Unread: an accent left rail and a bold title. Colour alone would not
-   survive a colour-blind reader, so the weight carries it too. */
+/* The 34px rounded badge behind each row's type icon. The tone is decided
+   by NotificationPresenter.badgeToneFor and is the same tone the toast for
+   that push used, so one event never gets two colours. */
+.hsts-notification-panel .row-badge {
+    -fx-background-radius: 10px;
+    -fx-alignment: center;
+}
+.hsts-notification-panel .row-badge.ok      { -fx-background-color: -hsts-ok-soft; }
+.hsts-notification-panel .row-badge.ok .row-icon { -fx-fill: -hsts-ok; }
+.hsts-notification-panel .row-badge.danger  { -fx-background-color: -hsts-danger-soft; }
+.hsts-notification-panel .row-badge.danger .row-icon { -fx-fill: -hsts-danger; }
+.hsts-notification-panel .row-badge.accent  { -fx-background-color: -hsts-accent-soft; }
+.hsts-notification-panel .row-badge.accent .row-icon { -fx-fill: -hsts-accent; }
+
+.hsts-notification-panel .row-icon  { -fx-fill: -hsts-muted; }
+.hsts-notification-panel .row-title { -fx-font-size: 13.5px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.hsts-notification-panel .row-body  { -fx-font-size: 12.5px; -fx-text-fill: -hsts-muted; }
+.hsts-notification-panel .row-age   { -fx-font-size: 11px; -fx-text-fill: -hsts-faint; }
+.hsts-notification-panel .row-unread-dot { -fx-fill: -hsts-accent; }
+
+/* Unread: a barely-tinted row, a 7px accent dot and a bolder title.
+   Three signals rather than one, because colour alone would not survive a
+   colour-blind reader. No left rail any more: the dot says the same thing
+   without squaring off the row's rounded corner. */
 .hsts-notification-panel .panel-row.unread {
     -fx-background-color: -hsts-accent-soft;
-    -fx-border-color: -hsts-accent transparent transparent transparent;
-    -fx-border-width: 0 0 0 3px;
-    -fx-border-radius: 0;
 }
 .hsts-notification-panel .panel-row.unread .row-title { -fx-font-weight: bold; }
-.hsts-notification-panel .panel-row.unread .row-icon  { -fx-fill: -hsts-accent; }
 
 /* The panel's empty state is a compact version of the page-level one. */
 .hsts-notification-panel .hsts-empty-state { -fx-padding: 24px 16px; }
@@ -1664,3 +1730,275 @@
 /* The three tables share one slot, so each must fill it when it is the one
    showing rather than shrinking to its rows. */
 .principal-data .data-body { -fx-spacing: 0; }
+
+/* =========================================================================
+   UI WAVE 1 · manual pass 1 mechanics (F-6 .. F-14)
+   -------------------------------------------------------------------------
+   Appended as one headed block rather than threaded into the sections above,
+   so the wave can be read (and reverted) as a unit. Colours are tokens;
+   sizes are literals, per the rule the E4.24 smoke test enforces.
+   ========================================================================= */
+
+/* ---- F-7: the back affordance ----
+   One control, one look, top-left of every drill-in. Quiet by construction:
+   it is the way out, not the thing to do, so it must never compete with the
+   screen's primary action for attention. */
+.hsts-back-link {
+    -fx-padding: 2px 10px 2px 4px;
+    -fx-background-radius: 6px;
+    -fx-cursor: hand;
+}
+.hsts-back-link .label    { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+.hsts-back-link .nav-icon { -fx-fill: -hsts-muted; }
+.hsts-back-link:hover           { -fx-background-color: -hsts-accent-soft; }
+.hsts-back-link:hover .label    { -fx-text-fill: -hsts-accent; }
+.hsts-back-link:hover .nav-icon { -fx-fill: -hsts-accent; }
+
+/* A printed page carries no navigation. The two print-capable screens that
+   host a back link hide the node from Java (visible + managed), so this is
+   only the belt to that braces: a stray one never inks the page. */
+.results-print .hsts-back-link,
+.reports-print .hsts-back-link { -fx-opacity: 0; }
+
+/* ---- F-10: dashboard cards ----
+   The whole card is the hit target. It therefore has to look like one: a
+   pointer, a hover lift, and a border that answers on hover. */
+/* The border, radius and surface come from .hsts-card, which every one of these
+   also carries; only the two things that make it a control are set here. */
+.hsts-dashboard-card { -fx-cursor: hand; }
+.hsts-dashboard-card:hover {
+    -fx-border-color: -hsts-accent;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.10), 12, 0.0, 0, 3);
+}
+.root.dark .hsts-dashboard-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.45), 12, 0.0, 0, 3);
+}
+
+/* The four states differ only in the value line, which is the only part that
+   is sometimes not a number. A loading or failed card keeps its size so the
+   row does not reflow as three reads land at three different moments. */
+.hsts-dashboard-card.state-loading .stat-value,
+.hsts-dashboard-card.state-failed  .stat-value { -fx-font-size: 15px; }
+.hsts-dashboard-card.state-loading .stat-value { -fx-text-fill: -hsts-faint; }
+.hsts-dashboard-card.state-failed  .stat-value { -fx-text-fill: -hsts-danger; }
+.hsts-dashboard-card.state-failed  .stat-hint  { -fx-text-fill: -hsts-danger; }
+/* An empty card is not a broken one: the zero stays in the normal colour and
+   only the hint is quieter, so nothing on a new account reads as an error. */
+.hsts-dashboard-card.state-empty   .stat-value { -fx-text-fill: -hsts-muted; }
+
+/* ---- F-12: the avatar chip is a menu ----
+   It already hovered and already showed a hand cursor, which was the defect:
+   it looked pressable and was not. The border is what marks it as a control
+   now that it is one. */
+.hsts-avatar-chip.interactive {
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 999px;
+    -fx-border-width: 1px;
+}
+.hsts-avatar-chip.interactive:hover { -fx-border-color: -hsts-accent; }
+
+/* ---- F-14: the bot screens' explanatory line ----
+   Sits under the course name, quieter than it, wrapping rather than
+   truncating: it is a sentence, and half a sentence explains nothing. */
+.bot-chat .page-subtitle.muted,
+.bot-manager .page-subtitle.muted,
+.bot-history .page-subtitle.muted,
+.bot-analytics .page-subtitle.muted {
+    -fx-font-size: 12px;
+    -fx-text-fill: -hsts-faint;
+    -fx-padding: 2px 0 0 0;
+}
+
+/* =====================================================================
+   21. UI WAVE 2 — the visual remodel
+        (implements the lead's approved design canvas, 2026-08-24)
+
+   Everything here is written against the token names and nothing else,
+   so both palettes and all five accents are correct without a variant.
+   Two toolkit facts shape this whole section and are worth stating once:
+
+     * JavaFX CSS has NO text-transform and NO letter-spacing. The kicker's
+       uppercase and its tracking are therefore done in Java, by
+       client.ui.components.logic.KickerText, and this file only sizes and
+       colours the result.
+     * JavaFX 21 CSS has NO transitions. A hover state changes instantly.
+       Where the canvas specifies a duration — the card lift at 150ms, the
+       row affordance at 100ms — the animation is played from Java through
+       the Motion system, which is also what makes it collapse under
+       reduced motion.
+   ===================================================================== */
+
+/* ---- Kickers: the small uppercase label above a number or a column ---- */
+.hsts-kicker {
+    -fx-font-size: 11.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-faint;
+}
+
+/* ---- The accent link line at the bottom of a card ---- */
+.card-link {
+    -fx-font-size: 12.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-accent;
+}
+
+/* ---- The greeting header ---- */
+.hsts-greeting .greeting-line    { -fx-font-size: 27px; }
+.hsts-greeting .greeting-summary { -fx-font-size: 14.5px; }
+
+/* ---- Dashboard cards: the wave-2 lift ----
+   The -2px travel and the deeper shadow are the hover state; the 150ms it
+   takes to get there is Animations.liftOnHover, because CSS cannot time
+   it on this toolkit. The border no longer changes colour: a card that
+   both lifts and outlines reads as two things happening. */
+.hsts-dashboard-card:hover {
+    -fx-border-color: -hsts-border;
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.16), 18, 0.0, 0, 6);
+}
+.root.dark .hsts-dashboard-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.55), 18, 0.0, 0, 6);
+}
+
+/* The rolling number is a clipped two-row column; it must not add height
+   of its own beyond one row of the value it carries. */
+.hsts-number-roll { -fx-min-height: 36px; }
+
+/* ---- The teacher's LIVE NOW card ---- */
+.live-dot  { -fx-fill: -hsts-ok; }
+/* The halo is its own node so its colour is a token: a drop shadow would
+   have needed a Color in Java, and no colour in this app comes from Java. */
+.live-halo { -fx-fill: -hsts-ok; -fx-opacity: 0.35; }
+
+.live-body .live-exam { -fx-font-size: 14px; }
+
+/* The slim progress bar. The fill is a two-stop gradient between the
+   accent and its soft companion — both tokens, so it is right in every
+   palette without a per-palette rule. */
+.live-progress-track {
+    -fx-background-color: -hsts-skeleton;
+    -fx-background-radius: 999px;
+    -fx-min-height: 7px;
+    -fx-pref-height: 7px;
+    -fx-max-height: 7px;
+}
+.live-progress-fill {
+    -fx-background-color: linear-gradient(to right, -hsts-accent, derive(-hsts-accent, 25%));
+    -fx-background-radius: 999px;
+    -fx-min-height: 7px;
+    -fx-pref-height: 7px;
+    -fx-max-height: 7px;
+}
+
+.live-student-row  { -fx-padding: 3px 0 3px 0; }
+.live-student      { -fx-text-fill: -hsts-text; }
+
+/* ---- The teacher's LAST CLOSED SITTING card ---- */
+.hsts-sparkbars .sparkbar { -fx-min-width: 6px; }
+.sparkbar-fill {
+    -fx-background-color: -hsts-accent-soft;
+    -fx-background-radius: 3px;
+    -fx-min-width: 6px;
+}
+/* The modal bucket in full accent, the rest in its soft companion: the
+   shape is the point, and one bar carrying the eye is what makes it read
+   as a shape rather than as ten numbers. */
+.sparkbar-fill.modal { -fx-background-color: -hsts-accent; }
+.sparkbar-fill.empty { -fx-background-color: -hsts-border; }
+
+/* ---- The circular progress ring ---- */
+.hsts-progress-ring .ring-track { -fx-stroke: -hsts-border; }
+.hsts-progress-ring .ring-fill  { -fx-stroke: -hsts-accent; }
+.hsts-progress-ring .ring-value {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-text;
+}
+
+/* ---- Text sitting ON the accent band ----
+   -hsts-on-accent is the token that already answers "what is legible on
+   the accent", and it is defined per palette and per mode, so this needs
+   no light/dark variant of its own. */
+.on-accent        { -fx-text-fill: -hsts-on-accent; }
+.on-accent-muted  { -fx-text-fill: -hsts-on-accent; -fx-opacity: 0.82; }
+
+/* ---- Student My Grades: the hero band ----
+   A flat -hsts-accent band with a soft radial wash over it, which is the
+   canvas's approved fallback. A two-stop linear gradient from a
+   LOOKED-UP colour cannot be lightened reliably at parse time across all
+   five palettes, and a per-palette gradient would be five more values to
+   keep in step with AccentPalette. The wash is one rule that works for
+   all of them. */
+.grades-hero-host {
+    -fx-background-color: -hsts-accent;
+    -fx-background-radius: 12px;
+}
+.grades-hero {
+    -fx-padding: 22px 26px;
+    -fx-background-color: transparent;
+}
+.grades-hero-wash {
+    -fx-background-radius: 12px;
+    -fx-background-color: radial-gradient(center 22% 20%, radius 70%,
+                          rgba(255, 255, 255, 0.22), transparent);
+}
+.grades-hero .hsts-progress-ring .ring-track { -fx-stroke: rgba(255, 255, 255, 0.28); }
+.grades-hero .hsts-progress-ring .ring-fill  { -fx-stroke: -hsts-on-accent; }
+.grades-hero .hsts-progress-ring .ring-value { -fx-text-fill: -hsts-on-accent; }
+.grades-hero .hsts-kicker { -fx-text-fill: -hsts-on-accent; -fx-opacity: 0.85; }
+.grades-next-exam { -fx-padding: 0 4px 0 0; }
+
+/* ---- Student My Grades: the card grid ---- */
+.grades-scroller { -fx-background-color: transparent; }
+.grades-grid     { -fx-padding: 2px 2px 8px 2px; }
+
+.grade-card {
+    -fx-cursor: hand;
+    -fx-padding: 16px 18px;
+    -fx-min-height: 168px;
+}
+.grade-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.16), 18, 0.0, 0, 6);
+}
+.root.dark .grade-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(1, 4, 9, 0.55), 18, 0.0, 0, 6);
+}
+.grade-card .grade-exam  { -fx-font-size: 15px; }
+.grade-card .grade-score {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-text;
+}
+/* The link line is the hover affordance: quiet until the pointer is on the
+   card, so a grid of twelve cards is not a grid of twelve links. */
+.grade-card .card-link        { -fx-opacity: 0; }
+.grade-card:hover .card-link  { -fx-opacity: 1; }
+
+/* The dashed slot that closes the grid. Not an empty state — the grid it
+   sits in is full — but the shape of the next card, saying what fills it. */
+.grade-slot {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12px;
+    -fx-border-color: -hsts-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1.5px;
+    -fx-border-style: segments(6, 5) line-cap round;
+    -fx-padding: 18px;
+    -fx-min-height: 168px;
+}
+.grade-slot .slot-disc {
+    -fx-background-color: -hsts-bg;
+    -fx-background-radius: 999px;
+    -fx-min-width: 46px;  -fx-min-height: 46px;
+    -fx-max-width: 46px;  -fx-max-height: 46px;
+    -fx-alignment: center;
+}
+.grade-slot .slot-icon { -fx-fill: -hsts-faint; }
+.grade-slot .small     { -fx-text-alignment: center; }
+
+/* The rolling submitted count on the live card: same weight as the words
+   beside it, so the roll is invisible to the eye until it moves. */
+.live-submitted-count {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-text;
+}

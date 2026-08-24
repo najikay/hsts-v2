@@ -3,6 +3,7 @@ package client.features.bot;
 import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
@@ -46,6 +47,7 @@ public final class BotAnalyticsView extends AbstractScreen {
     private final BorderPane root = new BorderPane();
     private final Label heading = new Label(BotCopy.ANALYTICS_TITLE);
     private final Label subheading = new Label();
+    private final Label explainer = new Label(BotCopy.ANALYTICS_EXPLAINER);
     private final Label status = new Label();
     private final Label totalValue = new Label("0");
     private final Label busiestValue = new Label("-");
@@ -81,10 +83,20 @@ public final class BotAnalyticsView extends AbstractScreen {
     private Parent buildHeader() {
         heading.getStyleClass().add("page-title");
         subheading.getStyleClass().add("page-subtitle");
+        // F-14: says what the numbers are about, before the anonymity note says what
+        // they are not.
+        explainer.getStyleClass().addAll("page-subtitle", "muted");
+        explainer.setWrapText(true);
         Button manager = Buttons.secondary(BotCopy.MANAGER_TITLE);
         manager.setOnAction(e -> navigator().navigate(Routes.BOT_MANAGER.id(),
                 NavParams.of(PARAM_COURSE, courseCode)));
-        HBox row = new HBox(12, new VBox(2, heading, subheading), Buttons.spacer(), manager);
+        // F-7: reached from the bot manager and absent from the rail, so it needs the
+        // convention's own way out; the manager button on the right stays as the
+        // named shortcut it always was.
+        HBox row = new HBox(12,
+                new VBox(2, BackLink.to(navigator(), Routes.BOT_MANAGER.id(), "Study bot"),
+                        heading, subheading, explainer),
+                Buttons.spacer(), manager);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(16, 20, 8, 20));
         return row;

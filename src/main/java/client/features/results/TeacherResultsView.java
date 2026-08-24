@@ -1,6 +1,7 @@
 package client.features.results;
 
 import client.core.NavParams;
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
@@ -96,6 +97,8 @@ public final class TeacherResultsView extends AbstractScreen {
 
     private TeacherResultsSession session;
     private boolean selecting;
+    private Node chartBack;
+    private Node chartPane;
 
     @Override
     protected Parent build() {
@@ -173,8 +176,18 @@ public final class TeacherResultsView extends AbstractScreen {
         buildTable();
         chart.setPrefHeight(300);
 
+        // F-7: the histogram fills the pane that held the table, so it is a drill-in
+        // in everything but the route. The segmented control that brought the reader
+        // here is a toggle, not an exit, and a full-pane view owes the same way back
+        // every other drill-in gives.
+        chartBack = BackLink.action("Table",
+                () -> select(TeacherResultsSession.ResultsView.TABLE));
+        VBox pane = new VBox(8, chartBack, chart);
+        chartPane = pane;
+        VBox.setVgrow(chart, Priority.ALWAYS);
+
         body.getStyleClass().add("results-body");
-        body.getChildren().addAll(table, chart);
+        body.getChildren().addAll(table, pane);
         VBox.setVgrow(body, Priority.ALWAYS);
 
         error.getStyleClass().addAll("small", "danger-text");
@@ -218,6 +231,11 @@ public final class TeacherResultsView extends AbstractScreen {
         table.column(numberColumn("Final", StudentGradeRow::finalScore));
         table.column("State", row -> ResultsCopy.gradeStateLabel(row.state()));
         table.column("", ResultsCopy::adjustedMarker);
+        // F-9: the student name is the only wide column here; four numeric ones and
+        // the unheaded marker were each being given a sixth of the width.
+        table.columnWidths(260, 110, 110, 110, 150, 60);
+        // UI wave 2: the three score columns are numbers and line up as such.
+        table.numericColumns(1, 2, 3);
         table.searchable("Find a student",
                 (row, needle) -> row.studentName().toLowerCase(java.util.Locale.ROOT)
                         .contains(needle));
@@ -336,6 +354,11 @@ public final class TeacherResultsView extends AbstractScreen {
     private void renderView() {
         boolean histogram = session.view() == TeacherResultsSession.ResultsView.HISTOGRAM;
         show(table, !histogram);
+        // The pane and the chart both, not the pane alone. JavaFX does not push
+        // visibility down into children, so a hidden wrapper still reports its own
+        // chart as visible, and "is the chart on screen" is exactly what the T-10
+        // regression test asks.
+        show(chartPane, histogram);
         show(chart, histogram);
     }
 
@@ -348,6 +371,8 @@ public final class TeacherResultsView extends AbstractScreen {
         // The rail is navigation, and navigation is exactly what a printed page does not need.
         show(examRail, !printing);
         root.setLeft(printing ? null : examRail);
+        // Same rule for the histogram's way back: it is navigation, not content.
+        show(chartBack, !printing);
     }
 
     private static VBox cardNode(ResultsCopy.StatCard card) {

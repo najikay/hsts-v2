@@ -94,6 +94,13 @@ jar tf target\G12-1_Server.jar | Select-String "\.dll$" | Select-Object -First 5
 
 ## 2. Clean Windows machine, double-click (E20.2)
 
+**Packaging invariant (2026-08-24): the client jar ships the full project artifact, on purpose.**
+No shade filters exclude server code, and none may be added: E6.11's editor calls
+`QuestionValidator`/`BankMessages` across the tier (one rule, one home), and a "cleanup" that
+filters server classes out of the client jar breaks the question editor on open in a way no test
+on the full classpath can see. If jar size ever bothers anyone, the answer is phase 2, not a
+filter. See ARCHITECTURE §packaging, same date.
+
 The point of this pass is that nothing on the demo machine is left over from development: no
 IDE, no Maven, no `JAVA_HOME` pointing at a project-local JDK, no `target\` directory full of
 history. Use a machine (or a fresh Windows user account) that has never built this project.

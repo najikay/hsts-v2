@@ -117,11 +117,36 @@ class BotCopyTest {
     @Test
     @DisplayName("the empty states offer something rather than reporting a void")
     void emptyStatesOfferSomething() {
-        assertThat(BotCopy.CHAT_EMPTY_HINT).containsIgnoringCase("try asking");
+        // UI wave 1 (F-14) sharpened two of these from "here is what this is" to
+        // "here is what to do next", so the phrases pinned here moved with them.
+        // The rule did not change and neither did its strength: each assertion
+        // still demands the words that make the sentence an instruction.
+        assertThat(BotCopy.CHAT_EMPTY_HINT)
+                .as("names the gesture, not just the feature")
+                .containsIgnoringCase("type a question")
+                .containsIgnoringCase("send");
         assertThat(BotCopy.NO_BOT_HINT).containsIgnoringCase("create");
         assertThat(BotCopy.SOURCES_EMPTY_HINT).containsIgnoringCase("add");
         assertThat(BotCopy.HISTORY_EMPTY_HINT).containsIgnoringCase("saved here");
         assertThat(BotCopy.ANALYTICS_EMPTY_HINT).containsIgnoringCase("once students");
+    }
+
+    @Test
+    @DisplayName("every bot screen explains itself in one line (F-14)")
+    void everyScreenHasAnExplainer() {
+        // The finding was "bot screens unclear": three of the four carried a course
+        // name where a sentence should have been. Each explainer therefore has to
+        // say what the screen does, not merely exist.
+        assertThat(BotCopy.CHAT_EXPLAINER)
+                .as("the student is told what it knows and who does not read it")
+                .containsIgnoringCase("your teacher uploaded")
+                .containsIgnoringCase("not shown to your teacher");
+        assertThat(BotCopy.MANAGER_EXPLAINER)
+                .as("the teacher is told what adding material is for")
+                .containsIgnoringCase("answers students")
+                .containsIgnoringCase("switch it on");
+        assertThat(BotCopy.HISTORY_EXPLAINER).containsIgnoringCase("reopen");
+        assertThat(BotCopy.ANALYTICS_EXPLAINER).containsIgnoringCase("what students are asking");
     }
 
     @Test

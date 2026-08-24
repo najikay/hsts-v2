@@ -67,6 +67,27 @@ public final class NotificationPresenter {
      * @param notification the pushed notification
      * @return the toast to hand to the shell's {@code ToastStack}
      */
+    /**
+     * The tone of a row's icon badge in the popover (UI wave 2).
+     *
+     * <p>The remodel gives every row a 34px rounded badge whose soft background
+     * says at a glance what kind of news it is, and the three tones are the same
+     * three {@link #toastFor} already decides between — deliberately, because a
+     * push that arrived as a green toast and is then listed with a red badge has
+     * told the reader two different things about one event.
+     *
+     * @return the style-class suffix, one of {@code ok}, {@code danger} or
+     *         {@code accent}
+     */
+    public static String badgeToneFor(NotificationType type) {
+        Objects.requireNonNull(type, "type");
+        return switch (type) {
+            case APPROVAL_APPROVED, GRADE_PUBLISHED -> "ok";
+            case APPROVAL_REJECTED, INTEGRITY_ALERT -> "danger";
+            default -> "accent";
+        };
+    }
+
     public static ToastSpec toastFor(NotificationDto notification) {
         Objects.requireNonNull(notification, "notification");
         return switch (notification.type()) {

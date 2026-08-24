@@ -52,6 +52,23 @@ public final class EmptyState extends VBox {
 
         getChildren().addAll(illustration, titleLabel, hintLabel);
         setShown(hintLabel, hint != null && !hint.isBlank());
+
+        // UI wave 2: the one ambient breathing loop in the app, and it runs only
+        // while this panel is actually on screen. Every DataTable builds an empty
+        // state whether or not it shows one, so a loop started in a constructor
+        // and never stopped would be one indefinite timeline per table in the
+        // build, all of them animating nothing.
+        visibleProperty().addListener((obs, was, showing) -> breathe(showing));
+        breathe(isVisible());
+    }
+
+    /** Starts or stops the illustration's breathing, following visibility. */
+    private void breathe(boolean showing) {
+        if (showing) {
+            client.ui.anim.Animations.breathe(illustration);
+        } else {
+            client.ui.anim.Animations.reset(illustration);
+        }
     }
 
     /** @return the standard "no results for these filters" state. */

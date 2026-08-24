@@ -73,12 +73,29 @@ class ConnectWiringTest {
         }
 
         @Test
-        @DisplayName("both collaborators are required")
-        void argumentsAreRequired() {
+        @DisplayName("an endpoint is required")
+        void theEndpointIsRequired() {
             assertThatNullPointerException()
                     .isThrownBy(() -> ConnectWiring.forEndpoint(null, eventBus));
-            assertThatNullPointerException()
-                    .isThrownBy(() -> ConnectWiring.forEndpoint(ENDPOINT, null));
+        }
+
+        @Test
+        @DisplayName("a missing bus degrades to a detached one instead of throwing")
+        void aMissingBusIsSurvivable() {
+            // UI wave 1 item 0: this call is reachable from a discovery sweep
+            // that lands after the app was torn down, on the FX thread with no
+            // test in the stack. Throwing there fails an unrelated test, so the
+            // wiring is built against a bus nobody listens to instead.
+            ConnectWiring.Wiring wiring = ConnectWiring.forEndpoint(ENDPOINT, null);
+
+            assertThat(wiring.client().getHost()).isEqualTo("10.0.0.5");
+            assertThat(wiring.client().isConnectionOpen())
+                    .as("still no socket: a torn-down app must not open one")
+                    .isFalse();
+
+            // And the detached bus really is detached: a push goes nowhere.
+            wiring.dispatcher().dispatchIncoming(Message.push(Verb.PUSH_NOTIFICATION, "hello"));
+            assertThat(collector.pushes).isEmpty();
         }
     }
 

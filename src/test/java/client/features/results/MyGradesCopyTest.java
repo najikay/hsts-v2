@@ -5,9 +5,16 @@ import common.dto.grading.StudentGradeRow;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -263,6 +270,149 @@ class MyGradesCopyTest {
     @DisplayName("every row on this screen is approved, which is what the verb guarantees")
     void everyRowIsApproved() {
         assertThat(MyGradesCopy.isApproved(plainRow())).isTrue();
+    }
+
+    // ===================== UI wave 2: the hero and the cards ==============
+
+    @Nested
+    @DisplayName("The house copy scan")
+    class HouseScan {
+
+        /**
+         * Every public String constant on the class, minus two that are not copy.
+         *
+         * <p>The exclusions are distinctions, not exemptions, and both are named
+         * rather than pattern-matched. {@code STYLE_CLASS} is a selector and
+         * would be asking the stylesheet to read like a sentence.
+         * {@code NO_COMMENT} is a single em dash — a glyph standing in for an
+         * absent value, which is precisely why the em-dash rule must not be run
+         * against it: the rule is about prose, and this is a placeholder.
+         */
+        static List<String> allCopy() {
+            List<String> copy = new ArrayList<>();
+            for (Field field : MyGradesCopy.class.getDeclaredFields()) {
+                if (!Modifier.isPublic(field.getModifiers())
+                        || !Modifier.isStatic(field.getModifiers())
+                        || field.getType() != String.class) {
+                    continue;
+                }
+                if (field.getName().equals("STYLE_CLASS") || field.getName().equals("NO_COMMENT")) {
+                    continue;
+                }
+                try {
+                    String value = (String) field.get(null);
+                    if (!value.isEmpty()) {
+                        copy.add(value);
+                    }
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException("could not read " + field.getName(), e);
+                }
+            }
+            return copy;
+        }
+
+        @Test
+        @DisplayName("the scan really finds the copy, so a green run means something")
+        void theScanHasTeeth() {
+            assertThat(allCopy()).hasSizeGreaterThanOrEqualTo(15);
+            assertThat(allCopy()).contains(MyGradesCopy.HERO_TITLE, MyGradesCopy.EMPTY_SLOT_HINT,
+                    MyGradesCopy.ADJUSTED_MARKER);
+        }
+
+        @ParameterizedTest
+        @MethodSource("allCopy")
+        @DisplayName("no line contains an em dash (PRD section 4.1)")
+        void noEmDashes(String line) {
+            assertThat(line).doesNotContain("—").doesNotContain("–");
+        }
+
+        @ParameterizedTest
+        @MethodSource("allCopy")
+        @DisplayName("nothing shouts, and nothing starts lowercase")
+        void sentenceCase(String line) {
+            assertThat(line).isNotBlank();
+            assertThat(line).isNotEqualTo(line.toUpperCase(Locale.ROOT));
+            assertThat(Character.isLowerCase(line.charAt(0)))
+                    .as("<%s> starts lowercase", line).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("The hero band's counting line")
+    class HeroCount {
+
+        @Test
+        @DisplayName("⚑ the singular forms exist, because the demo account has one mark")
+        void singularsAreReal() {
+            // "1 grades across 1 courses" is the sentence a format string
+            // produces, and it is on screen for the very first student who
+            // signs in after a reseed.
+            assertThat(MyGradesCopy.heroCount(1, 1)).isEqualTo("1 grade across 1 course");
+        }
+
+        @Test
+        @DisplayName("plurals agree in both halves independently")
+        void pluralsAgreeSeparately() {
+            assertThat(MyGradesCopy.heroCount(4, 1)).isEqualTo("4 grades across 1 course");
+            assertThat(MyGradesCopy.heroCount(1, 2)).isEqualTo("1 grade across 2 courses");
+            assertThat(MyGradesCopy.heroCount(0, 0)).isEqualTo("0 grades across 0 courses");
+        }
+
+        @Test
+        @DisplayName("a negative count is clamped rather than printed")
+        void negativesAreClamped() {
+            assertThat(MyGradesCopy.heroCount(-3, -1)).isEqualTo("0 grades across 0 courses");
+        }
+    }
+
+    @Nested
+    @DisplayName("The pass chip")
+    class PassChip {
+
+        @Test
+        @DisplayName("⚑ the pass mark is the server's, not a second copy in the client")
+        void thePassMarkComesFromTheContract() {
+            int passMark = common.dto.results.ResultStatistics.PASS_MARK;
+
+            assertThat(MyGradesCopy.passed(MyGradesCopyTest.row(passMark, passMark, null,
+                    Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11"))).isTrue();
+            assertThat(MyGradesCopy.passed(row(passMark - 1, passMark - 1, null,
+                    Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11"))).isFalse();
+        }
+
+        @Test
+        @DisplayName("an overridden grade is judged on the score that counts")
+        void theEffectiveScoreDecides() {
+            // yael.azulay's seeded row: auto 45, final 55. The fail that became
+            // a pass, and the chip has to say so.
+            StudentGradeRow rescued = row(45, 55, null,
+                    Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11");
+
+            assertThat(MyGradesCopy.passed(rescued)).isTrue();
+        }
+
+        @Test
+        @DisplayName("the failing chip names the mark, never the student")
+        void theFailingChipIsAboutTheMark() {
+            assertThat(MyGradesCopy.CHIP_BELOW)
+                    .containsIgnoringCase("pass mark")
+                    .doesNotContainIgnoringCase("you")
+                    .doesNotContainIgnoringCase("fail");
+        }
+    }
+
+    @Nested
+    @DisplayName("The dashed empty slot")
+    class EmptySlot {
+
+        @Test
+        @DisplayName("⚑ it names what fills it rather than restating the absence")
+        void itNamesWhatFillsIt() {
+            // The same rule the dashboards' empty cards follow. "No more grades"
+            // tells a student what she can already see.
+            assertThat(MyGradesCopy.EMPTY_SLOT_HINT)
+                    .containsIgnoringCase("teacher approves it");
+        }
     }
 
     @Test

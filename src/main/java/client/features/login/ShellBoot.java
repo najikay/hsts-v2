@@ -84,6 +84,10 @@ public final class ShellBoot {
         shell.setUser(login.displayName(), login.role());
         startNotifications(manager, shell, login);
         shell.setOnLogout(() -> logout(manager));
+        // F-12: the avatar chip has always looked pressable; now it is. Wired after
+        // setOnLogout so the menu can offer sign out rather than only the theme.
+        shell.installProfileMenu(manager.themeManager() == null
+                ? null : manager.themeManager().state());
 
         watchConnection(manager, shell);
         SessionRoutes.register(manager.navigator(), manager.screens(), login.role());
@@ -147,8 +151,10 @@ public final class ShellBoot {
         }
         NotificationsSession session =
                 new NotificationsSession(dispatcher, manager.eventBus(), new NotificationsModel());
-        NotificationsPanel panel =
-                new NotificationsPanel(session, manager.navigator(), shell.popovers());
+        // The bell is handed over as the anchor: the panel lines up under it, and
+        // a click on it counts as "the owner", not as a click outside (F-6).
+        NotificationsPanel panel = new NotificationsPanel(session, manager.navigator(),
+                shell.popovers(), shell.bell(), java.time.Clock.systemUTC());
 
         session.model().onChange(() ->
                 shell.state().setUnreadNotifications(session.model().unreadCount()));

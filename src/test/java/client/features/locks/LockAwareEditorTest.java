@@ -454,6 +454,29 @@ class LockAwareEditorTest {
         assertThatNullPointerException().isThrownBy(() -> editor.onStateChanged(null));
     }
 
+    @Test
+    @DisplayName("⚑ every snapshot is delivered through the bus's FX poster, never inline")
+    void snapshotsAreDeliveredThroughThePoster() {
+        // The hop lives inside publish() (ruled 2026-08-24): dispatcher answers arrive on the
+        // network thread, and a listener that mutated the scene graph from there would fail
+        // silently. This test fails if anyone "simplifies" publish() back to a direct loop.
+        java.util.List<Runnable> posted = new java.util.ArrayList<>();
+        ClientEventBus recordingBus = new ClientEventBus(ClientEventBus.newBus(), posted::add);
+        LockAwareEditor hopping = new LockAwareEditor(
+                new RequestDispatcher(connection), recordingBus, ME, heartbeat, "question");
+        java.util.List<EditLockState.Snapshot> seen = new java.util.ArrayList<>();
+        hopping.onStateChanged(seen::add);
+
+        hopping.open(QUESTION);
+
+        assertThat(seen)
+                .as("nothing may reach a listener before the poster runs the delivery")
+                .isEmpty();
+        assertThat(posted).isNotEmpty();
+        posted.forEach(Runnable::run);
+        assertThat(seen).isNotEmpty();
+    }
+
     // ===================== Helpers =======================================
 
     private void grant() {
