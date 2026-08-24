@@ -8,6 +8,8 @@ import common.dto.bank.QuestionDeleteRequest;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionDraft;
 import common.dto.bank.QuestionEdit;
+import common.dto.lock.EntityRef;
+import common.dto.lock.LockHolder;
 import common.protocol.ErrorCode;
 import org.hibernate.Session;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,9 +28,14 @@ import server.db.entities.User;
 import server.db.ids.AllocatedId;
 import server.db.ids.QuestionIdAllocator;
 import server.db.projections.ReferencingExam;
+import server.core.SessionManager;
 import server.db.repos.CourseRepository;
 import server.db.repos.QuestionRepository;
 import server.db.repos.UserRepository;
+import server.features.locks.DisplayNames;
+import server.features.locks.EditLockGuard;
+import server.features.locks.EditLockService;
+import server.realtime.PushGateway;
 
 import java.lang.reflect.Field;
 import java.time.Clock;
@@ -77,6 +84,12 @@ class QuestionServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-21T20:00:00Z");
     private static final Instant EARLIER = Instant.parse("2026-08-01T09:00:00Z");
 
+    /** The other teacher, for the lock consult. Nothing else in this file needs her. */
+    private static final long RINA_ID = 9;
+
+    private static final DisplayNames LOCK_NAMES = userId ->
+            userId == RINA_ID ? Optional.of("Rina Barak") : Optional.empty();
+
     private static final List<String> ANSWERS =
             List.of("Encapsulation", "Inheritance", "Polymorphism", "Abstraction");
 
@@ -95,10 +108,20 @@ class QuestionServiceTest {
 
     private QuestionService service;
 
+    /**
+     * A REAL lock service, not a mock, for the reason {@code EditLockGuardTest} gives: the
+     * guard's value is that it inherits one definition of "a live hold", and a mock here would
+     * restate that definition in the test that is supposed to be checking the caller honours it.
+     * No database is involved - locks are a map - so there is nothing two-engine about this.
+     */
+    private EditLockService lockService;
+
     @BeforeEach
     void setUp() {
-        service = new QuestionService(questions, courses, users, ids,
+        lockService = new EditLockService(new PushGateway(new SessionManager()), LOCK_NAMES,
                 Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new QuestionService(questions, courses, users, ids,
+                Clock.fixed(NOW, ZoneOffset.UTC), new EditLockGuard(lockService));
     }
 
     // ===================== Fixtures =======================================
@@ -323,6 +346,27 @@ class QuestionServiceTest {
         }
 
         @Test
+        @DisplayName("a question with no versions at all is STALE, not a dereference")
+        void aVersionlessQuestionIsRefused() {
+            // The other half of the staleness condition, and the half no test reached: JaCoCo
+            // showed the branch only ever taken through the versionNo comparison. Unreachable
+            // through the front door, since create writes version 1 in the same transaction as
+            // the question - but this is the arm that runs if it ever were, and "STALE" is a
+            // great deal better than latest.get() on an empty Optional inside a write.
+            when(questions.findActiveByDisplayId(session, DISPLAY_ID))
+                    .thenReturn(Optional.of(aQuestion()));
+            teaches(true);
+            when(questions.findLatestVersionForAuthoring(session, QUESTION_ID))
+                    .thenReturn(Optional.empty());
+
+            QuestionService.EditOutcome outcome =
+                    service.update(session, teacher(), anEdit(1, ImageAction.KEEP, null));
+
+            assertThat(outcome.status()).isEqualTo(QuestionService.EditStatus.STALE);
+            verify(session, never()).persist(any());
+        }
+
+        @Test
         @DisplayName("writes version n+1 and leaves version n exactly as it was")
         void editWritesANewVersionAndLeavesTheOldOneAlone() {
             QuestionVersion previous = aVersion(2, null);
@@ -525,6 +569,243 @@ class QuestionServiceTest {
             // F2.5 and T-2.8: the row stays, so the version history survives and the serial
             // is never handed out again.
             verify(session, never()).remove(any());
+        }
+    }
+
+    // ===================== the edit lock consult ==========================
+
+    /**
+     * The write-path lock consult (E6.14, F2.6, BANK §6's second {@code CONFLICT}).
+     *
+     * <p>Before this existed the mutual exclusion the editor draws on screen was enforced by the
+     * client alone: two teachers holding current base versions could both write, and the second
+     * one silently won. These cases are about the server refusing, and about <b>where</b> in the
+     * sequence it refuses, which turns out to carry more than the lock rule.
+     *
+     * <p>The order under test is scope check, then lock consult, then version check. Each
+     * neighbour is pinned by a case that fails if the consult moves across it:
+     * {@code outOfScopeBeatsTheLock} fails if it moves up, {@code lockBeatsStaleness} fails if it
+     * moves down. Both are written as assertions about what the caller is told rather than about
+     * what was called, because that is what a teacher actually experiences.
+     */
+    @Nested
+    @DisplayName("the edit lock consult")
+    class Locks {
+
+        /** The key the editor locks under. Hard-coded rather than derived, on purpose. */
+        private static final EntityRef GEOMETRY_LOCK = EntityRef.question(11007L);
+
+        private QuestionDeleteRequest ask(int baseVersionNo) {
+            return new QuestionDeleteRequest(DISPLAY_ID, baseVersionNo);
+        }
+
+        private void questionExistsAndSheTeachesIt() {
+            when(questions.findActiveByDisplayId(session, DISPLAY_ID))
+                    .thenReturn(Optional.of(aQuestion()));
+            teaches(true);
+        }
+
+        @Test
+        @DisplayName("⚑ the key is the display id, which is what makes client and server collide")
+        void theKeyIsTheDisplayId() {
+            // The case the whole consult rests on. The editor locks EntityRef.question(11007)
+            // through QuestionLockKey; if the service derived its key any other way - the
+            // primary key 4200, say, which is right there on the entity it just loaded - it
+            // would consult an empty slot, refuse nothing, and every other test in this class
+            // would still pass because they all take the lock through the same helper.
+            assertThat(QuestionLockKey.of(DISPLAY_ID))
+                    .as("the editor and the write path have to name the same lock")
+                    .isEqualTo(GEOMETRY_LOCK);
+            assertThat(GEOMETRY_LOCK.entityId())
+                    .as("and it is the display id, not the questions primary key")
+                    .isNotEqualTo(QUESTION_ID);
+
+            questionExistsAndSheTeachesIt();
+            lockService.acquire(RINA_ID, GEOMETRY_LOCK);
+
+            assertThat(service.update(session, teacher(), anEdit(2, ImageAction.KEEP, null))
+                    .status())
+                    .isEqualTo(QuestionService.EditStatus.LOCKED);
+        }
+
+        @Test
+        @DisplayName("⚑ another teacher's live lock refuses the edit, and names her")
+        void anotherHoldersLockRefusesTheEdit() {
+            questionExistsAndSheTeachesIt();
+            lockService.acquire(RINA_ID, GEOMETRY_LOCK);
+
+            QuestionService.EditOutcome outcome =
+                    service.update(session, teacher(), anEdit(2, ImageAction.KEEP, null));
+
+            assertThat(outcome.status()).isEqualTo(QuestionService.EditStatus.LOCKED);
+            assertThat(outcome.lockedBy().displayName())
+                    .as("the refusal has to name somebody, or the teacher has no route forward: "
+                            + "BankMessages.lockedBy is built from this")
+                    .isEqualTo("Rina Barak");
+            verify(session, never()).persist(any());
+        }
+
+        @Test
+        @DisplayName("her own lock does not refuse her, which is the whole point of holding one")
+        void herOwnLockDoesNotBlockHer() {
+            questionExistsAndSheTeachesIt();
+            lockService.acquire(TEACHER_ID, GEOMETRY_LOCK);
+            when(questions.findLatestVersionForAuthoring(session, QUESTION_ID))
+                    .thenReturn(Optional.of(aVersion(2, null)));
+            stubDetailLookups();
+
+            QuestionService.EditOutcome outcome =
+                    service.update(session, teacher(), anEdit(2, ImageAction.KEEP, null));
+
+            assertThat(outcome.status())
+                    .as("the editor takes the lock before she types, so a guard that ignored the "
+                            + "caller's own hold would refuse every single save")
+                    .isEqualTo(QuestionService.EditStatus.UPDATED);
+        }
+
+        @Test
+        @DisplayName("an unlocked question is untouched by any of this")
+        void noLockChangesNothing() {
+            questionExistsAndSheTeachesIt();
+            when(questions.findLatestVersionForAuthoring(session, QUESTION_ID))
+                    .thenReturn(Optional.of(aVersion(2, null)));
+            stubDetailLookups();
+
+            assertThat(service.update(session, teacher(), anEdit(2, ImageAction.KEEP, null))
+                    .status())
+                    .isEqualTo(QuestionService.EditStatus.UPDATED);
+        }
+
+        @Test
+        @DisplayName("⚑ locked beats stale: the consult runs before the version check")
+        void lockBeatsStaleness() {
+            questionExistsAndSheTeachesIt();
+            lockService.acquire(RINA_ID, GEOMETRY_LOCK);
+
+            // Base version 1 against a latest of 3 would be STALE. It never gets that far, and
+            // deliberately: telling her to "reopen the question to edit the newest version" is
+            // an instruction she cannot follow while somebody else has it open. The lock is the
+            // polite refusal, the version check is the correctness guarantee, in that order.
+            QuestionService.EditOutcome outcome =
+                    service.update(session, teacher(), anEdit(1, ImageAction.KEEP, null));
+
+            assertThat(outcome.status()).isEqualTo(QuestionService.EditStatus.LOCKED);
+            verify(questions, never()).findLatestVersionForAuthoring(any(),
+                    org.mockito.ArgumentMatchers.anyLong());
+        }
+
+        @Test
+        @DisplayName("⚑ out of scope beats locked: no lock refusal leaks a question she cannot see")
+        void outOfScopeBeatsTheLock() {
+            // The disclosure this ordering closes. Consulting first would answer "Rina Barak is
+            // editing this" about a question in a course she does not teach, which confirms the
+            // question exists AND names a colleague - straight through the hole section 6 folds
+            // three conditions into one answer to prevent.
+            when(questions.findActiveByDisplayId(session, DISPLAY_ID))
+                    .thenReturn(Optional.of(aQuestion()));
+            teaches(false);
+            lockService.acquire(RINA_ID, GEOMETRY_LOCK);
+
+            QuestionService.EditOutcome outcome =
+                    service.update(session, teacher(), anEdit(2, ImageAction.KEEP, null));
+
+            assertThat(outcome.status()).isEqualTo(QuestionService.EditStatus.NOT_FOUND);
+            assertThat(outcome.lockedBy())
+                    .as("no name reaches a caller who may not know the question exists")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("⚑ a malformed display id is NOT_FOUND rather than a thrown key")
+        void aMalformedIdDoesNotReachTheKey() {
+            // Nothing validates displayId5's shape on the write path - QuestionValidator does
+            // not look at it and neither does BankHandlers - so QuestionLockKey.of on raw
+            // request data would turn this payload into an exception on the socket read thread
+            // (E1.11). The scope check runs first, so the key is only ever built from an id
+            // that matched a stored row.
+            String malformed = "'; DROP TABLE questions; --";
+            when(questions.findActiveByDisplayId(session, malformed)).thenReturn(Optional.empty());
+
+            QuestionEdit hostile = new QuestionEdit(malformed, 1, "What is encapsulation?",
+                    ANSWERS, 1, "OOP", Difficulty.MEDIUM, ImageAction.KEEP, null);
+
+            assertThat(service.update(session, teacher(), hostile).status())
+                    .isEqualTo(QuestionService.EditStatus.NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("⚑ a delete is refused by another teacher's lock too")
+        void anotherHoldersLockRefusesTheDelete() {
+            // BANK §5: "a delete racing an edit is a CONFLICT rather than a coin toss". The
+            // baseVersionNo half of that was already true; this is the other half, and without
+            // it a teacher can delete the question somebody else is editing right now.
+            questionExistsAndSheTeachesIt();
+            lockService.acquire(RINA_ID, GEOMETRY_LOCK);
+
+            QuestionService.DeleteResolution resolved = service.delete(session, teacher(), ask(2));
+
+            assertThat(resolved.status()).isEqualTo(QuestionService.DeleteStatus.LOCKED);
+            assertThat(resolved.lockedBy().displayName()).isEqualTo("Rina Barak");
+            verify(questions, never()).findReferencingExams(any(),
+                    org.mockito.ArgumentMatchers.anyLong());
+        }
+
+        @Test
+        @DisplayName("⚑ out of scope beats locked on DELETE too, which update's case cannot show")
+        void outOfScopeBeatsTheLockOnDelete() {
+            // The gap a cold read found: the ordering was pinned on update and not on delete,
+            // so hoisting the consult in delete alone survived every other case in this class.
+            // The two verbs are separate call sites and neither one's ordering is evidence
+            // about the other's. Probing QUESTION_DELETE with display ids would otherwise be
+            // answered "This question is being edited by Rina Barak right now" for a course she
+            // does not teach: an existence oracle with a colleague's name attached.
+            when(questions.findActiveByDisplayId(session, DISPLAY_ID))
+                    .thenReturn(Optional.of(aQuestion()));
+            teaches(false);
+            lockService.acquire(RINA_ID, GEOMETRY_LOCK);
+
+            QuestionService.DeleteResolution resolved = service.delete(session, teacher(), ask(2));
+
+            assertThat(resolved.status()).isEqualTo(QuestionService.DeleteStatus.NOT_FOUND);
+            assertThat(resolved.lockedBy())
+                    .as("no name reaches a caller who may not know the question exists")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("a delete is not refused by her own lock")
+        void herOwnLockDoesNotBlockHerDelete() {
+            questionExistsAndSheTeachesIt();
+            lockService.acquire(TEACHER_ID, GEOMETRY_LOCK);
+            when(questions.findLatestVersionForAuthoring(session, QUESTION_ID))
+                    .thenReturn(Optional.of(aVersion(2, null)));
+            when(questions.findReferencingExams(session, QUESTION_ID)).thenReturn(List.of());
+
+            assertThat(service.delete(session, teacher(), ask(2)).status())
+                    .isEqualTo(QuestionService.DeleteStatus.RESOLVED);
+        }
+
+        @Test
+        @DisplayName("a lock refusal cannot be built without a holder, in either direction")
+        void theRefusalCannotLoseItsHolder() {
+            // The 3.1 shape from the last PR, in a new file: a component that is required in
+            // name only. BankHandlers dereferences lockedBy() the moment the status is LOCKED,
+            // so an outcome that can be built without one is a NullPointerException on a write
+            // path waiting for the first teacher to collide with a colleague.
+            assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() ->
+                    new QuestionService.EditOutcome(QuestionService.EditStatus.LOCKED, null, null));
+            assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() ->
+                    new QuestionService.DeleteResolution(
+                            QuestionService.DeleteStatus.LOCKED, null, null));
+
+            // And the quieter half: a holder on any other status is a caller who believes it is
+            // saying something no handler will ever read.
+            assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() ->
+                    new QuestionService.EditOutcome(QuestionService.EditStatus.STALE, null,
+                            new LockHolder(RINA_ID, "Rina Barak")));
+            assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() ->
+                    new QuestionService.DeleteResolution(QuestionService.DeleteStatus.NOT_FOUND,
+                            null, new LockHolder(RINA_ID, "Rina Barak")));
         }
     }
 }

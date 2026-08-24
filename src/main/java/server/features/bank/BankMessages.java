@@ -23,8 +23,14 @@ import java.util.stream.Collectors;
  * sentences. That is the visible reason. The invisible one is E6.11: the editor maps a server
  * error back onto the field that caused it, so a message that says only "answers are invalid"
  * leaves the client guessing which of four boxes to highlight. Every sentence below that can
- * name a position does, and {@link server.features.bank.QuestionValidator.Violation} carries
- * the field name beside it so the client never has to match on text.
+ * name a position does, which is what lets a client put a refusal under the right box.
+ *
+ * <p><b>The client does match on text, and this paragraph used to say it did not.</b>
+ * {@link server.features.bank.QuestionValidator.Violation} carries a field name, but
+ * {@code BankHandlers} keeps only the message, so the wire has never carried one. E6.11's editor
+ * maps a refusal to a box by <b>exact equality against the constants below</b>, which is sound
+ * because both tiers ship in one artifact, and which is why nothing here may be reworded without
+ * checking {@code QuestionEditorSession.locate}. Corrected 2026-08-23 after a cold read.
  */
 public final class BankMessages {
 
@@ -175,7 +181,20 @@ public final class BankMessages {
             "Someone else saved a new version of this question while you had it open. Nothing you "
                     + "typed was lost, but reopen the question to edit the newest version.";
 
-    /** E6.14, F2.6: the advisory edit lock is held by another teacher. */
+    /**
+     * E6.14, F2.6: the edit lock is held by another teacher.
+     *
+     * <p><b>It has an issuer now, which it did not when it was written.</b> Raised 2026-08-23 as
+     * a gap rather than a wording problem: the contract's section 6 listed {@code CONFLICT} for
+     * "the question is edit-locked by someone else" and nothing ever produced it, so the mutual
+     * exclusion the editor showed on screen was enforced by the client alone and two teachers
+     * holding current base versions could both write. Ruled on 2026-08-24, and
+     * {@code QuestionService} now consults {@code EditLockGuard} on both write verbs.
+     *
+     * <p>Says the question is readable and when it frees up, because the honest answer is "not
+     * now, and here is who to ask" - a refusal that names nobody leaves her with no route
+     * forward, which is the same standard {@link #deleteBlocked} is held to.
+     */
     public static String lockedBy(String editorName) {
         return "This question is being edited by " + editorName + " right now. You can read it, "
                 + "and it becomes editable as soon as that editor closes it.";

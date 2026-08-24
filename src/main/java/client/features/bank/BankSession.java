@@ -657,6 +657,54 @@ public final class BankSession {
     }
 
     /**
+     * Whether the caller may write into this course, which is narrower than seeing it.
+     *
+     * <p>Contract section 2 keeps two scopes apart: a coordinator <b>reads</b> every course of
+     * her subject and <b>writes</b> only in the ones she also teaches. The read half is why the
+     * list can show her a course at all; this is the write half, and without it the screen
+     * offers her Delete and Edit on rows the server will refuse.
+     *
+     * <p>The set is {@code LoginResult.courses()}, which is
+     * {@code CourseRepository.findForUser}: teaching <b>union enrolment</b>, and that union is a
+     * real difference rather than a technicality. This javadoc used to claim "for staff the
+     * enrolment half is empty, so it is exactly the taught set". <b>Nothing guarantees that.</b>
+     * {@code enrollments} carries no role constraint, so a teacher enrolled in a colleague's
+     * course would find this method answering true for it, and {@code Authorization}'s own
+     * javadoc warns against exactly this substitution for exactly this reason.
+     *
+     * <p>It is unreachable under today's seed, which enrols only students, and that is what
+     * makes it worth writing down rather than leaving: a claim the seed happens to satisfy is
+     * the shape of defect P-7 records. <b>The client has no taught-only set to switch to</b> —
+     * nothing on the wire carries one — so this stays the best available approximation and the
+     * server stays the decider. What changed is that the comment no longer says otherwise.
+     *
+     * <p>Raised in this PR's report: a taught-only field on {@code LoginResult}, or a narrow
+     * lookup, would let the offering match the rule instead of approximating it.
+     *
+     * <p>Offering, not permission: the server re-checks with {@code requireTeachesCourse} on
+     * create and {@code teachesCourse} on edit and delete, and it is the one that decides. This
+     * only stops the client proposing a trip whose single possible outcome is a refusal.
+     *
+     * @param courseCode the course a row or a detail belongs to
+     * @return whether the caller teaches it
+     */
+    public boolean canWriteIn(String courseCode) {
+        String wanted = blankToNull(courseCode);
+        if (wanted == null) {
+            return false;
+        }
+        for (CourseRef course : courses) {
+            // strip(), never trim(), for the reason the contract's section 5 gives: course codes
+            // are CHAR(2) under a PAD SPACE collation, so a code carrying a Unicode space
+            // matches the row in SQL while failing Java equality.
+            if (wanted.equals(blankToNull(course.code()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The courses the picker offers: the caller's own, plus every course the bank has actually
      * shown her.
      *

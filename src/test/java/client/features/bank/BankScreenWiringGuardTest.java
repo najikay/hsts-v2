@@ -27,33 +27,37 @@ import static org.assertj.core.api.Assertions.assertThat;
  * feature PR that goes green while its screen is not on any rail is the failure; a feature PR
  * that refuses to go green until somebody wires it is the guard working.
  *
- * <h2>Why it matches on the id string and not on a {@code Routes} constant</h2>
+ * <h2>Why it reads {@link BankRoutes} and not {@code client.core.Routes}</h2>
  *
- * <p>{@code Routes.BANK} does not exist yet either, and referring to it would make this a
- * <b>compile</b> error rather than a test failure, which would take the whole build down and
- * tell a reader nothing about what is missing. The id literal is also the thing the assembly has
- * to spell correctly, so pinning the spelling is the useful half:
- * {@code AppArgsAndRoutesTest.notificationRoutesLineUp} pins the notification route ids the same
- * way and for the same reason.
+ * <p>{@code Routes.BANK} does not exist yet, and naming it would make this a <b>compile</b> error
+ * rather than a test failure: the whole build would go down and tell a reader nothing about what
+ * is missing. {@link BankRoutes} is the feature's own copy of the two spellings, used by every
+ * button and every navigation in the package, so pinning it proves the screens are reachable
+ * rather than that somebody typed one string twice.
+ * {@code AppArgsAndRoutesTest.notificationRoutesLineUp} pins the notification route ids for the
+ * same reason.
  *
  * <h2>The mutations it has to reject</h2>
  *
- * <p>One assertion is not a guard (method rule 4). Five separate ways the wiring can be wrong,
- * one test each, so a failure names which one happened:
+ * <p>One assertion is not a guard (method rule 4). Two screens, and each of them can be wired
+ * wrong in the same four ways, one test each so a failure names which one happened:
  *
  * <ol>
- *   <li>the route is registered for nobody, which is #25 exactly;</li>
- *   <li>it is registered for one teaching role and not the other, which is how a coordinator
- *       finds an empty rail where a teacher finds a bank;</li>
- *   <li>it is offered to a student, which is a trip the server would refuse and the client
- *       should never have offered (F1.2);</li>
- *   <li>it is offered to the principal, which hands an S-7 role a Delete button;</li>
- *   <li>the legacy screen leaves the rail before its replacement is on it, which would take the
- *       bank away from everyone for as long as the gap lasts.</li>
+ *   <li>registered for nobody, which is #25 exactly (the list only; the editor's absence is
+ *       covered by its own positive case);</li>
+ *   <li>registered for one authoring role and not the other, which is how a coordinator finds an
+ *       empty rail where a teacher finds a bank;</li>
+ *   <li>offered to a student, which is a trip the server would refuse and the client should
+ *       never have offered (F1.2);</li>
+ *   <li>offered to the principal, which hands an S-7 role a Delete button on the list and a Save
+ *       on the editor that can only be refused.</li>
  * </ol>
  *
- * <p>The fifth is the one this PR's sequencing actually risks, and it is the reason the lead
- * ruled that rail id {@code questions} stays on the legacy screen until the retirement PR.
+ * <p>Plus one that belongs to the sequencing rather than to either screen: the legacy screen
+ * leaving the rail before its replacement is on it, which would take the question bank away from
+ * every teacher for the length of the gap. That is the one this PR stack actually risks, and it
+ * is why the lead ruled that rail id {@code questions} keeps serving the legacy screen until the
+ * retirement PR.
  *
  * <h2>Why the principal is a negative case, when the contract lets her read the bank</h2>
  *
@@ -68,21 +72,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  * offering-versus-permission distinction case 3 above already makes about students, applied
  * inconsistently one role over.
  *
- * <p><b>Both negative cases pass vacuously until the assembly lands</b>, because nothing offers
- * the route to anybody yet. Said out loud rather than left for a reader to assume otherwise: they
- * are green today for the same reason the positives are red, and they only start guarding
- * anything the moment the route exists. The vacuity assertions in each are the most that can be
- * checked before then.
+ * <p><b>All four negative cases pass vacuously until the assembly lands</b>, because neither
+ * route is offered to anybody yet. Said out loud rather than left for a reader to assume
+ * otherwise: they are green today for the same reason the positives are red, and they only start
+ * guarding anything the moment the routes exist. The vacuity assertion in each is the most that
+ * can be checked before then.
  */
 class BankScreenWiringGuardTest {
 
     /**
-     * The id the assembly PR must register, declared once.
+     * The id the assembly PR must register, read from the feature's own constant.
      *
-     * <p>Named in this PR's body under "route id" so the assembly and this constant are two
-     * copies of one decision that a reviewer can compare in one glance.
+     * <p>Not a literal: {@link BankRoutes#LIST} is what every button and every navigation in the
+     * feature uses, so pinning the constant is what makes this guard prove the screens are
+     * reachable rather than that somebody typed the same string twice.
      */
-    private static final String BANK_ROUTE_ID = "bank";
+    private static final String BANK_ROUTE_ID = BankRoutes.LIST;
+
+    /** The editor's id, on the same terms. */
+    private static final String EDITOR_ROUTE_ID = BankRoutes.EDITOR;
 
     /** The rail id the legacy screen keeps until the retirement PR (the lead's ruling). */
     private static final String LEGACY_ROUTE_ID = "questions";
@@ -156,6 +164,42 @@ class BankScreenWiringGuardTest {
                         + "The server would refuse the trip, and F1.2 says the client should not "
                         + "have offered it.")
                 .isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"TEACHER", "COORDINATOR"})
+    @DisplayName("the editor is offered to the two roles that may write, and to nobody else")
+    void theEditorIsOfferedToAuthorsOnly(Role role) {
+        assertThat(offers(role, EDITOR_ROUTE_ID))
+                .as("%s may write into the bank under BANK_WIRE_CONTRACT section 2, so she needs "
+                        + "the editor route. Without it the Edit button navigates nowhere.", role)
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("the principal is never offered the editor, because she may never write ⚑")
+    void thePrincipalIsNotOfferedTheEditor() {
+        assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
+                .as("guard against vacuity: she does have routes")
+                .isNotEmpty();
+        assertThat(offers(Role.PRINCIPAL, EDITOR_ROUTE_ID))
+                .as("F9.3 gives her zero mutating verbs, ever. She is on the bank's four READ "
+                        + "verbs and on none of the three writes, so offering her an editor would "
+                        + "be a screen whose every Save is refused. This is the one row of "
+                        + "section 2's table that a client can get wrong on its own.")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("a student is offered neither screen")
+    void studentsAreOfferedNeither() {
+        assertThat(SessionRoutes.routesFor(Role.STUDENT))
+                .as("guard against vacuity: a student does have routes")
+                .isNotEmpty();
+        // Both, because the name says both. It checked only the editor until a rebase put the
+        // bank's own student case beside it and left this one over-claiming by half.
+        assertThat(offers(Role.STUDENT, EDITOR_ROUTE_ID)).isFalse();
+        assertThat(offers(Role.STUDENT, BANK_ROUTE_ID)).isFalse();
     }
 
     @Test

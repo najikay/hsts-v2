@@ -155,7 +155,8 @@ public class BankHandlers {
      * @param request the request, carrying a {@link QuestionEdit}
      * @return {@code OK} with the new version; {@code VALIDATION} for a bad payload;
      *         {@code NOT_FOUND} for a question she may not edit or that is not there;
-     *         {@code CONFLICT} when somebody else has written a version since she opened hers
+     *         {@code CONFLICT} when somebody else has written a version since she opened hers,
+     *         or when another teacher holds the edit lock
      */
     Message update(CallerContext caller, Message request) {
         return asAuthor(request, caller, QuestionEdit.class, BankHandlers::checkEdit,
@@ -167,6 +168,11 @@ public class BankHandlers {
                                 BankMessages.QUESTION_NOT_FOUND);
                         case STALE -> Message.error(request, ErrorCode.CONFLICT,
                                 BankMessages.STALE_EDIT);
+                        // Both are CONFLICT and they are not the same event: STALE says her copy
+                        // is behind, LOCKED says somebody has it open right now. One sentence for
+                        // both would tell her to reopen a question she cannot open yet.
+                        case LOCKED -> Message.error(request, ErrorCode.CONFLICT,
+                                BankMessages.lockedBy(outcome.lockedBy().displayName()));
                     };
                 });
     }
@@ -183,7 +189,8 @@ public class BankHandlers {
      * @param request the request, carrying a {@link QuestionDeleteRequest}
      * @return {@code OK} with a {@code DeleteOutcome} whether it went through or was blocked;
      *         {@code NOT_FOUND} for a question she may not delete or that is not there;
-     *         {@code CONFLICT} for a stale base version
+     *         {@code CONFLICT} for a stale base version, or when another teacher holds the edit
+     *         lock
      */
     Message delete(CallerContext caller, Message request) {
         return asAuthor(request, caller, QuestionDeleteRequest.class, BankHandlers::noExtraChecks,
@@ -196,6 +203,11 @@ public class BankHandlers {
                                 BankMessages.QUESTION_NOT_FOUND);
                         case STALE -> Message.error(request, ErrorCode.CONFLICT,
                                 BankMessages.STALE_EDIT);
+                        // Deleting a question another teacher has open is the case the contract's
+                        // section 5 note is about: a delete racing an edit is a CONFLICT rather
+                        // than a coin toss, and now it is one on both sides of the race.
+                        case LOCKED -> Message.error(request, ErrorCode.CONFLICT,
+                                BankMessages.lockedBy(resolved.lockedBy().displayName()));
                     };
                 });
     }

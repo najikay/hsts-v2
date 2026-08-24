@@ -74,6 +74,34 @@ public final class BankCopy {
     /** The topic picker's "do not filter" entry. */
     public static final String ALL_TOPICS = "Any topic";
 
+    /**
+     * Why Edit and Delete are greyed on a question she can read.
+     *
+     * <p>Shown as a tooltip on the disabled controls rather than left unexplained: a coordinator
+     * reads every course of her subject and writes only in the ones she teaches (contract
+     * section 2's two scopes), so this is a state she reaches by doing nothing wrong, on a screen
+     * that otherwise offers her everything.
+     *
+     * <p>Deliberately not {@code BankMessages.COURSE_NOT_TAUGHT}, which is the server's refusal
+     * for a create and says "you can only ADD questions to courses you teach". That is the wrong
+     * verb for a greyed Delete, and a sentence borrowed into the wrong place reads as a bug.
+     */
+    public static String readOnlyCourse(String courseName) {
+        String where = courseName == null || courseName.isBlank() ? "this course" : courseName;
+        return "You can read " + where + "'s bank but not change it. Questions are added, edited "
+                + "and deleted by the teachers of the course.";
+    }
+
+    /**
+     * Why the New question button did nothing.
+     *
+     * <p>QUESTION_CREATE carries a course and the server refuses one she does not teach, so the
+     * course has to be known before the editor opens. With no course filter set there is nothing
+     * to guess at, and guessing would put her question in the wrong bank.
+     */
+    public static final String PICK_A_COURSE_FIRST =
+            "Choose a course first, so the question knows which bank it belongs to.";
+
     /** The button that puts every filter back. */
     public static final String CLEAR_FILTERS = "Clear filters";
 
