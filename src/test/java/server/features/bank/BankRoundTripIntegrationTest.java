@@ -180,44 +180,135 @@ class BankRoundTripIntegrationTest extends RepositoryTestBase {
          * <p>This test is the verification the javadoc claimed. It fails on the tree that
          * introduced it and passes on the fix.
          */
+        /**
+         * <b>The two verdicts must match, in both directions.</b> An earlier version of this test
+         * asserted only "a pair the validator accepts, the database accepts", which sounds like
+         * the promise but is not testable once the promise holds: every pair it listed was one the
+         * fixed validator refuses, so the branch that actually asks the database stopped executing
+         * the moment the fix landed. It would have gone on passing while the collation drifted.
+         *
+         * <p>So the database is asked <b>directly</b>, with the validator out of the way: the pair
+         * goes into {@code a1}/{@code a2} as a raw insert, and whether the CHECK accepted it is
+         * compared against what {@link QuestionValidator#sameAnswer} said. Both branches are
+         * populated by the cases below, and the assertion is symmetric - looser fails, and so does
+         * stricter-in-the-wrong-direction.
+         */
         @ParameterizedTest(name = "{2}: {0} vs {1}")
         @CsvSource({
+                // Pairs the collation folds. Validator must call them the same.
                 "מים,   מימ,  final mem",
                 "כן,    כנ,   final nun",
                 "רף,    רפ,   final pe",
                 "ארץ,   ארצ,  final tsadi",
                 "דרך,   דרכ,  final kaf",
-                "שלום,  שָׁלוֹם, niqqud (these already agreed)"
+                "שלום,  שָׁלוֹם, niqqud",
+                "װאס,   וואס, yiddish double vav",
+                "😀,     😁,    two emoji - one weight above the BMP",
+                // Pairs the collation keeps apart. Validator must call them different, or it
+                // refuses a question that is perfectly valid. Without these rows the database
+                // branch never runs.
+                "מים,   אש,   two different Hebrew words",
+                "תשע,   שבע,  two different Hebrew numbers",
+                "Paris, Madrid, two different Latin words",
+                "מים,   מים ורוח, one is a prefix of the other",
+                // These two pin COUNT preservation above the BMP, which nothing else does. The
+                // collation gives every astral character one weight but does not ignore it, so a
+                // fold that DELETED them instead of substituting a sentinel would call both of
+                // these pairs the same and refuse a question the database would have stored.
+                "מים😀,  מים,  an emoji is not nothing",
+                "😀😀,   😀,   two emoji are not one"
         })
-        @DisplayName("a pair the validator accepts is a pair the database accepts")
-        void whatTheValidatorAcceptsTheDatabaseAccepts(String first, String second, String why) {
-            // The two halves of the promise, checked in the only order that means anything: ask
-            // the validator, then ask the database the same question by actually inserting.
+        @DisplayName("⚑ the validator and the database agree, in both directions")
+        void theValidatorAndTheDatabaseAgree(String first, String second, String why) {
             boolean validatorSaysSame = QuestionValidator.sameAnswer(first, second);
+            boolean databaseSaysSame = !databaseAcceptsAsDistinct(first, second);
 
-            Message answer = create(draft(List.of(first, second, "אחר", "שונה"), 1));
+            assertThat(validatorSaysSame)
+                    .as("%s: the validator says %s, the database says %s. sameAnswer promises "
+                            + "'never accept a pair the database will reject' - a validator that "
+                            + "is looser hands the insert a pair the CHECK refuses and the "
+                            + "teacher gets an internal error; one that is stricter refuses a "
+                            + "question she is entitled to save.", why,
+                            validatorSaysSame ? "same" : "different",
+                            databaseSaysSame ? "same" : "different")
+                    .isEqualTo(databaseSaysSame);
+        }
 
-            if (validatorSaysSame) {
-                // Refused before the write. The database never sees the pair, so the promise holds
-                // trivially and the teacher gets a sentence naming the field.
-                assertThat(answer.isOk())
-                        .as("%s: the validator called these the same answer, so the create must be "
-                                + "refused with a sentence rather than attempted", why)
-                        .isFalse();
-                assertThat(answer.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
-            } else {
-                // The dangerous branch. The validator let the pair through, so the INSERT happens
-                // and the CHECK constraint decides. Anything other than OK here means the
-                // validator is looser than the constraint and the teacher meets a stack trace.
-                assertThat(answer.isOk())
-                        .as("%s: the validator accepted this pair, so the database must accept it "
-                                + "too. A refusal here is the P-6 divergence: sameAnswer promises "
-                                + "'never accept a pair the database will reject' and this pair "
-                                + "proves otherwise. Answer was: %s", why,
-                                answer.isOk() ? "OK" : answer.getErrorCode() + " / "
-                                        + errorText(answer))
-                        .isTrue();
+        @Test
+        @DisplayName("and the refusal she gets names the duplicate, not some other rule")
+        void theRefusalNamesTheDuplicate() {
+            // The branch above proves the two verdicts match. This proves the refusal a matching
+            // verdict produces is the RIGHT refusal: a blank-answer or topic rule firing first
+            // would satisfy "not OK" while telling her something irrelevant.
+            Message answer = create(draft(List.of("מים", "מימ", "אחר", "שונה"), 1));
+
+            assertThat(answer.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+            assertThat(errorText(answer))
+                    .as("the sentence has to point at the two answers that collide")
+                    .isEqualTo(BankMessages.answersDuplicated(1, 2));
+        }
+
+        /**
+         * Asks the CHECK constraint directly, with the validator bypassed entirely.
+         *
+         * <p>Inserts straight into {@code question_versions} rather than going through
+         * {@code QUESTION_CREATE}, because the whole point is to learn what the database thinks
+         * about a pair <em>independently</em> of what the service thinks. It rolls back either
+         * way, so nothing it probes survives into another assertion.
+         *
+         * @return {@code true} when the constraint accepted the pair as two distinct answers
+         */
+        private boolean databaseAcceptsAsDistinct(String first, String second) {
+            String id = createdQuestion();
+            long versionId = inTx(session -> session.createNativeQuery(
+                            "SELECT qv.id FROM question_versions qv "
+                                    + "JOIN questions q ON q.id = qv.question_id "
+                                    + "WHERE q.display_id5 = :id", Long.class)
+                    .setParameter("id", id)
+                    .getSingleResult());
+            try {
+                // All FOUR columns, not just the pair. The fixture's third answer is שבע, so a
+                // probe that wrote only a1 and a2 could collide with a3 and report the constraint
+                // firing on a pair it was not testing - which is exactly what happened, and the
+                // symmetric assertion is what caught it. The two fillers are ASCII and unrelated
+                // to any case, so the only pair that can trip the CHECK is the one under test.
+                inTx(session -> session.createNativeQuery(
+                                "UPDATE question_versions "
+                                        + "SET a1 = :first, a2 = :second, a3 = :filler1, "
+                                        + "a4 = :filler2 WHERE id = :versionId")
+                        .setParameter("first", first)
+                        .setParameter("second", second)
+                        .setParameter("filler1", "probe-filler-one")
+                        .setParameter("filler2", "probe-filler-two")
+                        .setParameter("versionId", versionId)
+                        .executeUpdate());
+                return true;
+            } catch (RuntimeException failed) {
+                // NARROW ON PURPOSE. A bare `catch (RuntimeException) -> false` cannot tell "the
+                // constraint refused this pair" from "my SQL is malformed", and the first version
+                // of this helper did exactly that: a broken UPDATE reported every pair as one the
+                // database folds, which reads as the validator being too strict on four cases that
+                // are fine. A test that cannot distinguish its own bug from the property under
+                // test is worse than no test.
+                if (!mentionsTheDistinctnessConstraint(failed)) {
+                    throw failed;
+                }
+                return false;
             }
+        }
+
+        /** @return whether this failure is {@code ck_question_versions_distinct} and not something else */
+        private boolean mentionsTheDistinctnessConstraint(Throwable failure) {
+            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                String message = cause.getMessage();
+                if (message != null && message.contains("ck_question_versions_distinct")) {
+                    return true;
+                }
+                if (cause.getCause() == cause) {
+                    break;
+                }
+            }
+            return false;
         }
     }
 

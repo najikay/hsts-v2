@@ -254,11 +254,37 @@ public final class QuestionValidator {
     private static final String HEBREW_BASE_LETTERS = "כמנפצ";
 
     /**
-     * The four normalisation steps that run before collation.
+     * The three Yiddish digraphs, and the letter pairs MySQL <em>expands</em> them to.
      *
-     * <p>Step 3 is Hebrew-specific and is the one that was missing. See {@link #sameAnswer} for
-     * what its absence cost; in short, {@code Collator} splits ם from מ and the collation does not,
-     * so without this the service accepted pairs {@code ck_question_versions_distinct} rejects.
+     * <p>{@code U+05F0 double vav, U+05F1 vav-yod, U+05F2 double yod}. Unlike the final forms these
+     * are one character folding to <b>two</b>, which is why they need their own table: NFKD does
+     * not decompose them (they have no canonical or compatibility decomposition at all), so step 1
+     * leaves them intact and nothing else in this method would reach them.
+     *
+     * <p>Measured, not assumed: MySQL answers {@code 1} for all three against the two-letter form.
+     */
+    private static final String YIDDISH_DIGRAPHS = "װױײ";
+    private static final String[] YIDDISH_EXPANSIONS = {"וו", "וי", "יי"};
+
+    /**
+     * What every supplementary-plane character folds to.
+     *
+     * <p>{@code U+FFFD REPLACEMENT CHARACTER}, chosen because it means "a character we cannot
+     * tell apart" and because a teacher will not type it. It has to be a character the collator
+     * treats as real: a fully ignorable sentinel would make {@code 😀} equal the empty string and
+     * {@code 😀} equal {@code 😀😀}, which is the <em>loose</em> direction and the whole defect.
+     * Measured: {@code U+FFFD} is non-ignorable at PRIMARY and counts.
+     */
+    private static final char SUPPLEMENTARY_SENTINEL = '�';
+
+    /**
+     * The five normalisation steps that run before collation.
+     *
+     * <p>Steps 3 and 4 are the ones that were missing, and both were found the same way: by
+     * executing the comparison against MySQL instead of reasoning about it. Step 3 folds Hebrew
+     * final forms and Yiddish digraphs, which {@code Collator} splits and the collation does not.
+     * Step 4 folds the supplementary planes, where the collation is far blunter than Java. See
+     * {@link #sameAnswer} and {@link #foldSupplementary}.
      *
      * @param answer one answer as typed, possibly null
      * @return the folded form, never null
@@ -269,8 +295,9 @@ public final class QuestionValidator {
         }
         String stripped = Normalizer.normalize(answer, Normalizer.Form.NFKD)
                 .replaceAll("\\p{M}+", "");
-        String hebrewFolded = foldHebrewFinalForms(stripped);
-        String cased = hebrewFolded.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
+        String hebrewFolded = foldHebrew(stripped);
+        String astralFolded = foldSupplementary(hebrewFolded);
+        String cased = astralFolded.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
         return cased.trim().replaceAll("\\s+", " ");
     }
 
@@ -288,18 +315,70 @@ public final class QuestionValidator {
      * @param text the text after decomposition and mark-stripping
      * @return the same text with the five final forms replaced by their base letters
      */
-    private static String foldHebrewFinalForms(String text) {
-        StringBuilder folded = null;
+    private static String foldHebrew(String text) {
+        StringBuilder folded = new StringBuilder(text.length());
+        boolean changed = false;
         for (int i = 0; i < text.length(); i++) {
-            int at = HEBREW_FINAL_FORMS.indexOf(text.charAt(i));
-            if (at >= 0) {
-                if (folded == null) {
-                    folded = new StringBuilder(text);
-                }
-                folded.setCharAt(i, HEBREW_BASE_LETTERS.charAt(at));
+            char at = text.charAt(i);
+            int finalForm = HEBREW_FINAL_FORMS.indexOf(at);
+            int digraph = YIDDISH_DIGRAPHS.indexOf(at);
+            if (finalForm >= 0) {
+                folded.append(HEBREW_BASE_LETTERS.charAt(finalForm));
+                changed = true;
+            } else if (digraph >= 0) {
+                // One character becoming two. The collation expands these, so a fold that
+                // replaced them one-for-one would still disagree with it.
+                folded.append(YIDDISH_EXPANSIONS[digraph]);
+                changed = true;
+            } else {
+                folded.append(at);
             }
         }
-        return folded == null ? text : folded.toString();
+        return changed ? folded.toString() : text;
+    }
+
+    /**
+     * Folds every supplementary-plane character onto one sentinel, preserving how many there were.
+     *
+     * <p><b>This is the same defect as the Hebrew one, one plane up, and it is not an edge case.</b>
+     * {@code utf8mb4_unicode_ci} is a UCA 4.0.0 table, and that table gives <em>every</em>
+     * character above the BMP the same weight. To the constraint, {@code 😀} and {@code 😁} are one
+     * string; so are {@code 😀} and {@code 𝐀}. Java tells all of them apart. Two different emoji
+     * pasted into two answer boxes therefore passed validation and violated
+     * {@code ck_question_versions_distinct}, reproduced against a real schema as {@code ERROR 3819}
+     * before this method existed.
+     *
+     * <p><b>Count is preserved because the collation preserves it.</b> Measured: {@code 😀} does
+     * <em>not</em> equal the empty string, {@code a} does not equal {@code a😀}, and {@code 😀}
+     * does not equal {@code 😀😀}. So these characters are equal-<em>weight</em> rather than
+     * ignorable, and the fold emits one sentinel per code point rather than deleting them.
+     *
+     * <p>Iterates by code point, not by {@code char}: a supplementary character is a surrogate
+     * pair, and folding each half separately would emit two sentinels for one character and make
+     * {@code 😀} collide with a genuine two-character string.
+     *
+     * <p>The one over-strictness this buys: an answer containing a literal {@code U+FFFD} folds to
+     * the same form as an answer containing one emoji. That is the safe direction the class
+     * javadoc already accepts, and a teacher typing a replacement character is not a case worth
+     * widening the rule for.
+     *
+     * @param text the text after the Hebrew fold
+     * @return the same text with every astral character replaced by one sentinel
+     */
+    private static String foldSupplementary(String text) {
+        if (text.codePointCount(0, text.length()) == text.length()) {
+            // No surrogate pairs, so nothing above the BMP. The common case allocates nothing.
+            return text;
+        }
+        StringBuilder folded = new StringBuilder(text.length());
+        text.codePoints().forEach(codePoint -> {
+            if (Character.isSupplementaryCodePoint(codePoint)) {
+                folded.append(SUPPLEMENTARY_SENTINEL);
+            } else {
+                folded.appendCodePoint(codePoint);
+            }
+        });
+        return folded.toString();
     }
 
     // ===================== The rules ======================================
