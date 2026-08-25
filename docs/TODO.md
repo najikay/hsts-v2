@@ -126,7 +126,7 @@ Client:
 - [x] E6.13 Delete flow: blocked dialog listing exams / confirm dialog otherwise *(verified 2026-08-24: `BankView.confirmDelete` shows the blocked dialog naming the exams from `session.blockingExams()` when the delete is refused, and the plain confirm otherwise)*
 - [ ] E6.14 Edit-lock integration: acquire on editor open, "being edited by X" read-only mode, live release (E18 dependency)
 - [ ] E6.15 Session tests: all flows against FakeClientConnection (incl. error paths)
-- [ ] E6.16 Integration test: add/edit/version/delete/browse round-trip; Hebrew text round-trip
+- [x] E6.16 Integration test: add/edit/version/delete/browse round-trip; Hebrew text round-trip *(2026-08-25: `BankRoundTripIntegrationTest`, 25 assertions against real MySQL - the first database-backed test in `server.features.bank`, which was the only feature package without one. Every assertion is a re-read in a new transaction and every question arrives through `QUESTION_CREATE`, so the validator, the allocator, the mappers and the transaction boundary are all on the path. It found a live defect: `QuestionValidator` was looser than `utf8mb4_unicode_ci` on Hebrew final forms, so two answers differing only in a final form passed validation and then violated `ck_question_versions_distinct` as an internal error on the add-question screen. Fixed, and the same divergence on supplementary-plane characters and Yiddish digraphs fixed with it; P-9 records the class)*
 - [ ] E6.17 Acceptance pass vs T-2 scenarios with [L] ⚑
 
 ## E7 — Exam builder [A]

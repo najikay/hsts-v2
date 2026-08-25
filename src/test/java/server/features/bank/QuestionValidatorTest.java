@@ -263,6 +263,42 @@ class QuestionValidatorTest {
                     withAnswers(List.of("Paris", "PARIS", "Madrid", "Rome")))).isPresent();
         }
 
+        @ParameterizedTest(name = "{2}: {0} / {1}")
+        @CsvSource({
+                "מים,  מימ,  final mem",
+                "כן,   כנ,   final nun",
+                "רף,   רפ,   final pe",
+                "ארץ,  ארצ,  final tsadi",
+                "דרך,  דרכ,  final kaf"
+        })
+        @DisplayName("⚑ a Hebrew final form alone does not make two answers different")
+        void hebrewFinalFormsAreNotADifference(String first, String second, String which) {
+            // THE ONE THAT SHIPPED BROKEN, and the reason this class cannot be the only test of
+            // the rule. Java's Collator at PRIMARY calls ם and מ different letters;
+            // utf8mb4_unicode_ci gives them the same primary weight. So the validator used to
+            // ACCEPT this pair and ck_question_versions_distinct then rejected the insert, which
+            // reached the teacher as a raw internal error on the add-question screen, in Hebrew.
+            //
+            // Found on 2026-08-25 by BankRoundTripIntegrationTest, which is the first test in this
+            // codebase to run the comparison against a real MySQL. These five cases are the fast
+            // copy: they run on every machine and in every profile, where that one needs a server.
+            // Neither replaces the other - this pins the folding, that pins the AGREEMENT.
+            assertThat(QuestionValidator.validate(
+                    withAnswers(List.of(first, second, "אחר", "שונה"))))
+                    .as("%s: the database calls these one string, so the validator must too, or "
+                            + "it hands the insert a pair the CHECK will reject", which)
+                    .isPresent();
+        }
+
+        @Test
+        @DisplayName("but two genuinely different Hebrew answers still pass")
+        void hebrewThatMerelyLooksSimilarStillPasses() {
+            // The other direction. Being stricter than the collation is safe, but folding two
+            // answers a teacher can tell apart would refuse a question that is perfectly fine.
+            assertThat(QuestionValidator.validate(
+                    withAnswers(List.of("מים", "אש", "אדמה", "רוח")))).isEmpty();
+        }
+
         @Test
         @DisplayName("internal whitespace alone does not either, which the schema CHECK misses")
         void collapsesInternalWhitespace() {
