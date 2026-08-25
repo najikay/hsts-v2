@@ -459,7 +459,6 @@
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>client/core/ScreenManager*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>client/core/AbstractScreenUI*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>client/net/HSTSClient*</exclude>
                         <!-- Assembly glue: parses nothing, decides nothing. Every rule it
@@ -485,15 +484,11 @@
                         <exclude>server/console/ConsoleView*</exclude>
                         <exclude>server/console/ConsoleTheme*</exclude>
                         <exclude>server/console/ServerConsoleApp*</exclude>
-                        <!-- server/db/QuestionDAO* stood here as the first half of the legacy
-                             prototype pair; it is deleted. DatabaseConfig is the second half and
-                             is now UNREACHABLE: QuestionDAO.getConnection() was its only caller,
-                             and the v2 stack opens connections through HibernateUtil. Kept rather
-                             than deleted because it is the lead's call (it hardcodes hsts_db and
-                             may still be wanted for a manual pass) — see
-                             docs/reports/lead/RETIREMENT.md. All other server/db/** code (E2
-                             entities, repositories, DbBootstrap, allocators) IS measured. -->
-                        <exclude>server/db/DatabaseConfig*</exclude>
+                        <!-- server/db/QuestionDAO* and server/db/DatabaseConfig* — the legacy
+                             prototype pair — stood here until the retirement PR deleted both.
+                             All server/db/** code (E2 entities, repositories, DbBootstrap,
+                             allocators) IS measured. -->
+
                     </excludes>
                 </configuration>
                 <executions>

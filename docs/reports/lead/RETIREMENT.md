@@ -248,19 +248,17 @@ Two needed more than a swap:
 navigator/rail fixture with no connection to `Routes.BANK`. **Deliberately left alone** — renaming
 them would be a false positive dressed as thoroughness.
 
-### 5.6 One class this retirement orphaned — left for you, not deleted
+### 5.6 One class this retirement orphaned — RULED AND DELETED (lead, same commit)
 
-**`src/main/java/server/db/DatabaseConfig.java` is now unreachable.** Its `getConnection()` had
-exactly one caller in the whole codebase — `QuestionDAO` — and the v2 stack opens connections
-through `HibernateUtil`. Its three public constants (`HOST`, `PORT`, `DATABASE`, plus the assembled
-`URL`) are referenced by nothing.
-
-The pom's own comment called it and `QuestionDAO` "the legacy prototype pair", so deleting it is
-arguably the completion of this PR. **I did not delete it**, for two reasons worth your ruling: it
-hardcodes `hsts_db` and may still be wanted for a manual pass or a quick JDBC probe on demo day, and
-it is not on the delete-list this PR was scoped to. The JaCoCo exclusion for it stays and its comment
-now says plainly that it is unreachable rather than implying it is still the DAO's config. **One
-line to delete it if you want it gone.**
+**`src/main/java/server/db/DatabaseConfig.java` is deleted.** Its `getConnection()` had exactly one
+caller in the whole codebase — `QuestionDAO` — and the v2 stack opens connections through
+`HibernateUtil`; its public constants were referenced by nothing. The sweep left it in place and
+flagged it for the lead's ruling; the lead ruled dead-code-goes and deleted it in this same commit
+— which briefly left this section, the pom comment and the JaCoCo exclusion describing a kept class
+while the diff deleted it. Member A's review caught the contradiction (P-6's shape, with the claim
+and the code that contradicts it in one commit); this paragraph, the pom comment and the exclusion
+were corrected in the review round rather than left as three records of a decision the diff had
+already made the other way.
 
 ---
 
@@ -397,4 +395,6 @@ should see rather than discover.
    that reading; unticked easily if you meant literal highlighting.
 5. **`DatabaseConfig` is orphaned** by this PR (§5.6) and I left it in deliberately. Your call — one
    line to delete it.
-6. Nothing is committed. Working tree only.
+6. Committed on `feat/legacy-bank-retirement` as PR #47. (This line originally read "nothing is
+   committed, working tree only" — true when written, stale the moment the branch was pushed;
+   corrected in the review round.)
