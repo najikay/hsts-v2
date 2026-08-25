@@ -1,5 +1,6 @@
 package client.features.bank;
 
+import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
@@ -16,6 +17,7 @@ import common.dto.bank.QuestionImage;
 import common.dto.bank.QuestionImageRequest;
 import common.dto.bank.QuestionRequest;
 import common.dto.bank.VersionHistory;
+import common.dto.lock.LockHolder;
 import common.protocol.Message;
 import common.protocol.Verb;
 
@@ -70,6 +72,16 @@ public final class BankSession {
     /** The courses the signed-in user may filter by, straight from the sign-in payload. */
     private final List<CourseRef> courses;
 
+    /**
+     * Who is editing each row on screen (E6.14).
+     *
+     * <p>A collaborator rather than more fields here: the lock dimension has its own two verbs,
+     * its own push and its own reason for never sending a third, and every one of those is a
+     * concern this class would otherwise have to carry beside the browse it exists for. What
+     * stays here is {@link #listGeneration}, which both need and neither should count twice.
+     */
+    private final BankRowLocks rowLocks;
+
     private Runnable onChange = () -> { };
 
     // --- the list -------------------------------------------------------
@@ -119,12 +131,16 @@ public final class BankSession {
      *                   fetched: E1.4 already puts them in the sign-in payload, and a verb to
      *                   re-read what the session is holding would be a round trip that can
      *                   disagree with the session
+     * @param eventBus   the app bus, for the lock pushes behind the "Editing" column (E6.14)
+     * @param selfUserId this client's user id, so a row this user has open reads as hers
      */
     public BankSession(RequestDispatcher dispatcher, FxThreadPoster poster,
-                       List<CourseRef> courses) {
+                       List<CourseRef> courses, ClientEventBus eventBus, long selfUserId) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
         this.courses = courses == null ? List.of() : List.copyOf(courses);
+        this.rowLocks = new BankRowLocks(dispatcher, eventBus, poster, selfUserId)
+                .onChange(() -> onChange.run());
     }
 
     /** Registers the "re-read me and re-render" callback. */
@@ -137,7 +153,20 @@ public final class BankSession {
 
     /** Loads the first page. What {@code onShow} calls. */
     public void load() {
+        rowLocks.start();
         requestPage(0);
+    }
+
+    /**
+     * Leaves the screen: stops listening for lock pushes and forgets who was editing what.
+     *
+     * <p>What {@code onHide} calls. It withdraws <b>no</b> watch registration, deliberately, and
+     * {@link BankRowLocks} carries the reason: the only verb that could withdraw one also
+     * releases a held lock, and the question this list is watching may be the very one this user
+     * has open in the editor she just navigated to.
+     */
+    public void stop() {
+        rowLocks.stop();
     }
 
     /**
@@ -178,6 +207,9 @@ public final class BankSession {
             hasNextPage = false;
             listError = BankCopy.LIST_FAILED;
             listState = AsyncViewState.ERROR;
+            // No rows means no chips. Leaving the previous page's holders in place would put
+            // "Editing" against an error panel showing nothing to edit.
+            rowLocks.showing(List.of(), generation);
             onChange.run();
             return;
         }
@@ -198,8 +230,17 @@ public final class BankSession {
         listState = AsyncViewState.forResult(rows);
 
         if (stepBackFromTheEnd()) {
+            // Deliberately before the chips are asked for. Stepping back issues another page
+            // under a new generation, and that page's own settle is what asks: querying for rows
+            // that are already being replaced would spend a round trip to answer about a screen
+            // nobody will see.
             return;
         }
+
+        // Who is editing these rows (E6.14). After the step-back check, so the ids asked about
+        // are the ids that stayed, and under this answer's generation, so a snapshot that
+        // outlives its page is discarded rather than chipping the wrong rows.
+        rowLocks.showing(rows, generation);
 
         // A selection that is no longer on the page stops being the selection, so the detail
         // pane can never describe a question the list is not showing.
@@ -616,6 +657,27 @@ public final class BankSession {
     /** @return the rows on the page showing */
     public List<BankQuestionRow> rows() {
         return rows;
+    }
+
+    /**
+     * Who has this row open in the editor right now (E6.14 — F10.3).
+     *
+     * @param displayId5 a row's five-digit id
+     * @return the holder, or empty when nobody is editing it. Empty is also the answer while the
+     *         snapshot is in flight and when it failed, which is the truthful reading of "not
+     *         known to be held" and the only one that does not invent a colleague
+     */
+    public Optional<LockHolder> editorOf(String displayId5) {
+        return rowLocks.holderOf(displayId5);
+    }
+
+    /**
+     * @param holder a holder from {@link #editorOf}
+     * @return whether that is this user, which the column words differently: seeing her own name
+     *         against a row would read as a colleague blocking her
+     */
+    public boolean isSelf(LockHolder holder) {
+        return rowLocks.isSelf(holder);
     }
 
     /** @return the list's load state */

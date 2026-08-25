@@ -1,6 +1,8 @@
 package client.features.bank;
 
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
@@ -18,6 +20,12 @@ import common.dto.bank.QuestionImageRequest;
 import common.dto.bank.QuestionRequest;
 import common.dto.bank.QuestionVersionDetail;
 import common.dto.bank.VersionHistory;
+import common.dto.lock.EntityRef;
+import common.dto.lock.LockChange;
+import common.dto.lock.LockHolder;
+import common.dto.lock.LockRequest;
+import common.dto.lock.LocksSnapshot;
+import common.dto.lock.LocksSnapshotRequest;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -25,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import server.features.bank.QuestionLockKey;
 
 import java.time.Instant;
 import java.util.List;
@@ -67,8 +76,15 @@ class BankSessionTest {
     private static final CourseRef ALGEBRA = new CourseRef("11", "אלגברה");
     private static final CourseRef CALCULUS = new CourseRef("12", "חדו\"א");
 
+    /** Dana Cohen, whose chair this fixture is. Her own id, so a row of hers can say "you". */
+    private static final long DANA = 501L;
+
+    /** A colleague, so a row of his says his name. */
+    private static final long RON = 502L;
+
     private FakeClientConnection connection;
     private BankSession session;
+    private ClientEventBus eventBus;
     private int renders;
 
     @BeforeEach
@@ -76,8 +92,16 @@ class BankSessionTest {
         connection = new FakeClientConnection();
         RequestDispatcher dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
+        eventBus = new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+        dispatcher.setPushListener(new PushEventBridge(eventBus));
         session = new BankSession(dispatcher, new DirectFxThreadPoster(),
-                List.of(ALGEBRA, CALCULUS)).onChange(() -> renders++);
+                List.of(ALGEBRA, CALCULUS), eventBus, DANA).onChange(() -> renders++);
+    }
+
+    /** A session with no courses and its own wire, for the cases that need a second chair. */
+    private static BankSession sessionOn(RequestDispatcher dispatcher) {
+        return new BankSession(dispatcher, new DirectFxThreadPoster(), List.of(),
+                new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster()), RON);
     }
 
     // ===================== Fixture ========================================
@@ -275,7 +299,14 @@ class BankSessionTest {
 
             session.clearFilters();
 
-            assertThat(connection.sentCount()).isEqualTo(1);
+            // Counted by verb rather than by message. What this asserts is that clearing three
+            // filters is ONE list request and not three; a raw message count also swept up
+            // whatever else a settled page sends, which since E6.14 includes the locks snapshot
+            // behind the Editing column. Narrowing it to BANK_LIST keeps the property and stops
+            // the test failing on traffic it was never about.
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .filteredOn(verb -> verb == Verb.BANK_LIST)
+                    .hasSize(1);
             assertThat(lastListRequest().isUnfiltered()).isTrue();
             assertThat(session.isFiltered()).isFalse();
 
@@ -683,7 +714,12 @@ class BankSessionTest {
             assertThat(session.justDeleted()).isEqualTo("11005");
             assertThat(session.selectedId()).isNull();
             assertThat(session.rows()).doesNotContain(ROW_GEOMETRY);
+            // The delete, then exactly one re-read, in that order. Filtered to those two verbs
+            // rather than asserting the whole traffic: the reloaded page also asks who is
+            // editing its rows (E6.14), which is not what this test is about and would make it
+            // fail every time a later epic adds anything to a settled page.
             assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .filteredOn(verb -> verb == Verb.QUESTION_DELETE || verb == Verb.BANK_LIST)
                     .containsExactly(Verb.QUESTION_DELETE, Verb.BANK_LIST);
         }
 
@@ -871,7 +907,7 @@ class BankSessionTest {
             hers.replyOk(Verb.BANK_LIST, page(List.of(ROW_LINEAR, ROW_LIMIT), 0, 2, 1));
 
             BankSession coordinator =
-                    new BankSession(dispatcher, new DirectFxThreadPoster(), List.of());
+                    sessionOn(dispatcher);
             coordinator.load();
 
             assertThat(coordinator.courseOptions()).extracting(CourseRef::code)
@@ -889,7 +925,7 @@ class BankSessionTest {
             RequestDispatcher dispatcher = new RequestDispatcher(hers);
             hers.setServerMessageHandler(dispatcher::dispatchIncoming);
             BankSession coordinator =
-                    new BankSession(dispatcher, new DirectFxThreadPoster(), List.of());
+                    sessionOn(dispatcher);
 
             assertThat(coordinator.canWriteIn("11"))
                     .as("the bank shows her the course; QUESTION_DELETE would refuse her. "
@@ -962,6 +998,529 @@ class BankSessionTest {
         }
     }
 
+    // ===================== E6.14, the Editing column ======================
+
+    /**
+     * The live "Editing · Ron Levi" column (E6.14 — F10.3, E18.8).
+     *
+     * <p>Two verbs feed it and the third one must never be sent. {@code LOCKS_SNAPSHOT} is the
+     * state at first paint, {@code LOCK_WATCH} registers for the news afterwards, and
+     * {@code LOCK_RELEASE} would drop this user's own editing lock, because the server's release
+     * unwatches and un-holds in one call and the list keys on the same reference the editor
+     * does. {@link #neverReleasesAnything} is the test that guard rests on.
+     */
+    @Nested
+    @DisplayName("who is editing each row (E6.14)")
+    class EditingColumn {
+
+        private EntityRef ref(String displayId5) {
+            return QuestionLockKey.of(displayId5);
+        }
+
+        private LocksSnapshot heldBy(String displayId5, long userId, String name) {
+            return new LocksSnapshot(EntityRef.QUESTION,
+                    java.util.Map.of(ref(displayId5).entityId(), new LockHolder(userId, name)));
+        }
+
+        private List<EntityRef> watchedRefs() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.LOCK_WATCH)
+                    .map(message -> ((LockRequest) message.getPayload()).entity())
+                    .toList();
+        }
+
+        @Test
+        @DisplayName("the snapshot at load is what fills the column")
+        void snapshotFillsTheColumn() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", RON, "Ron Levi"));
+
+            session.load();
+
+            assertThat(session.editorOf("11005"))
+                    .as("pushes carry news and not state, so a question locked before this "
+                            + "screen opened is only ever known through the snapshot")
+                    .isPresent()
+                    .get()
+                    .extracting(LockHolder::displayName)
+                    .isEqualTo("Ron Levi");
+            assertThat(session.editorOf("11001"))
+                    .as("a row nobody holds is absent from the map, not mapped to null")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("every row on the page is watched, and none of them twice")
+        void watchesEachRowOnce() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, LocksSnapshot.empty(EntityRef.QUESTION));
+
+            session.load();
+
+            assertThat(watchedRefs())
+                    .as("watch registers interest and takes nothing; acquiring here would put "
+                            + "four colleagues into read-only mode by the act of looking")
+                    .containsExactlyInAnyOrder(ref("11001"), ref("11002"), ref("11005"),
+                            ref("12001"));
+
+            connection.clearSent();
+            session.reload();
+
+            assertThat(watchedRefs())
+                    .as("the same page re-watched sends nothing: the registration is already "
+                            + "held and re-watching every refresh is how a list produces traffic "
+                            + "proportional to how long it is left open")
+                    .isEmpty();
+        }
+
+        /**
+         * The watch is registered before the snapshot is asked for ⚑
+         *
+         * <p>Not a preference. {@code EditLockService.publish} resolves recipients by reading
+         * its watcher set at the instant the lock changes, so asking for the snapshot first
+         * opens a window: the server answers "free", a colleague acquires before this client's
+         * {@code LOCK_WATCH} is handled, and {@code publish} finds a set this client is not in.
+         * No push is ever written, the snapshot already said free, and the row shows free for
+         * the whole time he is editing it - the one case the column exists to prevent.
+         *
+         * <p>Found by an adversarial read, not by the suite, which is why the order is now
+         * asserted rather than left to whoever edits {@code showing} next.
+         */
+        @Test
+        @DisplayName("every row is watched before the snapshot is asked for ⚑")
+        void watchesBeforeAskingWhoHolds() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, LocksSnapshot.empty(EntityRef.QUESTION));
+
+            session.load();
+
+            List<Verb> lockTraffic = connection.sentMessages().stream()
+                    .map(Message::getVerb)
+                    .filter(verb -> verb == Verb.LOCK_WATCH || verb == Verb.LOCKS_SNAPSHOT)
+                    .toList();
+            assertThat(lockTraffic)
+                    .as("the snapshot must be the LAST of the two, or a lock taken between the "
+                            + "server answering it and the watch registering is invisible for "
+                            + "the rest of the session")
+                    .endsWith(Verb.LOCKS_SNAPSHOT);
+            assertThat(lockTraffic.subList(0, lockTraffic.size() - 1))
+                    .as("and everything before it is the watches")
+                    .containsOnly(Verb.LOCK_WATCH);
+        }
+
+        /**
+         * The snapshot's own repaint, which nothing pinned ⚑
+         *
+         * <p>Every other test in this class settles through {@code DirectFxThreadPoster}, so
+         * {@code settleSnapshot} runs <em>inline</em> inside {@code settleList} and the chips are
+         * already in place when {@code settleList} renders. In production the poster is
+         * {@code Platform.runLater}: {@code settleList} renders on this pulse with no holders
+         * yet, and {@code settleSnapshot}'s own {@code onChange.run()} on a later pulse is the
+         * <b>only</b> thing that paints the column on first load. Deleting it left every test
+         * green and would have shipped a column blank until a colleague happened to open
+         * something.
+         */
+        @Test
+        @DisplayName("the snapshot landing is itself a repaint ⚑")
+        void theSnapshotRepaintsOnItsOwn() {
+            // No responder, so the snapshot is delivered by hand AFTER the page has settled and
+            // rendered. That is the production ordering, which the direct poster otherwise hides.
+            session.load();
+            Message list = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.BANK_LIST)
+                    .findFirst().orElseThrow();
+            connection.deliver(Message.ok(list,
+                    page(List.of(ROW_LINEAR, ROW_GEOMETRY), 0, 2, 1)));
+            Message snapshot = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.LOCKS_SNAPSHOT)
+                    .findFirst().orElseThrow();
+            int afterThePageRendered = renders;
+
+            connection.deliver(Message.ok(snapshot, heldBy("11005", RON, "Ron Levi")));
+
+            assertThat(renders)
+                    .as("the page had already been drawn with no chips on it, so the snapshot "
+                            + "has to ask for a redraw of its own or the column stays blank "
+                            + "until something unrelated repaints the table")
+                    .isGreaterThan(afterThePageRendered);
+            assertThat(session.editorOf("11005")).isPresent();
+        }
+
+        @Test
+        @DisplayName("a colleague opening a question shows up without a refresh")
+        void pushArrivesLive() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, LocksSnapshot.empty(EntityRef.QUESTION));
+            session.load();
+            assertThat(session.editorOf("11001")).isEmpty();
+
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED,
+                    LockChange.acquired(ref("11001"), new LockHolder(RON, "Ron Levi")));
+
+            assertThat(session.editorOf("11001"))
+                    .as("NFR-18 forbids asking her to press refresh, and this is the column "
+                            + "that would need one most")
+                    .isPresent()
+                    .get()
+                    .extracting(LockHolder::displayName)
+                    .isEqualTo("Ron Levi");
+        }
+
+        @Test
+        @DisplayName("releasing and expiring both free the row")
+        void releaseAndExpiryBothFreeIt() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", RON, "Ron Levi"));
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED, LockChange.released(ref("11005")));
+            assertThat(session.editorOf("11005")).isEmpty();
+
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED,
+                    LockChange.acquired(ref("11005"), new LockHolder(RON, "Ron Levi")));
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED, LockChange.expired(ref("11005")));
+
+            assertThat(session.editorOf("11005"))
+                    .as("a holder whose client died stops blocking the row, or a crash would "
+                            + "park a question for the rest of the day")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a push about a question on another page changes nothing here")
+        void pushForARowNotOnScreenIsIgnored() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, LocksSnapshot.empty(EntityRef.QUESTION));
+            session.load();
+            int before = renders;
+
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED,
+                    LockChange.acquired(ref("99999"), new LockHolder(RON, "Ron Levi")));
+
+            assertThat(session.editorOf("99999")).isEmpty();
+            assertThat(renders)
+                    .as("one bus carries every push, so a screen that re-rendered on all of "
+                            + "them would repaint on traffic that cannot change it")
+                    .isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("her own lock is hers, not a colleague's name shown back at her")
+        void herOwnLockReadsAsHers() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", DANA, "Dana Cohen"));
+
+            session.load();
+
+            LockHolder holder = session.editorOf("11005").orElseThrow();
+            assertThat(session.isSelf(holder))
+                    .as("a name against a row is the shape that means somebody else has it")
+                    .isTrue();
+            assertThat(BankCopy.editing(holder, true)).isEqualTo("Editing · you");
+        }
+
+        /**
+         * The stale snapshot that names a row still on screen ⚑
+         *
+         * <p><b>The row the two pages have in common is the whole test.</b> A stale answer about
+         * a question that paged away is already refused by the forward map, which holds only the
+         * rows showing — so a test built on one of those passes with the generation check
+         * deleted, and pins nothing. Measured: planting that mutation left the first version of
+         * this test green.
+         *
+         * <p>What the generation check alone catches is an answer that is stale and still
+         * <em>relevant</em>: she narrows the search, a question matches both the old filter and
+         * the new one, and the older snapshot lands last carrying who was editing it a moment
+         * ago. Without the check that older truth wins, and the column shows a colleague in a
+         * question he has already closed, until something else happens to repaint it.
+         */
+        @Test
+        @DisplayName("a snapshot that outlived its page loses to the current one ⚑")
+        void staleSnapshotIsDiscarded() {
+            // No responder: the answers are handed over by hand, in the order this test wants.
+            // The LateAnswers shape, for the same reason that class exists.
+            session.load();
+            Message firstList = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.BANK_LIST)
+                    .findFirst().orElseThrow();
+            connection.deliver(Message.ok(firstList,
+                    page(List.of(ROW_LINEAR, ROW_GEOMETRY), 0, 2, 1)));
+
+            Message firstSnapshot = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.LOCKS_SNAPSHOT)
+                    .findFirst().orElseThrow();
+
+            // She types into the search box before that snapshot comes back. 11005 matches the
+            // new filter too, so it is on screen under both generations.
+            connection.clearSent();
+            session.setSearch("diagram");
+            Message secondList = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.BANK_LIST)
+                    .findFirst().orElseThrow();
+            connection.deliver(Message.ok(secondList,
+                    page(List.of(ROW_GEOMETRY, ROW_QUADRATIC), 0, 2, 1)));
+
+            Message secondSnapshot = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.LOCKS_SNAPSHOT)
+                    .reduce((first, second) -> second).orElseThrow();
+            connection.deliver(Message.ok(secondSnapshot,
+                    LocksSnapshot.empty(EntityRef.QUESTION)));
+            assertThat(session.editorOf("11005"))
+                    .as("the current answer: Ron has closed it")
+                    .isEmpty();
+
+            // And now the older one lands, still naming him.
+            connection.deliver(Message.ok(firstSnapshot, heldBy("11005", RON, "Ron Levi")));
+
+            assertThat(session.editorOf("11005"))
+                    .as("the row is still on screen, so nothing but the generation stops this "
+                            + "older truth from overwriting the newer one and parking a "
+                            + "colleague's name on a question he has already let go")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a snapshot that failed leaves the column empty rather than saying so")
+        void aFailedSnapshotIsSilent() {
+            serverHasTheBank();
+            connection.replyError(Verb.LOCKS_SNAPSHOT, ErrorCode.INTERNAL, "no");
+
+            session.load();
+
+            assertThat(session.state())
+                    .as("the browse worked; a decoration that did not must not take the screen "
+                            + "down with it")
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.error()).isNull();
+            assertThat(session.editorOf("11005")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a failed page clears the chips with the rows")
+        void aFailedPageClearsTheChips() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", RON, "Ron Levi"));
+            session.load();
+            assertThat(session.editorOf("11005")).isPresent();
+
+            connection.replyError(Verb.BANK_LIST, ErrorCode.INTERNAL, "no");
+            session.reload();
+
+            assertThat(session.editorOf("11005"))
+                    .as("holders left over from the last good page would sit against an error "
+                            + "panel showing nothing to edit")
+                    .isEmpty();
+        }
+
+        /**
+         * The guard the whole design rests on (E6.14 ⚑).
+         *
+         * <p>{@code EditLockService.release} drops the caller's hold <b>and</b> unwatches, in one
+         * call, with no watcher-only form. The bank list and the question editor key on the
+         * identical reference, so one release sent from this class for a question this user has
+         * open would hand her own work to whoever asks next. {@code Verb.LOCK_WATCH}'s contract
+         * text tells list screens to send exactly that, which is why this is a test and not a
+         * comment.
+         *
+         * <p>It walks every path that could plausibly grow one: a load, a re-page, a filter
+         * change, a selection, a failed page, and leaving the screen.
+         */
+        @Test
+        @DisplayName("no path on this screen ever sends LOCK_RELEASE ⚑")
+        void neverReleasesAnything() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", DANA, "Dana Cohen"));
+            connection.replyOk(Verb.QUESTION_GET, detail("11005", true, 1, 1));
+
+            session.load();
+            session.nextPage();
+            session.previousPage();
+            session.setSearch("limit");
+            session.selectCourse("11");
+            session.selectDifficulty(Difficulty.HARD);
+            session.clearFilters();
+            session.select("11005");
+            session.select(null);
+            session.reload();
+            session.stop();
+
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .as("the one verb that could withdraw a watch also releases a held lock, so "
+                            + "this screen has no code path that sends it and leaving the screen "
+                            + "is not one either")
+                    .doesNotContain(Verb.LOCK_RELEASE);
+        }
+
+        /**
+         * Leaving really unsubscribes, asserted where it can fail ⚑
+         *
+         * <p>The obvious version of this test - stop, push, assert nothing arrived - <b>cannot
+         * fail for the thing it names</b>, because {@code stop()} also empties the rows on
+         * screen and {@code onServerPush} bails on an unknown reference anyway. Delete the
+         * {@code eventBus.unregister} and it stays green.
+         *
+         * <p>So it is asserted through the consequence instead: greenrobot throws
+         * {@code EventBusException: Subscriber already registered} on a second {@code register},
+         * which is what a teacher leaving the bank and coming back would hit. Re-entering the
+         * screen has to work, and the pushes have to work again after it.
+         */
+        @Test
+        @DisplayName("leaving the screen unsubscribes, so coming back does not throw ⚑")
+        void stopUnsubscribes() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", RON, "Ron Levi"));
+            session.load();
+
+            session.stop();
+
+            assertThat(session.editorOf("11005"))
+                    .as("the chips are forgotten with the screen")
+                    .isEmpty();
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED,
+                    LockChange.acquired(ref("11001"), new LockHolder(RON, "Ron Levi")));
+            assertThat(session.editorOf("11001"))
+                    .as("a screen that is not showing must not keep painting")
+                    .isEmpty();
+
+            // The half that can actually fail: a second onShow after a stop that never
+            // unregistered takes the screen out with an EventBusException.
+            session.load();
+
+            assertThat(session.editorOf("11005"))
+                    .as("re-entering the bank works, and its chips are live again")
+                    .isPresent();
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED, LockChange.released(ref("11005")));
+            assertThat(session.editorOf("11005"))
+                    .as("and the re-registered subscriber is receiving, not a stale one")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a row whose id is not five digits is skipped, not fatal to the page ⚑")
+        void aMalformedIdDoesNotTakeThePageDown() {
+            BankQuestionRow malformed = row("7", "11", "אלגברה", "A row the wire got wrong",
+                    "Equations", Difficulty.EASY, false);
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request,
+                    page(List.of(ROW_LINEAR, malformed, ROW_GEOMETRY), 0, 3, 1)));
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", RON, "Ron Levi"));
+
+            session.load();
+
+            assertThat(session.state())
+                    .as("a throw here runs inside whenComplete, which swallows it, so settleList "
+                            + "would never reach its own render and the teacher would sit on the "
+                            + "spinner forever with no error and nothing to retry")
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.rows()).hasSize(3);
+            assertThat(session.editorOf("11005"))
+                    .as("and the rows that do key still get their chips")
+                    .isPresent();
+            assertThat(session.editorOf("7")).isEmpty();
+        }
+
+        /**
+         * The leading-zero case, which is the one a reverse mapping loses (E6.14 ⚑).
+         *
+         * <p>A course code may lead with a zero, so display id {@code 01003} keys
+         * {@code question#1003} and formatting that id back gives {@code "1003"} — a different
+         * row, or no row at all. {@code QuestionLockKeyTest.leadingZeroIsNotLost} pins the
+         * forward direction; this pins that the column never walks it backwards, which is the
+         * shape that looks correct against every fixture whose course code starts with a 1.
+         */
+        @Test
+        @DisplayName("a display id with a leading zero still finds its own row ⚑")
+        void leadingZeroSurvivesTheRoundTrip() {
+            BankQuestionRow leadingZero = row("01003", "01", "מבוא", "The zeroth course",
+                    "Basics", Difficulty.EASY, false);
+            connection.respondTo(Verb.BANK_LIST, request ->
+                    Message.ok(request, page(List.of(leadingZero), 0, 1, 1)));
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("01003", RON, "Ron Levi"));
+
+            session.load();
+
+            assertThat(session.editorOf("01003"))
+                    .as("the id is only ever mapped forwards; formatting 1003 back to five "
+                            + "digits is the mutation that passes on every 11xxx fixture")
+                    .isPresent();
+
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED, LockChange.released(ref("01003")));
+            assertThat(session.editorOf("01003"))
+                    .as("and the push matches the same way")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a push that is not a lock change is not this class's business")
+        void otherPushesPassThrough() {
+            serverHasTheBank();
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, heldBy("11005", RON, "Ron Levi"));
+            session.load();
+            int before = renders;
+
+            connection.pushToClient(Verb.PUSH_EXECUTION_STATUS, "not a lock change");
+            connection.pushToClient(Verb.PUSH_LOCK_CHANGED, "not a LockChange either");
+
+            assertThat(session.editorOf("11005"))
+                    .as("one bus carries every push, so a malformed one and somebody else's "
+                            + "verb both have to leave this column exactly as it was")
+                    .isPresent();
+            assertThat(renders).isEqualTo(before);
+        }
+
+        /**
+         * The snapshot's id cap, and why it truncates rather than throws.
+         *
+         * <p>{@code LocksSnapshotRequest.MAX_IDS} is 500 and the bank contract clamps a page far
+         * below it, so this is unreachable today and exists for the day somebody raises the page
+         * size and not the cap. An oversized request comes back a refusal, which would blank the
+         * column on the whole page instead of on the rows past the cap.
+         *
+         * <p>It was a thrown {@code IllegalStateException} first, and <b>the throw did nothing</b>:
+         * this path runs inside the dispatcher's {@code whenComplete}, which captures a throwable
+         * into the future rather than propagating it, so "fails loudly" was a dead page render
+         * and a green test. Found by writing this test and watching it not throw.
+         */
+        @Test
+        @DisplayName("a page bigger than the snapshot cap asks about as many as it may ⚑")
+        void anOversizedPageIsTruncatedNotRefused() {
+            // Course 11 plus a three-digit serial (S-8), so one more row than the cap allows and
+            // every id distinct.
+            List<BankQuestionRow> tooMany = new java.util.ArrayList<>();
+            for (int serial = 0; serial <= LocksSnapshotRequest.MAX_IDS; serial++) {
+                tooMany.add(row(String.format("11%03d", serial), "11", "אלגברה",
+                        "Question " + serial, "Equations", Difficulty.EASY, false));
+            }
+            connection.respondTo(Verb.BANK_LIST, request ->
+                    Message.ok(request, page(tooMany, 0, tooMany.size(), 1)));
+
+            session.load();
+
+            LocksSnapshotRequest asked = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.LOCKS_SNAPSHOT)
+                    .map(message -> (LocksSnapshotRequest) message.getPayload())
+                    .reduce((first, second) -> second).orElseThrow();
+            assertThat(asked.isOversized())
+                    .as("an oversized request is refused whole, so the column would go blank on "
+                            + "every row rather than on the ones past the cap")
+                    .isFalse();
+            assertThat(asked.entityIds()).hasSize(LocksSnapshotRequest.MAX_IDS);
+            assertThat(session.state())
+                    .as("and the browse itself is untouched by a decoration hitting its limit")
+                    .isEqualTo(AsyncViewState.READY);
+        }
+
+        @Test
+        @DisplayName("an empty page asks nobody who is editing nothing")
+        void anEmptyPageAsksNothing() {
+            connection.replyOk(Verb.BANK_LIST, page(List.of(), 0, 0, 0));
+
+            session.load();
+
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .doesNotContain(Verb.LOCKS_SNAPSHOT, Verb.LOCK_WATCH);
+        }
+    }
+
     // ===================== The small surfaces =============================
 
     @Nested
@@ -1022,7 +1581,8 @@ class BankSessionTest {
         @DisplayName("a null course list and a null search are the empty ones")
         void nullsAreEmpties() {
             BankSession bare = new BankSession(new RequestDispatcher(new FakeClientConnection()),
-                    new DirectFxThreadPoster(), null);
+                    new DirectFxThreadPoster(), null,
+                    new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster()), DANA);
 
             assertThat(bare.courses()).isEmpty();
             assertThat(bare.courseOptions()).isEmpty();

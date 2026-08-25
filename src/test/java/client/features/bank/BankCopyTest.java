@@ -5,6 +5,7 @@ import common.dto.bank.BlockingExam;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionVersionDetail;
+import common.dto.lock.LockHolder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -431,6 +432,54 @@ class BankCopyTest {
             return List.of(panel.title(), panel.hint());
         }
         return List.of();
+    }
+
+    @Nested
+    @DisplayName("the Editing column (E6.14)")
+    class EditingColumn {
+
+        @Test
+        @DisplayName("a colleague is named, because the name is the whole point of the column")
+        void namesTheColleague() {
+            assertThat(BankCopy.editing(new LockHolder(502L, "Ron Levi"), false))
+                    .isEqualTo("Editing · Ron Levi");
+        }
+
+        @Test
+        @DisplayName("her own lock says so instead of showing her her own name")
+        void herOwnLockSaysYou() {
+            assertThat(BankCopy.editing(new LockHolder(501L, "Dana Cohen"), true))
+                    .as("a name against a row is the shape that means somebody else has it, so "
+                            + "printing hers would read as being blocked from her own editor")
+                    .isEqualTo("Editing · you");
+        }
+
+        @Test
+        @DisplayName("a row nobody is editing says nothing at all")
+        void freeRowsAreBlank() {
+            assertThat(BankCopy.editing(null, false))
+                    .as("a column saying 'free' on every row is a column of noise on the case "
+                            + "that is almost always true")
+                    .isEmpty();
+            assertThat(BankCopy.editing(null, true)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a holder the server could not name still reads as somebody")
+        void anUnnamedHolderIsStillSomebody() {
+            assertThat(BankCopy.editing(new LockHolder(502L, null), false))
+                    .as("LockHolder falls back rather than carrying a blank, and the column must "
+                            + "not turn that into a row that looks free")
+                    .isEqualTo("Editing · " + LockHolder.UNKNOWN_NAME);
+        }
+
+        @Test
+        @DisplayName("no em dash, per PRD section 4.1")
+        void noEmDash() {
+            assertThat(BankCopy.editing(new LockHolder(502L, "Ron Levi"), false))
+                    .doesNotContain("—");
+            assertThat(BankCopy.EDITING_COLUMN).doesNotContain("—");
+        }
     }
 
     @Test

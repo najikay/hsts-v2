@@ -19,6 +19,10 @@ import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionImage;
+import common.dto.lock.EntityRef;
+import common.dto.lock.LockChange;
+import common.dto.lock.LockHolder;
+import common.dto.lock.LocksSnapshot;
 import common.protocol.Message;
 import common.protocol.Verb;
 import javafx.scene.Node;
@@ -34,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.testfx.framework.junit5.ApplicationTest;
 import org.testfx.util.WaitForAsyncUtils;
+import server.features.bank.QuestionLockKey;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -128,6 +133,49 @@ class BankScreenInteractionTest extends ApplicationTest {
         assertThat(cellTexts(scene)).contains("#11001", "Solve the linear equation", "Equations",
                 "Easy", "#11005", "Read the diagram", "Geometry", "Hard");
         assertThat(labelTexts(scene)).contains("2 questions");
+    }
+
+    /**
+     * The Editing column, on a real table, through the real event bus (E6.14 ⚑).
+     *
+     * <p>Two wiring claims the FX-free session test cannot make. That the column exists on
+     * {@code BankView}'s table at all and renders its sentence into a cell — and that a push
+     * travelling the app's <em>real</em> {@code ClientEventBus} reaches
+     * {@code BankRowLocks.onServerPush}.
+     *
+     * <p>The second one is not hypothetical. The subscriber is invoked reflectively from the bus
+     * package, so a package-private subscriber class registers without complaint and then throws
+     * {@code IllegalAccessException} on every push, which {@code RequestDispatcher} catches and
+     * logs rather than rethrows. The screen simply never updates and no test fails. That is
+     * exactly what happened while this was being built.
+     */
+    @Test
+    @DisplayName("⚑ the Editing column paints, and a live push repaints it (real bus)")
+    void editingColumnPaintsAndFollowsPushes() {
+        FakeClientConnection[] wire = new FakeClientConnection[1];
+        Scene scene = openBank(connection -> {
+            wire[0] = connection;
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.LOCKS_SNAPSHOT, new LocksSnapshot(EntityRef.QUESTION,
+                    java.util.Map.of(QuestionLockKey.of("11005").entityId(),
+                            new LockHolder(7L, "Ron Levi"))));
+        });
+
+        assertThat(cellTexts(scene))
+                .as("the snapshot at load is what a teacher sees before she clicks anything")
+                .contains("Editing · Ron Levi");
+        assertThat(cellTexts(scene))
+                .as("and a row nobody holds carries no chip at all")
+                .doesNotContain("Editing · Dana Cohen", "Editing · you");
+
+        interact(() -> wire[0].pushToClient(Verb.PUSH_LOCK_CHANGED,
+                LockChange.released(QuestionLockKey.of("11005"))));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(cellTexts(scene))
+                .as("he closed the editor, so the row is free on screen with no refresh: a push "
+                        + "that never reaches the subscriber leaves this chip up forever")
+                .doesNotContain("Editing · Ron Levi");
     }
 
     @Test
