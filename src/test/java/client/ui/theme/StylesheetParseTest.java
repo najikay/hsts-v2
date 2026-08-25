@@ -40,10 +40,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class StylesheetParseTest {
 
-    /** Every stylesheet the app loads at runtime. */
+    /**
+     * Every stylesheet the app loads at runtime.
+     *
+     * <p>{@code /css/app.css} was the seventh: the prototype's sheet, loaded onto the legacy
+     * bank screen's own root rather than the Scene so its styling could not leak into the design
+     * system. It had exactly one loader, and the retirement PR deleted both.
+     */
     private static final List<String> SHIPPED = List.of(
             "/css/hsts.css",
-            "/css/app.css",
             "/css/accent-indigo.css",
             "/css/accent-emerald.css",
             "/css/accent-amber.css",
@@ -60,7 +65,6 @@ class StylesheetParseTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "/css/hsts.css",
-            "/css/app.css",
             "/css/accent-indigo.css",
             "/css/accent-emerald.css",
             "/css/accent-amber.css",

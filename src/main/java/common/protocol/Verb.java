@@ -28,15 +28,11 @@ public enum Verb {
      */
     LOGOUT,
 
-    // ===================== Question bank (legacy prototype flow) ===========
-    // Kept working verbatim through protocol v2 so the phase-3 demo never
-    // regresses; E6 replaces them with the versioned bank verbs.
-
-    /** List every question in the bank. Response payload: {@code List<Question>}. */
-    GET_ALL_QUESTIONS,
-
-    /** Persist an edited question. Request payload: {@code Question}. */
-    UPDATE_QUESTION,
+    // The prototype's GET_ALL_QUESTIONS and UPDATE_QUESTION stood here, kept
+    // working verbatim through protocol v2 so the phase-3 demo never regressed.
+    // Both retired with the legacy screen once the versioned bank took over rail
+    // id `questions` (BANK_WIRE_CONTRACT §7.4). The bank below is the only
+    // question flow on the wire now, and it is the whole flow.
 
     // ===================== Question bank (E6) ==============================
     // The draft wire contract: docs/contracts/BANK_WIRE_CONTRACT.md, with the
@@ -744,7 +740,8 @@ public enum Verb {
      *
      * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role),
      * {@code NOT_FOUND} (unknown, or not hers), {@code CONFLICT} (stale
-     * {@code expectedLockVersion}, or the version is a DRAFT).
+     * {@code expectedLockVersion}, the version is a DRAFT, or the version is
+     * edit-locked by someone else — the E6.14 consult, per-verb).
      */
     EXAM_VERSION_REVISE,
 
@@ -753,15 +750,17 @@ public enum Verb {
      * Caller: teacher, coordinator, <b>author only</b>. Request payload:
      * {@code ExamVersionAction}; response: {@code ExamComposition}, now PENDING.
      *
-     * <p><b>It hands off to E8 and emits nothing itself.</b>
-     * {@code ExamService.submitForApproval} calls
-     * {@code ApprovalService.versionSubmitted(examVersionId)} and sends no
-     * notification of its own — the approval contract's E8.2 names that hook as an
-     * instruction, because the one call supersedes the other pending versions,
-     * notifies the coordinator about the supersede, and emits the ordinary
-     * APPROVAL_REQUESTED. Splitting it would let E7 emit a request for a version
-     * whose supersede failed, or emit two notifications in an order that reads
-     * backwards. E7 owns the transition; E8 owns everything the queue sees.
+     * <p><b>It hands off to E8, and the HANDLER makes the call — after commit.</b>
+     * Corrected 2026-08-24 (P-6's shape: this paragraph previously said the service
+     * calls the hook, and a handler author trusting it would notify nobody):
+     * {@code ApprovalService.versionSubmitted} opens its own session and cannot see
+     * the caller's uncommitted status flip, so the service calling it mid-transaction
+     * silently does nothing. The handler calls the hook once the submit has
+     * committed; the one call supersedes the other pending versions, notifies the
+     * coordinator about the supersede, and emits the ordinary APPROVAL_REQUESTED.
+     * The named window: a crash between commit and hook loses the supersede and the
+     * bells, never the submission — the queue reads status, not bells. E7 owns the
+     * transition; E8 owns everything the queue sees.
      *
      * <p>Requires DRAFT and answers {@code CONFLICT} otherwise. It re-checks the
      * points rule cheaply even though the invariant above means no stored version
@@ -769,8 +768,10 @@ public enum Verb {
      * restatement of it, and if it ever fires the log line says so.
      *
      * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role),
-     * {@code NOT_FOUND} (unknown, or not hers), {@code CONFLICT} (stale
-     * {@code expectedLockVersion}, or the version is not a DRAFT).
+     * {@code NOT_FOUND} (unknown, or not hers), {@code VALIDATION} (malformed
+     * payload), {@code CONFLICT} (stale {@code expectedLockVersion}, the version is
+     * not a DRAFT, or the version is edit-locked by someone else — the E6.14
+     * consult, per-verb).
      */
     EXAM_SUBMIT,
 

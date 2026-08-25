@@ -115,7 +115,7 @@ class ConnectWiringTest {
         @Test
         @DisplayName("fails every in-flight request instead of leaving screens hanging")
         void failsPendingRequests() {
-            CompletableFuture<Message> pending = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> pending = dispatcher.send(Verb.BANK_LIST, null);
             assertThat(dispatcher.pendingCount()).isEqualTo(1);
 
             ConnectWiring.connectionLostHandler(ENDPOINT, eventBus, dispatcher)

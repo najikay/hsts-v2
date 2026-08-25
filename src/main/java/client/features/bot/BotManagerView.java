@@ -56,7 +56,7 @@ import java.util.Optional;
  *
  * <p>Sources are edit-locked (E18.5, F10.4) through the shared
  * {@link LockAwareEditor}, composed rather than inherited. The rendering rule is
- * the one {@code QuestionsView} established and this screen repeats deliberately:
+ * the one the E0 prototype screen established and this screen repeats deliberately:
  * <b>the lock state is applied last</b>. Acquiring answers on this very thread
  * when the server is quick, so a render that re-enabled the buttons after the lock
  * had disabled them would hand a teacher an editor she does not hold.
@@ -231,7 +231,7 @@ public final class BotManagerView extends AbstractScreen {
 
         // The lock has the last word, so it goes last: acquiring can answer on this
         // very thread, and the lines above would otherwise re-enable what it just
-        // disabled. Same ordering rule as QuestionsView.
+        // disabled. Same ordering rule the prototype bank screen established.
         if (locks != null) {
             renderLockState(locks.state());
         }

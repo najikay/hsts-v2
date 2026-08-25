@@ -148,7 +148,7 @@ class ClientEventBusTest {
                 bridge.onPush(null);
                 bridge.onPush(new Message(null, "id", Status.PUSH, null, "x"));
                 // A request verb wearing PUSH status: a server bug or a spoof.
-                bridge.onPush(new Message(Verb.GET_ALL_QUESTIONS, "id", Status.PUSH, null, "x"));
+                bridge.onPush(new Message(Verb.BANK_LIST, "id", Status.PUSH, null, "x"));
             }).doesNotThrowAnyException();
 
             assertThat(subscriber.events).isEmpty();

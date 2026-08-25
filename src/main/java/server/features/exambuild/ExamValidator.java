@@ -5,6 +5,7 @@ import common.dto.authoring.ExamCreateRequest;
 import common.dto.authoring.QuestionPin;
 import common.dto.authoring.TopicQuota;
 import server.db.projections.PinCandidate;
+import server.features.bank.QuestionValidator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -287,21 +288,43 @@ public final class ExamValidator {
      * The criteria rules, which are the validator's even though the generator is not (§5.3).
      *
      * <p>Two quotas naming one topic is refused rather than merged, and the reason is not tidiness:
-     * two buckets drawing from one candidate pool break the disjointness §7.4's most-constrained
-     * -first selection relies on, and the report could then name a shortfall <b>the teacher can
-     * disprove</b> by filtering her own bank to that topic. §7.2 property 2 calls that the worst
-     * failure available here.
+     * they are two buckets over one candidate pool with no rule saying which of them is short, so
+     * the report could name a shortfall <b>the teacher can disprove</b> by filtering her own bank
+     * to that topic. §7.2 property 2 calls that the worst failure available here.
+     *
+     * <p><b>This rule does not make the candidate pools disjoint, and an earlier version of this
+     * javadoc claimed it did.</b> Corrected 2026-08-24, found by a cold read rather than by a
+     * test. {@link #quotaProblem} deliberately permits one course-wide quota alongside every topic
+     * quota and its pool overlaps all of them; within a single {@code TopicQuota} the {@code any}
+     * bucket overlaps {@code easy}/{@code medium}/{@code hard}. Contract §7.3 states the same
+     * thing outright - quotas draw from overlapping supply - which is why its aggregate shortfall
+     * row exists at all. The correction matters because the false version is what a later reader
+     * would trust when deciding whether {@code AutoComposer} may assume disjoint pools. <b>It may
+     * not</b>, and §7.4's selection rule is an open contract question because of it.
      *
      * <p>Comparison is on the <b>normalised</b> topic. {@code TopicQuota} folds blank to null, so
      * {@code ""} and {@code null} are one bucket and not two, and a client sending both would
      * otherwise open exactly the hazard above while looking like two distinct rows.
+     *
+     * <p><b>And it is collation-safe, which a {@code HashSet} was not</b> <i>(corrected
+     * 2026-08-24, found by a cold read)</i>. The pool these buckets draw on is selected with
+     * {@code qv.topic = :topic} against a {@code utf8mb4_unicode_ci} column, so Java string
+     * equality is strictly looser than the thing it is protecting: {@code "Algebra"} and
+     * {@code "algebra"} passed as two distinct buckets and drew from one set of rows, which is
+     * the hazard this rule exists for rather than an edge case beside it. The comparison is
+     * {@link QuestionValidator#sameTopic}, shared rather than reimplemented, for the reason
+     * P-6 gives. C-7 / ADR-016: at least as strict as the collation, in every dimension.
+     *
+     * <p>The scan is pairwise and quadratic. A request carries a handful of quotas - one per
+     * topic row on her screen - and a collation-folded key that could be hashed would be a
+     * second expression of the comparison, which is the thing being avoided.
      *
      * @param request the criteria as they arrived
      * @return the first rule broken, or empty when the criteria are acceptable
      */
     public static Optional<Violation> quotaProblem(AutoComposeRequest request) {
         List<TopicQuota> quotas = request.quotas();
-        Set<String> seenTopics = new HashSet<>();
+        List<String> seenTopics = new ArrayList<>();
         boolean anyNullTopic = false;
 
         for (int i = 0; i < quotas.size(); i++) {
@@ -322,9 +345,17 @@ public final class ExamValidator {
                     return violation(FIELD_QUOTAS, ExamBuildMessages.topicRequestedTwice(null));
                 }
                 anyNullTopic = true;
-            } else if (!seenTopics.add(quota.topic())) {
-                return violation(FIELD_QUOTAS,
-                        ExamBuildMessages.topicRequestedTwice(quota.topic()));
+            } else {
+                for (String seen : seenTopics) {
+                    if (QuestionValidator.sameTopic(seen, quota.topic())) {
+                        // Named with the topic SHE typed on this row, not the folded form or the
+                        // earlier row's spelling: the sentence has to point at something she can
+                        // find on her own screen.
+                        return violation(FIELD_QUOTAS,
+                                ExamBuildMessages.topicRequestedTwice(quota.topic()));
+                    }
+                }
+                seenTopics.add(quota.topic());
             }
         }
         if (request.totalRequested() < 1) {

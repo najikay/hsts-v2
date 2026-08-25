@@ -7,6 +7,8 @@ import common.dto.authoring.TopicQuota;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import server.db.projections.PinCandidate;
 
 import java.util.ArrayList;
@@ -313,10 +315,51 @@ class ExamValidatorTest {
                     TopicQuota.ofAnyDifficulty("Algebra", 3),
                     TopicQuota.ofAnyDifficulty("Algebra", 2))))
                     .hasValueSatisfying(v -> assertThat(v.message())
-                            .as("two buckets over one candidate pool break the disjointness "
-                                    + "most-constrained-first relies on, and the report could "
-                                    + "then name a shortfall she can disprove")
+                            .as("two buckets over one candidate pool with no rule saying which "
+                                    + "of them is short, and the report could then name a "
+                                    + "shortfall she can disprove")
                             .isEqualTo(ExamBuildMessages.topicRequestedTwice("Algebra")));
+        }
+
+        @ParameterizedTest(name = "\"Algebra\" and \"{0}\" are one topic to the database")
+        @ValueSource(strings = {
+                "algebra",      // case: the plain one, and the one a HashSet missed
+                "ALGEBRA",
+                "AlGeBrA",
+                "  Algebra  ",  // the column is compared after the record's strip()
+                "Álgebra"       // utf8mb4_unicode_ci folds accents; so must the validator
+        })
+        @DisplayName("⚑ a topic the database calls the same topic is refused, whatever the "
+                + "spelling")
+        void aTopicTheDatabaseFoldsIsOneTopic(String variant) {
+            // THE PROPERTY: the validator must be AT LEAST AS STRICT as utf8mb4_unicode_ci
+            // (C-7 / ADR-016, P-6). The pool these buckets draw on is selected with
+            // `qv.topic = :topic` under that collation, so anything the database folds together
+            // is one pool - and two quotas over one pool is exactly what the rule above refuses.
+            // A case-sensitive HashSet let every one of these through as two distinct buckets,
+            // which is the defect this parameterisation exists to keep out rather than an edge
+            // case beside it.
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    TopicQuota.ofAnyDifficulty("Algebra", 3),
+                    TopicQuota.ofAnyDifficulty(variant, 2))))
+                    .as("\"%s\" draws on the same rows as \"Algebra\", so the two quotas are two "
+                            + "buckets over one pool", variant)
+                    .hasValueSatisfying(v -> assertThat(v.message())
+                            // Named with the spelling SHE typed on the offending row, so the
+                            // sentence points at something she can find on her own screen.
+                            .isEqualTo(ExamBuildMessages.topicRequestedTwice(variant.strip())));
+        }
+
+        @Test
+        @DisplayName("two genuinely different topics still pass, so the fold is not a blunt "
+                + "instrument")
+        void topicsThatMerelyLookAlikeStillPass() {
+            // The other direction, which the fold could break: being stricter than the collation
+            // is safe, but folding two topics a teacher can tell apart would refuse a request
+            // that is fine. These differ by more than case and accent.
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    TopicQuota.ofAnyDifficulty("Algebra", 3),
+                    TopicQuota.ofAnyDifficulty("Algebra II", 2)))).isEmpty();
         }
 
         @Test

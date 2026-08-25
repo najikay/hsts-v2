@@ -178,7 +178,7 @@ class PushGatewayTest {
     void nonPushVerbIsStillDelivered() throws IOException {
         sessions.attach(ALICE, Role.STUDENT, aliceConnection);
 
-        assertThat(gateway.toUser(ALICE, Verb.GET_ALL_QUESTIONS, null)).isTrue();
+        assertThat(gateway.toUser(ALICE, Verb.BANK_LIST, null)).isTrue();
         verify(aliceConnection).sendToClient(any());
     }
 

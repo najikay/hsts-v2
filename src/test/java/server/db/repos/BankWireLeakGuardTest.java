@@ -1,11 +1,9 @@
 package server.db.repos;
 
 import common.dto.bank.BankQuestionRow;
-import common.dto.bank.Question;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionDraft;
 import common.dto.bank.QuestionEdit;
-import common.dto.bank.QuestionUpdate;
 import common.dto.bank.QuestionVersionDetail;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,15 +53,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Asserting the split separately is what stops the honest failure mode: a future outbound
  * DTO being waved onto a single flat list by pointing at the two inbound entries already on it.
  *
- * <h2>What this guard does NOT cover, stated rather than discovered</h2>
+ * <h2>What this guard used not to cover, and no longer has to</h2>
  *
- * <p>{@link #LEGACY_NOT_COVERED}. The prototype's {@link Question} carries a real answer key in
- * a field called {@code answer}, and the scan is blind to it twice over: {@code answer} matches
- * nothing in {@link CorrectnessNames} — deliberately, because {@code answer1..answer4} are the
- * options a student is meant to see — and {@code Question} is a mutable class rather than a
- * record. Retiring the pair is a scheduled PR after E6 merges. Until then the exclusion is
- * named, dated and tested, so a reader of this file learns the limit here instead of finding it
- * later.
+ * <p>A third list, {@code LEGACY_NOT_COVERED}, carved out the prototype's {@code Question} and
+ * {@code QuestionUpdate}. {@code Question} carried a real answer key in a field called
+ * {@code answer} and the scan was blind to it twice over: {@code answer} matches nothing in
+ * {@link CorrectnessNames} — deliberately, because {@code answer1..answer4} are the options a
+ * student is meant to see — and {@code Question} was a mutable class rather than a record. The
+ * exclusion was named, dated and tested so a reader learned the limit here rather than finding
+ * it later, and its companion test was written to fail the day the pair retired.
+ *
+ * <p><b>That day came.</b> The retirement PR deleted both types, both verbs and the screen that
+ * sent them; the carve-out and its three skip clauses went with them, and
+ * {@link #theLegacyExclusionIsRetired()} now pins the end state instead. Every record in the
+ * package is inside the scan, so the allow-list above is the whole of the licence.
  *
  * <h2>Name-based, and that is enough</h2>
  *
@@ -121,18 +124,19 @@ class BankWireLeakGuardTest {
     private static final List<Class<?>> OUTBOUND_LICENCE =
             List.of(QuestionDetail.class, QuestionVersionDetail.class);
 
-    /**
-     * LEGACY - retirement PR scheduled after E6 merges (retires LegacyQuestionHandlers,
-     * QuestionDAO, the legacy screen, the E18.4 guarded-update flow).
-     *
-     * <p>Dated 2026-08-21, by the lead's ruling. {@code Question.answer} is an answer key that
-     * this guard cannot see, so for as long as these two live in {@code common.dto.bank} the
-     * claim "the build says so" is qualified. They are listed here rather than left out so the
-     * qualification is impossible to miss, and {@link #theLegacyExclusionIsNamedAndStillReal()}
-     * fails the day the pair is retired, which is the day this entry should be deleted.
-     */
-    private static final List<Class<?>> LEGACY_NOT_COVERED =
-            List.of(Question.class, QuestionUpdate.class);
+    // A third list stood here: LEGACY_NOT_COVERED = {Question, QuestionUpdate}, dated 2026-08-21
+    // by the lead's ruling, naming the retirement PR that would retire LegacyQuestionHandlers,
+    // QuestionDAO, the legacy screen and the E18.4 guarded-update flow. Question.answer was an
+    // answer key this guard could not see - `answer` matches nothing in CorrectnessNames, and
+    // Question was a mutable class rather than a record - so while those two lived in
+    // common.dto.bank the claim "the build says so" was qualified, and the entry existed to make
+    // the qualification impossible to miss. Its companion test asserted the excluded types were
+    // still present, so it would fail the day the pair retired: the entry was built to force its
+    // own deletion rather than to be remembered.
+    //
+    // That day is this PR. Both types are gone, both verbs with them, and the three skip clauses
+    // below that consulted this list went too. Every record in the package is now inside the
+    // scan and the claim is unqualified. This shrink is the proof the retirement is complete.
 
     @Test
     @DisplayName("no record on the bank wire carries an answer key unless it is licensed by name")
@@ -148,7 +152,7 @@ class BankWireLeakGuardTest {
 
         List<String> unlicensed = new ArrayList<>();
         for (Class<?> dto : records) {
-            if (licensed.contains(dto) || LEGACY_NOT_COVERED.contains(dto)) {
+            if (licensed.contains(dto)) {
                 continue;
             }
             if (componentsOf(dto).stream().anyMatch(CorrectnessNames::suggestsCorrectness)) {
@@ -168,10 +172,9 @@ class BankWireLeakGuardTest {
     void noUnlicensedBankDtoDeclaresCorrectness() {
         // Components and fields are the same thing for a record today, but a future
         // non-record DTO in this package would slip past the check above - which is exactly
-        // how the legacy Question already does.
+        // how the legacy Question used to, until it was retired.
         Set<Class<?>> known = new LinkedHashSet<>(INBOUND_LICENCE);
         known.addAll(OUTBOUND_LICENCE);
-        known.addAll(LEGACY_NOT_COVERED);
 
         for (Class<?> dto : classesIn()) {
             if (known.contains(dto)) {
@@ -247,9 +250,6 @@ class BankWireLeakGuardTest {
         // sentence. A lockVersion here would also be inert: `questions` never changes when a
         // version is inserted, so @Version never increments. baseVersionNo does the work.
         for (Class<?> dto : classesIn().stream().filter(Class::isRecord).toList()) {
-            if (LEGACY_NOT_COVERED.contains(dto)) {
-                continue;
-            }
             assertThat(componentsOf(dto))
                     .as("%s must not carry lock state; the bank list merges E18.8's snapshot "
                             + "and pushes onto its rows client-side (F10.0)", dto.getSimpleName())
@@ -258,28 +258,38 @@ class BankWireLeakGuardTest {
     }
 
     @Test
-    @DisplayName("the legacy exclusion is named, dated, and still describes something real")
-    void theLegacyExclusionIsNamedAndStillReal() {
-        // The day the retirement PR lands, this fails and takes LEGACY_NOT_COVERED with it.
-        List<Class<?>> present = classesIn();
-        assertThat(present)
-                .as("LEGACY_NOT_COVERED names types that have been retired; delete the entry "
-                        + "and this test with it")
-                .containsAll(LEGACY_NOT_COVERED);
+    @DisplayName("the legacy pair is gone, and nothing in the package escapes the scan any more")
+    void theLegacyExclusionIsRetired() {
+        // This replaces theLegacyExclusionIsNamedAndStillReal, which asserted the excluded types
+        // were STILL PRESENT so that it would fail the day they were retired. It fired, and the
+        // fix was the shrink above rather than a weakening. Turned round to pin the end state, so
+        // that re-adding a scan-invisible type here is a failure and not a silent regression.
+        List<String> names = classesIn().stream().map(Class::getSimpleName).toList();
+        assertThat(names)
+                .as("the prototype pair retired with GET_ALL_QUESTIONS, UPDATE_QUESTION and the "
+                        + "screen that sent them; nothing should bring them back")
+                .doesNotContain("Question", "QuestionUpdate");
 
-        // And it is honest about why the exclusion is needed: `answer` is a real key that the
-        // shared predicate does not and must not match, because answer1..answer4 are the four
-        // options a student is supposed to see.
-        assertThat(Arrays.stream(Question.class.getDeclaredFields()).map(f -> f.getName()))
-                .contains("answer");
+        // The reason the exclusion was needed in the first place, kept as a live assertion: the
+        // shared predicate does not and must not match `answer`, because answer1..answer4 are the
+        // four options a student is supposed to see. A future non-record DTO named around it
+        // would be invisible all over again, so the blind spot is pinned even though nothing
+        // currently sits in it.
         assertThat(CorrectnessNames.suggestsCorrectness("answer")).isFalse();
-        assertThat(CorrectnessNames.carriesCorrectness(Question.class))
-                .as("if this ever goes true the legacy pair is visible to the scan and the "
-                        + "exclusion can go")
-                .isFalse();
-        assertThat(Question.class.isRecord())
-                .as("the second reason the scan is blind to it")
-                .isFalse();
+
+        // And the scan now covers the package with no carve-out. The second half of the old
+        // exclusion was that Question was a MUTABLE CLASS, which the record-component scan in
+        // onlyLicensedBankDtosCarryCorrectness cannot see into at all. Nothing shaped like that
+        // is left: every type here is a record or an enum, and an enum constant has no wire
+        // payload to hide a key in. Not asserted as "everything is a record" - Difficulty and
+        // ImageAction are enums and always were, and a check that red-lined them would be fixed
+        // by weakening it.
+        assertThat(classesIn())
+                .as("a mutable class DTO here would slip past "
+                        + "onlyLicensedBankDtosCarryCorrectness the way the legacy Question did; "
+                        + "noUnlicensedBankDtoDeclaresCorrectness is the field-level net under "
+                        + "this, and it is the one that would actually catch the key")
+                .allMatch(dto -> dto.isRecord() || dto.isEnum());
     }
 
     /**

@@ -1,7 +1,5 @@
 package server.features.locks;
 
-import common.dto.bank.Question;
-import common.dto.bank.QuestionUpdate;
 import common.dto.auth.Role;
 import common.dto.lock.EntityRef;
 import common.dto.lock.LockChange;
@@ -24,8 +22,6 @@ import org.mockito.quality.Strictness;
 import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.core.SessionManager;
-import server.db.QuestionDAO;
-import server.features.bank.LegacyQuestionHandlers;
 import server.realtime.PushGateway;
 
 import java.time.Instant;
@@ -34,7 +30,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 /**
  * Two clients, one question (E18.6/E18.7).
@@ -64,8 +59,6 @@ class LockConcurrencyIntegrationTest {
     private ConnectionToClient danaClient;
     @Mock
     private ConnectionToClient rinaClient;
-    @Mock
-    private QuestionDAO questionDAO;
 
     private MutableClock clock;
     private SessionManager sessions;
@@ -85,7 +78,6 @@ class LockConcurrencyIntegrationTest {
         locks = new EditLockService(new PushGateway(sessions), names, clock);
         locks.registerOn(router);
         locks.attachTo(sessions);
-        new LegacyQuestionHandlers(questionDAO).registerOn(router);
 
         // Record what each client's socket receives, the way a real client would.
         recordInto(danaClient, toDana);
@@ -195,44 +187,6 @@ class LockConcurrencyIntegrationTest {
         assertThat(acquire(RINA).granted())
                 .as("Dana has been editing for over a minute and still holds it")
                 .isFalse();
-    }
-
-    @Test
-    @DisplayName("a stale write is refused with CONFLICT, and the row is not touched (E18.4)")
-    void staleWriteIsRejected() {
-        when(questionDAO.updateGuarded(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(QuestionDAO.UpdateOutcome.STALE);
-
-        // Rina saved first; Dana's client still holds the values it read.
-        Message response = router.route(
-                Message.request(Verb.UPDATE_QUESTION,
-                        new QuestionUpdate(new Question(42, "Dana's text", "Dana's answer"),
-                                "the text Dana loaded", "the answer Dana loaded")),
-                CallerContext.authenticated(danaClient, DANA, Role.TEACHER));
-
-        assertThat(response.isError()).isTrue();
-        assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
-        assertThat(response.errorMessage())
-                .as("the message has to say what the user can do next")
-                .isEqualTo(LegacyQuestionHandlers.STALE_WRITE_MESSAGE)
-                .contains("Reload");
-        org.mockito.Mockito.verify(questionDAO, org.mockito.Mockito.never()).getAll();
-    }
-
-    @Test
-    @DisplayName("a guarded write on an untouched row still saves normally")
-    void freshWriteStillSaves() {
-        when(questionDAO.updateGuarded(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(QuestionDAO.UpdateOutcome.SAVED);
-        when(questionDAO.getAll()).thenReturn(List.of(new Question(42, "saved", "answer")));
-
-        Message response = router.route(
-                Message.request(Verb.UPDATE_QUESTION,
-                        new QuestionUpdate(new Question(42, "saved", "answer"), "before", "before")),
-                CallerContext.authenticated(danaClient, DANA, Role.TEACHER));
-
-        assertThat(response.isOk()).isTrue();
-        assertThat(response.getPayload()).isInstanceOf(List.class);
     }
 
     @Test

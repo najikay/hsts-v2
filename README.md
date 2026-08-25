@@ -1,38 +1,28 @@
-# HSTS — High School Test System (Prototype)
+# HSTS — High School Test System
 
-A monolithic **3-tier desktop application** built on the **Thin Client / Fat Server**
-paradigm. A JavaFX client lets a user view and edit exam questions; all logic and
-persistence live on a server reached over the OCSF networking framework, backed by MySQL.
+A monolithic **3-tier desktop application** on the **Thin Client / Fat Server** paradigm:
+JavaFX desktop clients that only render and ask, one fat server owning every rule, and MySQL
+behind it. Teachers build a versioned question bank and compose exams (manually or
+auto-generated from criteria), a subject coordinator approves them, teachers release them
+under 4-character codes, students sit them under a server-owned timer, grading is automatic
+with teacher review and audited overrides, and every role gets exactly the statistics it is
+allowed to see. An AI study bot answers course questions from teacher-uploaded material.
+Everything runs over a local network.
 
-> **Scope:** This is the **working prototype (Part C)** of a larger course project — the
-> full HSTS handles question banks, exam building/execution/grading, statistics, an AI
-> study-bot, and multiple user roles. The prototype deliberately implements just one
-> vertical slice (view → select → edit → update a question) end-to-end, on an
-> architecture shaped so the rest of the system slots in cleanly.
-
----
-
-## 1. What it does
-
-A complete client → server → database → client round trip:
-
-1. The client connects to the server and requests the list of questions.
-2. The user selects a question and edits its text / answer.
-3. The update is sent to the server over OCSF.
-4. The server validates it and persists it to MySQL via the DAO.
-5. The server returns the refreshed list; the client re-renders the saved state.
-
-**Stack:** JavaFX 17 (FXML + CSS UI) · native OCSF (networking) · MySQL via JDBC (data) ·
-Maven + `maven-shade-plugin` (two deployable Fat JARs — server and client).
+**Stack:** Java 21 · JavaFX 21 + AtlantaFX (design tokens, 5 accent palettes, light/dark/system)
+· vendored OCSF behind an adapter (networking) · protocol v2 (request correlation + server push)
+· Hibernate 6.6 + HikariCP + Flyway (data) · BCrypt (passwords) · greenrobot EventBus (client)
+· DeepSeek + Anthropic SDK (bot) · JUnit 5 / Mockito / AssertJ / TestFX (tests) · Maven +
+shade (two deployable Fat JARs).
 
 ### Tiers
 
 | Tier | Responsibility | Key types |
 |------|---------------|-----------|
-| **Presentation** | Render UI, capture intent | `client.core.*`, `client.ui.*`, `client.features.*`, `client.net.*` |
-| **Logic (Fat Server)** | Route requests, enforce rules, gatekeep data | `server.core.HSTSServer`, `server.core.ServerMain` |
-| **Data** | Persistence | `server.db.QuestionDAO`, `DatabaseConfig`, MySQL |
-| **Common** | Shared wire types | `common.dto.bank.Question`, `common.protocol.Message` |
+| **Presentation** | Render UI, capture intent; no rules | `client.core.*` (Navigator, ScreenManager, Routes), `client.ui.*` (design system), `client.features.*` (screen + FX-free session per feature), `client.net.*` |
+| **Logic (Fat Server)** | Route verbs to handlers, enforce every rule, own time | `server.core.{HSTSServer, MessageRouter, SessionManager}`, `server.features.*` (auth, bank, exambuild, approval, release, exam, grading, results, reports, bot, notify, locks) |
+| **Data** | Persistence: entities, repositories, projections, migrations | `server.db.*` — Hibernate entities, `server.db.repos.*` (one query per need), Flyway `V1..V7` |
+| **Common** | Shared wire types only | `common.protocol.{Message, Verb}`, `common.dto.*` (Serializable records; student-facing shapes structurally cannot carry answer keys) |
 
 ---
 
@@ -137,124 +127,112 @@ server.host=localhost
 server.port=5555
 ```
 
-For a two-machine demo, run the server on one machine and set `server.host` on the
-client to that machine's LAN IP. The database host/port (`localhost:3306/hsts_db`) are
-fixed in `server/db/DatabaseConfig.java` for the prototype.
 
 ---
 
 ## 3. User Interface
 
-The UI is defined in **FXML** with a shared **CSS** theme, so layout and styling are
-separated from the controller logic.
+Every screen splits into a thin **view** (nodes only) and a toolkit-free **session** class
+holding all decisions, which is what makes UI behaviour unit-testable without booting JavaFX.
+The design system (`client.ui`) carries the tokens: 5 accent palettes, light/dark/system modes
+switchable live, motion through one budgeted `Motion` system (reduced-motion collapses every
+gesture to a plain fade; the take-exam screen gets no entrance motion at all, by rule).
 
-- **Connect screen** (`ConnectView`) — branded splash that opens the OCSF connection on a
-  background thread; on success it asks the navigation controller to swap to the main
-  screen, on failure it shows an inline error + Retry.
-- **Main screen** (`QuestionsView`) — a master-detail layout: a scrollable, multi-line
-  question list on the left; an editor on the right with unsaved-changes tracking, a
-  Revert action, and a transient "Saved" confirmation after a successful write.
-- **Branding** (`Logo`) — a vector graduation-cap mark on the app's indigo gradient,
-  reused on the splash, in the header, and as the window icon. Source: `branding/hsts-logo.svg`.
+Per role, after sign-in: **teachers** get a dashboard with live cards, the versioned question
+bank and its editor, the exam builder, releases, the live execution monitor, grading, results
+with histograms, and the bot manager; **coordinators** get all of that plus the approval queue
+with a student-identical exam preview; **students** get take-exam, their own grades with the
+marked paper behind each row, and the study bot; the **principal** gets read-only school-wide
+reports and a data browser, with zero write controls anywhere (asserted by test).
 
 ---
 
-## 4. Architecture & Design Choices
+## 4. Design Patterns at a Glance
 
-Every decision favours **traceable, demonstrable correctness now**, with clean seams for
-later growth.
-
-### 4.1 Thin Client / Fat Server
-The client holds **no business logic and no database credentials** — it renders UI and
-relays intent. The server owns all rules, validation, and persistence. The client is
-trivially replaceable, and the server is the only tier that must be trusted and scaled.
-
-### 4.2 Native OCSF behind an Adapter (`IClientConnection`)
-OCSF provides the socket + object-serialization transport. The UI never touches OCSF
-directly — it depends only on the `IClientConnection` interface, implemented by the
-OCSF-backed `HSTSClient` (**Adapter pattern**). A future protocol swap (REST, gRPC,
-WebSocket) becomes a single new adapter class, with zero UI changes. OCSF is vendored as
-source under `src/main/java/ocsf/`, so the project is self-contained.
-
-### 4.3 DAO pattern (`QuestionDAO`)
-All SQL is isolated in the Data Access Object; callers speak in `Question` objects, never
-SQL strings. Persistence can change (new columns, a different engine) without touching the
-logic tier.
-
-### 4.4 Why no Event Bus
-The flow is intentionally **synchronous and point-to-point**: one UI action sends one
-`Message`, the server handles it in one place (`handleMessageFromClient`), and one
-response comes back. This keeps the whole data path readable top-to-bottom and the
-behaviour deterministic. An event bus would scatter that path across subscribers and solve
-problems this prototype doesn't have.
+| Pattern | Where | Purpose |
+|---------|-------|---------|
+| **Adapter** | `client.net.IClientConnection` over OCSF; `BotProvider` over each AI vendor | Phase-2 transport swap = one class; AI vendors interchangeable |
+| **Strategy** | `server.features.reports.ReportEngine` over `DimensionStrategy` | A new principal report = one class + one registration line (proven by a fourth strategy defined inside a test) |
+| **Observer** | Client EventBus; server `PushGateway`; attempt/lock listeners | Screens react to pushes without knowing each other |
+| **Singleton** | `HibernateUtil`'s one `SessionFactory` | Expensive to build, safe to share, closed once |
+| **Template Method** | `RepositoryTestBase` + the `*Contract` test suites | Every data-layer test runs on H2 AND real MySQL |
+| **Repository + Projection** | `server.db.repos.*` | One query per need; student-facing projections have no field for a correct answer |
+| **DI + injected Clock** | Every service constructor | Deterministic timer/lockout/TTL tests, no sleeping |
+| **State machine + CAS** | Exam attempts (`IN_PROGRESS -> SUBMITTED / TIMED_OUT`) | One atomic guarded UPDATE decides submit-vs-expiry races |
 
 ---
 
 ## 5. Concurrency Model
 
-OCSF reads from the socket on a **background thread**; JavaFX may only be touched from the
-**JavaFX Application Thread**. That boundary is crossed in exactly one place —
-`HSTSClient.handleMessageFromServer` wraps the hand-off to the UI in
-`Platform.runLater(...)`. The view code therefore only ever runs on the FX thread, and the
-network read loop never blocks the UI.
+The server computes every deadline itself (start + duration + extensions, derived, never
+stored) and re-checks status and deadline inside each transaction; a crashed client still gets
+force-submitted by `TimerService`. On the client, OCSF reads on a background thread and every
+crossing to the FX thread goes through one `FxThreadPoster` seam - the event bus and the shared
+`LockAwareEditor` deliver on the FX thread by construction, so screens never call
+`Platform.runLater` themselves and tests run the whole path synchronously.
 
 ---
 
 ## 6. Security
 
-- **Fat Server as gatekeeper.** The server is the single choke point for data access.
-  Clients cannot reach MySQL directly — they send `Message` requests, which the server
-  type-checks and routes on a known `Command` (rejecting anything else with an `ERROR`)
-  before touching the DAO. The same trusted boundary is where future user-auth and
-  AI-provider mediation will live.
-- **SQL injection neutralized.** Every query in `QuestionDAO` uses a parameterized
-  `PreparedStatement`; user input is bound as typed parameters, never concatenated into SQL
-  text — so input can never alter the statement's structure.
+- **Identity is the session, never the payload.** No student verb carries a user id; the server
+  resolves the caller from the authenticated socket on every request.
+- **Structural over careful.** A family of guard tests scans source and bytecode and fails the
+  build on any path that could carry an answer key to a student - the student-facing projections
+  and DTOs have nowhere to put one.
+- **BCrypt** with per-password salts; one generic login failure message; a dummy-hash timing
+  defense; a lockout after 5 failures that refuses even correct passwords (so the throttle
+  cannot become a password oracle).
+- **Locks and versions.** Server-side edit locks (advisory, TTL + heartbeat) refuse a write on
+  a row someone else is editing; optimistic version checks remain the final arbiter, so a stale
+  save is a calm CONFLICT with a reload, never a lost update.
+- **The bot cannot leak exams.** A bytecode-level isolation test proves the bot package cannot
+  even reference exam or grade code; bot context is built from sources and bank questions
+  without correct answers.
 
 ---
 
-## 7. Design Patterns at a Glance
+## 7. Testing
 
-| Pattern | Where | Purpose |
-|---------|-------|---------|
-| **Singleton** | `client.core.ScreenManager` | One owner of the Stage + connection; central navigation |
-| **Template Method** | `client.core.AbstractScreenUI` | Fixed screen lifecycle (`render()` → `onShown()`), variable steps in subclasses |
-| **Adapter** | `client.net.IClientConnection` / `HSTSClient` | Hide OCSF; enable a future protocol swap |
-| **DAO** | `server.db.QuestionDAO` | Isolate SQL from logic |
+One command runs everything: `mvnw clean verify` compiles, runs ~6,000 tests (zero skipped),
+enforces a **90% instruction-coverage gate** (thin view classes excluded one-by-one, never by
+wildcard), and packages both JARs. Data-layer suites run on H2 and real MySQL both
+(`HSTS_REQUIRE_MYSQL=true` makes MySQL mandatory, as CI does); TestFX + Monocle drive real
+clicks through the screens headlessly; wiring guards fail the build if a screen or handler
+ships unreachable; and `SeedArithmeticTest` re-derives the demo dataset\'s statistics so a
+hand-edited number cannot drift from its source document.
 
 ---
 
 ## 8. Project Structure
 
 ```
-HSTS/
-├── pom.xml                       # Maven build + shade (two Fat JARs)
-├── client.properties             # deployment template → copied to target/ on build
-├── server.properties             # deployment template → copied to target/ on build
-├── README.md
-└── src/main/
-    ├── java/
-    │   ├── client/
-    │   │   ├── core/             # ClientLauncher, ClientApp, Launcher, ScreenManager,
-    │   │   │                     #   AbstractScreenUI, ClientConfig — loads client.properties
-    │   │   ├── net/              # IClientConnection (Adapter), HSTSClient
-    │   │   ├── ui/components/    # Logo (design-system components)
-    │   │   └── features/         # connect/ConnectView, bank/QuestionsView
-    │   ├── common/dto/bank/      # Question (Serializable)
-    │   ├── common/protocol/      # Message + Command enum (Serializable protocol)
-    │   ├── ocsf/                 # Native OCSF: server.{AbstractServer, ConnectionToClient},
-    │   │                         #   client.AbstractClient
-    │   └── server/
-    │       ├── core/             # HSTSServer, ServerMain,
-    │       │                     #   ServerConfig — loads server.properties
-    │       └── db/               # DatabaseConfig, QuestionDAO
-    └── resources/
-        ├── client.properties     # bundled default for the client JAR
-        ├── server.properties     # bundled default for the server JAR
-        ├── db/migration/        # Flyway-versioned schema (V1..V7)
-        ├── fxml/                 # ConnectView.fxml, QuestionsView.fxml
-        ├── css/app.css           # shared theme
-        └── branding/             # hsts-logo.svg
+hsts-v2/
+├── docs/                       # PRD, ARCHITECTURE, TODO (epics E0-E23), contracts/ (frozen
+│                               #   wire contracts), reports/ (per-PR records), DEMO_DAY.md
+├── src/main/java/
+│   ├── client/
+│   │   ├── core/               # Navigator, Routes, ScreenManager, session routing
+│   │   ├── ui/                 # design system: components, shell, theme, Motion
+│   │   ├── features/           # one package per feature: bank, exam, grading, results,
+│   │   │                       #   release, reports, data, bot, home, locks, settings...
+│   │   └── net/                # IClientConnection adapter, RequestDispatcher
+│   ├── common/
+│   │   ├── protocol/           # Message envelope + Verb vocabulary
+│   │   └── dto/                # Serializable wire records, one package per feature
+│   ├── server/
+│   │   ├── core/               # HSTSServer, MessageRouter, SessionManager, Authorization
+│   │   ├── features/           # auth, bank, exambuild, approval, release, exam, grading,
+│   │   │                       #   results, reports, bot, notify, locks
+│   │   ├── db/                 # entities, repos/ (repositories + contracts), projections/,
+│   │   │                       #   seed/ (demo dataset + SeedMain), Flyway migrations
+│   │   ├── console/            # the server's own JavaFX console window (E19)
+│   │   └── realtime/           # PushGateway
+│   └── ocsf/                   # vendored OCSF source (self-contained)
+└── src/main/resources/
+    ├── css/hsts.css            # design tokens + every screen's styles
+    ├── css/accent-*.css        # the five accent palettes
+    └── db/migration/           # V1__core.sql ... V7__notifications.sql
 ```
 
 ---
@@ -265,7 +243,9 @@ HSTS/
   - `hsts-server.jar` — `Main-Class = server.core.ServerMain`; includes MySQL driver and JavaFX
     (the server console of E19 is a JavaFX window).
   - `hsts-client.jar` — `Main-Class = client.core.ClientLauncher`; includes JavaFX, excludes
-    MySQL driver, Hibernate, Flyway, PDFBox, POI and the bot providers by allow-list.
+    the MySQL driver, Hibernate, Flyway, PDFBox, POI and bot-provider **libraries** by
+    allow-list. Project **classes** are never filtered: the client jar ships the full project
+    artifact on purpose, and E6.11's editor depends on it (ARCHITECTURE, packaging invariant).
   Both are plain (non-`Application`) entry points to satisfy JavaFX module restrictions in a shaded jar.
 - **JAR names (E20.1).** `-Djar.prefix=G12-1 package` switches both to `G12-1_Server.jar` /
   `G12-1_Client.jar`; without it they keep the `hsts-server` / `hsts-client` names. The switch

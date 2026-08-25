@@ -240,6 +240,38 @@ public final class QuestionValidator {
     }
 
     /**
+     * Whether two topics are one topic as far as the database is concerned (E7.4, §5.3).
+     *
+     * <p><b>The same comparison as {@link #sameAnswer}, deliberately, because it is the same
+     * job.</b> {@code question_versions.topic VARCHAR(100)} sits in the same
+     * {@code utf8mb4_unicode_ci} table as the answer columns, and the bank's own filter and
+     * E7's auto-composer both select candidates with {@code qv.topic = :topic}, which the
+     * database evaluates under that collation. So a service-side comparison that folds
+     * <em>less</em> than the collation splits one candidate pool into two buckets that the
+     * database will then serve from the same rows.
+     *
+     * <p>That is the failure contract §5.3 and §7.2 property 2 exist to prevent: two quotas
+     * drawing on one pool with no rule saying which of them is short, and a shortfall the
+     * teacher can disprove by filtering her own bank to the topic named in it. C-7 / ADR-016
+     * states the governing rule for the whole codebase: the service comparison must be
+     * <b>at least as strict as {@code utf8mb4_unicode_ci} in every dimension</b>.
+     *
+     * <p>Exposed here rather than reimplemented in {@code ExamValidator} because a second
+     * expression of "what the database calls the same string" is exactly the defect
+     * {@code docs/PROBLEMS.md} P-6 is about: the two would agree on the cases their author
+     * thought of and diverge silently everywhere else. The four folding steps and their honest
+     * limit are documented on {@link #sameAnswer}; the cases measured against the real database
+     * are in the bank's tests and cover this method by construction, since it is the same call.
+     *
+     * @param first  one topic as typed
+     * @param second another
+     * @return whether the database would treat them as one topic
+     */
+    public static boolean sameTopic(String first, String second) {
+        return sameAnswer(first, second);
+    }
+
+    /**
      * The five Hebrew final forms, and the base letters MySQL weighs them as.
      *
      * <p>Parallel strings rather than a {@code Map}: the pairing is the whole content, and two
