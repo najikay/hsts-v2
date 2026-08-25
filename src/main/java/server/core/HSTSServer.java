@@ -12,6 +12,7 @@ import server.db.Transactions;
 import server.db.ids.QuestionIdAllocator;
 import server.db.repos.AttemptRepository;
 import server.db.repos.CourseRepository;
+import server.db.repos.ExamBuildRepository;
 import server.db.repos.ExamRepository;
 import server.db.repos.ExecutionRepository;
 import server.db.repos.GradeRepository;
@@ -44,6 +45,8 @@ import server.features.exam.ExtendService;
 import server.features.exam.JpaExamStore;
 import server.features.exam.MonitorService;
 import server.features.exam.TimerService;
+import server.features.exambuild.ExamHandlers;
+import server.features.exambuild.ExamService;
 import server.features.grading.GradeApprovalService;
 import server.features.grading.GradeReviewService;
 import server.features.grading.GradingHandlers;
@@ -247,7 +250,20 @@ public class HSTSServer extends AbstractServer {
         // (H15.2). Her third tab needed no verb at all - BankReadHandlers below already serves
         // her the bank school-wide (F9.3), and reusing it is the point rather than a shortcut.
         new DataBrowseService(reportStore).registerOn(router);
-        registerApprovalFeature(router, notifications, sessionFactory);
+        ApprovalService approvals = registerApprovalFeature(router, notifications, sessionFactory);
+        // The exam builder's six verbs (E7.1-E7.3, E7.5, E7.6, E7.10). Three things in this
+        // wiring are load-bearing and deliberate (#46 §11): the ApprovalService is THE instance
+        // the approval verbs run on, because EXAM_SUBMIT's handler calls versionSubmitted after
+        // its own commit and a second instance would notify through nobody's queue; the
+        // EditLockGuard wraps the ONE EditLockService registered above, because locks live in
+        // that object's map and a copy would consult an empty world and refuse nothing; and
+        // ExamService takes two repositories, the second serving EXAM_LIST's question counts
+        // through the same read every other screen uses.
+        new ExamHandlers(sessionFactory,
+                new ExamService(new ExamBuildRepository(), new ExamRepository(),
+                        new CourseRepository(), new EditLockGuard(locks), clock),
+                approvals)
+                .registerOn(router);
         // The question bank's write verbs (E6.1, E6.3, E6.4). Assembled last, and the only
         // things above it that it uses are the sessionFactory and clock locals: its guards ask
         // the open transaction's own data through a repository lambda rather than the
@@ -355,8 +371,9 @@ public class HSTSServer extends AbstractServer {
      * stay testable with a two-line lambda and never depend on process-wide state. The
      * installation is for everybody else.
      */
-    private void registerApprovalFeature(MessageRouter router, NotificationService notifications,
-                                         SessionFactory sessionFactory) {
+    private ApprovalService registerApprovalFeature(MessageRouter router,
+                                                    NotificationService notifications,
+                                                    SessionFactory sessionFactory) {
         CourseRepository courses = new CourseRepository();
         Authorization.useSubjectCoordinators((teacherId, subjectCode) ->
                 Transactions.inTx(sessionFactory,
@@ -367,8 +384,13 @@ public class HSTSServer extends AbstractServer {
                 Transactions.inTx(sessionFactory,
                         session -> courses.teaches(session, teacherId, courseCode)));
 
-        new ApprovalService(new JpaApprovalStore(sessionFactory), notifications)
-                .registerOn(router);
+        // Returns the instance (the registerGradingFeature shape): EXAM_SUBMIT's handler
+        // calls versionSubmitted after its own commit, so the wiring below needs the one
+        // service the approval verbs are registered on, not a second one.
+        ApprovalService approvals =
+                new ApprovalService(new JpaApprovalStore(sessionFactory), notifications);
+        approvals.registerOn(router);
+        return approvals;
     }
 
     /**
