@@ -12,7 +12,6 @@ import common.dto.approval.ExamApproveRequest;
 import common.dto.approval.ExamPreview;
 import common.dto.approval.ExamPreviewRequest;
 import common.dto.approval.ExamRejectRequest;
-import common.dto.approval.MyApprovals;
 import common.dto.approval.PreviewAnswerRow;
 import common.dto.auth.Role;
 import common.dto.exam.ExamQuestion;
@@ -116,14 +115,16 @@ class ApprovalServiceTest {
     // ===================== Registration ==================================
 
     @Test
-    @DisplayName("all five verbs are registered, and none of them is open")
+    @DisplayName("all four verbs are registered, and none of them is open")
     void registersItsVerbs() {
         MessageRouter router = new MessageRouter(new SessionManager());
 
         service.registerOn(router);
 
+        // Four since 2026-08-25: MY_APPROVALS_GET retired into E7.10's EXAM_LIST, which
+        // ExamService registers (APPROVAL ruling 1).
         for (Verb verb : List.of(Verb.APPROVALS_QUEUE_GET, Verb.EXAM_PREVIEW_GET,
-                Verb.EXAM_APPROVE, Verb.EXAM_REJECT, Verb.MY_APPROVALS_GET)) {
+                Verb.EXAM_APPROVE, Verb.EXAM_REJECT)) {
             assertThat(router.isRegistered(verb)).as("%s registered", verb).isTrue();
             assertThat(router.isOpen(verb)).as("%s must need a session", verb).isFalse();
         }
@@ -671,48 +672,12 @@ class ApprovalServiceTest {
         }
     }
 
-    // ===================== The author's own list =========================
-
-    @Nested
-    @DisplayName("MY_APPROVALS_GET")
-    class Mine {
-
-        @Test
-        @DisplayName("a teacher sees her own submissions with the reason she was given")
-        void herOwnSubmissions() {
-            service.reject(caller(RINA, Role.COORDINATOR), request(Verb.EXAM_REJECT,
-                    new ExamRejectRequest(CALCULUS_V1, "Five questions is too few for 60 minutes.", 0)));
-
-            Message response = service.mine(caller(DANA, Role.TEACHER),
-                    request(Verb.MY_APPROVALS_GET, null));
-
-            MyApprovals mine = (MyApprovals) response.getPayload();
-            assertThat(mine.rows()).extracting(ApprovalRow::examVersionId).containsExactly(CALCULUS_V1);
-            assertThat(mine.rejected()).hasSize(1);
-            assertThat(mine.rows().get(0).rejectedReason())
-                    .isEqualTo("Five questions is too few for 60 minutes.");
-            assertThat(mine.rows().get(0).selfAuthored()).isTrue();
-        }
-
-        @Test
-        @DisplayName("and never anybody else's, because there is no id on the wire to misuse ⚑")
-        void neverSomebodyElses() {
-            MyApprovals michals = (MyApprovals) service.mine(caller(MICHAL, Role.COORDINATOR),
-                    request(Verb.MY_APPROVALS_GET, null)).getPayload();
-
-            assertThat(michals.rows()).extracting(ApprovalRow::examVersionId)
-                    .containsExactly(DATABASES_V1)
-                    .doesNotContain(CALCULUS_V1);
-        }
-
-        @Test
-        @DisplayName("a student cannot ask at all")
-        void studentsAreRefused() {
-            assertThatExceptionOfType(AuthorizationException.class)
-                    .isThrownBy(() -> service.mine(caller(99L, Role.STUDENT),
-                            request(Verb.MY_APPROVALS_GET, null)));
-        }
-    }
+    // ===================== The author's own list (retired) ===============
+    //
+    // MY_APPROVALS_GET's three cases stood here: her own submissions with the reason, never
+    // anybody else's, and a student refused. The verb retired into E7.10's EXAM_LIST on
+    // 2026-08-25 (APPROVAL ruling 1) and ExamService answers all three now — the scoping one
+    // included, since EXAM_LIST is author-scoped in the SQL with no id on the wire either.
 
     // ===================== Wire mapping ==================================
 

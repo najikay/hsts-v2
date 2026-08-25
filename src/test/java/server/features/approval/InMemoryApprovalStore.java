@@ -146,18 +146,6 @@ final class InMemoryApprovalStore implements ApprovalStore, ApprovalData {
     }
 
     @Override
-    public List<ExamVersionContext> submittedByAuthor(long authorId) {
-        List<ExamVersionContext> found = new ArrayList<>();
-        versions.forEach((id, version) -> {
-            if (meta.get(id).authorId() == authorId && version.getStatus() != ExamVersionStatus.DRAFT) {
-                found.add(contextOf(id, version));
-            }
-        });
-        found.sort(java.util.Comparator.comparing(ExamVersionContext::createdAt).reversed());
-        return List.copyOf(found);
-    }
-
-    @Override
     public List<String> coordinatedSubjects(long teacherId) {
         return coordinators.entrySet().stream()
                 .filter(entry -> entry.getValue() == teacherId)

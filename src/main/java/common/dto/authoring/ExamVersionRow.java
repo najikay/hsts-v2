@@ -21,15 +21,15 @@ import java.util.Objects;
  * also carries E8's superseded sentence, which is a rejection with a different cause and the
  * same need to be readable a week later.
  *
- * <h2>This row is why {@code MY_APPROVALS_GET} retires</h2>
+ * <h2>This row is why {@code MY_APPROVALS_GET} retired</h2>
  *
  * <p>Contract section 8: {@code ApprovalRow} carried {@code state}, {@code rejectedReason},
  * {@code questionCount}, {@code durationMinutes} and {@code versionNo}, and every one of them is
  * here. The two facts that do not cross over are {@code submittedAt}, replaced by
  * {@link #createdAt()}, and {@code selfAuthored}, which on a screen that only ever shows the
- * caller's own exams is true on every row and therefore says nothing. The verb is removed in the
- * same PR as the screen swap, so there is never a window where two overlapping reads of one fact
- * are both live.
+ * caller's own exams is true on every row and therefore says nothing. The verb was removed in the
+ * same change as the screen swap, so there was never a window where two overlapping reads of one
+ * fact were both live.
  *
  * @param examVersionId   this version's id, and what {@link ExamVersionRequest} opens
  * @param versionNo       which version this is, 1-based ({@code uq_exam_versions_no})

@@ -666,10 +666,14 @@ public enum Verb {
     // There are NO PUSHES here. The author learns her exam was approved or rejected
     // through E8's durable notification, which already points at route id `exams`.
     //
-    // MY_APPROVALS_GET RETIRES INTO EXAM_LIST (contract section 8, the lead's
-    // ruling at the E8 freeze, confirmed 2026-08-23). It is still live below and
-    // is removed in the SAME PR that lands E7.10's screen, so there is never a
-    // window where two overlapping reads of one fact are both live.
+    // MY_APPROVALS_GET RETIRED INTO EXAM_LIST on 2026-08-25 (contract section 8,
+    // the lead's ruling at the E8 freeze, confirmed 2026-08-23, executed with
+    // E7.10's screen swap). The verb, its DTO and its screen are deleted rather
+    // than deprecated: this protocol's never-remove-a-header rule is about a
+    // client jar meeting a server jar of a different version, and there is no
+    // such pair here — both tiers ship from one build, the same precedent #47
+    // set. It was removed in the SAME change that landed the screen, so there
+    // was never a window where two overlapping reads of one fact were both live.
 
     /**
      * Every exam the calling teacher wrote, each with all of its versions
@@ -680,8 +684,8 @@ public enum Verb {
      * rather than filtered afterwards.
      *
      * <p>Rows are {@code ExamListRow} and carry every version, drafts included,
-     * which is what makes a row expandable and what makes
-     * {@link #MY_APPROVALS_GET}'s retirement into this verb honest: that verb
+     * which is what makes a row expandable and what made
+     * {@code MY_APPROVALS_GET}'s retirement into this verb honest: that verb
      * showed non-draft versions only. {@code ExamListRow.name} is the LATEST
      * version's name, because F3.5 makes a rename a version and a teacher looks
      * for her exam under the name she is using now.
@@ -859,8 +863,21 @@ public enum Verb {
      * reproduce it.
      *
      * <p>Errors: {@code UNAUTHORIZED}, {@code FORBIDDEN} (role, or the course is
-     * not hers), {@code VALIDATION} (a quota bucket below zero, a total of zero
-     * across the request, or two quotas naming one topic — contract section 5.3).
+     * not hers), {@code VALIDATION}.
+     *
+     * <p><b>The {@code VALIDATION} causes are not enumerated here, deliberately</b>
+     * (corrected 2026-08-25; it listed three when there were five, and an
+     * enumerated list that stops enumerating reads as complete). The rules live in
+     * {@code EXAM_BUILDER_WIRE_CONTRACT.md} sections 5.3, 7.3 and 7.3a, which is
+     * where they are maintained; the <em>property</em> a caller can rely on is
+     * that <b>every refusal names the rule it broke</b>, in a sentence
+     * {@code ExamBuildMessages} owns, so no client has to map a code to a cause.
+     * By way of example rather than catalogue: section 7.3a's shape rule — if any
+     * topic quota is present the course-wide quota may use {@code any} only, and
+     * its refusal names both legal shapes — and section 5.1's points ceiling,
+     * which refuses a grid asking for more questions than 100 points can cover
+     * and which is itself a consequence of the points rule rather than a second
+     * rule beside it. There are others, and there will be more.
      */
     EXAM_AUTO_COMPOSE,
 
@@ -873,11 +890,12 @@ public enum Verb {
     // the {@code coordinators} table — {@code requireCoordinatorOf}, never
     // whoever the payload says (P-5). "One coordinator per subject" is the
     // primary key of that table, so the scoping question has exactly one answer.
-    // Two exceptions, both deliberate: {@link #MY_APPROVALS_GET} is any teacher's
-    // read of her own submissions, scoped to the caller in the query itself; and
-    // {@link #EXAM_PREVIEW_GET} also admits the version's own AUTHOR as a plain
-    // teacher, because a rejection reason is only actionable if she can re-read
-    // the exam it names (F4.2). Corrected 2026-08-21; the contract was always right.
+    // One exception, deliberate: {@link #EXAM_PREVIEW_GET} also admits the
+    // version's own AUTHOR as a plain teacher, because a rejection reason is only
+    // actionable if she can re-read the exam it names (F4.2). Corrected
+    // 2026-08-21; the contract was always right. There were two until 2026-08-25,
+    // when MY_APPROVALS_GET — any teacher's read of her own submissions, scoped
+    // to the caller in the query itself — retired into {@link #EXAM_LIST}.
     //
     // Two rules bind the group. The two decisions are optimistic-locked
     // compare-and-sets on {@code exam_versions.lock_version} AND guarded on
@@ -935,26 +953,15 @@ public enum Verb {
      */
     EXAM_REJECT,
 
-    /**
-     * The calling teacher's own submitted versions, with their outcomes (F4.2).
-     * Caller: any teacher or coordinator, scoped to herself. Request payload:
-     * {@code null}; response: {@code MyApprovals} — the "visible on the exam"
-     * half of F4.2, which a dismissed notification cannot provide.
-     *
-     * <p>Deliberately the narrow approval-status read and not an exam list: E7
-     * owns the exam list and its verb, and this one retires into it.
-     *
-     * <p><b>That verb now exists: {@link #EXAM_LIST}</b> (E7 contract section 8,
-     * confirmed 2026-08-23). This one stays live until E7.10's screen lands and is
-     * removed in the SAME PR as the screen swap, on the pattern the lead ruled for
-     * the legacy bank screen, so there is never a window where two overlapping
-     * reads of one fact are both live. {@code ExamListRow} is a strict superset of
-     * what {@code MyApprovals} showed; the two facts that do not cross over are
-     * {@code submittedAt}, replaced by the version's {@code createdAt}, and
-     * {@code selfAuthored}, which on a screen showing only the caller's own exams
-     * is true on every row and therefore says nothing.
-     */
-    MY_APPROVALS_GET,
+    // MY_APPROVALS_GET stood here — the calling teacher's own submitted versions
+    // with their outcomes (F4.2), answered with {@code MyApprovals}. RETIRED
+    // 2026-08-25 into {@link #EXAM_LIST} (E7 contract section 8, ruled at the E8
+    // freeze, confirmed 2026-08-23, executed with E7.10's screen swap in one
+    // change so there was never a window with two live reads of one fact).
+    // {@code ExamListRow} is a strict superset of what it showed; the two facts
+    // that did not cross over are {@code submittedAt}, replaced by the version's
+    // {@code createdAt}, and {@code selfAuthored}, which on a screen showing only
+    // the caller's own exams is true on every row and therefore says nothing.
 
     // ============= Teacher results & statistics (E14) ======================
     // The draft wire contract: docs/contracts/RESULTS_WIRE_CONTRACT.md. Payload

@@ -61,7 +61,7 @@ class DataSessionTest {
 
     private static BankQuestionRow question(String id, String course, String courseName,
                                             String text, String topic, Difficulty difficulty) {
-        return new BankQuestionRow(id, course, courseName, text, topic, difficulty, 1, false,
+        return new BankQuestionRow(id, course, courseName, text, topic, difficulty, 701L, 1, false,
                 SPRING);
     }
 

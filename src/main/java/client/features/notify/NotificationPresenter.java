@@ -1,12 +1,16 @@
 package client.features.notify;
 
+import client.core.NavParams;
+import client.core.Routes;
 import client.ui.components.Icons;
 import client.ui.components.logic.RelativeTime;
 import client.ui.components.logic.ToastSpec;
+import common.dto.notify.NavRef;
 import common.dto.notify.NotificationDto;
 import common.dto.notify.NotificationType;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -119,4 +123,72 @@ public final class NotificationPresenter {
         String body = notification.body().isEmpty() ? "" : notification.body() + ". ";
         return unread + notification.title() + ". " + body + ageOf(notification, now);
     }
+
+    // ===================== The deep link ==================================
+
+    /**
+     * Turns a notification's reference into the parameters its destination reads ⚑.
+     *
+     * <p><b>The defect this fixes affected every notification in the app.</b>
+     * {@code NotificationsPanel.activate} called the one-argument
+     * {@code navigate(routeId)}, which passes {@link NavParams#empty()}, so
+     * {@link NavRef#entityId()} — set by {@code NotificationCatalog} on every
+     * draft it writes — was dropped at the last hop. The panel opened the right
+     * <em>screen</em> and never told it <em>which row</em>, which for F4.2's
+     * "the reason is visible on the exam" means a teacher with exams in two
+     * courses lands on whichever one her list happens to open on.
+     *
+     * <h2>Why a table and not one canonical key</h2>
+     *
+     * <p>There is no single parameter name to pass it under, and inventing one
+     * would mean editing every destination screen to read it. The screens already
+     * name what they want and have since E4.2: {@code ExamListView} and
+     * {@code ExamPreviewView} read {@code examVersionId},
+     * {@code ExecutionMonitorView} reads {@code executionId}. So the mapping is
+     * from the route the server named to the key that route's screen asks for,
+     * written once, here, where it is a pure function and can be tested. The
+     * routes are keyed off {@link Routes}' own ids rather than re-typed literals,
+     * because those are the ids the server's catalog was written against and a
+     * rename that missed one should break the build, not the deep link.
+     *
+     * <p><b>A route not in the table gets no parameter, and that is deliberate.</b>
+     * {@link Routes#BOT_MANAGER} is the case that proves it: the catalog's
+     * {@code botSourceChanged} carries a <em>bot</em> id, while
+     * {@code BotManagerView.PARAM_COURSE} wants a course <em>code</em>, a
+     * {@code String}. Handing a {@code Long} to that key would not deep-link, it
+     * would throw {@link IllegalArgumentException} out of
+     * {@link NavParams#get(String, Class)} on a bell click. Navigating to the
+     * screen with nothing is the behaviour every notification had before this
+     * fix, which is the honest fallback; making that one deep-link needs the
+     * catalog to carry a course code, which is a wire change and not this one.
+     *
+     * @param ref the reference the notification travelled with
+     * @return the parameters to navigate with; {@link NavParams#empty()} when the
+     *         reference has no id, or when its route takes none
+     */
+    public static NavParams paramsFor(NavRef ref) {
+        Objects.requireNonNull(ref, "ref");
+        String key = ref.entityId() == null ? null : PARAM_BY_ROUTE.get(ref.route());
+        return key == null ? NavParams.empty() : NavParams.of(key, ref.entityId());
+    }
+
+    /**
+     * Route id -> the navigation parameter that route's screen reads.
+     *
+     * <p>Every entry is the key a real {@code onShow(NavParams)} looks up, named
+     * beside it. A route absent from here navigates with no parameters.
+     */
+    private static final Map<String, String> PARAM_BY_ROUTE = Map.of(
+            // ExamListView.onShow -> params.getLong("examVersionId", 0) (E7.10).
+            Routes.EXAMS.id(), "examVersionId",
+            // The approval queue's rows are versions too, so the id means the same
+            // thing here; ExamPreviewView reads the identical key (E8.4).
+            Routes.APPROVALS.id(), "examVersionId",
+            // ExecutionMonitorView.onShow -> params.getLong("executionId", 0) (E11).
+            Routes.MONITOR.id(), "executionId",
+            // The catalog hands these two an execution id as well.
+            Routes.TAKE_EXAM.id(), "executionId",
+            Routes.RELEASES.id(), "executionId",
+            // The catalog's gradePublished carries the attempt the grade is for.
+            Routes.MY_GRADES.id(), "attemptId");
 }

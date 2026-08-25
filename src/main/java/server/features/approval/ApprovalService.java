@@ -8,7 +8,6 @@ import common.dto.approval.ExamApproveRequest;
 import common.dto.approval.ExamPreview;
 import common.dto.approval.ExamPreviewRequest;
 import common.dto.approval.ExamRejectRequest;
-import common.dto.approval.MyApprovals;
 import common.dto.approval.PreviewAnswerRow;
 import common.dto.approval.TeacherOnlyBlock;
 import common.dto.auth.Role;
@@ -102,14 +101,19 @@ public final class ApprovalService {
         this.notifier = Objects.requireNonNull(notifier, "notifier");
     }
 
-    /** Registers the five approval verbs; all authenticated, none open. */
+    /**
+     * Registers the four approval verbs; all authenticated, none open.
+     *
+     * <p>Four rather than five since 2026-08-25: {@code MY_APPROVALS_GET} retired into E7.10's
+     * {@code EXAM_LIST} (APPROVAL_WIRE_CONTRACT ruling 1), whose payload is a strict superset
+     * of what it answered.
+     */
     public void registerOn(MessageRouter router) {
         Objects.requireNonNull(router, "router");
         router.register(Verb.APPROVALS_QUEUE_GET, this::queue);
         router.register(Verb.EXAM_PREVIEW_GET, this::preview);
         router.register(Verb.EXAM_APPROVE, this::approve);
         router.register(Verb.EXAM_REJECT, this::reject);
-        router.register(Verb.MY_APPROVALS_GET, this::mine);
     }
 
     // ===================== APPROVALS_QUEUE_GET ===========================
@@ -144,29 +148,13 @@ public final class ApprovalService {
         });
     }
 
-    // ===================== MY_APPROVALS_GET ==============================
-
-    /**
-     * What became of the exams this teacher submitted (E8.6 — F4.2).
-     *
-     * <p>The author's half of F4.2's "stored and pushed as a notification <b>and</b> visible
-     * on the exam". A notification the reader dismissed is not a record, so the reason has to
-     * live somewhere she can go back to, and this is that somewhere until E7's exam list
-     * absorbs it.
-     *
-     * <p>Scoped to the caller in the query itself, like every other "mine" verb in the
-     * protocol: another teacher's id would answer with the caller's own rows, because there
-     * is no id on the wire to misuse.
-     */
-    Message mine(CallerContext caller, Message request) {
-        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
-        long authorId = caller.userId();
-
-        return store.inTx(data -> {
-            List<ExamVersionContext> submitted = data.submittedByAuthor(authorId);
-            return Message.ok(request, new MyApprovals(rows(data, submitted, authorId)));
-        });
-    }
+    // ===================== MY_APPROVALS_GET (retired) ====================
+    //
+    // What became of the exams this teacher submitted (E8.6 — F4.2) used to be answered here.
+    // E7.10's EXAM_LIST answers it now, from ExamService, with the drafts this verb could
+    // never show alongside the approval state it could. Retired 2026-08-25 under APPROVAL
+    // ruling 1, in the same change that put the exam list on the teacher's rail, so there was
+    // never a window with two live reads of one fact.
 
     // ===================== EXAM_PREVIEW_GET ==============================
 

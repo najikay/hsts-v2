@@ -60,7 +60,7 @@ class BankDtoTest {
 
     private static BankQuestionRow row(String displayId) {
         return new BankQuestionRow(displayId, "11", "אלגברה", "כמה צלעות...", "גאומטריה",
-                Difficulty.EASY, 3, false, WHEN);
+                Difficulty.EASY, 703L, 3, false, WHEN);
     }
 
     // ===================== the enums =====================================
@@ -74,7 +74,7 @@ class BankDtoTest {
         @DisplayName("every difficulty survives a round-trip inside a row")
         void everyDifficultyRoundTrips(Difficulty difficulty) throws Exception {
             BankQuestionRow original = new BankQuestionRow("11005", "11", "אלגברה", STEM,
-                    "גאומטריה", difficulty, 1, false, WHEN);
+                    "גאומטריה", difficulty, 701L, 1, false, WHEN);
 
             assertThat(roundTrip(original).difficulty()).isEqualTo(difficulty);
         }
@@ -260,19 +260,19 @@ class BankDtoTest {
         @DisplayName("a row the server could not have built fails where the server can see it")
         void rowNullChecks() {
             assertThatThrownBy(() -> new BankQuestionRow(null, "11", "אלגברה", STEM, "t",
-                    Difficulty.EASY, 1, false, WHEN))
+                    Difficulty.EASY, 701L, 1, false, WHEN))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("displayId5");
             assertThatThrownBy(() -> new BankQuestionRow("11005", null, "אלגברה", STEM, "t",
-                    Difficulty.EASY, 1, false, WHEN))
+                    Difficulty.EASY, 701L, 1, false, WHEN))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("courseCode");
             assertThatThrownBy(() -> new BankQuestionRow("11005", "11", "אלגברה", null, "t",
-                    Difficulty.EASY, 1, false, WHEN))
+                    Difficulty.EASY, 701L, 1, false, WHEN))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("text");
             assertThatThrownBy(() -> new BankQuestionRow("11005", "11", "אלגברה", STEM, "t",
-                    null, 1, false, WHEN))
+                    null, 7001L, 1, false, WHEN))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("difficulty");
         }

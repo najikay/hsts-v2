@@ -50,7 +50,7 @@ class DataCopyTest {
 
     private static BankQuestionRow question() {
         return new BankQuestionRow("11005", "11", "אלגברה", "Solve the linear equation",
-                "Equations", Difficulty.MEDIUM, 2, false, SPRING);
+                "Equations", Difficulty.MEDIUM, 702L, 2, false, SPRING);
     }
 
     // ===================== The scan =======================================

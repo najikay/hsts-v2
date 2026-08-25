@@ -468,7 +468,7 @@ public final class QuestionRepository {
         var select = session.createQuery("""
                 select new server.db.projections.BankQuestionSummary(
                     q.displayId, q.courseCode, c.name, qv.text, qv.topic, qv.difficulty,
-                    qv.versionNo,
+                    qv.id, qv.versionNo,
                     case when qv.image is null then false else true end,
                     qv.createdAt)
                 """ + bankFrom() + bankWhere(query) + """

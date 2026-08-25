@@ -1,5 +1,6 @@
 package client.features.notify;
 
+import client.core.Routes;
 import client.ui.components.logic.ToastSpec;
 import common.dto.notify.NavRef;
 import common.dto.notify.NotificationDto;
@@ -183,6 +184,61 @@ class NotificationPresenterTest {
         assertThatNullPointerException().isThrownBy(() -> NotificationPresenter.ageOf(null, NOW));
         assertThatNullPointerException()
                 .isThrownBy(() -> NotificationPresenter.accessibleTextOf(null, NOW));
+        assertThatNullPointerException().isThrownBy(() -> NotificationPresenter.paramsFor(null));
+    }
+
+    // ===================== The deep link (⚑ every notification) ==========
+
+    @Test
+    @DisplayName("⚑ the reference's entity id becomes the parameter its screen reads")
+    void theEntityIdBecomesAParam() {
+        // The defect: NotificationsPanel.activate called the one-argument navigate, so
+        // ref.entityId() was dropped for EVERY notification in the app. These are the exact
+        // NavRefs NotificationCatalog writes, asserted against the exact keys the
+        // destination screens' onShow(NavParams) look up.
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.EXAMS.id(), 11L))
+                .getLong("examVersionId", 0))
+                .as("F4.2: the rejection notification has to open the version it names, and "
+                        + "ExamListView reads exactly this key")
+                .isEqualTo(11L);
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.APPROVALS.id(), 55L))
+                .getLong("examVersionId", 0))
+                .isEqualTo(55L);
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.MONITOR.id(), 7L))
+                .getLong("executionId", 0))
+                .isEqualTo(7L);
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.TAKE_EXAM.id(), 8L))
+                .getLong("executionId", 0))
+                .isEqualTo(8L);
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.RELEASES.id(), 9L))
+                .getLong("executionId", 0))
+                .isEqualTo(9L);
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.MY_GRADES.id(), 3L))
+                .getLong("attemptId", 0))
+                .isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("a reference with nothing to carry navigates with nothing")
+    void referencesWithoutAnIdCarryNothing() {
+        assertThat(NotificationPresenter.paramsFor(NavRef.none()).isEmpty()).isTrue();
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.EXAMS.id())).isEmpty())
+                .as("a route that needs no argument must not gain an empty one")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("bot.manager gets no param, because a bot id is not a course code ⚑")
+    void theOneRouteThatCannotBeDeepLinked() {
+        // botSourceChanged carries a bot id; BotManagerView.PARAM_COURSE reads a String
+        // course code. Passing the Long under that key would throw IllegalArgumentException
+        // out of NavParams.get on a bell click, which is worse than not deep-linking.
+        assertThat(NotificationPresenter.paramsFor(NavRef.to(Routes.BOT_MANAGER.id(), 4L))
+                .isEmpty())
+                .isTrue();
+        assertThat(NotificationPresenter.paramsFor(new NavRef("no.such.route", 4L)).isEmpty())
+                .as("and a route from a later epic degrades the same way rather than guessing")
+                .isTrue();
     }
 
     private static NotificationDto row(NotificationType type, String title, String body) {

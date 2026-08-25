@@ -249,6 +249,17 @@ public final class NotificationsPanel extends VBox {
      * <p>Marking and navigating are independent: a notification whose route this
      * build does not know still gets marked read and simply closes the panel.
      * Refusing to mark it would leave a badge the user cannot clear.
+     *
+     * <p><b>The reference's entity id travels with it ⚑.</b> This called the
+     * one-argument {@code navigate(routeId)} until 2026-08-25, which passes
+     * {@link client.core.NavParams#empty()} — so {@link NavRef#entityId()},
+     * which {@code NotificationCatalog} sets on every draft it writes, was
+     * dropped here at the last hop. That was not one screen's bug: <b>every
+     * notification in the app opened the right screen and never said which
+     * row</b>, which for F4.2's "the reason is visible on the exam" put a
+     * teacher with exams in two courses on whichever one her list opened by
+     * default. {@link NotificationPresenter#paramsFor} names the key the
+     * destination reads and is where that decision is tested.
      */
     private void activate(NotificationDto item) {
         if (item.isUnread()) {
@@ -265,6 +276,6 @@ public final class NotificationsPanel extends VBox {
             log.debug("Notification {} points at unknown route '{}'", item.id(), ref.route());
             return;
         }
-        navigator.navigate(ref.route());
+        navigator.navigate(ref.route(), NotificationPresenter.paramsFor(ref));
     }
 }

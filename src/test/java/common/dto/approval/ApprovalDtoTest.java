@@ -98,20 +98,10 @@ class ApprovalDtoTest {
         assertThat(new ApprovalQueue(null, true).rows()).isEmpty();
     }
 
-    @Test
-    @DisplayName("the author's list separates what was sent back from what was not")
-    void myApprovals() throws Exception {
-        MyApprovals mine = new MyApprovals(List.of(
-                row(ApprovalState.APPROVED, ""),
-                row(ApprovalState.REJECTED, "Please add a fourth question.")));
-
-        assertThat(mine.size()).isEqualTo(2);
-        assertThat(mine.rejected()).hasSize(1);
-        assertThat(roundTrip(mine).rejected().get(0).rejectedReason())
-                .isEqualTo("Please add a fourth question.");
-        assertThat(MyApprovals.empty().isEmpty()).isTrue();
-        assertThat(new MyApprovals(null).rows()).isEmpty();
-    }
+    // The author's own list was measured here. MyApprovals retired into common.dto.authoring's
+    // ExamList on 2026-08-25 (APPROVAL ruling 1); ExamList/ExamListRow/ExamVersionRow carry the
+    // separation now, and ExamListSessionTest is where the rejected-versus-not split is
+    // measured against the screen that renders it.
 
     // ===================== The reject rule ===============================
 
@@ -231,8 +221,12 @@ class ApprovalDtoTest {
         // ExamPreview would put an answer key on a list a coordinator scans in public, and on
         // a payload whose other half is deliberately the student's. This is the check that
         // makes adding one a red test rather than a review someone might not do.
+        // MyApprovals came off this list with its retirement (ruling 1, 2026-08-25). Its
+        // successor ExamList is not unfenced-by-omission: WireDtoLeakGuardTest scans EVERY
+        // record under common/dto/** for a correctness-suggesting component and licenses by
+        // name, so the authoring package is covered by that scan rather than by this list.
         List<Class<? extends Record>> unfenced = List.of(ApprovalRow.class, ApprovalQueue.class,
-                MyApprovals.class, ExamPreview.class, ExamPreviewRequest.class,
+                ExamPreview.class, ExamPreviewRequest.class,
                 ExamApproveRequest.class, ExamRejectRequest.class, ApprovalDecision.class);
 
         for (Class<? extends Record> type : unfenced) {

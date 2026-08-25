@@ -18,9 +18,9 @@ import java.util.Objects;
  * <h2>Every version travels, and that is what makes the row expandable</h2>
  *
  * <p>{@link #versions()} is newest first and holds all of them, drafts included — this list is
- * the screen behind route id {@code exams} after E7.10 lands, and the retirement of
- * {@code MY_APPROVALS_GET} into it (contract section 8) is only honest if the drafts that verb
- * never showed are here. Versions carry counts rather than compositions, so expanding a row is
+ * the screen behind route id {@code exams} since E7.10 landed, and the retirement of
+ * {@code MY_APPROVALS_GET} into it (contract section 8, executed 2026-08-25) is only honest if
+ * the drafts that verb never showed are here. Versions carry counts rather than compositions, so expanding a row is
  * free and opening one is a deliberate second call.
  *
  * @param examId           the exam's id

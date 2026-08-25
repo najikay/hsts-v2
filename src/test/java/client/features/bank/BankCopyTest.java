@@ -140,7 +140,7 @@ class BankCopyTest {
     @DisplayName("the id is shown the way the teacher reads it")
     void questionId() {
         BankQuestionRow row = new BankQuestionRow("11005", "11", "אלגברה", "text", "Geometry",
-                Difficulty.HARD, 2, false, WHEN);
+                Difficulty.HARD, 702L, 2, false, WHEN);
 
         assertThat(BankCopy.questionId(row)).isEqualTo("#11005");
         assertThat(BankCopy.questionId(null)).isEmpty();

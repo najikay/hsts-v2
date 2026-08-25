@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for the {@link Verb} vocabulary.
@@ -66,20 +67,21 @@ class VerbTest {
     }
 
     @Test
-    @DisplayName("the five approval verbs exist, spelled as the draft contract spells them")
+    @DisplayName("the four approval verbs exist, spelled as the contract spells them")
     void approvalVerbsExist() {
         // docs/contracts/APPROVAL_WIRE_CONTRACT.md. Same reasoning as the two checks below:
         // a verb travels by name between two separately-shipped JARs, so valueOf is the
         // spelling assertion — referring to the constant would survive a rename.
+        // Four, not five, since 2026-08-25: MY_APPROVALS_GET retired into EXAM_LIST under
+        // ruling 1 and is asserted GONE by myApprovalsGetIsRetired below.
         assertThat(Verb.values()).contains(
                 Verb.APPROVALS_QUEUE_GET, Verb.EXAM_PREVIEW_GET,
-                Verb.EXAM_APPROVE, Verb.EXAM_REJECT, Verb.MY_APPROVALS_GET);
+                Verb.EXAM_APPROVE, Verb.EXAM_REJECT);
 
         assertThat(Verb.valueOf("APPROVALS_QUEUE_GET")).isEqualTo(Verb.APPROVALS_QUEUE_GET);
         assertThat(Verb.valueOf("EXAM_PREVIEW_GET")).isEqualTo(Verb.EXAM_PREVIEW_GET);
         assertThat(Verb.valueOf("EXAM_APPROVE")).isEqualTo(Verb.EXAM_APPROVE);
         assertThat(Verb.valueOf("EXAM_REJECT")).isEqualTo(Verb.EXAM_REJECT);
-        assertThat(Verb.valueOf("MY_APPROVALS_GET")).isEqualTo(Verb.MY_APPROVALS_GET);
     }
 
     @Test
@@ -204,16 +206,26 @@ class VerbTest {
     }
 
     @Test
-    @DisplayName("MY_APPROVALS_GET is still live: it retires only when E7.10's screen lands")
-    void myApprovalsGetHasNotRetiredYet() {
-        // E7 contract section 8: the verb retires INTO EXAM_LIST, and the removal lands in the
-        // SAME PR as the screen swap, on the pattern the lead ruled for the legacy bank screen —
-        // so there is never a window where two overlapping reads of one fact are both live.
-        // Removing it at type-landing time would open that window from the other side, leaving
-        // E8's MyApprovalsView calling a verb that no longer exists.
-        assertThat(Verb.valueOf("MY_APPROVALS_GET")).isEqualTo(Verb.MY_APPROVALS_GET);
-        assertThat(Verb.MY_APPROVALS_GET.isPush()).isFalse();
-        assertThat(Verb.EXAM_LIST).isNotEqualTo(Verb.MY_APPROVALS_GET);
+    @DisplayName("MY_APPROVALS_GET has retired into EXAM_LIST, and stays retired ⚑")
+    void myApprovalsGetIsRetired() {
+        // Was "MY_APPROVALS_GET is still live", and the flip is the point rather than a chore.
+        // E7 contract section 8 / APPROVAL ruling 1: the verb retires INTO EXAM_LIST, and the
+        // removal lands in the SAME change as the screen swap, so there is never a window where
+        // two overlapping reads of one fact are both live. That change is 2026-08-25's assembly,
+        // so the pin now asserts the far side: the name is gone from the wire and nothing can
+        // reintroduce it quietly. Asked by NAME, because referring to the constant would not
+        // compile and a build that does not compile tells a reader nothing about what was
+        // missing — the same reasoning ExamListWiringGuardTest gives.
+        assertThat(Verb.values())
+                .as("the verb is deleted, not deprecated: both jars ship from one build, so "
+                        + "the never-remove-a-header rule (cross-version compat) does not "
+                        + "apply — precedent #47")
+                .noneMatch(verb -> verb.name().equals("MY_APPROVALS_GET"));
+        assertThatThrownBy(() -> Verb.valueOf("MY_APPROVALS_GET"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(Verb.valueOf("EXAM_LIST"))
+                .as("it retired INTO this one, which must therefore still be here")
+                .isEqualTo(Verb.EXAM_LIST);
     }
 
     @Test

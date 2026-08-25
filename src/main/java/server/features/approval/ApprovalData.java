@@ -52,12 +52,6 @@ public interface ApprovalData {
     List<ExamVersionContext> pendingFor(long coordinatorId);
 
     /**
-     * @param authorId the caller, from the session
-     * @return her own submitted versions, whatever became of them, newest first
-     */
-    List<ExamVersionContext> submittedByAuthor(long authorId);
-
-    /**
      * @param teacherId the caller
      * @return the subject codes she coordinates; empty for a plain teacher
      */

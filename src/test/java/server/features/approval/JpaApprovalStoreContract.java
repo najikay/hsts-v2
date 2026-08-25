@@ -89,17 +89,19 @@ abstract class JpaApprovalStoreContract extends RepositoryTestBase {
     }
 
     @Test
-    @DisplayName("the queue read is the scoped one, and the author read is the author's")
+    @DisplayName("the queue read is the scoped one")
     void listsAreWiredToTheRightQueries() {
+        // submittedByAuthor was asserted here too until 2026-08-25: it retired with
+        // MY_APPROVALS_GET (the E7.10 integration), and the author's list is EXAM_LIST's
+        // own read now. Deleting a dead seam method beats keeping a corpse warm with a
+        // two-engine test (rule 5 runs in both directions).
         long versionId = pendingVersion(1);
 
         List<ExamVersionContext> hers = store().inTx(data -> data.pendingFor(rinaId));
         List<ExamVersionContext> danas = store().inTx(data -> data.pendingFor(danaId));
-        List<ExamVersionContext> mine = store().inTx(data -> data.submittedByAuthor(danaId));
 
         assertThat(hers).extracting(ExamVersionContext::examVersionId).containsExactly(versionId);
         assertThat(danas).as("Dana teaches the course but coordinates nothing").isEmpty();
-        assertThat(mine).extracting(ExamVersionContext::examVersionId).containsExactly(versionId);
     }
 
     @Test

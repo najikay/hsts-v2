@@ -47,8 +47,14 @@ import java.io.Serializable;
  * during deserialization and kill the connection (E1.11) instead of answering a sentence.
  *
  * @param topic  the topic to draw from, or {@code null} for any topic in the course. Matched by
- *               <b>exact equality</b>, inherited from the bank contract's ruling 7.6 so the
- *               auto-composer and the bank's own filter can never disagree about what a topic is
+ *               <b>the collation's equality</b> — {@code utf8mb4_unicode_ci}, as measured in #48,
+ *               reproduced service-side by {@code QuestionValidator.sameTopic}. Never Java
+ *               {@code equals}, and never a fold stricter or looser than the column: the point of
+ *               ruling 7.6 is that the auto-composer and the bank's own filter can never disagree
+ *               about what a topic is, and both directions of that agreement are load-bearing.
+ *               Said as "exact equality" here until 2026-08-25, which was loose rather than wrong
+ *               — ruling 7.6 chose option A over a normalising filter, and the filter it ruled on
+ *               runs in SQL (EXAM_BUILDER_WIRE_CONTRACT §7.3)
  * @param easy   how many EASY questions are wanted from it
  * @param medium how many MEDIUM questions are wanted from it
  * @param hard   how many HARD questions are wanted from it

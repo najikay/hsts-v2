@@ -12,7 +12,6 @@ import common.dto.approval.ExamApproveRequest;
 import common.dto.approval.ExamPreview;
 import common.dto.approval.ExamPreviewRequest;
 import common.dto.approval.ExamRejectRequest;
-import common.dto.approval.MyApprovals;
 import common.dto.approval.PreviewAnswerRow;
 import common.dto.approval.TeacherOnlyBlock;
 import common.dto.exam.ExamQuestion;
@@ -30,7 +29,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The three approval screens' behaviour, proven without a JavaFX toolkit (E8.7).
+ * The approval screens' behaviour, proven without a JavaFX toolkit (E8.7).
+ *
+ * <p>Two sessions now rather than three: the author's own list retired into E7.10's exam list
+ * with {@code MY_APPROVALS_GET} (APPROVAL ruling 1), and {@code ExamListSessionTest} is where
+ * that behaviour is measured.
  *
  * <p>Each session talks to a {@link FakeClientConnection} through a real
  * {@link RequestDispatcher}, and the FX hop is a {@link DirectFxThreadPoster}, so every
@@ -383,137 +386,6 @@ class ApprovalSessionTest {
                     "מבחן אמצע — חדו\"א", "12", "חדו\"א", 1, "דנה כהן", SUBMITTED, 2, 60,
                     state, state.isRejected() ? "Question 4 has two correct answers." : "",
                     self, 1), self);
-        }
-    }
-
-    // ===================== The author's own list =========================
-
-    @Nested
-    @DisplayName("MyApprovalsSession")
-    class Mine {
-
-        private MyApprovalsSession session;
-
-        @BeforeEach
-        void openTheList() {
-            session = new MyApprovalsSession(dispatcher, new DirectFxThreadPoster());
-        }
-
-        private ApprovalRow rejected(long versionId, String reason) {
-            return new ApprovalRow(versionId, "101101", "מבחן אמצע — אלגברה", "11", "אלגברה",
-                    1, "דנה כהן", SUBMITTED, 5, 60, ApprovalState.REJECTED, reason, true, 1);
-        }
-
-        @Test
-        @DisplayName("the list loads and the rejected ones are separable")
-        void loadsTheList() {
-            ApprovalRow sentBack = rejected(11L, "חמש שאלות בלבד ל-60 דקות.");
-            connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(sentBack, PENDING)));
-
-            session.load();
-
-            assertThat(session.state()).isEqualTo(AsyncViewState.READY);
-            assertThat(session.rows()).hasSize(2);
-            assertThat(session.rejected()).containsExactly(sentBack);
-        }
-
-        @Test
-        @DisplayName("a teacher who has submitted nothing gets an explanation, not a blank panel")
-        void emptyState() {
-            connection.replyOk(Verb.MY_APPROVALS_GET, MyApprovals.empty());
-
-            session.load();
-
-            assertThat(session.state()).isEqualTo(AsyncViewState.EMPTY);
-            assertThat(session.rows()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("a failed load says so")
-        void errorPath() {
-            connection.replyError(Verb.MY_APPROVALS_GET, ErrorCode.INTERNAL, "boom");
-
-            session.load();
-
-            assertThat(session.state()).isEqualTo(AsyncViewState.ERROR);
-            assertThat(session.error()).contains(ApprovalCopy.MINE_LOAD_FAILED);
-        }
-
-        @Test
-        @DisplayName("a notification's version is the one that opens (F4.2's deep link) ⚑")
-        void notificationSelectsItsVersion() {
-            ApprovalRow first = rejected(11L, "First reason, long enough to count.");
-            ApprovalRow second = rejected(12L, "Second reason, also long enough.");
-            connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(first, second)));
-
-            session.selectedVersionId(12L);
-            session.load();
-
-            assertThat(session.focused()).contains(second);
-            assertThat(session.focusedRejectionReason())
-                    .contains("Second reason, also long enough.");
-        }
-
-        @Test
-        @DisplayName("a reference to something no longer listed falls back rather than erroring")
-        void danglingReferenceFallsBack() {
-            ApprovalRow sentBack = rejected(11L, "The one reason there is.");
-            connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(PENDING, sentBack)));
-
-            session.selectedVersionId(9_999L);
-            session.load();
-
-            assertThat(session.focused())
-                    .as("notifications outlive what they point at; the screen still works")
-                    .contains(sentBack);
-        }
-
-        @Test
-        @DisplayName("with nothing rejected there is no reason panel to draw")
-        void noRejectionNoPanel() {
-            connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(PENDING)));
-
-            session.load();
-
-            assertThat(session.focused()).contains(PENDING);
-            assertThat(session.focusedRejectionReason())
-                    .as("a heading with nothing under it is a mystery state")
-                    .isEmpty();
-        }
-
-        @Test
-        @DisplayName("an empty list has nothing focused at all")
-        void nothingFocusedWhenEmpty() {
-            connection.replyOk(Verb.MY_APPROVALS_GET, MyApprovals.empty());
-
-            session.load();
-
-            assertThat(session.focused()).isEmpty();
-            assertThat(session.focusedRejectionReason()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("a push re-queries rather than patching the row it was handed (NFR-18)")
-        void decisionPushRequeries() {
-            connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(PENDING)));
-            session.load();
-            connection.replyOk(Verb.MY_APPROVALS_GET,
-                    new MyApprovals(List.of(rejected(11L, "Please add a fourth question."))));
-
-            session.onDecisionArrived();
-
-            assertThat(session.rejected()).hasSize(1);
-            assertThat(connection.sentCount()).isEqualTo(2);
-        }
-
-        @Test
-        @DisplayName("no second request while one is in flight")
-        void noDoubleLoad() {
-            session.load();
-            session.load();
-
-            assertThat(session.isLoading()).isTrue();
-            assertThat(connection.sentCount()).isEqualTo(1);
         }
     }
 }

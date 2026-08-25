@@ -139,15 +139,20 @@ public final class Routes {
     public static final Route EXAM_PREVIEW = Route.shell("approvals.preview", "Exam preview");
 
     /**
-     * The teacher's own exams and what became of them (E8.6, F4.2).
+     * The teacher's own exams and what became of them (E7.10, F3.6/F4.2).
      *
      * <p>The id matches {@code NotificationCatalog.ROUTE_EXAMS}, which is where the "your
      * exam was sent back" notification navigates: F4.2 requires the reason to be visible on
-     * the exam and not only in a bell, so the notification has to land somewhere real.
+     * the exam and not only in a bell, so the notification has to land somewhere real. It
+     * arrives carrying {@code examVersionId}, which the screen opens on
+     * ({@code NotificationPresenter.paramsFor}).
      *
-     * <p><b>E8 ships the approval-status half of this screen only.</b> E7 owns the exam
-     * builder and list and replaces the screen behind this id when it lands; the id is E7's
-     * either way, which is why it is spelled the way E7's rail item already spells it.
+     * <p><b>The screen behind this id is E7.10's exam list, since 2026-08-25.</b> E8.6
+     * shipped the approval-status half here first and this javadoc said E7 would replace it;
+     * that swap has happened, and {@code MY_APPROVALS_GET} retired into {@code EXAM_LIST}
+     * in the same change (EXAM_BUILDER_WIRE_CONTRACT §8). The id never moved — it was
+     * spelled the way E7's rail item spells it from E5.4 onward, which is what made the
+     * swap a screen swap and not a migration.
      */
     public static final Route EXAMS = Route.shell("exams", "My exams", "Exams");
 

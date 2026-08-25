@@ -274,7 +274,7 @@ class BankBrowseServiceTest {
             when(questions.countBank(any(), any())).thenReturn(1L);
             when(questions.findBankPage(any(), any(), anyInt(), anyInt())).thenReturn(List.of(
                     new BankQuestionSummary(DISPLAY_ID, COURSE, "Java", "What is encapsulation?",
-                            "OOP", server.db.entities.Difficulty.HARD, 4, true, EARLIER)));
+                            "OOP", server.db.entities.Difficulty.HARD, 704L, 4, true, EARLIER)));
 
             BankPage page = browse.list(session, teacher(), BankListRequest.firstPage());
 

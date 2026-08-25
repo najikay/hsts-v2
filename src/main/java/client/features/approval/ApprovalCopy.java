@@ -132,27 +132,11 @@ public final class ApprovalCopy {
     }
 
     // ===================== Teacher side (E8.6) ===========================
-
-    /** Page title of the author's own approval-status list. */
-    public static final String MINE_TITLE = "My exams";
-
-    /** Under it. */
-    public static final String MINE_SUBTITLE =
-            "Where each exam you submitted stands, and what your coordinator said.";
-
-    /** Empty state for a teacher who has submitted nothing. */
-    public static final String MINE_EMPTY_TITLE = "Nothing submitted yet";
-
-    /** Its hint. */
-    public static final String MINE_EMPTY_HINT =
-            "Exams you send for approval appear here with their status.";
-
-    /** Shown when the list could not be loaded. */
-    public static final String MINE_LOAD_FAILED =
-            "Your exams could not be loaded. Please try again.";
-
-    /** Heading of the panel that carries a rejection reason. */
-    public static final String REJECTED_PANEL_TITLE = "Sent back by your coordinator";
+    //
+    // Retired with MY_APPROVALS_GET (APPROVAL ruling 1, 2026-08-25). The six sentences that
+    // stood here belonged to MyApprovalsView, which E7.10's exam list replaced; they live in
+    // client.features.exambuild.ExamListCopy now and are measured by ExamListCopyTest. Copy
+    // for a screen that no longer exists is copy no reader can ever be shown.
 
     // ===================== Derived text ==================================
 

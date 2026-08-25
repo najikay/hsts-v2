@@ -1,29 +1,33 @@
-# E7 exam builder wire contract — FROZEN v1 (§1-§6, §8), §7 DRAFT
+# E7 exam builder wire contract — FROZEN v1
 
-**Status: FROZEN v1 as of 2026-08-25, for sections 1 to 6 and section 8. Section 7 alone stays
-DRAFT.** The freeze condition the lead set was handlers existing against the text, and they do:
-`server.features.exambuild.ExamHandlers` serves six of the seven verbs. **Additive-only from here**
-for the frozen sections, same as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) and
-[BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md).
+**Status: FROZEN v1, whole. Sections 1-6 and 8 froze on #46 (2026-08-25); section 7 froze
+2026-08-25 with the collation-equality clarification in §7.3.** **Additive-only from here**, same
+as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) and
+[BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md). The freeze condition the lead set was handlers
+existing against the text. `server.features.exambuild.ExamHandlers` served six of the seven when
+§1-§6 and §8 froze; #50 landed `AutoComposer`, registered the seventh and moved
+`ExamHandlersTest.Registration` to the seven-verb set, which is what §7 was waiting for.
 
-The partial freeze is the lead's decision of 2026-08-24, approved and then enlarged by him: the
+The partial freeze was the lead's decision of 2026-08-24, approved and then enlarged by him: the
 proposal was to hold §2 and §3 open alongside §7, and his ruling settled §2 in the same message, so
-only §7 remains. Freezing a section whose code does not exist is the thing a freeze is supposed to
+only §7 remained. Freezing a section whose code does not exist is the thing a freeze is supposed to
 prevent.
 
-> **§7 STAYS DRAFT UNTIL PR B.** A cold read before the handlers were written found that §7 did not
-> determine what to report for quotas whose candidate pools **cross** rather than nest, and that
-> §7.4's most-constrained-first rule is a greedy order rather than a matching, so it could emit a
-> shortfall the teacher can disprove. **Ruled 2026-08-24: option (a), the laminar restriction** -
-> see §7.3. The lead checked the argument independently rather than taking it: topic quotas are
-> pairwise disjoint, a topic's difficulty buckets nest inside it, the course-wide `any` bucket is a
-> superset of all of them, so Hall's condition collapses to exactly the per-bucket checks §7.3
-> already makes and deepest-first greedy is exact.
+> **§7's freeze, 2026-08-25.** It stayed DRAFT after the others for one honest reason — no code
+> exercised it. #50 wrote `AutoComposer`, registered `EXAM_AUTO_COMPOSE` and moved
+> `ExamHandlersTest.Registration` to the seven-verb set, so the condition every other section met
+> is now met here too. It freezes together with **one text change and no behaviour change**:
+> §7.3's "exact equality" for topic matching is replaced by the collation's equality, which is
+> what the code has always done and what ruling 7.6 always meant (§7.3, and the note under it).
 >
-> It stays DRAFT anyway, because **no code exercises it yet**: `AutoComposer` is not written and
-> `EXAM_AUTO_COMPOSE` is registered nowhere. `ExamHandlersTest.Registration` asserts the six-verb
-> set, so restoring the seventh takes a deliberate test change rather than a quiet addition. §7
-> freezes on PR B, on the same condition every other section just met.
+> The rulings §7 carries into the freeze, unchanged: **option (a), the laminar restriction**
+> (2026-08-24, §7.3a) — topic quotas are pairwise disjoint, a topic's difficulty buckets nest
+> inside it, the course-wide `any` bucket is a superset of all of them, so Hall's condition
+> collapses to exactly the per-bucket checks §7.3 already makes and deepest-first greedy is exact.
+> The lead checked that argument independently rather than taking it.
+>
+> One amendment is knowingly **ahead of the code** and says so where it sits: §5.4-A1, one open
+> draft per exam, ruled 2026-08-25 with its service change landing in PR23.
 
 *Types landed 2026-08-23; §12 records the five rulings applied while landing them, and the in-place
 corrections they required are marked where they sit. Written for the lead to land the verbs and
@@ -422,6 +426,36 @@ the field:
   the metadata and composition of the version it was revised from. `rejected_reason` is **not**
   copied: it belongs to the version that was rejected.
 
+#### 5.4-A1 — one open draft per exam *(amendment ruled 2026-08-25, service change in flight)*
+
+**An exam has at most one open `DRAFT` at a time. `EXAM_VERSION_REVISE` against any version, while
+that exam already has an open `DRAFT`, answers `CONFLICT` naming the existing draft.**
+
+This is a rule the contract did not have and meant to. §5.4's second bullet — "`EXAM_VERSION_REVISE`
+refuses a `DRAFT`" — checks the **addressed** version only; nothing asked whether the exam had a
+draft elsewhere, so revising v1 while v3 is a draft inserted a second one. Member A found the gap
+in PR22 §4.6 by reading `ExamService.revise`'s own comment against its code: the comment claimed
+"revising a draft would leave two drafts of one exam", the code did not enforce it, and he
+corrected the **comment** rather than widening the behaviour, which was right — the code matched
+this contract and the contract was what was wrong. Now the contract says what it meant.
+
+**Why it is a rule and not a tolerated shape.** E7.11's builder opens *the* draft of an exam. With
+two, it has to choose, and every choice is a guess about which one the teacher believes she is
+editing; the version numbers are already allocated, so the loser is a permanent gap in a sequence
+`uq_exam_versions_no` makes look meaningful. Answering `CONFLICT` at the moment of the second
+revise is the only point where the teacher still knows what she meant.
+
+**The refusal names the existing draft** — its version number — on the same rule §7.3a's refusal
+follows: a `CONFLICT` that does not say which draft leaves her hunting for it on a list she is
+already looking at. `ExamBuildMessages` owns the wording.
+
+> **⚠ The contract is ahead of the code, deliberately and only until PR23.** No service change
+> lands with this amendment: `ExamService.revise` still enforces §5.4's addressed-version check
+> only. **E7.11 requires this rule** — it is the PR whose builder has to open one draft — so the
+> implementation lands there, with the test that proves the second revise is refused. Written down
+> now, dated, because E7.11 wanted the answer *before* that PR rather than inside it, and a rule
+> ruled in a review comment is a rule nobody can find. **PR23 removes this warning.**
+
 ### 5.5 Submit hands off to E8, and emits nothing itself
 
 **Amended 2026-08-24 (lead ruling, freeze text): the hook is the handler's, after commit.**
@@ -553,22 +587,29 @@ A question is available to a quota when it is in the exam's course, not soft-del
 version because it used to be Hard would put a question on the paper that the bank no longer
 describes the way she asked for.
 
-Topic matching is **exact equality**, inherited from the bank contract's ruling 7.6 (option A) so
-that the auto-composer and the bank's own filter can never disagree about what a topic is.
+**Topic matching is the COLLATION's equality** *(ruled 2026-08-25, the clarification Member A
+raised on 2026-08-25 and PR21 §6.1 restated; §7 freezes with this text)*. Two topics are the same
+topic when the `topic` column's own collation says they are — `utf8mb4_unicode_ci`, as **measured** in
+#48 rather than assumed, which folds case and accents. Service-side that equality is reproduced by
+`QuestionValidator.sameTopic`, which is the one authority the auto-composer buckets with.
 
-> **Clarification, needs [L] to confirm before §7 freezes** *(Member A, 2026-08-25, from a cold
-> read of §7 against the code)*. "Exact" here means **the column's own exactness**, which is
-> `utf8mb4_unicode_ci` and therefore folds case and accents. It does **not** mean Java
-> `String.equals`. Ruling 7.6 chose option A over a normalising filter; it did not choose Java
-> equality over the collation, and it could not have, because the filter it was ruling on runs in
-> SQL. The implementation buckets with `QuestionValidator.sameTopic`, which is at least as strict
-> as the collation in every dimension (C-7 / ADR-016).
->
-> Stated because the sentence above, read literally, is the one line in §7 a client author or a
-> second query would rely on, and reading it as Java equality would split one candidate pool into
-> two buckets that the database serves from the same rows - the exact hazard `docs/PROBLEMS.md`
-> P-9 records. The same phrase appears on `TopicQuota.topic`'s javadoc, which is lead-owned
-> (`common/dto/**`) and is not edited here.
+This is what the bank contract's ruling 7.6 (option A) inherited into §7, and the phrase it used —
+"exact equality" — was loose rather than wrong. Ruling 7.6 chose option A over a *normalising
+filter*; it did not choose Java equality over the collation, and it could not have, because the
+filter it was ruling on runs in SQL. So:
+
+- **never Java `String.equals`.** Reading the old phrase literally splits one candidate pool into
+  two buckets the database serves from the same rows — `docs/PROBLEMS.md` P-9's hazard exactly,
+  and it would make §7.2's property 2 false against the bank screen the teacher checks;
+- **never a fold stricter or looser than the column.** `sameTopic` is the collation reproduced,
+  not an improvement on it. Over-folding shrinks `available` below the count she can see;
+  under-folding splits the pool. §7.2 property 2 needs agreement in **both** directions, which is
+  what `BankRoundTripIntegrationTest`'s bidirectional agreement test measures.
+
+*Member A raised this from a cold read of §7 against the code, correctly, and the annotation is
+resolved into the text above rather than left standing beside it. The same correction lands on
+`TopicQuota.topic`'s javadoc and as a dated cross-reference on `BANK_WIRE_CONTRACT.md` ruling 7.6;
+`AutoCandidate`, the fourth place that carried the loose phrase, he corrected in PR21.*
 
 **`available` never changes meaning, and which row is emitted does** *(lead ruling, 2026-08-24,
 freeze text)*. It is always the **raw** count above: what she gets by filtering the bank screen to
@@ -686,7 +727,38 @@ working across it because `rejectedReason` is on `ExamVersionRow`.
 
 **The retirement lands in the same PR as the replacement**, on the pattern the lead ruled for the
 legacy bank screen on 2026-08-23: the screen swap and the removal in one change, so there is never a
-window where two overlapping reads of one fact are both live.
+window where two overlapping reads of one fact are both live. *Executed 2026-08-25.*
+
+**The coordinator-author's read path moves to E7.11's version-open, and `EXAM_PREVIEW` stays
+coordinator-only** *(lead ruling, 2026-08-25, on PR22 ask 3 — option (b))*. `MyApprovalsView`'s row
+click opened `ExamPreviewView`; the exam list selects a row instead, so between this change and
+PR23 a **coordinator author** can read her rejection reason on the exam and cannot open the exam
+it is about. For a plain teacher nothing regressed: `EXAM_PREVIEW` was registered for coordinators
+only, so that path already threw. The gap closes with `EXAM_VERSION_GET` and E7.11's version-open,
+which is the read path this contract intends and which is author-scoped in its own right.
+
+Widening `EXAM_PREVIEW` to `TEACHER` was the other option and is refused — but **not** for the
+reason it is tempting to give. It is worth being exact, because the wrong reason would be frozen
+into this document: `EXAM_PREVIEW_GET`'s server guard **already admits the version's own author**.
+`ApprovalService.preview` calls `requireCoordinatorOf` only when `version.isAuthoredBy(callerId)`
+is false, which is APPROVAL_WIRE_CONTRACT ruling 3, frozen 2026-08-21 precisely so F4.2 is
+actionable. So registering the route for teachers would **not** produce a screen that fails
+server-side, and it would not touch a frozen guard. It really is only a route registration.
+
+It is refused on cost and shape instead:
+
+- **It buys a second author read path two weeks before the first one lands.** `EXAM_VERSION_GET`
+  is what this contract gives an author for reading her own version, and E7.11 is the PR that
+  opens it. Adding `EXAM_PREVIEW` as an author path now means two paths to the same fact, one of
+  which E7.11 immediately makes redundant — and this whole change exists to remove a duplicate
+  read, not to add one.
+- **`Routes.EXAM_PREVIEW` is registered beside `Routes.APPROVALS` on purpose**, as the queue's
+  detail view rather than a rail item of its own. Registering it for a role with no approval queue
+  puts a reachable route on every teacher's session whose only entry point would be a button
+  E7.11 replaces.
+
+So the gap is one role (**coordinator authors**), one read path, and at most one PR wide, and it is
+written down here so it is a known gap rather than a discovered one.
 
 ---
 
@@ -816,11 +888,14 @@ this verb is not the fix.
 **Types landed by the lead on 2026-08-23.** `common/protocol/Verb.java` gained its
 `Exam builder (E7)` section with all seven verbs; `common/dto/authoring` holds the fourteen records
 of §4, reusing `Difficulty` and `ApprovalState` rather than redeclaring either. `MY_APPROVALS_GET`
-is deliberately **still live** — §8 binds its removal to the same PR as E7.10's screen swap, and
-removing it at type-landing time would open the window from the other side by leaving E8's
-`MyApprovalsView` calling a verb that no longer exists.
+was deliberately **kept live** at type-landing — §8 binds its removal to the same change as E7.10's
+screen swap, and removing it earlier would have opened the window from the other side by leaving
+E8's `MyApprovalsView` calling a verb that no longer exists. **It was removed 2026-08-25**, in that
+change: the verb, `common/dto/approval/MyApprovals`, `MyApprovalsView` and `MyApprovalsSession` are
+all deleted.
 
-**Freeze happens on Member A's handlers PR, same as BANK.** Until then this header says DRAFT and
-means it: the shapes are compiled and tested, but a handler author who finds a genuine problem with
-one still gets to say so, and the correction is cheaper today than it will be on the far side of
-the freeze. From FROZEN, terms are additive only.
+**Freeze happened on Member A's handlers PR for §1-§6 and §8, same as BANK, and on #50's
+`AutoComposer` for §7.** While the header said DRAFT it meant it: the shapes were compiled and
+tested, but a handler author who found a genuine problem with one still got to say so, and §7.3's
+"exact equality" is exactly such a finding, corrected on the way into the freeze rather than after
+it. From FROZEN, terms are additive only.

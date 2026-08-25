@@ -2,7 +2,6 @@ package client.core;
 
 import client.features.approval.ApprovalQueueView;
 import client.features.approval.ExamPreviewView;
-import client.features.approval.MyApprovalsView;
 import client.features.bank.BankView;
 import client.features.bank.QuestionEditorView;
 import client.features.bot.BotAnalyticsView;
@@ -12,6 +11,7 @@ import client.features.bot.BotManagerView;
 import client.features.data.DataView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exam.TakeExamView;
+import client.features.exambuild.ExamListView;
 import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
@@ -99,9 +99,14 @@ public final class SessionRoutes {
             // exams the caller wrote and re-checks ownership on every sitting she opens, so this
             // list decides what is offered and never what is permitted.
             routes.add(Routes.GRADING);
-            // E8.6's teacher side. Every teacher gets it, coordinators included: it is the
+            // E7.10's exam list. Every teacher gets it, coordinators included: it is the
             // surface F4.2's "the reason is visible on the exam" needs, and it is where the
-            // rejection notification's reference points.
+            // rejection notification's reference points. It lists the exams the caller wrote
+            // with their drafts included, a chip per version, and the actions each state
+            // allows. The route id is unchanged since E5.4; what moved is which screen
+            // answers to it — E8.6's approval-status half retired into it per APPROVAL
+            // ruling 1, so a teacher reads her rejection reasons on the same screen that
+            // shows her the draft she has not submitted yet.
             routes.add(Routes.EXAMS);
         }
         if (role == Role.COORDINATOR) {
@@ -193,7 +198,7 @@ public final class SessionRoutes {
             return ExamPreviewView::new;
         }
         if (Routes.EXAMS.id().equals(route.id())) {
-            return MyApprovalsView::new;
+            return ExamListView::new;
         }
         if (Routes.TAKE_EXAM.id().equals(route.id())) {
             return TakeExamView::new;

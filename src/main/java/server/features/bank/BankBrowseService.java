@@ -350,6 +350,7 @@ public class BankBrowseService {
                 summary.text(),
                 summary.topic(),
                 common.dto.bank.Difficulty.valueOf(summary.difficulty().name()),
+                summary.versionId(),
                 summary.versionNo(),
                 summary.hasImage(),
                 summary.lastVersionAt());

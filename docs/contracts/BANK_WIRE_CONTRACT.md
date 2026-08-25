@@ -467,6 +467,11 @@ A for exactly that addition** rather than making it wait on his lane, and ruled 
 together with `findDistinctTopics` and its caller, which keeps the no-method-without-a-caller rule
 intact. It is therefore **not** in the read-verbs PR; §3's row for it arrives with the code.
 
+**Cross-reference, 2026-08-25: the "exact equality" this ruling chose is the COLLATION's equality**
+— `utf8mb4_unicode_ci`, as measured in #48, not Java `String.equals` — because the filter this
+ruling was deciding about runs in SQL; see `EXAM_BUILDER_WIRE_CONTRACT.md` §7.3, which now states
+it in those terms and which `QuestionValidator.sameTopic` reproduces service-side.
+
 ### 7.7 The sixth ruling, which arrived after the other five: two scopes, not one
 
 Raised as an objection by the post-implementation audit of `requireTeachesCourse` (PR #20 §6),
@@ -539,3 +544,19 @@ returned fifteen findings; these are the ones that changed the contract rather t
 Two findings were **not** fixed in that pass because they were decisions rather than corrections:
 the legacy-pair sequencing and the `requireTeachesCourse` note in §2. Both are now settled, the
 first by ruling §7.4 and the second by the lead opening `Authorization.java` to E6.
+
+---
+
+## Additive amendments
+
+### A1 — `latestVersionId` on `BankQuestionRow` (E7.12's picker join, 2026-08-25)
+
+`BankQuestionRow` gains `long latestVersionId` beside `latestVersionNo`: the row's version PK.
+Ruled on Member A's finding that the two frozen contracts fail exactly where they join — the
+builder's picker is `BANK_LIST` (EXAM_BUILDER §3), `QuestionPin` keys on `questionVersionId`
+(EXAM_BUILDER §4), and nothing on this wire carried it, so the picker could show a question and
+not pin it. The row's version IS what the picker pins; E7.7's pinned-vs-latest badge is the
+drift detector afterwards. Alternatives rejected: a resolve verb (a round trip for a fact the
+row already knows) and retyping `QuestionPin` to `displayId5`+`versionNo` (loses the
+exact-version pin the composition model keys on). Version PKs already travel on the authoring
+wire (`ComposedQuestion`), so this adds no disclosure class and needs no guard licence.

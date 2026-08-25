@@ -238,9 +238,12 @@ class BankWireLeakGuardTest {
         // The high-volume payload: forty rows for a browse, and the thing on screen when
         // somebody shares a screenshot. Pinning the shape means adding a key to it is a
         // deliberate edit to this assertion rather than a field that appeared in a mapper.
+        // latestVersionId joined 2026-08-25 by BANK amendment A1 (E7.12's picker join): the
+        // row's version PK, which is what QuestionPin keys on. A long id, nothing
+        // correctness-flavoured; the guard edit is the deliberate act the comment above asks for.
         assertThat(componentsOf(BankQuestionRow.class)).containsExactly(
                 "displayId5", "courseCode", "courseName", "text", "topic", "difficulty",
-                "latestVersionNo", "hasImage", "lastVersionAt");
+                "latestVersionId", "latestVersionNo", "hasImage", "lastVersionAt");
     }
 
     @Test

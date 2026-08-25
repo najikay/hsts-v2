@@ -63,6 +63,17 @@ class NotificationsInteractionTest extends ApplicationTest {
             "Dana Cohen submitted Algebra Midterm for approval.",
             NavRef.to("approvals", 55L), NOW, null);
 
+    /**
+     * The rejection F4.2 is about, pointing at the version it names.
+     *
+     * <p>Exactly what {@code NotificationCatalog.approvalRejected} writes: route id
+     * {@code exams}, and the exam version on it.
+     */
+    private static final NotificationDto REJECTED = new NotificationDto(3L,
+            NotificationType.APPROVAL_REJECTED, "Exam sent back for changes",
+            "Rina Barak did not approve Algebra Midterm. Reason: Please add three more questions.",
+            NavRef.to("exams", 11L), NOW, null);
+
     private static final NotificationDto PUSHED = new NotificationDto(2L,
             NotificationType.GRADE_PUBLISHED, "Your grade is ready",
             "Your grade for Algebra Midterm has been published.",
@@ -175,10 +186,50 @@ class NotificationsInteractionTest extends ApplicationTest {
                 .isNotNull();
     }
 
+    /**
+     * The deep link actually arrives ⚑ (PR22 ask 2).
+     *
+     * <p>Until 2026-08-25 {@code NotificationsPanel.activate} called the one-argument
+     * {@code navigate(routeId)}, which passes {@code NavParams.empty()}, so
+     * {@code NavRef.entityId()} was dropped at the last hop — for <b>every</b> notification in
+     * the app, not one screen's. The screen opened and never learned which row it was about.
+     *
+     * <p>This drives the real affordance rather than the mapping function: a robot click on the
+     * bell, a robot click on the row, and then the navigator is asked what it was handed.
+     * {@code NotificationPresenterTest} pins the route-to-key table; only a booted toolkit can
+     * prove the panel passes it on, which is exactly where the defect lived.
+     */
+    @Test
+    @DisplayName("⚑ clicking a notification carries its entity id to the screen it opens")
+    void theDeepLinkCarriesTheEntityId() {
+        ScreenManager manager = signIn(REJECTED);
+
+        clickOn(manager.shell().bell());
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn(manager.scene().getRoot().lookup(".panel-row"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.navigator().currentRouteId())
+                .as("the row navigated to the route its NavRef names")
+                .isEqualTo(Routes.EXAMS.id());
+        assertThat(manager.navigator().current())
+                .as("and it arrived with the version the notification is about, which is what "
+                        + "F4.2's 'the reason is visible on the exam' needs")
+                .isPresent()
+                .get()
+                .extracting(entry -> entry.params().getLong("examVersionId", 0))
+                .isEqualTo(11L);
+    }
+
     // ===================== Fixture =======================================
 
     /** Boots the app, attaches a scripted server, and enters Dana's shell. */
     private ScreenManager signIn() {
+        return signIn(WAITING);
+    }
+
+    /** As {@link #signIn()}, with the bell already holding {@code waiting}. */
+    private ScreenManager signIn(NotificationDto waiting) {
         interact(() -> new ClientApp().start(new Stage()));
         WaitForAsyncUtils.waitForFxEvents();
 
@@ -192,7 +243,7 @@ class NotificationsInteractionTest extends ApplicationTest {
             }
             connection.replyOk(Verb.LOGIN, DANA);
             connection.replyOk(Verb.LOGOUT, null);
-            connection.replyOk(Verb.NOTIFICATIONS_GET, new NotificationsPage(List.of(WAITING), 2));
+            connection.replyOk(Verb.NOTIFICATIONS_GET, new NotificationsPage(List.of(waiting), 2));
             RequestDispatcher dispatcher = new RequestDispatcher(connection);
             connection.setServerMessageHandler(dispatcher::dispatchIncoming);
             manager.setClient(connection);

@@ -237,33 +237,6 @@ public final class ExamRepository {
     }
 
     /**
-     * One teacher's own versions that have left her desk (E8.6 — F4.2).
-     *
-     * <p>F4.2 requires a rejection reason to be visible <em>on the exam</em> and not only in
-     * a notification, which needs a read the author can open. Drafts are excluded because a
-     * draft has no approval outcome to report; everything that has been submitted at least
-     * once is here, whatever it became.
-     *
-     * <p>Newest first: the thing a teacher wants after reading "your exam was sent back" is
-     * the exam that was just sent back.
-     *
-     * <p>Consumer: E8.6's teacher-side approval-status screen. E7's exam list supersedes it.
-     *
-     * @param session  the current session
-     * @param authorId the caller, from the session
-     * @return her non-draft versions, newest first
-     */
-    public List<ExamVersionContext> findSubmittedByAuthor(Session session, long authorId) {
-        return session.createQuery(CONTEXT_SELECT + """
-                          and e.authorId = :authorId and v.status <> :draft
-                        order by v.createdAt desc, v.id desc
-                        """, ExamVersionContext.class)
-                .setParameter("authorId", authorId)
-                .setParameter("draft", ExamVersionStatus.DRAFT)
-                .getResultList();
-    }
-
-    /**
      * How many questions each of these versions has, in one query (E8.1).
      *
      * <p>The approval queue shows "12 questions" per row so a coordinator can triage without

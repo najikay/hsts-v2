@@ -19,10 +19,10 @@ import java.util.Objects;
  * meaning "she teaches nothing": a teacher who teaches nothing cannot reach this screen at all.
  * One empty state, so the panel says one true thing.
  *
- * <p>This is the payload that lets {@code MY_APPROVALS_GET} retire (contract section 8). It is a
- * strict superset of what {@code MyApprovals} showed, so the swap behind route id {@code exams}
- * loses nothing — {@code Routes.EXAMS} already says in its javadoc that E7 replaces the screen
- * when it lands, and F4.2's "reason visible on the exam" keeps working because
+ * <p>This is the payload that retired {@code MY_APPROVALS_GET} (contract section 8, executed
+ * 2026-08-25). It is a strict superset of what {@code MyApprovals} showed, so the swap behind
+ * route id {@code exams} lost nothing, and F4.2's "reason visible on the exam" keeps working
+ * because
  * {@link ExamVersionRow#rejectedReason()} came across.
  *
  * @param rows the caller's exams, newest first; never {@code null}, defensively copied

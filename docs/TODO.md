@@ -161,14 +161,14 @@ Server:
 > **(5)** only a DRAFT is savable, and REVISE refuses a DRAFT (§5.4, answering CONFLICT not
 > VALIDATION).
 > Listed here because the store PR is the last artefact reviewed before these get assumed done.
-- [x] E7.9 Verbs + DTOs frozen with [L] *(types landed by [L] 2026-08-23, freeze on handlers PR — `common/protocol/Verb.java` has its `Exam builder (E7)` section with all seven verbs, and `common/dto/authoring` holds the fourteen records of the contract's §4, reusing `Difficulty` and `ApprovalState`. The five rulings are §12 of `docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md`; what Member A must know before writing handlers — the constants to cite and the tolerance boundaries his validator has to cover because the constructors deliberately do not — is `docs/reports/lead/E7-TYPES.md`. Not ticked: the tick is the freeze, and the contract still says DRAFT so a handler author who finds a real problem with a shape still gets to say so.)* **FROZEN v1 for sections 1-6 and 8 on #46 (2026-08-25); section 7 alone stays open for PR B per the laminar ruling.**
+- [x] E7.9 Verbs + DTOs frozen with [L] *(types landed by [L] 2026-08-23, freeze on handlers PR — `common/protocol/Verb.java` has its `Exam builder (E7)` section with all seven verbs, and `common/dto/authoring` holds the fourteen records of the contract's §4, reusing `Difficulty` and `ApprovalState`. The five rulings are §12 of `docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md`; what Member A must know before writing handlers — the constants to cite and the tolerance boundaries his validator has to cover because the constructors deliberately do not — is `docs/reports/lead/E7-TYPES.md`. Not ticked: the tick is the freeze, and the contract still says DRAFT so a handler author who finds a real problem with a shape still gets to say so.)* **FROZEN v1, WHOLE. Sections 1-6 and 8 froze on #46 (2026-08-25); section 7 froze 2026-08-25** with the collation-equality clarification in §7.3 (topic matching is `utf8mb4_unicode_ci`'s equality as measured in #48, reproduced by `QuestionValidator.sameTopic` — never Java `equals`), which resolves Member A's standing annotation and PR21 §6.1 / PR22 R1. §7's freeze condition was code exercising it, and #50 landed `AutoComposer` and registered the seventh verb. Additive-only from here; §5.4-A1 (one open draft per exam, ruled 2026-08-25) is the one amendment knowingly ahead of its code and says so, with the service change landing in PR23.
 Client:
-- [ ] E7.10 Exam list screen: teacher's exams, status chips, versions expandable, actions per state
+- [x] E7.10 Exam list screen: teacher's exams, status chips, versions expandable, actions per state *(2026-08-25: built in #51 (`client.features.exambuild` — `ExamListView`, `ExamListSession`, `ExamListCopy`, `ExamBuildRoutes`, 82 tests) and made reachable by the lead's assembly commit, which is what this tick is for. Master and detail rather than an expandable tree, because there is no `TreeTableView` in this client and a new shared component under `client/ui` was not Member A's to write; the actions come from the frozen contract and nowhere else (`canSubmit` is `isEditable()`, `canRevise` its negation, §5.4). **Deliberately NOT ticked with the PR that built it**, on E6.9's precedent: the screen was on no rail until `SessionRoutes` pointed route id `exams` at it, so a reviewer could have disproved the tick. That swap retired `MY_APPROVALS_GET`, `MyApprovals`, `MyApprovalsView` and `MyApprovalsSession` in the same change (contract §8), and the two `ExamListWiringGuardTest` cases that were red by design on `main` are green because of it, not because they were edited. `docs/reports/lead/E7-INTEGRATION.md`)*
 - [ ] E7.11 Builder — metadata step (name, duration, texts with student/teacher tabs)
 - [ ] E7.12 Builder — manual tab: bank picker (filter/search), selected list with points editors + reorder, live Σ/100 indicator (green at 100)
 - [ ] E7.13 Builder — auto tab: criteria form (topic rows, difficulty sliders), generate → editable result, infeasibility report rendering ⚑
 - [ ] E7.14 Version history + "question has newer version" badges with update-question action
-- [ ] E7.15 Submit-for-approval flow with confirmation summary
+- [x] E7.15 Submit-for-approval flow with confirmation summary *(2026-08-25: folded into #51's exam list rather than given a screen of its own — `ExamVersionRow` already carries the question count, the duration and the version number, and §5.1 refuses a save that does not total 100 points, so the summary is exact and needs no second call. The revise dialog deliberately does **not** predict the new version number: it is allocated against `uq_exam_versions_no`, so any number named in advance is one concurrent revise away from being false; `revisedNotice` names it afterwards off the server's own answer. Ticked with the assembly for the same reason E7.10 is)*
 - [ ] E7.16 Session tests + integration test (manual + auto + infeasible + Σ≠100 + versioning)
 - [ ] E7.17 Acceptance pass vs T-3 with [L] ⚑
 
@@ -188,7 +188,12 @@ Client:
 > Two things E7 has to pick up: (a) `ExamService.submitForApproval` calls
 > `ApprovalService.versionSubmitted(examVersionId)` and emits **no** notification of its own — that
 > hook does the supersede *and* the APPROVAL_REQUESTED; (b) E7's exam list replaces
-> `MyApprovalsView` at route id `exams` and absorbs `MY_APPROVALS_GET`.
+> `MyApprovalsView` at route id `exams` and absorbs `MY_APPROVALS_GET`. **(b) is done, 2026-08-25:**
+> the swap landed with E7.10 and the verb, `MyApprovals`, `MyApprovalsView` and `MyApprovalsSession`
+> are deleted (APPROVAL ruling 1 / E7 contract §8). E8.6's requirement is still met — the rejection
+> reason is on `ExamVersionRow` and paints on the version's own card — and the notification deep
+> link it names now actually arrives, which it did not: `NotificationsPanel.activate` dropped
+> `NavRef.entityId()` for **every** notification in the app until it was fixed in the same change.
 > `Authorization.requireCoordinatorOf` is no longer a stub: E8 implemented it against the
 > `coordinators` table. `requireTeachesCourse` and `requireEnrolled` are still fail-closed stubs.
 

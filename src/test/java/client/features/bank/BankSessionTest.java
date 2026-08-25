@@ -108,7 +108,7 @@ class BankSessionTest {
 
     private static BankQuestionRow row(String id, String course, String courseName, String text,
                                        String topic, Difficulty difficulty, boolean hasImage) {
-        return new BankQuestionRow(id, course, courseName, text, topic, difficulty, 1, hasImage,
+        return new BankQuestionRow(id, course, courseName, text, topic, difficulty, 701L, 1, hasImage,
                 SPRING);
     }
 

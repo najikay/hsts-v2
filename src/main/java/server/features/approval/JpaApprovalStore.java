@@ -76,11 +76,6 @@ public final class JpaApprovalStore implements ApprovalStore {
         }
 
         @Override
-        public List<ExamVersionContext> submittedByAuthor(long authorId) {
-            return exams.findSubmittedByAuthor(session, authorId);
-        }
-
-        @Override
         public List<String> coordinatedSubjects(long teacherId) {
             return users.findCoordinatedSubjects(session, teacherId);
         }

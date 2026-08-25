@@ -92,9 +92,9 @@ class BankScreenInteractionTest extends ApplicationTest {
             "Rina Barak", Role.COORDINATOR, List.of(), 0);
 
     private static final BankQuestionRow LINEAR = new BankQuestionRow("11001", "11", "Algebra",
-            "Solve the linear equation", "Equations", Difficulty.EASY, 1, false, SPRING);
+            "Solve the linear equation", "Equations", Difficulty.EASY, 701L, 1, false, SPRING);
     private static final BankQuestionRow GEOMETRY = new BankQuestionRow("11005", "11", "Algebra",
-            "Read the diagram", "Geometry", Difficulty.HARD, 2, true, SPRING);
+            "Read the diagram", "Geometry", Difficulty.HARD, 702L, 2, true, SPRING);
 
     private static final QuestionDetail GEOMETRY_V2 = new QuestionDetail("11005", "11", "Algebra",
             2, 2, "Read the diagram and answer",

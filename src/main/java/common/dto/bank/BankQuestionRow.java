@@ -52,11 +52,12 @@ public record BankQuestionRow(String displayId5,
                               String text,
                               String topic,
                               Difficulty difficulty,
+                              long latestVersionId,
                               int latestVersionNo,
                               boolean hasImage,
                               Instant lastVersionAt) implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     /**
      * How much stem a row carries.

@@ -16,7 +16,6 @@ import common.dto.approval.ApprovalRow;
 import common.dto.approval.ApprovalState;
 import common.dto.approval.ExamPreview;
 import common.dto.approval.ExamRejectRequest;
-import common.dto.approval.MyApprovals;
 import common.dto.approval.PreviewAnswerRow;
 import common.dto.approval.TeacherOnlyBlock;
 import common.dto.auth.CourseRef;
@@ -25,7 +24,6 @@ import common.dto.auth.Role;
 import common.dto.exam.ExamQuestion;
 import common.protocol.Message;
 import common.protocol.Verb;
-import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -288,41 +286,9 @@ class ApprovalInteractionTest extends ApplicationTest {
 
     // ===================== The teacher's side (E8.6) =====================
 
-    @Test
-    @DisplayName("the author's screen shows the reason her exam was sent back (F4.2)")
-    void theAuthorSeesTheReason() {
-        ApprovalRow sentBack = new ApprovalRow(11L, "101101", "Algebra Midterm", "11", "Algebra",
-                1, "Dana Cohen", SUBMITTED, 5, 60, ApprovalState.REJECTED,
-                "Five questions is too few for 60 minutes. Please add three more.", true, 1);
-        ScreenManager manager = signIn(connection ->
-                connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(sentBack))));
-
-        interact(() -> manager.navigator().navigate(Routes.EXAMS.id(),
-                NavParams.of("examVersionId", 11L)));
-        WaitForAsyncUtils.waitForFxEvents();
-
-        Scene scene = manager.scene();
-        assertThat(scene.getRoot().lookup(".rejected-panel")).isNotNull();
-        assertThat(labelTexts(scene))
-                .contains(ApprovalCopy.REJECTED_PANEL_TITLE)
-                .contains("Five questions is too few for 60 minutes. Please add three more.")
-                .contains("101101 · Algebra Midterm (v1)");
-    }
-
-    @Test
-    @DisplayName("with nothing sent back there is no reason panel to look at")
-    void noPanelWithoutARejection() {
-        ScreenManager manager = signIn(connection ->
-                connection.replyOk(Verb.MY_APPROVALS_GET, new MyApprovals(List.of(PENDING))));
-
-        interact(() -> manager.navigator().navigate(Routes.EXAMS.id()));
-        WaitForAsyncUtils.waitForFxEvents();
-
-        Node panel = manager.scene().getRoot().lookup(".rejected-panel");
-        assertThat(panel == null || !panel.isVisible())
-                .as("a heading with nothing under it is a mystery state")
-                .isTrue();
-    }
+    // Retired. The author's own list moved to E7.10's exam list with MY_APPROVALS_GET
+    // (APPROVAL ruling 1); ExamListInteractionTest drives the rejection panel on the real
+    // toolkit now, including the deep link that used to be exercised here.
 
     // ===================== Fixture =======================================
 

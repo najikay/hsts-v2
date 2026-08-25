@@ -41,5 +41,5 @@ import java.time.Instant;
  */
 public record BankQuestionSummary(String displayId, String courseCode, String courseName,
                                   String text, String topic, Difficulty difficulty,
-                                  int versionNo, boolean hasImage, Instant lastVersionAt) {
+                                  long versionId, int versionNo, boolean hasImage, Instant lastVersionAt) {
 }

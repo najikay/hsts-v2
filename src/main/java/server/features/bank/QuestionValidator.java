@@ -266,6 +266,32 @@ public final class QuestionValidator {
      * states the governing rule for the whole codebase: the service comparison must be
      * <b>at least as strict as {@code utf8mb4_unicode_ci} in every dimension</b>.
      *
+     * <h2>The two-consumer invariant, and the test that holds it ⚑</h2>
+     *
+     * <p>One expression, two consumers, and they tolerate error in <b>opposite</b> directions.
+     * State it as an invariant so a future tightening is checked against both rather than
+     * against whichever one its author had in mind:
+     *
+     * <ul>
+     *   <li><b>Duplicate detection ({@link #sameAnswer}) tolerates over-folding.</b> Its promise
+     *       is one-directional — never accept a pair the database will reject — and the cost of
+     *       being stricter than MySQL is a teacher told two similar answers are too similar. An
+     *       annoyance, recoverable in the editor she is already in.</li>
+     *   <li><b>Availability ({@code sameTopic}, E7.4) requires agreement in BOTH directions.</b>
+     *       Over-folding merges two topics she filters separately and inflates a bucket;
+     *       under-folding splits one pool and deflates it. Either way the shortfall's
+     *       {@code available} stops being the number she can reproduce on the bank screen, and
+     *       §7.2 property 2 is a promise about exactly that number.</li>
+     * </ul>
+     *
+     * <p><b>{@code BankRoundTripIntegrationTest}'s bidirectional agreement test is the tripwire,
+     * and any future change to the folding must keep it green.</b> It asks this comparison and
+     * the real database about the same pair and fails when the two verdicts differ <em>in either
+     * direction</em> — not merely when this side is looser. A tightening that only satisfies
+     * {@code sameAnswer}'s one-directional promise will pass every unit test in this package and
+     * fail there, which is the intended order of discovery: the constraint that binds is the
+     * stricter of the two consumers, and it is measured against MySQL rather than argued.
+     *
      * <p>Exposed here rather than reimplemented in {@code ExamValidator} because a second
      * expression of "what the database calls the same string" is exactly the defect
      * {@code docs/PROBLEMS.md} P-6 is about: the two would agree on the cases their author

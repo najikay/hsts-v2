@@ -143,31 +143,8 @@ abstract class ApprovalRepositoryContract extends RepositoryTestBase {
 
     // ===================== The author's own list =========================
 
-    @Test
-    @DisplayName("the author's list excludes drafts and is newest first")
-    void authorsListExcludesDrafts() {
-        long older = versionOf(COURSE_ALGEBRA, 1, danaId, ExamVersionStatus.REJECTED, WHEN);
-        long newer = versionOf(COURSE_ALGEBRA, 2, danaId, ExamVersionStatus.APPROVED,
-                WHEN.plus(Duration.ofHours(1)));
-        long draft = versionOf(COURSE_ALGEBRA, 3, danaId, ExamVersionStatus.DRAFT,
-                WHEN.plus(Duration.ofHours(2)));
-
-        List<ExamVersionContext> mine = inTx(s -> exams.findSubmittedByAuthor(s, danaId));
-
-        assertThat(mine).extracting(ExamVersionContext::examVersionId)
-                .containsExactly(newer, older)
-                .as("a draft has no approval outcome to report")
-                .doesNotContain(draft);
-    }
-
-    @Test
-    @DisplayName("and it is somebody else's list for somebody else")
-    void authorsListIsScopedToTheAuthor() {
-        pendingVersion(COURSE_ALGEBRA, 1, danaId);
-
-        List<ExamVersionContext> rinas = inTx(s -> exams.findSubmittedByAuthor(s, rinaId));
-        assertThat(rinas).isEmpty();
-    }
+// findSubmittedByAuthor retired with MY_APPROVALS_GET (E7.10 integration, 2026-08-25);
+    // its two contract tests were deleted with it - rule 5 runs in both directions.
 
     // ===================== Question counts ===============================
 

@@ -4,6 +4,7 @@
 
 **Lead rulings at freeze:**
 1. The fifth verb, `MY_APPROVALS_GET`, is approved and RETIRES INTO E7's exam list when that screen absorbs route id `exams` — documented in the E8 report and binding on E7.
+   > **Ruling 1 executed 2026-08-25 — `MY_APPROVALS_GET` retired into E7.10's `EXAM_LIST`; the verb, DTO and screen are deleted.** Gone with it: `common/dto/approval/MyApprovals`, `client/features/approval/MyApprovalsView`, `MyApprovalsSession`, `ApprovalService.mine` and its registration, and `ApprovalCopy`'s six teacher-side sentences. `ApprovalRow` stays — the queue uses it. Removed rather than deprecated on #47's precedent: the never-remove-a-header rule protects a client jar meeting a server jar of another version, and both tiers ship from one build here. The removal landed in the **same change** as the screen swap, so there was never a window with two live reads of one fact. `ExamList`/`ExamListRow`/`ExamVersionRow` are a strict superset; `submittedAt` becomes the version's `createdAt` and `selfAuthored` is dropped as vacuous on an author-scoped screen. See `EXAM_BUILDER_WIRE_CONTRACT.md` §8 and `docs/reports/lead/E7-INTEGRATION.md`.
 2. `PreviewAnswerRow` stays a separate type from `AnswerReviewRow`: a preview key and a marked paper are different documents with different audiences.
 3. The preview's audience is the deciding coordinator OR the version's own author (F4.2 actionability) — the wording corrected 2026-08-21 across guard licence, Verb header and javadoc after Member A's rule-5 pass; the plain-teacher negative test pins the third role out.
 4. The `versionSubmitted` three-in-one hook (supersede + notify + request notice) is approved; E7's `submitForApproval` calls it and emits nothing of its own. A stale coordinator is refused by the STATUS guard, not her lock token — a cross-file dependency named in both javadocs.
@@ -56,8 +57,9 @@ of suppressed.
   F4.2 requires the rejection reason to be visible on the exam, and a teacher who cannot reopen what
   she submitted cannot act on the reason she was given. A teacher of the same course who did not
   write it and does not coordinate the subject is refused.
-- `MY_APPROVALS_GET`: any teacher or coordinator, scoped to **her own submissions** in the query
-  itself. There is no id on the wire to misuse.
+- ~~`MY_APPROVALS_GET`: any teacher or coordinator, scoped to **her own submissions** in the query
+  itself. There is no id on the wire to misuse.~~ *Retired 2026-08-25 (ruling 1). `EXAM_LIST` is
+  author-scoped in its own SQL with no id on the wire either, so the property survives the move.*
 - "One coordinator per subject" is the primary key of `coordinators` (ARCHITECTURE §5), so every
   scoping question here has exactly one answer and no join can multiply a row.
 
@@ -88,7 +90,7 @@ failure catches two writers who read the same value. The client's response to `C
 | `EXAM_PREVIEW_GET` | coordinator of the subject, or the version's author | `ExamPreviewRequest` | `ExamPreview` |
 | `EXAM_APPROVE` | coordinator of the subject | `ExamApproveRequest` | `ApprovalDecision` |
 | `EXAM_REJECT` | coordinator of the subject | `ExamRejectRequest` | `ApprovalDecision` |
-| `MY_APPROVALS_GET` | teacher / coordinator, scoped to herself | `null` | `MyApprovals` |
+| ~~`MY_APPROVALS_GET`~~ | *retired 2026-08-25 into `EXAM_LIST` (ruling 1)* | — | — |
 
 No push verb. Both decisions raise a **durable notification** to the author through
 `Notifier`/`NotificationCatalog` (`APPROVAL_APPROVED` / `APPROVAL_REJECTED`), which is what reaches a
@@ -230,10 +232,10 @@ the queue and carries `examVersionId` as a nav parameter.
 
 ## Open questions for the freeze
 
-1. **`MY_APPROVALS_GET` and E7.** This verb is deliberately the narrow approval-status read, named
-   after approvals rather than after exams so it cannot collide with E7.9's exam-list verb. When E7
-   lands, its richer payload should absorb this one and this verb should retire. Lead to confirm the
-   retirement rather than letting two overlapping reads ship.
+1. **`MY_APPROVALS_GET` and E7. — ANSWERED, and executed 2026-08-25.** This verb was deliberately
+   the narrow approval-status read, named after approvals rather than after exams so it could not
+   collide with E7.9's exam-list verb. E7.10 landed, `ExamList` absorbed it, and the verb is
+   deleted. See ruling 1 above for what went with it.
 2. **`selfAuthored` on `ApprovalRow`.** Caller-relative, computed server-side. Harmless today; if a
    row is ever cached client-side across users it becomes wrong. Lead to confirm this stays a
    per-response field rather than becoming a client-side comparison against the session.
