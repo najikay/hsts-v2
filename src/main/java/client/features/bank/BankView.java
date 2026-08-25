@@ -106,7 +106,8 @@ public final class BankView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new BankSession(dispatcher(), onFxThread(), coursesOfSignedInUser())
+        session = new BankSession(dispatcher(), onFxThread(), coursesOfSignedInUser(),
+                eventBus(), signedInUserId())
                 .onChange(this::render);
 
         root.getStyleClass().addAll("hsts-page", "bank-screen");
@@ -139,6 +140,18 @@ public final class BankView extends AbstractScreen {
         session.load();
     }
 
+    /**
+     * Stops listening for lock pushes on the way out (E6.14).
+     *
+     * <p>It withdraws no watch, and that is deliberate: the only verb that could withdraw one
+     * also releases a held lock, and the screen this navigates to is usually the editor holding
+     * the very question the list was watching. {@code BankRowLocks} carries the full reasoning.
+     */
+    @Override
+    public void onHide() {
+        session.stop();
+    }
+
     // ===================== Building =======================================
 
     private void buildList() {
@@ -149,6 +162,13 @@ public final class BankView extends AbstractScreen {
         list.column("Course", BankQuestionRow::courseName);
         list.column("Version", row -> "v" + row.latestVersionNo());
         list.column("Written", row -> BankCopy.rowDate(row.lastVersionAt()));
+        // E6.14. Reads from the session per render rather than from the row, because the row is
+        // a wire DTO of what the question IS and this is who happens to be holding it: putting
+        // it on BankQuestionRow would have made a live fact arrive on a paginated snapshot.
+        list.column(BankCopy.EDITING_COLUMN, row -> row == null ? ""
+                : session.editorOf(row.displayId5())
+                        .map(holder -> BankCopy.editing(holder, session.isSelf(holder)))
+                        .orElse(""));
         list.getStyleClass().add("bank-list");
         list.emptyState(new EmptyState(Icons.BANK, BankCopy.NO_QUESTIONS.title(),
                 BankCopy.NO_QUESTIONS.hint()));
@@ -675,6 +695,17 @@ public final class BankView extends AbstractScreen {
     private static List<CourseRef> coursesOfSignedInUser() {
         LoginResult user = ScreenManager.getInstance().signedInUser();
         return user == null ? List.of() : user.courses();
+    }
+
+    /**
+     * @return the signed-in user's id, or {@code 0} when there is no session. Zero is safe here
+     *         rather than a guard: it is only ever compared against a lock holder's id to decide
+     *         whether a row says "you", and no holder can carry it, so the column falls back to
+     *         naming the holder instead of claiming the row is this user's
+     */
+    private static long signedInUserId() {
+        LoginResult user = ScreenManager.getInstance().signedInUser();
+        return user == null ? 0L : user.userId();
     }
 
     private javafx.stage.Window window() {

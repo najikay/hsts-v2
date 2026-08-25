@@ -6,6 +6,7 @@ import common.dto.bank.BlockingExam;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
 import common.dto.bank.QuestionVersionDetail;
+import common.dto.lock.LockHolder;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -265,6 +266,33 @@ public final class BankCopy {
     /** A row whose topic the teacher never filled in still has to render as something. */
     public static String topic(String topic) {
         return topic == null || topic.isBlank() ? "No topic" : topic;
+    }
+
+    /** What the Editing column is called. */
+    public static final String EDITING_COLUMN = "Editing";
+
+    /**
+     * What the Editing column says for one row (E6.14 — F10.3).
+     *
+     * <p><b>Words, not a colour or an icon.</b> The reason is the one already settled for the
+     * version history's change summary: a sentence survives a screenshot, a printout and a
+     * screen reader, and this one is read exactly when a teacher is deciding whether to click,
+     * which is the moment a decoration she cannot name is worth nothing.
+     *
+     * <p>A row this user has open herself says so rather than showing her own name back to her.
+     * Her name against a row is the shape that means "somebody else has this", so printing it
+     * would read as a colleague blocking her from her own editor.
+     *
+     * @param holder who is editing, or {@code null} when nobody is
+     * @param self   whether that holder is the signed-in user
+     * @return the cell's text; empty for a row nobody is editing, because a column that says
+     *         "free" on every row is a column of noise on the common case
+     */
+    public static String editing(LockHolder holder, boolean self) {
+        if (holder == null) {
+            return "";
+        }
+        return self ? "Editing · you" : "Editing · " + holder.displayName();
     }
 
     // ===================== The detail pane ================================
