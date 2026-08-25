@@ -1,14 +1,34 @@
-# E7 exam builder wire contract — DRAFT
+# E7 exam builder wire contract — FROZEN v1 (§1-§6, §8), §7 DRAFT
 
-**Status: DRAFT, 2026-08-23 — types landed 2026-08-23; freeze on the handlers PR.** The verbs and
-the DTO package are built, tested and on `main`; §12 records the five rulings applied while landing
-them, and the in-place corrections they required are marked where they sit. Still DRAFT, and
-deliberately: the freeze happens on Member A's handlers PR, exactly as BANK froze. Written for the
-lead to land the verbs and DTOs from, on the same
-handoff as [BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md): Member A drafts, the lead freezes and
-lands `common/protocol/Verb.java` and the DTO package himself. Not binding until this header says
-FROZEN. Additive-only terms from that point, same as
-[EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md).
+**Status: FROZEN v1 as of 2026-08-25, for sections 1 to 6 and section 8. Section 7 alone stays
+DRAFT.** The freeze condition the lead set was handlers existing against the text, and they do:
+`server.features.exambuild.ExamHandlers` serves six of the seven verbs. **Additive-only from here**
+for the frozen sections, same as [EXAM_WIRE_CONTRACT.md](EXAM_WIRE_CONTRACT.md) and
+[BANK_WIRE_CONTRACT.md](BANK_WIRE_CONTRACT.md).
+
+The partial freeze is the lead's decision of 2026-08-24, approved and then enlarged by him: the
+proposal was to hold §2 and §3 open alongside §7, and his ruling settled §2 in the same message, so
+only §7 remains. Freezing a section whose code does not exist is the thing a freeze is supposed to
+prevent.
+
+> **§7 STAYS DRAFT UNTIL PR B.** A cold read before the handlers were written found that §7 did not
+> determine what to report for quotas whose candidate pools **cross** rather than nest, and that
+> §7.4's most-constrained-first rule is a greedy order rather than a matching, so it could emit a
+> shortfall the teacher can disprove. **Ruled 2026-08-24: option (a), the laminar restriction** -
+> see §7.3. The lead checked the argument independently rather than taking it: topic quotas are
+> pairwise disjoint, a topic's difficulty buckets nest inside it, the course-wide `any` bucket is a
+> superset of all of them, so Hall's condition collapses to exactly the per-bucket checks §7.3
+> already makes and deepest-first greedy is exact.
+>
+> It stays DRAFT anyway, because **no code exercises it yet**: `AutoComposer` is not written and
+> `EXAM_AUTO_COMPOSE` is registered nowhere. `ExamHandlersTest.Registration` asserts the six-verb
+> set, so restoring the seventh takes a deliberate test change rather than a quiet addition. §7
+> freezes on PR B, on the same condition every other section just met.
+
+*Types landed 2026-08-23; §12 records the five rulings applied while landing them, and the in-place
+corrections they required are marked where they sit. Written for the lead to land the verbs and
+DTOs from, on the same handoff as BANK: Member A drafts, the lead freezes and lands
+`common/protocol/Verb.java` and the DTO package himself.*
 
 Package: **`common/dto/authoring`** (ruling 1 below — `common/dto/exam` is taken by E10/E11's
 take-exam surface and reusing it would put a student's paper and a teacher's composition in one
@@ -90,9 +110,17 @@ section 3 shapes it:
     never `FORBIDDEN`. Naming the exam would tell a caller probing ids that it exists and who owns
     it, which is the existence oracle P-5 is about and which both frozen contracts already refuse.
 
-- **`NOT_FOUND` is the only answer for anything the caller cannot reach.** Unknown id, another
-  teacher's exam, and an exam whose course she has stopped teaching are one answer, indistinguishable
-  on purpose.
+- **`NOT_FOUND` is the only answer for anything the caller cannot reach.** Unknown id and another
+  teacher's exam are one answer, indistinguishable on purpose.
+
+  **Two cases, not three** *(corrected 2026-08-25, the lead's ruling)*. This sentence used to end
+  "and an exam whose course she has stopped teaching". `ExamService.authoredHeader` filters on the
+  author id and nothing else, so that third case never existed: the document was describing a
+  guard the code does not have, and §3's own table said only "author" the whole time. The ruling
+  is that **the code is right and this section overreached.** An exam is authored work rather than
+  course-scoped data, so a teacher who stops teaching a course keeps the exams she wrote there,
+  including the right to submit a new version into that course's coordinator queue. That
+  consequence is stated here so it can be found on purpose rather than discovered.
 
 - **No payload carries a caller id.** Authorship is `CallerContext.userId()` (S-12), so an exam
   cannot be created in somebody else's name and an edit cannot be attributed to somebody else.
@@ -156,6 +184,25 @@ for a lock.
 ---
 
 ## 4. DTOs (`common/dto/authoring`)
+
+> **`ExamList`'s row order: newest exam first, and the store has to change** *(ruled 2026-08-25;
+> the disagreement was found by a cold read of this document against the store)*. This section and
+> `ExamList`'s own javadoc both say "newest exam first". The store did something else and did it
+> deliberately: `ExamBuildRepository.findAuthoredExams` ends `order by e.displayId`, pinned on both
+> engines by `ExamBuildRepositoryContract.examListIsOrderedByDisplayId`, landed in #44 and
+> reviewed. Both could not be right.
+>
+> **The contract wins.** A teacher opens this list looking for the exam she touched yesterday, both
+> wire documents already promise recency, and display id is a *filing* order rather than a recency
+> one: `displayId6` is `subjectCode + courseCode + a per-course serial` (`ExamIdAllocator`), so
+> ascending sorts by subject, then course, then oldest first within a course. A teacher with exams
+> in two courses got neither ordering.
+>
+> **The fix is the query and its pinning test, not a sort in `ExamService.list`** - one rule with
+> one home, so the screen cannot disagree with the store about what "newest" means. It lands in
+> whichever PR next touches the store: PR B or the E7.10 screen. Until then the wire answer is the
+> store's order, and this paragraph is the record of why that is a known gap rather than a
+> surprise.
 
 ```
 ExamList(List<ExamListRow> rows)
@@ -340,12 +387,20 @@ carries no rules of its own in the DTO — its compact constructor normalises an
 (§4's inbound rule) — so both of these are `ExamValidator`'s, and both answer `VALIDATION` naming
 the field:
 
-- **`TopicQuota` topics must be distinct within one request.** Two quotas naming one topic break
-  the disjointness that makes §7.4's most-constrained-first selection produce **true** shortfalls:
-  the two buckets would compete for one candidate pool, and the report could then name a shortfall
-  the teacher can disprove by filtering her own bank to the same topic. §7.2 property 2 calls that
-  the worst possible failure here. Comparison is on the **normalised** topic, since the record
-  folds blank to `null`, so `""` and `null` are one bucket and not two.
+- **`TopicQuota` topics must be distinct within one request.** Two quotas naming one topic are two
+  buckets drawing on one pool with no rule saying which of them is short, so the report could name
+  a shortfall the teacher can disprove by filtering her own bank to the same topic. §7.2 property
+  2 calls that the worst possible failure here. Comparison is on the **normalised** topic, since
+  the record folds blank to `null`, so `""` and `null` are one bucket and not two.
+
+  **This rule does not buy disjointness, and an earlier draft of it said so wrongly** *(corrected
+  2026-08-24, found by a cold read of this document against the code)*. Distinct topics still
+  overlap: `quotaProblem` deliberately permits one course-wide quota alongside every topic quota,
+  and within a single `TopicQuota` the `any` bucket overlaps `easy`/`medium`/`hard`. §7.3 says as
+  much outright - "quotas draw from overlapping supply" - which is the whole reason its aggregate
+  row exists. The rule is kept because two buckets over one pool have no defined answer; what it
+  must not be read as is a licence for the generator to assume disjoint pools. It is not one, and
+  §7.4's selection rule is the open question that follows from that.
 - **Every quota bucket is `>= 0`, and the total across all quotas is `>= 1`.** A negative bucket
   would subtract from a sibling quota's demand and make the derived total a lie; a request for
   nothing at all is not a composition, and answering it with an empty proposal would violate
@@ -368,6 +423,50 @@ the field:
   copied: it belongs to the version that was rejected.
 
 ### 5.5 Submit hands off to E8, and emits nothing itself
+
+**Amended 2026-08-24 (lead ruling, freeze text): the hook is the handler's, after commit.**
+`EXAM_SUBMIT`'s handler calls **`ApprovalService.versionSubmitted(examVersionId)`** once its
+transaction has committed and `ExamService.submitForApproval` returned `OK`.
+`ExamService.submitForApproval` owns the transition and sends no notification of its own.
+
+**"After the service returned `OK`" is not sufficient on its own, and the difference is the whole
+bug** *(added while writing the handler, 2026-08-24)*. `ExamService.submitForApproval` does not
+own a transaction: it takes a `Session` and the boundary is the handler's
+`Transactions.inTx(...)`. So a call placed *inside* that lambda satisfies both halves of the
+sentence above - the service has returned `OK`, and nothing has committed - while reproducing
+exactly the failure this amendment exists to kill. **The call goes outside `Transactions.inTx`, on
+the returned outcome.** `ExamHandlersTest.theHookRunsAfterTheCommit` is what holds it there: it
+asserts what had happened to the transaction *at the moment of the call*, not that the call
+happened, because a call that happens and notifies nobody is the thing being prevented.
+
+**A hook that throws does not turn a committed submission into an error.** By the time it runs the
+transaction is committed, so propagating would tell her the submit failed when it did not, and she
+would submit again over a version that is already `PENDING`. It is logged at error and the answer
+stays `OK`. That is the window the next paragraph but two states, entered deliberately rather than
+by accident.
+
+The original text below said the *service* makes that call from inside the transaction. **That
+notifies nobody**, and it was found by a cold read rather than by a test.
+`JpaApprovalStore.inTx` goes through `Transactions.inTx(factory, ...)`, which opens a fresh
+session, so the hook runs on another connection, cannot see the uncommitted status flip, takes its
+own `if (!version.isPending())` guard, reads the row as still `DRAFT` and returns
+`Superseded.none()` before either notification. E7 was the hook's first production caller, which is
+why nothing had exercised it.
+
+**The session-joining alternative is worse, and that is the lead's reason rather than mine.**
+`versionSubmitted` already notifies *outside* its own transaction, so a variant that joined the
+caller's session would push bells about a submit that has not committed, and rolling the outer
+transaction back would leave phantom notifications. Doing that correctly needs post-commit callback
+machinery, which is a phase-2 shape.
+
+**The one window, stated honestly because somebody will probe it.** A crash between the commit and
+the hook loses the supersede and the notifications. **It never loses the submission**: the version
+is `PENDING` in a committed transaction, and the coordinator's queue reads *status*, not bells, so
+the row still appears. A re-submit re-fires the hook.
+
+---
+
+*Original text, kept because the division of ownership it states is unchanged:*
 
 `ExamService.submitForApproval` calls **`ApprovalService.versionSubmitted(examVersionId)`** and
 sends no notification of its own. This is not a suggestion; the approval contract's E8.2 section
@@ -456,6 +555,65 @@ describes the way she asked for.
 
 Topic matching is **exact equality**, inherited from the bank contract's ruling 7.6 (option A) so
 that the auto-composer and the bank's own filter can never disagree about what a topic is.
+
+**`available` never changes meaning, and which row is emitted does** *(lead ruling, 2026-08-24,
+freeze text)*. It is always the **raw** count above: what she gets by filtering the bank screen to
+that same topic and difficulty. Section 7.2's property 2 is non-negotiable, and a count net of what
+another quota consumed would break it, because the number in the sentence would no longer be a
+number she can check.
+
+That leaves the case this rule exists for. **Every quota can be satisfiable on its own while the
+request as a whole is not**, because quotas draw from overlapping supply. Three Recursion and eight
+course-wide against a bank of ten: neither row is short, eleven questions are asked for, ten exist.
+Reporting either quota alone produces a true count paired with a demand it does not belong to, and
+"Requested 8 questions, bank has 10" is a sentence she can disprove.
+
+So when every individual quota is satisfiable against raw supply but the union is not, the
+shortfall is emitted at the **smallest enclosing bucket whose summed demand exceeds its raw
+supply**:
+
+- `requested` is the total demanded across every quota inside that bucket;
+- `available` is that bucket's own raw supply, unchanged in meaning.
+
+The example above emits `(null, null, 11, 10)` - **"Requested 11 questions, bank has 10."** Both
+numbers are verifiable against her own bank and the pairing is coherent.
+
+The same rule applies one level down. Topic-internal overlap, where a topic's difficulty buckets
+and its `any` bucket compete for one supply, reports `(topic, null, topicDemand, topicSupply)`.
+
+**No wire change.** The four `Shortfall` shapes in section 7.1 already express exactly these
+levels: a `null` difficulty is the topic-wide bucket and a `null` topic is the course-wide one.
+This is a rule about which row to emit, not a new field.
+
+**Raw-short quotas keep their own rows beside the aggregate one.** Section 7.2's property 1 -
+every shortfall, not the first - extends to the aggregate row rather than being replaced by it: a
+teacher short on Recursion Hard *and* over her course's total supply is told both, because fixing
+one does not fix the other.
+
+### 7.3a The shape rule that makes all of the above true *(ruled 2026-08-24)*
+
+**If any topic quota is present, the course-wide quota may use `any` only. A course-wide quota with
+graded buckets stands alone.** `ExamValidator.quotaProblem` refuses any other combination.
+
+Everything §7.3 says about which row to emit, and everything §7.4 says about selection order, is
+true **because of this rule and not without it.** The pools then form a nesting hierarchy: topic
+quotas are pairwise disjoint, a topic's difficulty buckets nest inside that topic, and the
+course-wide `any` bucket is a superset of all of them. On a family that nests, Hall's condition
+collapses to exactly the per-bucket comparisons §7.3 already makes, so bucket checking is complete
+rather than approximate, and deepest-first (most-constrained-first) greedy is exact rather than
+merely reasonable.
+
+**Without the rule, both properties fail, and the failures were reproduced rather than imagined.**
+A topic quota drawing on `any` crosses a course-wide quota drawing on `hard`: neither nests inside
+the other, no bucket is short, and yet the request is infeasible - so §7.3 names no row to emit,
+`AutoComposeResult`'s compact constructor refuses the empty report, and the teacher gets
+`INTERNAL` on the one verb F3.3 exists for. Separately, greedy loses on crossing pools and emits a
+shortfall whose `missing()` is zero, which renders as a shortfall claiming nothing is missing.
+
+**The refusal must name the two legal shapes** *(the lead's condition on accepting this rule)*. A
+sentence saying only "that combination is not allowed" leaves her guessing which half to delete.
+It names both: quotas per topic with a course-wide **total**, or one course-wide quota split by
+difficulty on its own. `ExamBuildMessages` owns the wording; the client composes nothing (ruling 4).
 
 ### 7.4 Selection, when it is feasible
 

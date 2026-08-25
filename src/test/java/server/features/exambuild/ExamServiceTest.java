@@ -3,8 +3,11 @@ package server.features.exambuild;
 import common.dto.approval.ApprovalState;
 import common.dto.auth.Role;
 import common.dto.authoring.ExamCreateRequest;
+import common.dto.authoring.ExamList;
+import common.dto.authoring.ExamListRow;
 import common.dto.authoring.ExamVersionAction;
 import common.dto.authoring.ExamVersionRequest;
+import common.dto.authoring.ExamVersionRow;
 import common.dto.authoring.ExamVersionSave;
 import common.dto.authoring.QuestionPin;
 import common.dto.lock.EntityRef;
@@ -23,11 +26,14 @@ import server.core.SessionManager;
 import server.db.entities.Difficulty;
 import server.db.entities.ExamVersion;
 import server.db.entities.ExamVersionStatus;
+import server.db.projections.AuthoredExamHeader;
+import server.db.projections.AuthoredVersionRow;
 import server.db.projections.ExamCompositionHeader;
 import server.db.projections.PinCandidate;
 import server.db.projections.PinnedQuestion;
 import server.db.repos.CourseRepository;
 import server.db.repos.ExamBuildRepository;
+import server.db.repos.ExamRepository;
 import server.features.locks.DisplayNames;
 import server.features.locks.EditLockGuard;
 import server.features.locks.EditLockService;
@@ -37,7 +43,9 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +59,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -100,6 +109,8 @@ class ExamServiceTest {
     @Mock
     private ExamBuildRepository exams;
     @Mock
+    private ExamRepository sharedExamReads;
+    @Mock
     private CourseRepository courses;
 
     private EditLockService lockService;
@@ -109,7 +120,7 @@ class ExamServiceTest {
     void setUp() {
         lockService = new EditLockService(new PushGateway(new SessionManager()), LOCK_NAMES,
                 Clock.fixed(NOW, ZoneOffset.UTC));
-        service = new ExamService(exams, courses, new EditLockGuard(lockService),
+        service = new ExamService(exams, sharedExamReads, courses, new EditLockGuard(lockService),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -796,5 +807,157 @@ class ExamServiceTest {
 
         assertThat(service.get(session, teacher(), new ExamVersionRequest(VERSION_ID)).status())
                 .isEqualTo(ExamService.BuildStatus.NOT_FOUND);
+    }
+
+    // ===================== EXAM_LIST ======================================
+
+    @Nested
+    @DisplayName("list")
+    class ListHerExams {
+
+        private static final long EXAM_ID = 70;
+        private static final long OTHER_EXAM_ID = 71;
+        private static final long V1 = 4101;
+        private static final long V2 = 4102;
+
+        private AuthoredExamHeader header(long examId, String displayId6, int latestVersionNo) {
+            return new AuthoredExamHeader(examId, displayId6, COURSE, "Java", "Midterm",
+                    latestVersionNo);
+        }
+
+        private AuthoredVersionRow version(long examId, long versionId, int versionNo,
+                                           ExamVersionStatus status, String rejectedReason) {
+            return new AuthoredVersionRow(examId, versionId, versionNo, status, rejectedReason,
+                    90, NOW, 1);
+        }
+
+        @Test
+        @DisplayName("every version lands under its own exam, with its question count")
+        void everyVersionLandsUnderItsOwnExam() {
+            when(exams.findAuthoredExams(session, TEACHER_ID))
+                    .thenReturn(List.of(header(EXAM_ID, "110001", 2),
+                            header(OTHER_EXAM_ID, "110002", 1)));
+            when(exams.findAuthoredVersions(session, TEACHER_ID)).thenReturn(List.of(
+                    version(EXAM_ID, V2, 2, ExamVersionStatus.DRAFT, null),
+                    version(EXAM_ID, V1, 1, ExamVersionStatus.APPROVED, null),
+                    version(OTHER_EXAM_ID, 4103, 1, ExamVersionStatus.PENDING, null)));
+            when(sharedExamReads.countQuestionsByVersion(eq(session), any()))
+                    .thenReturn(Map.of(V2, 12, V1, 10, 4103L, 8));
+
+            ExamList list = service.list(session, teacher());
+
+            assertThat(list.rows()).extracting(ExamListRow::examId)
+                    .containsExactly(EXAM_ID, OTHER_EXAM_ID);
+            assertThat(list.rows().get(0).versions())
+                    .extracting(ExamVersionRow::examVersionId, ExamVersionRow::questionCount)
+                    .containsExactly(tuple(V2, 12), tuple(V1, 10));
+            assertThat(list.rows().get(1).versions())
+                    .extracting(ExamVersionRow::examVersionId, ExamVersionRow::questionCount)
+                    .containsExactly(tuple(4103L, 8));
+        }
+
+        @Test
+        @DisplayName("the version order the store returned is the order the screen gets")
+        void theStoresOrderSurvives() {
+            // The read orders by versionNo descending, and the expandable row shows newest
+            // first. A grouping that reordered would put version 1 above version 3 on screen
+            // with nothing in the query to blame.
+            when(exams.findAuthoredExams(session, TEACHER_ID))
+                    .thenReturn(List.of(header(EXAM_ID, "110001", 3)));
+            when(exams.findAuthoredVersions(session, TEACHER_ID)).thenReturn(List.of(
+                    version(EXAM_ID, 4103, 3, ExamVersionStatus.DRAFT, null),
+                    version(EXAM_ID, V2, 2, ExamVersionStatus.REJECTED, "Too short"),
+                    version(EXAM_ID, V1, 1, ExamVersionStatus.APPROVED, null)));
+            when(sharedExamReads.countQuestionsByVersion(eq(session), any()))
+                    .thenReturn(Map.of(4103L, 5, V2, 5, V1, 5));
+
+            ExamList list = service.list(session, teacher());
+
+            assertThat(list.rows().get(0).versions()).extracting(ExamVersionRow::versionNo)
+                    .containsExactly(3, 2, 1);
+        }
+
+        @Test
+        @DisplayName("the stored status becomes the wire state, and a null reason becomes \"\"")
+        void statusAndReasonAreMapped() {
+            // ExamVersionRow refuses a null rejectedReason outright, so this is the difference
+            // between a rejected exam rendering its reason and the whole list failing to build.
+            when(exams.findAuthoredExams(session, TEACHER_ID))
+                    .thenReturn(List.of(header(EXAM_ID, "110001", 2)));
+            when(exams.findAuthoredVersions(session, TEACHER_ID)).thenReturn(List.of(
+                    version(EXAM_ID, V2, 2, ExamVersionStatus.REJECTED, "Too short"),
+                    version(EXAM_ID, V1, 1, ExamVersionStatus.DRAFT, null)));
+            when(sharedExamReads.countQuestionsByVersion(eq(session), any()))
+                    .thenReturn(Map.of(V2, 4, V1, 4));
+
+            ExamList list = service.list(session, teacher());
+
+            assertThat(list.rows().get(0).versions())
+                    .extracting(ExamVersionRow::state, ExamVersionRow::rejectedReason)
+                    .containsExactly(tuple(ApprovalState.REJECTED, "Too short"),
+                            tuple(ApprovalState.DRAFT, ""));
+        }
+
+        @Test
+        @DisplayName("the counts are asked for by id, for the versions actually on screen")
+        void theCountsAreAskedForByVersionId() {
+            when(exams.findAuthoredExams(session, TEACHER_ID))
+                    .thenReturn(List.of(header(EXAM_ID, "110001", 2)));
+            when(exams.findAuthoredVersions(session, TEACHER_ID)).thenReturn(List.of(
+                    version(EXAM_ID, V2, 2, ExamVersionStatus.DRAFT, null),
+                    version(EXAM_ID, V1, 1, ExamVersionStatus.APPROVED, null)));
+            when(sharedExamReads.countQuestionsByVersion(eq(session), any()))
+                    .thenReturn(Map.of(V2, 3, V1, 3));
+
+            service.list(session, teacher());
+
+            ArgumentCaptor<Collection<Long>> ids = ArgumentCaptor.captor();
+            verify(sharedExamReads).countQuestionsByVersion(eq(session), ids.capture());
+            assertThat(ids.getValue()).containsExactlyInAnyOrder(V1, V2);
+        }
+
+        @Test
+        @DisplayName("a version the count query has nothing for reads 0 rather than falling over")
+        void aMissingCountReadsZero() {
+            // The write path forbids a version with no questions, so this is defensive. It is
+            // here because the alternative is an unboxing NullPointerException that takes her
+            // whole exam list down over one row.
+            when(exams.findAuthoredExams(session, TEACHER_ID))
+                    .thenReturn(List.of(header(EXAM_ID, "110001", 1)));
+            when(exams.findAuthoredVersions(session, TEACHER_ID)).thenReturn(List.of(
+                    version(EXAM_ID, V1, 1, ExamVersionStatus.DRAFT, null)));
+            when(sharedExamReads.countQuestionsByVersion(eq(session), any()))
+                    .thenReturn(Map.of());
+
+            ExamList list = service.list(session, teacher());
+
+            assertThat(list.rows().get(0).versions().get(0).questionCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("a teacher who has written nothing gets an empty list and two idle queries")
+        void anAuthorWithNoExamsCostsOneQuery() {
+            when(exams.findAuthoredExams(session, TEACHER_ID)).thenReturn(List.of());
+
+            ExamList list = service.list(session, teacher());
+
+            assertThat(list.rows()).isEmpty();
+            verify(exams, never()).findAuthoredVersions(any(), anyLong());
+            verifyNoInteractions(sharedExamReads);
+        }
+
+        @Test
+        @DisplayName("⚑ the author scope is the query's, so no other teacher's id is ever asked "
+                + "for")
+        void theScopeIsTheQuerys() {
+            // The scope this verb has is the author id in the SQL. If it were ever re-expressed
+            // as a filter over a wider read, this is the test that would go red first.
+            when(exams.findAuthoredExams(session, TEACHER_ID)).thenReturn(List.of());
+
+            service.list(session, teacher());
+
+            verify(exams).findAuthoredExams(session, TEACHER_ID);
+            verify(exams, never()).findAuthoredExams(eq(session), eq(RINA_ID));
+        }
     }
 }

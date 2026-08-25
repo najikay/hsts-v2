@@ -3,8 +3,11 @@ package server.features.exambuild;
 import common.dto.authoring.ComposedQuestion;
 import common.dto.authoring.ExamComposition;
 import common.dto.authoring.ExamCreateRequest;
+import common.dto.authoring.ExamList;
+import common.dto.authoring.ExamListRow;
 import common.dto.authoring.ExamVersionAction;
 import common.dto.authoring.ExamVersionRequest;
+import common.dto.authoring.ExamVersionRow;
 import common.dto.authoring.ExamVersionSave;
 import common.dto.authoring.QuestionPin;
 import common.dto.approval.ApprovalState;
@@ -17,11 +20,14 @@ import server.core.Authorization;
 import server.core.CallerContext;
 import server.db.entities.ExamVersion;
 import server.db.entities.ExamVersionStatus;
+import server.db.projections.AuthoredExamHeader;
+import server.db.projections.AuthoredVersionRow;
 import server.db.projections.ExamCompositionHeader;
 import server.db.projections.PinCandidate;
 import server.db.projections.PinnedQuestion;
 import server.db.repos.CourseRepository;
 import server.db.repos.ExamBuildRepository;
+import server.db.repos.ExamRepository;
 import server.features.locks.EditLockGuard;
 
 import java.time.Clock;
@@ -183,13 +189,28 @@ public class ExamService {
     }
 
     private final ExamBuildRepository exams;
+
+    /**
+     * The exam reads this epic shares with other screens, and the reason it is a second
+     * repository rather than a method on the first.
+     *
+     * <p>Only {@link ExamRepository#countQuestionsByVersion} is used, and only by {@link #list}.
+     * {@code AuthoredVersionRow}'s javadoc is where the decision is argued: the count is one
+     * aggregate over a different table, the approval queue already reads it there, and a
+     * correlated count added to the authored-versions query would be a second expression of one
+     * fact. The first time the two disagreed, the teacher's exam list would show a count no other
+     * screen agreed with.
+     */
+    private final ExamRepository sharedExamReads;
+
     private final CourseRepository courses;
     private final EditLockGuard locks;
     private final Clock clock;
 
-    public ExamService(ExamBuildRepository exams, CourseRepository courses,
-                       EditLockGuard locks, Clock clock) {
+    public ExamService(ExamBuildRepository exams, ExamRepository sharedExamReads,
+                       CourseRepository courses, EditLockGuard locks, Clock clock) {
         this.exams = Objects.requireNonNull(exams, "exams");
+        this.sharedExamReads = Objects.requireNonNull(sharedExamReads, "sharedExamReads");
         this.courses = Objects.requireNonNull(courses, "courses");
         // Required, never optional. A null guard would make "locks are not enforced here" a
         // runtime state nobody declares, and the one deployment where it was null is the one
@@ -216,6 +237,80 @@ public class ExamService {
     private Optional<LockHolder> lockHolderOtherThan(CallerContext caller, ExamVersion version) {
         return locks.heldByAnother(
                 new EntityRef(EntityRef.EXAM_VERSION, version.getId()), caller.userId());
+    }
+
+    // ===================== EXAM_LIST (E7.10) ==============================
+
+    /**
+     * Every exam the calling teacher wrote, each with all of its versions (E7.10, F3.6, F9.2).
+     *
+     * <p>Three reads and no filtering in Java. The scope is in the SQL: both queries take the
+     * author's id and return only her rows, so there is no moment where somebody else's exam is
+     * in a collection here waiting to be filtered out. That is the shape §2 asks for and it is
+     * also the one that cannot be broken by an edit to a later loop.
+     *
+     * <p><b>The question count comes from a third read on purpose.</b> See
+     * {@link #sharedExamReads}. The alternative, a correlated subquery on the versions read, was
+     * rejected where the projection was written rather than here.
+     *
+     * <p>An empty list is a real answer with a designed panel behind it, per the verb's javadoc.
+     * There is deliberately no second empty state meaning "she teaches nothing": a teacher who
+     * teaches nothing cannot reach this screen at all.
+     *
+     * <p>No authorization decision is made here beyond the author scope in the queries. The role
+     * gate is the handler's, because it does not need a transaction to run.
+     *
+     * @param session a session inside the caller's transaction
+     * @param caller  the authenticated author, already role-checked
+     * @return her exams, newest version first within each row
+     */
+    public ExamList list(Session session, CallerContext caller) {
+        Objects.requireNonNull(session, "session");
+        Objects.requireNonNull(caller, "caller");
+
+        List<AuthoredExamHeader> headers = exams.findAuthoredExams(session, caller.userId());
+        if (headers.isEmpty()) {
+            // Neither of the two reads below can return anything for an author with no exams,
+            // and the count query refuses an empty id list anyway. Answering here keeps a
+            // teacher who has written nothing to one query rather than three.
+            return new ExamList(List.of());
+        }
+
+        List<AuthoredVersionRow> versions = exams.findAuthoredVersions(session, caller.userId());
+        List<Long> versionIds = new ArrayList<>(versions.size());
+        for (AuthoredVersionRow version : versions) {
+            versionIds.add(version.examVersionId());
+        }
+        Map<Long, Integer> questionCounts =
+                sharedExamReads.countQuestionsByVersion(session, versionIds);
+
+        // Grouped rather than looked up per header, so the number of passes over the versions
+        // does not grow with the number of exams on her screen.
+        Map<Long, List<ExamVersionRow>> byExam = new HashMap<>();
+        for (AuthoredVersionRow version : versions) {
+            byExam.computeIfAbsent(version.examId(), examId -> new ArrayList<>())
+                    .add(new ExamVersionRow(version.examVersionId(), version.versionNo(),
+                            stateOf(version.status()), rejectionOf(version.rejectedReason()),
+                            // A version with no pinned rows is absent from the map entirely.
+                            // The write path forbids one - every stored version sums to 100
+                            // across at least one question - and this read does not re-assert
+                            // that, because answering 0 keeps her list on screen where an
+                            // unboxed null would take it down.
+                            questionCounts.getOrDefault(version.examVersionId(), 0),
+                            version.durationMinutes(), version.createdAt(), version.lockVersion()));
+        }
+
+        List<ExamListRow> rows = new ArrayList<>(headers.size());
+        for (AuthoredExamHeader header : headers) {
+            rows.add(new ExamListRow(header.examId(), header.displayId6(), header.courseCode(),
+                    header.courseName(), header.name(), header.latestVersionNo(),
+                    // An exam always has at least version 1, so the default is unreachable
+                    // through the store. It is here because ExamListRow refuses a null list and
+                    // a missing group is a defect worth seeing as an empty row rather than as a
+                    // NullPointerException inside a record constructor.
+                    byExam.getOrDefault(header.examId(), List.of())));
+        }
+        return new ExamList(rows);
     }
 
     // ===================== EXAM_CREATE (E7.1) =============================
