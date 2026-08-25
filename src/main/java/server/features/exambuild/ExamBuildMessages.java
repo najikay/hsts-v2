@@ -228,11 +228,32 @@ public final class ExamBuildMessages {
     /**
      * A revise landed on a draft (§5.4).
      *
-     * <p>Revising a draft would produce two drafts of one exam, and the second is a version
-     * number nobody asked for.
+     * <p>The version she addressed is already the thing revise would make her.
      */
     public static final String ALREADY_A_DRAFT =
             "This version is still a draft, so there is nothing to revise. Edit it and save.";
+
+    /**
+     * A revise landed on a finished version while the exam already had an open draft
+     * (§5.4 as amended 2026-08-25: <b>one open draft per exam</b>).
+     *
+     * <p>The rule and this sentence are the lead's ruling. It exists because the exam list made
+     * the case reachable for the first time: the screen renders a card per version and offered
+     * Revise on every non-draft, so revising an approved v1 while v3 sat unfinished produced two
+     * drafts of one exam. {@code ALREADY_A_DRAFT} did not catch it, because that check is on the
+     * version she addressed and this one is a fact about the exam.
+     *
+     * <p><b>It names the draft rather than only refusing.</b> "A draft already exists" leaves her
+     * hunting for it in a version list; naming the number and telling her to open it is the
+     * difference between a refusal and an instruction. That was the lead's condition on the rule.
+     *
+     * @param versionNo the open draft's version number
+     * @return the sentence for the teacher
+     */
+    public static String draftAlreadyOpen(int versionNo) {
+        return "Version " + versionNo + " of this exam is already an open draft. Open that one "
+                + "and make your changes there.";
+    }
 
     /** A submit landed on something other than a draft (§5.4). */
     public static final String NOT_SUBMITTABLE =

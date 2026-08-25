@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -568,6 +569,82 @@ abstract class ExamBuildRepositoryContract extends RepositoryTestBase {
             assertThat(exam.name()).isEqualTo("השם החדש");
             assertThat(exam.latestVersionNo()).isEqualTo(2);
         });
+    }
+
+    // ===================== The exam's open draft (§5.4, amended) ==========
+
+    /**
+     * {@code findOpenDraftVersionNo} — the query behind one open draft per exam.
+     *
+     * <p>Its consumer's unit test mocks this repository, so nothing there exercises the HQL. If
+     * the status filter were dropped, every one of those service tests would still pass and the
+     * rule would refuse every revise on every exam.
+     */
+    @Test
+    @DisplayName("⚑ the exam's open draft is found, by version number")
+    void findsTheOpenDraft() {
+        long examId = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
+        long v1 = inTx(session -> repository.insertDraftVersion(session, examId, 1, "v1", 60, null, null, WHEN));
+        inTx(session -> repository.insertDraftVersion(session, examId, 2, "v2", 60, null, null, WHEN));
+        approve(v1);
+
+        OptionalInt draft = inTx(session -> repository.findOpenDraftVersionNo(session, examId));
+
+        assertThat(draft).hasValue(2);
+    }
+
+    @Test
+    @DisplayName("an exam whose versions are all finished has no open draft")
+    void noOpenDraftWhenEverythingIsFinished() {
+        long examId = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
+        long v1 = inTx(session -> repository.insertDraftVersion(session, examId, 1, "v1", 60, null, null, WHEN));
+        approve(v1);
+
+        OptionalInt draft = inTx(session -> repository.findOpenDraftVersionNo(session, examId));
+
+        assertThat(draft)
+                .as("a rule that refused every revise would be worse than the defect it fixes")
+                .isEmpty();
+    }
+
+    /**
+     * Two drafts can exist in data written before the rule, and the query still has to answer.
+     *
+     * <p>{@code max} rather than a row order, so the answer is exact by construction on both
+     * engines rather than whichever row InnoDB or H2 hands back first.
+     */
+    @Test
+    @DisplayName("with two drafts, the newest is named ⚑")
+    void namesTheNewestOfTwoDrafts() {
+        long examId = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
+        inTx(session -> repository.insertDraftVersion(session, examId, 1, "v1", 60, null, null, WHEN));
+        inTx(session -> repository.insertDraftVersion(session, examId, 2, "v2", 60, null, null, WHEN));
+
+        OptionalInt draft = inTx(session -> repository.findOpenDraftVersionNo(session, examId));
+
+        assertThat(draft).hasValue(2);
+    }
+
+    /**
+     * The scope is one exam, which needs a second exam to mean anything.
+     *
+     * <p>Dropping {@code v.examId = :examId} leaves every other assertion in this class green and
+     * makes a teacher's draft on one exam refuse a revise on a different one.
+     */
+    @Test
+    @DisplayName("⚑ another exam's draft is not this exam's")
+    void draftsDoNotLeakBetweenExams() {
+        long mine = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
+        long v1 = inTx(session -> repository.insertDraftVersion(session, mine, 1, "v1", 60, null, null, WHEN));
+        approve(v1);
+        long other = inTx(session -> repository.insertExam(session, COURSE_CALCULUS, danaId));
+        inTx(session -> repository.insertDraftVersion(session, other, 1, "hers", 60, null, null, WHEN));
+
+        OptionalInt onMine = inTx(session -> repository.findOpenDraftVersionNo(session, mine));
+        OptionalInt onHers = inTx(session -> repository.findOpenDraftVersionNo(session, other));
+
+        assertThat(onMine).isEmpty();
+        assertThat(onHers).hasValue(1);
     }
 
     @Test

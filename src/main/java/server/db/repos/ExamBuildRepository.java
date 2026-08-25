@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * The exam builder's write surface, and the reads only it needs (E7).
@@ -225,6 +226,38 @@ public final class ExamBuildRepository {
                 .setParameter("examId", examId)
                 .uniqueResult();
         return highest == null ? 0 : highest;
+    }
+
+    /**
+     * The exam's open draft, if it has one (E7.5, contract §5.4 as amended 2026-08-25).
+     *
+     * <p>Serves the <b>one open draft per exam</b> rule. Before that ruling, {@code revise}
+     * refused only a version that was <em>itself</em> a draft, which meant revising an approved
+     * v1 while v3 sat unfinished inserted a second draft: two drafts of one exam, and E7.11's
+     * builder with no defined answer for which one it opens. The rule was the lead's, argued from
+     * the exam list making the case reachable for the first time.
+     *
+     * <p><b>{@code max} rather than a query with an order.</b> The rule makes at most one draft
+     * possible from here on, but data written before it can hold two, and a caller that has to
+     * pick one deterministically should not depend on row order for it. {@code max} is exact by
+     * construction, and it names the draft a teacher is most likely to mean: the newest.
+     *
+     * <p>Consumer: {@code ExamService.revise}.
+     *
+     * @param session the session inside the current transaction
+     * @param examId  the exam to look under
+     * @return the version number of its newest open draft, or empty when it has none
+     */
+    public OptionalInt findOpenDraftVersionNo(Session session, long examId) {
+        Integer draft = session.createQuery("""
+                        select max(v.versionNo) from ExamVersion v
+                        where v.examId = :examId
+                          and v.status = :draft
+                        """, Integer.class)
+                .setParameter("examId", examId)
+                .setParameter("draft", ExamVersionStatus.DRAFT)
+                .uniqueResult();
+        return draft == null ? OptionalInt.empty() : OptionalInt.of(draft);
     }
 
     /**

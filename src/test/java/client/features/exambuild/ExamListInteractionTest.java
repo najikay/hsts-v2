@@ -110,6 +110,19 @@ class ExamListInteractionTest extends ApplicationTest {
             "Calculus", "Calculus final", 1,
             List.of(version(9101L, 1, ApprovalState.PENDING, "", 20, 120)));
 
+    /**
+     * An exam with no open draft, which is the only kind §5.4's amendment lets her revise.
+     *
+     * <p>The midterm has a DRAFT at v3 and therefore offers Revise nowhere. Without this exam
+     * the suite could not tell the amended rule apart from a screen that renders no Revise
+     * button at all.
+     */
+    private static final ExamListRow GEOMETRY = new ExamListRow(902L, "110201", "11", "Algebra",
+            "Geometry quiz", 3,
+            List.of(version(9203L, 3, ApprovalState.REJECTED, SENT_BACK, 8, 45),
+                    version(9202L, 2, ApprovalState.APPROVED, "", 8, 45),
+                    version(9201L, 1, ApprovalState.APPROVED, "", 6, 30)));
+
     @BeforeAll
     static void headless() {
         System.setProperty("testfx.robot", "glass");
@@ -137,7 +150,7 @@ class ExamListInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ the exam list builds and its rows reach the table")
     void rowsRender() {
-        Scene scene = openList(this::serverHasTwoExams);
+        Scene scene = openList(this::serverHasThreeExams);
 
         assertThat(cellTexts(scene))
                 .contains("Algebra midterm", "110101", "11 · Algebra",
@@ -153,7 +166,7 @@ class ExamListInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ the selected exam's versions paint, drafts included")
     void versionsPaint() {
-        Scene scene = openList(this::serverHasTwoExams);
+        Scene scene = openList(this::serverHasThreeExams);
 
         Set<String> labels = labelTexts(scene);
         assertThat(labels)
@@ -175,7 +188,7 @@ class ExamListInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ a sent-back version paints its reason on its own card (F4.2)")
     void rejectionReasonPaints() {
-        Scene scene = openList(this::serverHasTwoExams);
+        Scene scene = openList(this::serverHasThreeExams);
 
         assertThat(labelTexts(scene))
                 .contains(SENT_BACK)
@@ -185,7 +198,7 @@ class ExamListInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ clicking another exam really swaps the versions panel (real input)")
     void clickingAnExamSwapsThePanel() {
-        Scene scene = openList(this::serverHasTwoExams);
+        Scene scene = openList(this::serverHasThreeExams);
 
         clickOn(rowShowing(scene, "Calculus final"));
         WaitForAsyncUtils.waitForFxEvents();
@@ -211,20 +224,49 @@ class ExamListInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ Submit is on the draft alone, Revise on the two that are not drafts")
     void actionsMatchTheState() {
-        Scene scene = openList(this::serverHasTwoExams);
+        Scene scene = openList(this::serverHasThreeExams);
 
         assertThat(buttonsNamed(scene, ExamListCopy.SUBMIT))
                 .as("v3 is the only DRAFT, and contract §5.4 lets nothing else be submitted")
                 .hasSize(1);
         assertThat(buttonsNamed(scene, ExamListCopy.REVISE))
-                .as("v2 REJECTED and v1 APPROVED may both be revised; the draft may not")
-                .hasSize(2);
+                .as("⚑ NONE, and that is §5.4's amendment on a real screen: this exam has an "
+                        + "open draft at v3, so no version of it may be revised. Before the "
+                        + "amendment the approved v1 and the sent-back v2 both carried a button "
+                        + "whose only possible outcome is now a refusal")
+                .isEmpty();
+    }
+
+    /**
+     * The other side of the one-draft rule, on a real screen.
+     *
+     * <p>{@link #actionsMatchTheState} alone cannot distinguish "the rule works" from "Revise is
+     * never rendered at all", which is a mutation that would pass it. This exam has no draft and
+     * every one of its versions carries the button.
+     */
+    @Test
+    @DisplayName("⚑ an exam with no open draft carries Revise on every version")
+    void reviseAppearsWhenNoDraftIsOpen() {
+        Scene scene = openList(this::serverHasThreeExams);
+
+        clickOn(rowShowing(scene, "Geometry quiz"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(scene))
+                .as("the act landed before anything is claimed about the buttons")
+                .contains("Geometry quiz");
+        assertThat(buttonsNamed(scene, ExamListCopy.REVISE))
+                .as("three versions, none of them a draft, so all three are revisable")
+                .hasSize(3);
+        assertThat(buttonsNamed(scene, ExamListCopy.SUBMIT))
+                .as("and nothing here is submittable, because nothing here is a draft")
+                .isEmpty();
     }
 
     @Test
     @DisplayName("⚑ a version with only one state shows only that state's button")
     void pendingShowsReviseOnly() {
-        Scene scene = openList(this::serverHasTwoExams);
+        Scene scene = openList(this::serverHasThreeExams);
 
         clickOn(rowShowing(scene, "Calculus final"));
         WaitForAsyncUtils.waitForFxEvents();
@@ -253,7 +295,7 @@ class ExamListInteractionTest extends ApplicationTest {
     @Test
     @DisplayName("⚑ a notification's version opens the exam that owns it, on a real screen")
     void deepLinkOpensTheOwningExam() {
-        Scene scene = openList(this::serverHasTwoExams,
+        Scene scene = openList(this::serverHasThreeExams,
                 NavParams.of("examVersionId", 9101L));
 
         assertThat(labelTexts(scene))
@@ -263,9 +305,9 @@ class ExamListInteractionTest extends ApplicationTest {
 
     // ===================== Harness ========================================
 
-    private void serverHasTwoExams(FakeClientConnection connection) {
+    private void serverHasThreeExams(FakeClientConnection connection) {
         connection.respondTo(Verb.EXAM_LIST, request ->
-                Message.ok(request, new ExamList(List.of(MIDTERM, FINAL_EXAM))));
+                Message.ok(request, new ExamList(List.of(MIDTERM, FINAL_EXAM, GEOMETRY))));
     }
 
     private Scene openList(Consumer<FakeClientConnection> script) {
