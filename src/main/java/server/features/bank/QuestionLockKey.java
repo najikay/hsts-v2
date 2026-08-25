@@ -99,4 +99,41 @@ public final class QuestionLockKey {
                             + "lock (S-8 says five digits)", notANumber);
         }
     }
+
+    /**
+     * The inverse of {@link #of(String)}: the display id a lock key was made from (E18.9).
+     *
+     * <p><b>Zero-padded to five, and that is the entire content of this method.</b>
+     * {@code of("01003")} keys {@code question#1003}, because a course code may lead with a
+     * zero — {@code QuestionLockKeyTest.leadingZeroIsNotLost} measures exactly that. Going
+     * back with {@code Long.toString} would hand the bank {@code "1003"}, which matches no
+     * row in {@code uq_questions_display_id}, and the question would resolve to nothing.
+     *
+     * <p>The consequence of getting it wrong is not a visible error. The caller of this is
+     * the {@code question} entity scope, which turns "no such question" into "you do not
+     * reach it" and drops the id from a snapshot — so a truncating inverse would silently
+     * hide every lock on every question whose course code starts with a zero, and the suite
+     * would stay green because such a question is absent either way when nobody holds it.
+     * That is why the round trip is pinned by a test rather than left to reading.
+     *
+     * <p>Lives here rather than at the call site because this file is the one home of the
+     * numbering rule, and an inverse kept somewhere else is a second implementation of it —
+     * the precise hazard the lead's ruling above exists to prevent.
+     *
+     * @param entityId the {@link EntityRef} id, as {@link #of(String)} produced it
+     * @return the five-digit display id
+     * @throws IllegalArgumentException when the id cannot be a five-digit display id at all,
+     *         which would mean something other than {@link #of(String)} made the key
+     */
+    public static String displayIdOf(long entityId) {
+        if (entityId < 0 || entityId > MAX_DISPLAY_ID) {
+            throw new IllegalArgumentException(
+                    "entity id " + entityId + " cannot be a " + DISPLAY_ID_LENGTH
+                            + "-digit question display id (S-8)");
+        }
+        return String.format("%0" + DISPLAY_ID_LENGTH + "d", entityId);
+    }
+
+    /** 99999: the largest value five digits can hold, and so the largest legal display id. */
+    private static final long MAX_DISPLAY_ID = 99_999L;
 }

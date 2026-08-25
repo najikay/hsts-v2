@@ -40,11 +40,31 @@ public record EntityRef(String entityType, long entityId) implements Serializabl
     public static final String GRADE = "grade";
 
     public EntityRef {
+        entityType = normalizeType(entityType);
+    }
+
+    /**
+     * The one definition of what makes two entity types the same type.
+     *
+     * <p>Extracted from the compact constructor above on 2026-08-25 and not
+     * duplicated anywhere, because a second copy is how a key stops being the
+     * mutual exclusion. {@code EntityScopes} keys its registry by this, so a
+     * scope installed for {@code "Question"} governs a request that says
+     * {@code "question"} — without this being one method, an out-of-scope
+     * filter could be installed under a spelling nothing ever looks up, and the
+     * filter would silently pass everything while looking installed.
+     *
+     * @param entityType the raw type, from a payload or from wiring
+     * @return it trimmed and lower-cased
+     * @throws IllegalArgumentException when it is blank, which names no kind of thing
+     */
+    public static String normalizeType(String entityType) {
         Objects.requireNonNull(entityType, "entityType");
-        entityType = entityType.trim().toLowerCase(java.util.Locale.ROOT);
-        if (entityType.isEmpty()) {
+        String normalized = entityType.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.isEmpty()) {
             throw new IllegalArgumentException("An entity reference needs a type");
         }
+        return normalized;
     }
 
     /** @return a reference to a legacy question-bank row. */

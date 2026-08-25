@@ -236,9 +236,13 @@ public enum Verb {
     // over (P-5 follow-up). The gate is the same one for all five so a reader does
     // not have to check which ones are softer: none are.
     //
-    // Identity is never on the wire. No payload in this group carries a user id,
-    // because a user id in one of them could only ever be somebody else's
-    // (ARCHITECTURE §3, security).
+    // Identity is never on the REQUEST wire. No request payload in this group
+    // carries a user id, because a user id in one of them could only ever be
+    // somebody else's (ARCHITECTURE §3, security). Responses are different on
+    // purpose: LockHolder names the holder (id + display name), which is what
+    // the "being edited by X" banner exists to show (corrected 2026-08-25 -
+    // the earlier sentence overclaimed "no payload" and E6.14 depends on the
+    // response half being false).
 
     /** Take (or take over) the advisory edit lock on one entity. */
     LOCK_ACQUIRE,
@@ -268,9 +272,28 @@ public enum Verb {
      * {@code null} when nobody is, which is the same shape a refusal and a
      * release already use.
      *
-     * <p>To stop watching, send {@link #LOCK_RELEASE} for the same entity: it
-     * drops the registration and, since the watcher holds nothing, changes no
-     * lock. Logging out or dropping the socket drops every registration anyway.
+     * <p><b>A screen never un-watches (corrected 2026-08-25; the earlier text
+     * here was a trap).</b> This paragraph used to say "send LOCK_RELEASE to
+     * stop watching - the watcher holds nothing, so it changes no lock". That
+     * premise is not a property of anything: {@code EditLockService.release}
+     * keys on the user id alone and drops the hold AND the watch in one call,
+     * and a user who is both watcher (list) and holder (editor) of one entity
+     * is the NORMAL state the moment a list navigates into an editor. A list
+     * that released on hide would drop the teacher's own lock while she typed.
+     * So the rule is the one E6.14's list ships and guards
+     * ({@code neverReleasesAnything}): leave the registration - it is cheap,
+     * costs at most a few unread pushes, and dies with the session on logout
+     * or disconnect.
+     *
+     * <p><b>Scoped at registration (2026-08-25).</b> A watch on an entity the
+     * caller's scope for that type does not reach is silently not registered, and
+     * the answer is the free one — not granted, no holder — which is exactly what
+     * a watch on an entity nobody is editing returns, so the filtering discloses
+     * nothing itself. Without this, {@link #LOCKS_SNAPSHOT}'s scoping would be
+     * worth nothing: a caller could watch an out-of-scope id and be told who
+     * holds it by the next {@code PUSH_LOCK_CHANGED} instead of by the snapshot.
+     * The same {@code EntityScopes} registry governs both, and the same
+     * unfiltered-when-uninstalled rule applies.
      */
     LOCK_WATCH,
 
@@ -284,12 +307,40 @@ public enum Verb {
      * the screen opened, because pushes carry news and not state: a question
      * locked ten minutes ago raises nothing, so a freshly opened list would show
      * it as free. One snapshot at load plus the pushes afterwards is the complete
-     * picture.
+     * picture — <b>provided {@link #LOCK_WATCH} is sent first</b> (qualified
+     * 2026-08-25; the sentence used to end at "picture", and that was false).
+     * The server resolves push recipients from its watcher set at the instant the
+     * lock changes, so a screen that snapshots and then watches has a window in
+     * which a colleague acquires, the push finds a set that screen is not in, and
+     * the row reads free for the whole of his edit session. Subscribe first and
+     * read second: the overlap then duplicates, which is idempotent, instead of
+     * dropping, which is silent (Member A, PR20 §3, P-11).
      *
      * <p>Only <b>live</b> holds are in the answer. Ids nobody is editing are
      * absent from the map rather than mapped to null, and an id that does not
-     * exist at all is treated identically: this verb reports locks, and it is not
-     * an existence oracle for rows the caller may not be allowed to see.
+     * exist at all is treated identically: this verb reports locks.
+     *
+     * <p><b>Not an existence oracle, in both directions (corrected 2026-08-25).
+     * </b> Absence has always been ambiguous — free, unknown, and now out of
+     * scope are one answer. <em>Presence</em> was not: until this date the verb
+     * applied {@code requireRole(TEACHER, COORDINATOR)} and scoped no further, so
+     * a present entry proved that a row exists, that somebody is editing it and
+     * who that somebody is, for a course whose every bank read answers
+     * {@code NOT_FOUND} out of scope and is indistinguishable from a row that
+     * does not exist on purpose. Half a claim, and the half that was false is the
+     * half the sentence was for (found by Member A, PR20 §5.3).
+     *
+     * <p>Both directions hold now. Every id is put through the caller's scope for
+     * its entity type before it is answered, and one she does not reach is left
+     * out of the map — the same absence a free id gets. The scope is per entity
+     * type and installed at the server's assembly ({@code EntityScopes}); the
+     * {@code question} type is scoped to the same courses the bank's reads use.
+     * <b>A type nobody installed a scope for is unfiltered</b>, because it has
+     * made no scoping promise; that default is stated in {@code EntityScopes} and
+     * is not a claim this verb makes on any feature's behalf.
+     *
+     * <p>{@link #LOCK_WATCH} is filtered through the same scope at registration,
+     * so what this verb declines to say cannot be learned from the pushes either.
      *
      * <p>Asking does <b>not</b> subscribe. A screen that wants live updates too
      * sends {@link #LOCK_WATCH} per row it is showing; keeping the two separate is

@@ -94,4 +94,39 @@ class QuestionLockKeyTest {
         assertThatThrownBy(() -> QuestionLockKey.of("110050"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ===================== the inverse, E18.9 =============================
+
+    @Test
+    @DisplayName("the key round-trips back to the display id it was made from")
+    void theInverseRoundTrips() {
+        for (String displayId : new String[] {"11005", "01003", "00001", "99999"}) {
+            assertThat(QuestionLockKey.displayIdOf(QuestionLockKey.of(displayId).entityId()))
+                    .as("round trip of %s", displayId)
+                    .isEqualTo(displayId);
+        }
+    }
+
+    @Test
+    @DisplayName("the inverse zero-pads, which is the whole of what it has to get right")
+    void theInverseZeroPads() {
+        // Long.toString would answer "1003" here, which matches no row in
+        // uq_questions_display_id. The consequence is invisible rather than loud: the question
+        // scope that calls this would resolve nothing, read it as "you do not reach it", and
+        // silently hide every lock on every course whose code starts with a zero.
+        assertThat(QuestionLockKey.displayIdOf(1003L)).isEqualTo("01003");
+        assertThat(QuestionLockKey.displayIdOf(1L)).isEqualTo("00001");
+        assertThat(QuestionLockKey.displayIdOf(11005L)).isEqualTo("11005");
+    }
+
+    @Test
+    @DisplayName("an id no display id could hold is refused rather than padded into a lie")
+    void theInverseRefusesImpossibleIds() {
+        // The lock map is keyed by a raw long off the wire, so this is reachable input.
+        assertThatThrownBy(() -> QuestionLockKey.displayIdOf(100_000L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("5-digit");
+        assertThatThrownBy(() -> QuestionLockKey.displayIdOf(-1L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

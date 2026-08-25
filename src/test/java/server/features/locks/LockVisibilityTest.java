@@ -243,7 +243,7 @@ class LockVisibilityTest {
             locks.acquire(DANA, Q41);
             locks.acquire(RINA, Q43);
 
-            LocksSnapshot snapshot = locks.snapshot(EntityRef.QUESTION, List.of(41L, 42L, 43L));
+            LocksSnapshot snapshot = locks.snapshot(RINA, EntityRef.QUESTION, List.of(41L, 42L, 43L));
 
             assertThat(snapshot.entityType()).isEqualTo(EntityRef.QUESTION);
             assertThat(snapshot.holders()).containsOnlyKeys(41L, 43L);
@@ -263,7 +263,7 @@ class LockVisibilityTest {
             clock.advance(LockTiming.TTL.plusSeconds(1));
             locks.acquire(MAYA, Q43);
 
-            LocksSnapshot snapshot = locks.snapshot(EntityRef.QUESTION, List.of(41L, 43L));
+            LocksSnapshot snapshot = locks.snapshot(RINA, EntityRef.QUESTION, List.of(41L, 43L));
 
             assertThat(snapshot.holders())
                     .as("41 lapsed and was never touched again; 43 was taken over")
@@ -277,7 +277,7 @@ class LockVisibilityTest {
         @Test
         @DisplayName("ids nobody has ever locked answer as free rather than as an error")
         void unknownIdsAreFree() {
-            LocksSnapshot snapshot = locks.snapshot(EntityRef.QUESTION, List.of(999L, 1000L));
+            LocksSnapshot snapshot = locks.snapshot(RINA, EntityRef.QUESTION, List.of(999L, 1000L));
 
             assertThat(snapshot.holders()).isEmpty();
         }
@@ -285,7 +285,7 @@ class LockVisibilityTest {
         @Test
         @DisplayName("asking does not subscribe")
         void snapshotDoesNotWatch() {
-            locks.snapshot(EntityRef.QUESTION, List.of(41L, 42L));
+            locks.snapshot(RINA, EntityRef.QUESTION, List.of(41L, 42L));
 
             assertThat(locks.watchersOf(Q41)).isEmpty();
             assertThat(locks.watchersOf(Q42)).isEmpty();
@@ -296,7 +296,7 @@ class LockVisibilityTest {
         void typeIsNormalised() {
             locks.acquire(DANA, Q41);
 
-            LocksSnapshot snapshot = locks.snapshot("QUESTION", List.of(41L));
+            LocksSnapshot snapshot = locks.snapshot(RINA, "QUESTION", List.of(41L));
 
             assertThat(snapshot.isHeld(41L))
                     .as("a client sending 'QUESTION' must not see a second, empty world")
@@ -309,7 +309,7 @@ class LockVisibilityTest {
             locks.acquire(DANA, Q41);
 
             LocksSnapshot snapshot =
-                    locks.snapshot(EntityRef.QUESTION, Arrays.asList(41L, null, 42L));
+                    locks.snapshot(RINA, EntityRef.QUESTION, Arrays.asList(41L, null, 42L));
 
             assertThat(snapshot.holders()).containsOnlyKeys(41L);
         }
@@ -319,16 +319,16 @@ class LockVisibilityTest {
         void emptyListIsEmptyAnswer() {
             locks.acquire(DANA, Q41);
 
-            assertThat(locks.snapshot(EntityRef.QUESTION, List.of()).holders()).isEmpty();
+            assertThat(locks.snapshot(RINA, EntityRef.QUESTION, List.of()).holders()).isEmpty();
         }
 
         @Test
         @DisplayName("arguments are required")
         void argumentsAreRequired() {
             assertThatNullPointerException()
-                    .isThrownBy(() -> locks.snapshot(null, List.of(1L)));
+                    .isThrownBy(() -> locks.snapshot(RINA, null, List.of(1L)));
             assertThatNullPointerException()
-                    .isThrownBy(() -> locks.snapshot(EntityRef.QUESTION, null));
+                    .isThrownBy(() -> locks.snapshot(RINA, EntityRef.QUESTION, null));
         }
     }
 
@@ -478,6 +478,246 @@ class LockVisibilityTest {
 
         private CallerContext teacher(long userId) {
             return CallerContext.authenticated(danaSocket, userId, Role.TEACHER);
+        }
+    }
+
+    // ===================== Course scoping (E18.9) ========================
+
+    /**
+     * The fix for PR20 §5.3: neither list verb may tell a caller about a lock on an entity
+     * she does not reach.
+     *
+     * <p>The scope installed here is a two-line lambda, which is the point of the seam: the
+     * production one resolves a display id to a question to a course and asks the same
+     * reachability the bank's reads use, and none of that has to be present for the filtering
+     * itself to be provable. {@code Q41} is Dana's; {@code Q42} and {@code Q43} are not.
+     */
+    @Nested
+    @DisplayName("entity scoping")
+    class Scoping {
+
+        @BeforeEach
+        void scopeDanaToQ41() {
+            locks.scopes().install(EntityRef.QUESTION,
+                    (callerId, entityId) -> callerId != DANA || entityId == 41L);
+        }
+
+        @Test
+        @DisplayName("a scoped caller sees the entries she reaches and no others")
+        void inScopeEntriesSurvive() {
+            locks.acquire(RINA, Q41);
+            locks.acquire(RINA, Q43);
+
+            LocksSnapshot snapshot =
+                    locks.snapshot(DANA, EntityRef.QUESTION, List.of(41L, 43L));
+
+            assertThat(snapshot.holders())
+                    .as("41 is hers to see; 43 is not")
+                    .containsOnlyKeys(41L);
+            assertThat(snapshot.holderOf(41L)).contains(new LockHolder(RINA, "Rina Barak"));
+        }
+
+        @Test
+        @DisplayName("a held out-of-scope entity is ABSENT, not refused - the oracle is closed")
+        void aHeldOutOfScopeEntityIsAbsent() {
+            // This is the defect, in one test. Before the filter this answer named Rina and
+            // proved that question 42 exists and is being edited - for a course whose every
+            // bank read tells Dana NOT_FOUND, indistinguishably from a question that is not
+            // there. Absence was already ambiguous; now presence proves nothing either.
+            locks.acquire(RINA, Q42);
+
+            LocksSnapshot held = locks.snapshot(DANA, EntityRef.QUESTION, List.of(42L));
+            LocksSnapshot neverExisted =
+                    locks.snapshot(DANA, EntityRef.QUESTION, List.of(999_42L));
+
+            assertThat(held.holders()).isEmpty();
+            assertThat(held)
+                    .as("a locked question out of scope is byte-identical to one that has "
+                            + "never existed, which is what 'not an existence oracle' means")
+                    .isEqualTo(neverExisted);
+        }
+
+        @Test
+        @DisplayName("two callers asking about the same ids get different answers")
+        void theAnswerIsPerCaller() {
+            locks.acquire(MAYA, Q41);
+            locks.acquire(MAYA, Q43);
+
+            assertThat(locks.snapshot(DANA, EntityRef.QUESTION, List.of(41L, 43L)).holders())
+                    .containsOnlyKeys(41L);
+            assertThat(locks.snapshot(RINA, EntityRef.QUESTION, List.of(41L, 43L)).holders())
+                    .as("Rina is not scoped by this lambda, so she still sees both")
+                    .containsOnlyKeys(41L, 43L);
+        }
+
+        @Test
+        @DisplayName("an entity type with no scope installed is not filtered")
+        void unregisteredTypesAreUnfiltered() {
+            // E7's exam versions, E16's bot sources and E9's executions all lock through this
+            // service and install nothing. A fail-closed default would blank every one of them
+            // silently, which is why the default runs the other way (EntityScopes javadoc).
+            EntityRef examVersion = new EntityRef(EntityRef.EXAM_VERSION, 42L);
+            locks.acquire(RINA, examVersion);
+
+            LocksSnapshot snapshot =
+                    locks.snapshot(DANA, EntityRef.EXAM_VERSION, List.of(42L));
+
+            assertThat(snapshot.holders())
+                    .as("42 is out of Dana's QUESTION scope, but this is not a question")
+                    .containsOnlyKeys(42L);
+        }
+
+        @Test
+        @DisplayName("an out-of-scope watch is silently not registered")
+        void anOutOfScopeWatchIsDropped() {
+            LockResponse response = locks.watch(DANA, Q42);
+
+            assertThat(locks.watchersOf(Q42))
+                    .as("registering it would leak the lock through the next push instead")
+                    .isEmpty();
+            assertThat(response.granted()).isFalse();
+            assertThat(response.holder())
+                    .as("the free shape: a refusal that named a holder would be the same leak")
+                    .isNull();
+            assertThat(response.isFree()).isTrue();
+        }
+
+        @Test
+        @DisplayName("watching a HELD out-of-scope entity answers as if it were free")
+        void anOutOfScopeWatchHidesTheHolder() {
+            locks.acquire(RINA, Q42);
+
+            LockResponse response = locks.watch(DANA, Q42);
+
+            assertThat(response.holder()).isNull();
+            assertThat(response.isFree()).isTrue();
+            assertThat(locks.isHeldBy(Q42, RINA))
+                    .as("Rina's lock is untouched; Dana is simply not told about it")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a dropped watch registration means no push either, ever")
+        void aDroppedWatchHearsNothing() {
+            sessions.attach(DANA, danaSocket);
+            locks.watch(DANA, Q42);
+
+            locks.acquire(RINA, Q42);
+            locks.release(RINA, Q42);
+
+            assertThat(gateway.changesFor(DANA))
+                    .as("filtering the snapshot alone would leave this door open")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("an in-scope watch still registers and still hears")
+        void anInScopeWatchIsUnaffected() {
+            sessions.attach(DANA, danaSocket);
+
+            locks.watch(DANA, Q41);
+            locks.acquire(RINA, Q41);
+
+            // Rina is in the set too, because acquire registers its own caller (rule 4).
+            assertThat(locks.watchersOf(Q41)).contains(DANA);
+            assertThat(gateway.kindsFor(DANA)).containsExactly(LockChange.Kind.ACQUIRED);
+        }
+
+        @Test
+        @DisplayName("an out-of-scope acquire takes nothing and names nobody - the gap is closed")
+        void anOutOfScopeAcquireIsRefusedAsFree() {
+            // This test used to pin the OPPOSITE as "the named gap": an out-of-scope acquire
+            // was refused with the holder's name, the last one-directional oracle in the
+            // group. Closed by the lead on 2026-08-25 with the same ruling that scoped the
+            // snapshot: the refusal is the free shape watch() uses, indistinguishable from
+            // an entity nobody is editing, and nothing is taken - a teacher must not be able
+            // to block a course she cannot read. The legitimate editor never reaches this
+            // branch: it navigates from lists that are scoped already.
+            locks.acquire(RINA, Q42);
+
+            LockResponse heldResponse = locks.acquire(DANA, Q42);
+
+            assertThat(heldResponse.granted()).isFalse();
+            assertThat(heldResponse.holder()).as("the oracle: no holder is ever named").isNull();
+            assertThat(locks.isHeldBy(Q42, RINA)).as("Rina's lock is untouched").isTrue();
+
+            locks.release(RINA, Q42);
+            LockResponse freeResponse = locks.acquire(DANA, Q42);
+
+            assertThat(freeResponse.granted()).isFalse();
+            assertThat(freeResponse.holder()).isNull();
+            assertThat(locks.holderOf(Q42)).as("nothing was taken on a free entity either").isEmpty();
+        }
+
+        @Nested
+        @DisplayName("over the router")
+        class OverTheWire {
+
+            private MessageRouter router;
+
+            @BeforeEach
+            void register() {
+                router = new MessageRouter(sessions);
+                locks.registerOn(router);
+            }
+
+            @Test
+            @DisplayName("LOCKS_SNAPSHOT's wire answer honours the scope")
+            void snapshotIsScopedOnTheWire() {
+                // The service-level tests above prove the filter; this proves the handler
+                // reaches it with the SESSION's caller id, which is the half a service test
+                // cannot see. A handler passing 0, or the payload, would pass those and fail
+                // this one.
+                locks.acquire(RINA, Q41);
+                locks.acquire(RINA, Q43);
+
+                Message response = router.route(
+                        Message.request(Verb.LOCKS_SNAPSHOT,
+                                LocksSnapshotRequest.of(EntityRef.QUESTION, List.of(41L, 43L))),
+                        CallerContext.authenticated(danaSocket, DANA, Role.TEACHER));
+
+                assertThat(response.getStatus()).isEqualTo(Status.OK);
+                assertThat(((LocksSnapshot) response.getPayload()).holders())
+                        .containsOnlyKeys(41L);
+            }
+
+            @Test
+            @DisplayName("the same request from a caller with a wider scope answers more")
+            void theWireAnswerIsPerSession() {
+                locks.acquire(MAYA, Q41);
+                locks.acquire(MAYA, Q43);
+                Message request = Message.request(Verb.LOCKS_SNAPSHOT,
+                        LocksSnapshotRequest.of(EntityRef.QUESTION, List.of(41L, 43L)));
+
+                Message narrow = router.route(request,
+                        CallerContext.authenticated(danaSocket, DANA, Role.TEACHER));
+                Message wide = router.route(request,
+                        CallerContext.authenticated(rinaSocket, RINA, Role.TEACHER));
+
+                assertThat(((LocksSnapshot) narrow.getPayload()).holders()).containsOnlyKeys(41L);
+                assertThat(((LocksSnapshot) wide.getPayload()).holders())
+                        .containsOnlyKeys(41L, 43L);
+            }
+
+            @Test
+            @DisplayName("LOCK_WATCH's wire answer registers nothing out of scope")
+            void watchIsScopedOnTheWire() {
+                locks.acquire(RINA, Q42);
+
+                Message response = router.route(
+                        Message.request(Verb.LOCK_WATCH, new LockRequest(Q42)),
+                        CallerContext.authenticated(danaSocket, DANA, Role.TEACHER));
+
+                assertThat(response.getStatus())
+                        .as("OK rather than FORBIDDEN: a refusal would itself be the disclosure")
+                        .isEqualTo(Status.OK);
+                LockResponse payload = (LockResponse) response.getPayload();
+                assertThat(payload.granted()).isFalse();
+                assertThat(payload.holder()).isNull();
+                // Rina is in the set because acquire registers its own caller (rule 4);
+                // the assertion is about Dana, whose registration was dropped.
+                assertThat(locks.watchersOf(Q42)).doesNotContain(DANA);
+            }
         }
     }
 

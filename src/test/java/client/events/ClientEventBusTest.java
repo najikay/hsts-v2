@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
@@ -173,6 +174,129 @@ class ClientEventBusTest {
 
             assertThat(subscriber.events)
                     .containsExactly(new ServerPushEvent(Verb.PUSH_FORCE_SUBMITTED, "attempt 12"));
+        }
+    }
+
+    // ===================== P-10: reflective reachability ==================
+
+    /**
+     * {@code register} refuses a subscriber the bus could never deliver to.
+     *
+     * <p>The defect this closes has the worst possible shape: greenrobot invokes
+     * {@code @Subscribe} methods reflectively, so a public method on a
+     * package-private class registers happily and then throws
+     * {@link IllegalAccessException} on every delivery — which
+     * {@code RequestDispatcher} swallows on purpose so one bad subscriber cannot
+     * drop the socket. The screen paints once, never updates, and the suite stays
+     * green because tests post to their subscribers directly.
+     *
+     * <p>{@link #aPackagePrivateSubscriberIsRefused} is the plant: deleting the
+     * check in {@code register} is what it exists to fail on.
+     */
+    @Nested
+    @DisplayName("P-10: @Subscribe classes must be reflectively reachable")
+    class SubscriberReachability {
+
+        @Test
+        @DisplayName("a package-private subscriber is refused, by name and with the reason")
+        void aPackagePrivateSubscriberIsRefused() {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> eventBus.register(new HiddenSubscriber()))
+                    .withMessageContaining("@Subscribe classes must be public")
+                    .withMessageContaining(HiddenSubscriber.class.getName())
+                    .withMessageContaining("delivers nothing, silently")
+                    .withMessageContaining("P-10");
+        }
+
+        @Test
+        @DisplayName("the refusal happens at registration, before the bus is touched")
+        void nothingIsRegisteredWhenItIsRefused() {
+            HiddenSubscriber hidden = new HiddenSubscriber();
+
+            assertThatIllegalArgumentException().isThrownBy(() -> eventBus.register(hidden));
+
+            assertThat(eventBus.isRegistered(hidden))
+                    .as("registration is where the developer is looking; delivery is not")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("a public subscriber registers and receives, exactly as before")
+        void aPublicSubscriberIsUnaffected() {
+            assertThatCode(() -> eventBus.register(subscriber)).doesNotThrowAnyException();
+
+            eventBus.post(new ServerPushEvent(Verb.PUSH_NOTIFICATION, "hi"));
+
+            assertThat(subscriber.events).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("an anonymous subscriber is refused: it is genuinely unreachable")
+        void anAnonymousSubscriberIsRefused() {
+            Object anonymous = new Object() {
+                @Subscribe
+                public void onPush(ServerPushEvent event) {
+                    // never called: greenrobot cannot reach this class from its own package
+                }
+            };
+
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> eventBus.register(anonymous));
+        }
+
+        @Test
+        @DisplayName("a public class nested in a package-private one is ACCEPTED, and delivers")
+        void aPublicNestedClassIsReachable() {
+            // The measured correction to the obvious guard. Walking enclosing classes would
+            // refuse this - and would refuse RecordingSubscriber below, which is exactly this
+            // shape and has been delivering events through the real bus since E1.8. A nested
+            // class carries its own ACC_PUBLIC in its own class file and the JVM's access
+            // check never looks at the outer one.
+            RecordingSubscriber nested = new RecordingSubscriber();
+
+            eventBus.register(nested);
+            eventBus.post(new ServerPushEvent(Verb.PUSH_NOTIFICATION, "reaches it"));
+
+            assertThat(nested.events)
+                    .as("the proof is the delivery, not the modifier")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a protected nested subscriber is accepted, because the JVM accepts it")
+        void aProtectedNestedClassIsReachable() {
+            // The one case where every Java-level API disagrees with the JVM: getModifiers()
+            // and accessFlags() both report PROTECTED, from the InnerClasses attribute, while
+            // the class file itself carries ACC_PUBLIC and the access check passes. Refusing
+            // this would break a subscriber that works.
+            assertThatCode(() -> eventBus.register(new ProtectedSubscriber()))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("a null subscriber is refused before anything is asked of it")
+        void nullIsRefused() {
+            assertThatNullPointerException().isThrownBy(() -> eventBus.register(null));
+        }
+    }
+
+    /**
+     * The P-10 shape itself: a perfectly public {@code @Subscribe} method on a class the bus
+     * cannot see. Package-private on purpose — this is the bug, held still.
+     */
+    static class HiddenSubscriber {
+        @Subscribe
+        public void onPush(ServerPushEvent event) {
+            // Never called in production: greenrobot's invoke throws IllegalAccessException,
+            // RequestDispatcher logs it, and the screen quietly stops updating.
+        }
+    }
+
+    /** Protected rather than public, to pin the ACC_PUBLIC case the guard must accept. */
+    protected static class ProtectedSubscriber {
+        @Subscribe
+        public void onPush(ServerPushEvent event) {
+            // reachable: a protected member class is ACC_PUBLIC in its own class file
         }
     }
 

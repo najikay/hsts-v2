@@ -20,8 +20,6 @@ import server.db.repos.QuestionRepository;
 import server.db.repos.UserRepository;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -240,15 +238,53 @@ public class BankBrowseService {
                 return Set.of();
             }
             if (memo == null) {
-                // A LinkedHashSet so the order the codes reach BankQuery is stable, which keeps
-                // the generated parameter list stable and query plans comparable between runs.
-                Set<String> union = new LinkedHashSet<>(
-                        courses.findTaughtCourseCodes(session, caller.userId()));
-                union.addAll(courses.findCoordinatedCourseCodes(session, caller.userId()));
-                memo = Collections.unmodifiableSet(union);
+                memo = reachableCourseCodes(courses, session, caller.userId());
             }
             return memo;
         }
+    }
+
+    /**
+     * The bank's read scope for one member of staff: taught, plus coordinated (E6 §7.3).
+     *
+     * <p><b>One home for the union, and that is the only reason this is a method rather than
+     * four lines inside {@link Scope#forCaller}.</b> A teacher reaches what she teaches (S-5),
+     * a coordinator reaches every course of her subject (F4.1), and a dual-hat coordinator
+     * reaches both so neither hat can take something away. When the edit lock's
+     * {@code LOCKS_SNAPSHOT} needed the same answer for the same reason (E18.9, PR20 §5.3),
+     * that sentence was about to be written out a second time in {@code HSTSServer}'s wiring.
+     * Two copies of a scope rule is precisely how a snapshot starts disclosing a lock on a
+     * course whose questions the same caller is told do not exist — the disagreement the fix
+     * was closing.
+     *
+     * <p><b>Membership only; the role branch is not here.</b> A {@code PRINCIPAL} holds no
+     * {@code course_teachers} and no {@code coordinators} rows, so this answers her nothing,
+     * and that is correct rather than a bug: {@link Authorization#reachesEveryCourse}
+     * short-circuits her before any directory is consulted (F9.3). A caller that has not made
+     * that branch is scoping the principal to an empty world — the trap
+     * {@link Authorization.ReachableCourses} spends four paragraphs on.
+     *
+     * <p>Takes the repository as an argument rather than reading a field, so the lock wiring
+     * can call it with its own {@code CourseRepository} and its own session, and so a unit
+     * test's mock is still the thing that answers.
+     *
+     * <p>A {@link java.util.LinkedHashSet} so the order the codes reach {@link BankQuery} is
+     * stable, which keeps the generated parameter list stable and query plans comparable
+     * between runs. Taught codes first, both halves already sorted by their own queries.
+     *
+     * @param courses the repository to ask
+     * @param session the open session
+     * @param userId  the caller
+     * @return her course codes, taught then coordinated, deduplicated, unmodifiable
+     */
+    public static Set<String> reachableCourseCodes(CourseRepository courses, Session session,
+                                                   long userId) {
+        Set<String> union =
+                new java.util.LinkedHashSet<>(courses.findTaughtCourseCodes(session, userId));
+        union.addAll(courses.findCoordinatedCourseCodes(session, userId));
+        // Unmodifiable because it is handed to Authorization and then to BankQuery: a caller
+        // that could add to it would be widening its own scope after the guard agreed to it.
+        return java.util.Collections.unmodifiableSet(union);
     }
 
     /**

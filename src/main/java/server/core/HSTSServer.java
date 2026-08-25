@@ -27,6 +27,7 @@ import server.features.auth.UserRecord;
 import server.features.bank.BankBrowseService;
 import server.features.bank.BankHandlers;
 import server.features.bank.BankReadHandlers;
+import server.features.bank.QuestionLockKey;
 import server.features.bank.QuestionService;
 import server.features.bot.AskRateLimiter;
 import server.features.bot.BotAdminService;
@@ -58,6 +59,7 @@ import server.features.grading.OverrideService;
 import server.features.grading.RepositoryGradingReads;
 import server.features.locks.EditLockGuard;
 import server.features.locks.EditLockService;
+import server.features.locks.EntityScopes;
 import server.features.notify.JpaNotificationStore;
 import server.features.notify.NotificationService;
 import server.features.notify.NotificationStore;
@@ -297,7 +299,93 @@ public class HSTSServer extends AbstractServer {
                 new BankBrowseService(new QuestionRepository(), new CourseRepository(),
                         new UserRepository()))
                 .registerOn(router);
+        installQuestionLockScope(locks, sessionFactory);
         return router;
+    }
+
+    /**
+     * Scopes the edit lock's two list verbs to the bank's own read scope (E18.9 — PR20 §5.3).
+     *
+     * <p>{@code LOCKS_SNAPSHOT} and {@code LOCK_WATCH} are role-gated to the two teaching
+     * roles and were scoped no further, so a <b>present</b> snapshot entry proved that a
+     * question exists, that somebody is editing it and who — for a course whose every bank
+     * read answers {@code NOT_FOUND} out of scope, indistinguishably from a question that
+     * does not exist. This line is what makes the "not an existence oracle" claim true in
+     * both directions rather than one.
+     *
+     * <p><b>Installed here, beside the bank it belongs to, and not inside
+     * {@code EditLockService}.</b> The lock service is generic — an {@code EntityRef} is a
+     * type and a long, and it knows nothing about questions, courses or teaching. Keeping the
+     * predicate out here is what lets E7's exam versions, E16's bot sources and E9's
+     * executions keep using the same service without inheriting the bank's idea of scope.
+     *
+     * <p><b>The same reachability the bank reads use, through the same method.</b>
+     * {@code BankBrowseService.reachableCourseCodes} is the union
+     * {@code BankBrowseService.Scope} memoizes for every browse, so the browse and this filter
+     * cannot disagree about what a caller reaches — a second copy of "taught, plus
+     * coordinated" is exactly how a snapshot would start disclosing a lock on a course the
+     * browse says is empty.
+     *
+     * <p><b>No principal branch, and that is checked rather than assumed.</b>
+     * {@code Authorization.reachesEveryCourse} short-circuits her everywhere else (F9.3)
+     * because she holds no rows in either table this union is built from, so this predicate
+     * would answer her nothing. She never reaches it: both verbs run
+     * {@code requireRole(TEACHER, COORDINATOR)} before any of this, and {@code PRINCIPAL} is
+     * neither. Adding a branch for a caller the role gate excludes would be an untested claim
+     * about an unreachable path, which is the P-6 shape.
+     *
+     * <p>One transaction per consult, matching how {@code useCourseTeachers} and
+     * {@code useSubjectCoordinators} wire just above. {@code EditLockService.snapshot}
+     * consults only for ids somebody is actually holding, which is what keeps a 500-id request
+     * from becoming 500 transactions; its javadoc proves the answer is identical either way.
+     */
+    private static void installQuestionLockScope(EditLockService locks,
+                                                 SessionFactory sessionFactory) {
+        locks.scopes().install(EntityRef.QUESTION, questionLockScope(sessionFactory));
+    }
+
+    /**
+     * The predicate {@link #installQuestionLockScope} installs, built rather than installed.
+     *
+     * <p><b>Separated from the installation for one reason: so a test can run this exact
+     * lambda against a real database.</b> Everything it composes is covered on its own —
+     * {@code QuestionLockKey.displayIdOf} round-trips, {@code reachableCourseCodes} unions,
+     * {@code findActiveByDisplayId} finds — and the composition is where the interesting
+     * mistake lives: a truncating inverse, a course code compared unstripped, an
+     * {@code orElse(true)}. All three are green in every part and wrong as a whole, which is
+     * the P-8 shape. {@code QuestionLockScopeH2Test} calls this method, not a copy of it.
+     *
+     * <p>Package-private and named as production API that exists partly for testability,
+     * because that is what it is; the independent justification is that
+     * {@link #defaultRouter} is already too long to grow another block.
+     *
+     * @param sessionFactory the pool to open one transaction per consult on
+     * @return the {@code question} scope
+     */
+    static EntityScopes.EntityScope questionLockScope(SessionFactory sessionFactory) {
+        QuestionRepository questions = new QuestionRepository();
+        CourseRepository courses = new CourseRepository();
+        return (callerId, entityId) ->
+                Transactions.inTx(sessionFactory, session -> {
+                    String displayId;
+                    try {
+                        displayId = QuestionLockKey.displayIdOf(entityId);
+                    } catch (IllegalArgumentException notADisplayId) {
+                        // An id no question could ever have. Out of scope rather than an
+                        // exception on the read thread: this runs inside a snapshot serving
+                        // forty other rows, and one hostile id must not take the answer down.
+                        log.debug("Lock scope: {} is not a question display id", entityId);
+                        return false;
+                    }
+                    return questions.findActiveByDisplayId(session, displayId)
+                            .map(question -> BankBrowseService
+                                    .reachableCourseCodes(courses, session, callerId)
+                                    .contains(question.getCourseCode().strip()))
+                            // Unknown or soft-deleted collapses into "not reachable", the same
+                            // conflation BankBrowseService.readable makes and for the same
+                            // reason: the caller must not be able to tell the two apart.
+                            .orElse(false);
+                });
     }
 
     /**

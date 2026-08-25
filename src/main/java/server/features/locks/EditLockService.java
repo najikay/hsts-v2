@@ -78,12 +78,27 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li><b>Renewing a lock you do not hold fails as a refusal, not an error.</b>
  *       A heartbeat that arrives after a takeover is an ordinary race, and the
  *       client turns the refusal into the "take over editing?" prompt.</li>
+ *   <li><b>The reading and taking verbs are scoped, and the scope is somebody
+ *       else's knowledge (E18.9).</b> {@link #snapshot}, {@link #watch} and
+ *       {@link #acquire} put every id through the {@link EntityScopes} predicate
+ *       installed for its type, so a caller is never told about — and can never
+ *       hold — a lock on an entity she cannot reach. An out-of-scope acquire
+ *       answers the same free shape an out-of-scope watch does and takes
+ *       nothing (closed 2026-08-25; it was briefly a named gap here, and its
+ *       refusal used to name the holder). The service still holds no domain
+ *       knowledge of its own: it consults a lambda a feature installed at
+ *       wiring and never learns what the answer means. A type with no scope
+ *       installed is unfiltered, deliberately — see {@link EntityScopes} for
+ *       why that default runs the opposite way to {@code Authorization}'s.
+ *       {@link #renew} and {@link #release} stay unscoped: both key on the
+ *       caller's own user id and can only ever touch her own hold.</li>
  * </ol>
  *
  * <p>Everything is constructor-injected — {@link PushGateway}, a
  * {@link DisplayNames} lookup and a {@link Clock} — so expiry, takeover and the
  * disconnect path are all unit-testable by moving a test clock rather than by
- * sleeping.
+ * sleeping. The one exception is {@link #scopes}, installed after construction
+ * for an ordering reason {@link #scopes()} states.
  */
 public class EditLockService {
 
@@ -107,6 +122,7 @@ public class EditLockService {
 
     private final Map<EntityRef, Held> locks = new ConcurrentHashMap<>();
     private final Map<EntityRef, Set<Long>> watchers = new ConcurrentHashMap<>();
+    private final EntityScopes scopes = new EntityScopes();
 
     /** Production wiring: system clock. */
     public EditLockService(PushGateway pushGateway, DisplayNames displayNames) {
@@ -118,6 +134,28 @@ public class EditLockService {
         this.pushGateway = Objects.requireNonNull(pushGateway, "pushGateway");
         this.displayNames = Objects.requireNonNull(displayNames, "displayNames");
         this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    /**
+     * The per-type scope registry the two list verbs consult (E18.9).
+     *
+     * <p>Handed out rather than constructor-injected, which is the one place this
+     * service does not follow its own "everything is constructor-injected" rule.
+     * The reason is ordering: a scope for {@code question} is a lambda over the
+     * bank's repositories, and in {@code HSTSServer} the lock service is
+     * assembled before the bank is. Requiring the registry at construction would
+     * mean building it empty and populating it later anyway, which is this method
+     * with an extra argument.
+     *
+     * <p>Install once, at assembly. Nothing reads it during construction, so
+     * there is no window in which a request could be served against a
+     * half-populated registry that a constructor argument would close.
+     *
+     * @return the registry, to install scopes on
+     * @see EntityScopes the unfiltered-when-uninstalled contract
+     */
+    public EntityScopes scopes() {
+        return scopes;
     }
 
     /** Registers the five lock verbs; all authenticated, none open. */
@@ -156,6 +194,17 @@ public class EditLockService {
      */
     public LockResponse acquire(long userId, EntityRef entity) {
         Objects.requireNonNull(entity, "entity");
+        if (!scopes.reaches(entity, userId)) {
+            // The same non-disclosure shape watch() uses, ruled 2026-08-25 with the
+            // snapshot scoping: an out-of-scope acquire must neither TAKE the lock (a
+            // teacher could block a course she cannot read) nor NAME a holder (the
+            // refusal was the last one-directional oracle in this group). "Free" here
+            // is indistinguishable from an entity nobody is editing, and the caller's
+            // own editor can never legitimately reach this branch - it navigates from
+            // lists that are scoped already.
+            log.debug("User {} may not acquire {}; refused as free, nothing taken", userId, entity);
+            return LockResponse.free(entity);
+        }
         addWatcher(entity, userId);
         Instant now = clock.instant();
         Instant expiry = now.plus(LockTiming.TTL);
@@ -273,12 +322,37 @@ public class EditLockService {
      * no news, and a screen that re-watches on every refresh must not produce a
      * push storm.
      *
+     * <h2>Out of scope is silently not registered (E18.9)</h2>
+     *
+     * <p>A watch on an entity the caller's {@link EntityScopes} scope does not
+     * reach is <b>not registered</b>, and the answer is the free one: not
+     * granted, no holder, no expiry. That is the same shape a watch on a genuinely
+     * free entity gets, so the refusal discloses nothing — which is the point,
+     * and is why this is a silent filter rather than a {@code FORBIDDEN}.
+     *
+     * <p><b>Registration rather than delivery, and that was a cost decision.</b>
+     * {@link #snapshot} closing the oracle would be worth little if the caller
+     * could watch an out-of-scope id and be told about it by the next
+     * {@code PUSH_LOCK_CHANGED} instead. Two places could close that: here, or
+     * {@link #publish} filtering its recipients. Filtering here is one consult in
+     * the place that already has the caller, the entity and the scope in hand.
+     * Filtering at publish would be one consult per recipient per lock change, on
+     * the hot path, forever — the same answer bought repeatedly. A list screen
+     * already spends one message per row on this verb, so one consult per row is
+     * proportionate to what the client is doing anyway.
+     *
      * @return the entity's current state, never a grant: a watcher is not a
      *         holder, so {@code granted} is {@code false} even when nobody holds
      *         it and {@code holder} is {@code null} in exactly that case
      */
     public LockResponse watch(long userId, EntityRef entity) {
         Objects.requireNonNull(entity, "entity");
+        if (!scopes.reaches(entity, userId)) {
+            // Indistinguishable from a free entity on purpose: a caller must not be
+            // able to tell "you may not watch this" from "nobody is editing this".
+            log.debug("User {} may not watch {}; registration dropped", userId, entity);
+            return LockResponse.free(entity);
+        }
         addWatcher(entity, userId);
         Held held = live(entity);
         if (held == null) {
@@ -297,7 +371,14 @@ public class EditLockService {
      * question locked ten minutes ago raises nothing when a colleague opens the
      * bank, so a screen fed only by {@code PUSH_LOCK_CHANGED} would show it as
      * free until somebody happened to touch it. One snapshot at load plus the
-     * pushes afterwards is the whole picture.
+     * pushes afterwards is the whole picture — <b>provided the screen calls
+     * {@link #watch} first</b> (qualified 2026-08-25; the sentence used to end at
+     * "picture" and that was false). {@link #publish} resolves recipients from the
+     * watcher set at the instant the lock changes, so a screen that snapshots and
+     * then watches has a window in which a colleague acquires, the push finds a
+     * set the screen is not in, and the row shows free for that whole edit
+     * session. Watch first and the overlap duplicates, which is idempotent here;
+     * read first and it drops, which is silent (Member A, PR20 §3, P-11).
      *
      * <p>Only live holds are reported. An expired hold that the sweeper has not
      * reached yet is not in the answer, because it is not true any more; the
@@ -308,25 +389,61 @@ public class EditLockService {
      * calls {@link #watch} per row it is showing, and keeping the two apart is
      * what lets a one-off refresh stay a one-off.
      *
+     * <h2>Out of scope is absent, not refused (E18.9)</h2>
+     *
+     * <p>Every id is put through the caller's {@link EntityScopes} scope for this
+     * type before it is answered, and an id she does not reach is simply <b>not
+     * in the map</b> — the same absence a free id gets, and the same absence an
+     * id that has never existed gets. Absence was already ambiguous and stays
+     * that way; what changes is that <em>presence</em> no longer proves anything
+     * about a row out of reach.
+     *
+     * <p>Before this, the verb was role-gated and scoped no further, so a present
+     * entry proved that a row exists, that somebody is editing it and who — for a
+     * course whose every bank read answers {@code NOT_FOUND} out of scope,
+     * indistinguishably from a row that does not exist. One direction of the "not
+     * an existence oracle" claim held and the other did not (Member A, PR20 §5.3).
+     *
+     * <p><b>Only held ids are put through the scope, and the answer is identical
+     * either way.</b> An id nobody holds is absent whether or not the caller
+     * reaches it, so consulting the scope for it can only change how long the
+     * answer takes. That matters at this verb's scale: {@code MAX_IDS} is 500 and
+     * a scope consult is a database read, so filtering first would mean up to 500
+     * reads to remove entries that were never going to exist. Filtering the held
+     * ones costs one read per row somebody is actually editing, which on a bank
+     * page is nought to a handful. The residual is a timing signal — a batch
+     * containing a held id takes marginally longer than one containing none — and
+     * that is accepted: it says nothing about <em>which</em> id, and the map
+     * lookup it rides on predates this filter.
+     *
+     * @param callerId   the session's user id, whose scope the ids are filtered
+     *                   through; never taken from a payload
      * @param entityType the kind of thing every id refers to
-     * @param entityIds  the ids on screen; unknown and free ids are simply absent
-     *                   from the answer
+     * @param entityIds  the ids on screen; unknown, free and out-of-scope ids are
+     *                   all simply absent from the answer
      * @return the sparse map of id to holder
      */
-    public LocksSnapshot snapshot(String entityType, Collection<Long> entityIds) {
+    public LocksSnapshot snapshot(long callerId, String entityType, Collection<Long> entityIds) {
         Objects.requireNonNull(entityType, "entityType");
         Objects.requireNonNull(entityIds, "entityIds");
         Map<Long, LockHolder> held = new LinkedHashMap<>();
+        int hidden = 0;
         for (Long entityId : entityIds) {
             if (entityId == null) {
                 continue;
             }
             Held current = live(new EntityRef(entityType, entityId));
-            if (current != null) {
-                held.put(entityId, holder(current.userId()));
+            if (current == null) {
+                continue;
             }
+            if (!scopes.reaches(entityType, callerId, entityId)) {
+                hidden++;
+                continue;
+            }
+            held.put(entityId, holder(current.userId()));
         }
-        log.debug("Snapshot of {} {} id(s): {} held", entityIds.size(), entityType, held.size());
+        log.debug("Snapshot of {} {} id(s) for user {}: {} held, {} withheld as out of scope",
+                entityIds.size(), entityType, callerId, held.size(), hidden);
         return new LocksSnapshot(entityType, held);
     }
 
@@ -438,7 +555,8 @@ public class EditLockService {
                     query.entityIds().size(), caller.userId(), LocksSnapshotRequest.MAX_IDS);
             return Message.error(request, ErrorCode.VALIDATION, LocksSnapshotRequest.TOO_MANY_IDS);
         }
-        return Message.ok(request, snapshot(query.entityType(), query.entityIds()));
+        return Message.ok(request,
+                snapshot(caller.userId(), query.entityType(), query.entityIds()));
     }
 
     /** Shared shape of the four single-entity verbs: same payload, same guard, different operation. */
