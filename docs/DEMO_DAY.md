@@ -1,6 +1,6 @@
 # HSTS — demo day
 
-**Defense date: Wednesday 2026-08-27** (moved from 08-28, announced 08-21). Group: **12-1**, prefix `G12-1`.
+**Defense date: NEXT WEEK, exact date TBD (extension announced 2026-08-25; previously Wednesday 2026-08-27).** Group: **12-1**, prefix `G12-1`.
 
 Everything that has to be true on the machines before the defence starts, in the order it has
 to be done. Written to be executed, not read: every step is a box, and a box is only ticked

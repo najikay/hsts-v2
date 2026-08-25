@@ -42,6 +42,13 @@ E21 hardening is everyone (each attacks the others' features); E23 stretch assig
 ## 2. Load & sequencing
 
 **Endgame update (2026-08-21):** the defense moved to **Aug 27** and the group name is **12-1**.
+**EXTENSION (2026-08-25): the defense moved to NEXT WEEK (exact date TBD).** The pace does NOT
+change - the plan below completed on schedule and the extra week is spent on: (1) the full
+acceptance pass, every scenario walked against live builds (B leads, per his walkthrough
+standard); (2) UI polish rounds through docs/UI-REGISTER.md (Naji tests note-by-note, entries
+ruled, fixes batched into agent waves); (3) the submission document (E22.1-22.3) written against
+a COMPLETE acceptance table, before the defense. Present-readiness outranks polish at every
+decision.
 Compressed plan: features done Aug 23-24 · integration + lead's manual passes Aug 24-25 ·
 hardening Aug 26 · submission zip + two-machine rehearsal + DEFENSE Aug 27. Because of the lost
 day, **E14.3 (StatChart) moved to the lead** (it is shared design-system work; B keeps E14 and
