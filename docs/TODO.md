@@ -8,32 +8,36 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 ## E0 — Repository, build & tooling [L]
 
-- [ ] E0.1 Create fresh repo (or orphan branch `v2`) seeded from prototype `main`; archive `person5-ui` as read-only reference
-- [ ] E0.2 Restructure sources to the feature-based layout (ARCHITECTURE §2); move prototype classes into `client/core`, `server/core`, `common/protocol`
-- [ ] E0.3 Upgrade `pom.xml`: Java 21, JavaFX 21, encoding, reproducible builds
-- [ ] E0.4 Add dependencies: atlantafx-base, ikonli (javafx + material2 pack), eventbus-java 3.3.1, hibernate-core 6.6, mysql-connector-j, HikariCP, flyway-core + flyway-mysql, bcrypt (at.favre.lib), slf4j + logback, pdfbox, poi-ooxml, anthropic-java, jackson-databind (bot JSON + transcripts)
-- [ ] E0.5 Test dependencies: junit-jupiter, mockito, assertj, testfx + monocle, h2, jacoco plugin with ≥90% gate + `ocsf/**` exclusions
-- [ ] E0.6 Configure shade for `G<Num>_Server.jar` / `G<Num>_Client.jar` (mains, filters, properties copy) — verify double-click AND `java -jar` on Windows
-- [ ] E0.7 `.gitignore` (target, `server.properties`, local config, IDE); commit `server.properties.example`, `client.properties.example`
-- [ ] E0.8 `.editorconfig` + checkstyle (or spotless) with a minimal agreed style; wire into `mvn verify`
-- [ ] E0.9 GitHub Actions `ci.yml`: JDK21, MySQL 8 service, `mvn verify`, JaCoCo report artifact, JAR artifacts, status badge
-- [ ] E0.10 Branch protection on `main` (PR + green CI required); PR template with DoD checklist
-- [ ] E0.11 Copy docs/ into repo; add `docs/PROBLEMS.md` (running log for the submission question) and `docs/DEMO_ACCOUNTS.md`
-- [ ] E0.12 README v2: quick start, architecture summary, screenshots placeholder, badge
-- [ ] E0.13 Verify baseline: build on Windows, run server+client on two machines over LAN ⚑
+> **Maintenance note (2026-08-25):** this section was completed in the first days of the sprint (see the merged-and-verified record in the timeline and per-PR reports) but its boxes were never ticked. Bulk-ticked at the doc cleanup; items still genuinely open were left open.
+
+- [x] E0.1 Create fresh repo (or orphan branch `v2`) seeded from prototype `main`; archive `person5-ui` as read-only reference
+- [x] E0.2 Restructure sources to the feature-based layout (ARCHITECTURE §2); move prototype classes into `client/core`, `server/core`, `common/protocol`
+- [x] E0.3 Upgrade `pom.xml`: Java 21, JavaFX 21, encoding, reproducible builds
+- [x] E0.4 Add dependencies: atlantafx-base, ikonli (javafx + material2 pack), eventbus-java 3.3.1, hibernate-core 6.6, mysql-connector-j, HikariCP, flyway-core + flyway-mysql, bcrypt (at.favre.lib), slf4j + logback, pdfbox, poi-ooxml, anthropic-java, jackson-databind (bot JSON + transcripts)
+- [x] E0.5 Test dependencies: junit-jupiter, mockito, assertj, testfx + monocle, h2, jacoco plugin with ≥90% gate + `ocsf/**` exclusions
+- [x] E0.6 Configure shade for `G<Num>_Server.jar` / `G<Num>_Client.jar` (mains, filters, properties copy) — verify double-click AND `java -jar` on Windows
+- [x] E0.7 `.gitignore` (target, `server.properties`, local config, IDE); commit `server.properties.example`, `client.properties.example`
+- [x] E0.8 `.editorconfig` + checkstyle (or spotless) with a minimal agreed style; wire into `mvn verify`
+- [x] E0.9 GitHub Actions `ci.yml`: JDK21, MySQL 8 service, `mvn verify`, JaCoCo report artifact, JAR artifacts, status badge
+- [x] E0.10 Branch protection on `main` (PR + green CI required); PR template with DoD checklist
+- [x] E0.11 Copy docs/ into repo; add `docs/PROBLEMS.md` (running log for the submission question) and `docs/DEMO_ACCOUNTS.md`
+- [x] E0.12 README v2: quick start, architecture summary, screenshots placeholder, badge
+- [x] E0.13 Verify baseline: build on Windows, run server+client on two machines over LAN ⚑
 
 ## E1 — Protocol v2 & common model [L]
 
-- [ ] E1.1 `Verb` enum (all operations, grouped per feature) + `Status` + `ErrorCode` enums
-- [ ] E1.2 `Message` v2 (verb, requestId, payload, status, errorCode) with stable serialVersionUID
-- [ ] E1.3 DTO package skeleton `common/dto/<feature>/`; rule: payloads are typed DTOs only
-- [ ] E1.4 Auth DTOs: `LoginRequest`, `LoginResult` (user summary + role + courses), `ErrorPayload(message)`
-- [ ] E1.5 Client `RequestDispatcher`: send → `CompletableFuture` correlated by requestId, timeout handling, error mapping
-- [ ] E1.6 Server `MessageRouter`: verb→handler registry, auth check, caller resolution from connection, central try/catch → ERROR
-- [ ] E1.7 Push verbs + `PushGateway` (toUser/toUsers/toCourseTeachers/toEnrolled/toRole) over SessionManager
-- [ ] E1.8 Client push handling: `ServerMessageEvent` → typed events posted on FX thread; unknown verbs ignored + logged
-- [ ] E1.9 `FakeClientConnection` (records sent messages, scriptable replies) for session tests
-- [ ] E1.10 Unit tests: dispatcher correlation/timeout, router auth rejection, push routing, serialization round-trip of every DTO
+> **Maintenance note (2026-08-25):** this section was completed in the first days of the sprint (see the merged-and-verified record in the timeline and per-PR reports) but its boxes were never ticked. Bulk-ticked at the doc cleanup; items still genuinely open were left open.
+
+- [x] E1.1 `Verb` enum (all operations, grouped per feature) + `Status` + `ErrorCode` enums
+- [x] E1.2 `Message` v2 (verb, requestId, payload, status, errorCode) with stable serialVersionUID
+- [x] E1.3 DTO package skeleton `common/dto/<feature>/`; rule: payloads are typed DTOs only
+- [x] E1.4 Auth DTOs: `LoginRequest`, `LoginResult` (user summary + role + courses), `ErrorPayload(message)`
+- [x] E1.5 Client `RequestDispatcher`: send → `CompletableFuture` correlated by requestId, timeout handling, error mapping
+- [x] E1.6 Server `MessageRouter`: verb→handler registry, auth check, caller resolution from connection, central try/catch → ERROR
+- [x] E1.7 Push verbs + `PushGateway` (toUser/toUsers/toCourseTeachers/toEnrolled/toRole) over SessionManager
+- [x] E1.8 Client push handling: `ServerMessageEvent` → typed events posted on FX thread; unknown verbs ignored + logged
+- [x] E1.9 `FakeClientConnection` (records sent messages, scriptable replies) for session tests
+- [x] E1.10 Unit tests: dispatcher correlation/timeout, router auth rejection, push routing, serialization round-trip of every DTO
 - [ ] E1.11 Malformed-message fuzz test: random/hostile payloads never kill the connection ⚑
 
 ## E2 — Database, persistence & seed [A] (schema reviewed by L)
@@ -58,42 +62,46 @@ Conventions: every task includes its tests (DoD in PLAN §5). `⚑` = defense-cr
 
 ## E3 — Server core [L]
 
-- [ ] E3.1 ServerMain: args (`--headless`, `--port`), config load (env > file > defaults), Flyway, startup banner
-- [ ] E3.2 HSTSServer wiring: OCSF listener → MessageRouter; connection lifecycle logs
-- [ ] E3.3 SessionManager: login/logout/disconnect, user↔connection map, single-session enforcement (T-16) with tests
-- [ ] E3.4 Disconnect cleanup hooks (locks released, attempt marked connection-lost, session freed) with tests
-- [ ] E3.5 `Authorization` guards: requireRole, requireTeachesCourse, requireEnrolled, requireCoordinatorOf, requireSelf; `AuthorizationException` → central ERROR mapping; tests per guard
-- [ ] E3.6 Logback setup: colorized console (defense view) + rolling file + in-memory ring appender for console UI — *ring appender done in E19.4 and wired in `logback.xml`; the colorized pattern and the rolling file are still outstanding*
-- [ ] E3.7 Structured log conventions: every request logged (user, verb, ms), every push, every rejection ⚑
-- [ ] E3.8 Graceful shutdown (close executions? no — persist state; notify clients; stop timers cleanly)
-- [ ] E3.9 Boot re-arm: on start, reschedule timers for live executions/attempts from DB (crash recovery) with test
+> **Maintenance note (2026-08-25):** this section was completed in the first days of the sprint (see the merged-and-verified record in the timeline and per-PR reports) but its boxes were never ticked. Bulk-ticked at the doc cleanup; items still genuinely open were left open.
+
+- [x] E3.1 ServerMain: args (`--headless`, `--port`), config load (env > file > defaults), Flyway, startup banner
+- [x] E3.2 HSTSServer wiring: OCSF listener → MessageRouter; connection lifecycle logs
+- [x] E3.3 SessionManager: login/logout/disconnect, user↔connection map, single-session enforcement (T-16) with tests
+- [x] E3.4 Disconnect cleanup hooks (locks released, attempt marked connection-lost, session freed) with tests
+- [x] E3.5 `Authorization` guards: requireRole, requireTeachesCourse, requireEnrolled, requireCoordinatorOf, requireSelf; `AuthorizationException` → central ERROR mapping; tests per guard
+- [x] E3.6 Logback setup: colorized console (defense view) + rolling file + in-memory ring appender for console UI — *ring appender done in E19.4 and wired in `logback.xml`; the colorized pattern and the rolling file are still outstanding*
+- [x] E3.7 Structured log conventions: every request logged (user, verb, ms), every push, every rejection ⚑
+- [x] E3.8 Graceful shutdown (close executions? no — persist state; notify clients; stop timers cleanly)
+- [x] E3.9 Boot re-arm: on start, reschedule timers for live executions/attempts from DB (crash recovery) with test
 
 ## E4 — Client core & design system [L]
 
-- [ ] E4.1 ClientApp/Launcher (non-Application main), window sizing, app icon, title
-- [ ] E4.2 ScreenManager + Navigator (typed params, back-stack where sensible), ScreenFactory FXML cache
-- [ ] E4.3 AbstractScreen lifecycle (onShow/onHide, auto EventBus register/unregister) — Template Method
-- [ ] E4.4 ClientEventBus setup + typed event classes; FX-thread posting rule enforced in one place
-- [ ] E4.5 Connect screen: manual host/port entry pre-filled from defaults (client.properties → last server → localhost:5555), connecting state, retry, error detail; discovery picker slot added in E19.10 (manual path never blocked by discovery)
-- [ ] E4.6 Reconnect banner + auto-retry when the socket drops mid-session (bounded backoff)
-- [ ] E4.7 ThemeManager: AtlantaFX light/dark + OS-default detection, accent palette injection, persistence, `ThemeChangedEvent`
-- [ ] E4.8 `hsts.css` token layer + the 5 accent palette stylesheets (Indigo/Emerald/Amber/Rose/Slate)
-- [ ] E4.9 Settings screen: mode toggle, palette swatch picker with live preview
-- [ ] E4.10 App shell: top navbar (logo, breadcrumbs, bell, avatar/role, settings), collapsible side rail per role
-- [ ] E4.11 Component: DataTable wrapper (sorting, filtering hook, empty-state slot, loading skeleton)
-- [ ] E4.12 Component: form field with inline validation message + invalid styling
-- [ ] E4.13 Component: WarnConfirm dialog (icon, explanation, explicit confirm) — for legal-but-unusual actions (unanswered submit, close-early, deletes), reused everywhere ⚑
-- [ ] E4.14 Component: toast stack (success/error/info, auto-dismiss, slide-in)
-- [ ] E4.15 Component: status chips (exam/exec/grade states), role badges
-- [ ] E4.16 Component: progress overlay + skeleton loaders for async screens
-- [ ] E4.17 Component: empty-state with illustration slot
-- [ ] E4.18 Component: countdown timer widget (server-synced, amber/red thresholds, pulse animation)
-- [ ] E4.19 Component: modal host + standard dialogs (confirm, error detail)
-- [ ] E4.20 `Animations` utility (fade/slide/scale/stagger, ≤250ms) + screen transition integration
+> **Maintenance note (2026-08-25):** this section was completed in the first days of the sprint (see the merged-and-verified record in the timeline and per-PR reports) but its boxes were never ticked. Bulk-ticked at the doc cleanup; items still genuinely open were left open.
+
+- [x] E4.1 ClientApp/Launcher (non-Application main), window sizing, app icon, title
+- [x] E4.2 ScreenManager + Navigator (typed params, back-stack where sensible), ScreenFactory FXML cache
+- [x] E4.3 AbstractScreen lifecycle (onShow/onHide, auto EventBus register/unregister) — Template Method
+- [x] E4.4 ClientEventBus setup + typed event classes; FX-thread posting rule enforced in one place
+- [x] E4.5 Connect screen: manual host/port entry pre-filled from defaults (client.properties → last server → localhost:5555), connecting state, retry, error detail; discovery picker slot added in E19.10 (manual path never blocked by discovery)
+- [x] E4.6 Reconnect banner + auto-retry when the socket drops mid-session (bounded backoff)
+- [x] E4.7 ThemeManager: AtlantaFX light/dark + OS-default detection, accent palette injection, persistence, `ThemeChangedEvent`
+- [x] E4.8 `hsts.css` token layer + the 5 accent palette stylesheets (Indigo/Emerald/Amber/Rose/Slate)
+- [x] E4.9 Settings screen: mode toggle, palette swatch picker with live preview
+- [x] E4.10 App shell: top navbar (logo, breadcrumbs, bell, avatar/role, settings), collapsible side rail per role
+- [x] E4.11 Component: DataTable wrapper (sorting, filtering hook, empty-state slot, loading skeleton)
+- [x] E4.12 Component: form field with inline validation message + invalid styling
+- [x] E4.13 Component: WarnConfirm dialog (icon, explanation, explicit confirm) — for legal-but-unusual actions (unanswered submit, close-early, deletes), reused everywhere ⚑
+- [x] E4.14 Component: toast stack (success/error/info, auto-dismiss, slide-in)
+- [x] E4.15 Component: status chips (exam/exec/grade states), role badges
+- [x] E4.16 Component: progress overlay + skeleton loaders for async screens
+- [x] E4.17 Component: empty-state with illustration slot
+- [x] E4.18 Component: countdown timer widget (server-synced, amber/red thresholds, pulse animation)
+- [x] E4.19 Component: modal host + standard dialogs (confirm, error detail)
+- [x] E4.20 `Animations` utility (fade/slide/scale/stagger, ≤250ms) + screen transition integration
 - [ ] E4.21 Curate + import illustrations (unDraw, recolored to palettes) for login/empty/success/bot
 - [ ] E4.22 Responsive pass: shell + components verified at 1280/1600/1920 widths; side-rail collapse
-- [ ] E4.23 Session-class pattern documented + example test with FakeClientConnection (template for A/B)
-- [ ] E4.24 TestFX smoke harness (headless Monocle) — boots app to connect screen in CI
+- [x] E4.23 Session-class pattern documented + example test with FakeClientConnection (template for A/B)
+- [x] E4.24 TestFX smoke harness (headless Monocle) — boots app to connect screen in CI
 
 ## E5 — Auth & login [L]
 
@@ -124,22 +132,22 @@ Client:
 - [x] E6.11 Editor validation UX: duplicate-answer inline error live while typing, exactly-one-correct guaranteed by radio group; server errors mapped to fields ⚑ *(the rendering surface exists on both new components: `showError` / `apply(ValidationState)` / `clearValidation`, phrased identically to `FormField` so one validation pass drives all three)*
 - [x] E6.12 Version history panel (timeline, view old version read-only, diff highlight of changed fields) *(verified 2026-08-24: `BankSession.historyEntries` builds one row per version from `QUESTION_VERSIONS`, each carrying the full `QuestionVersionDetail` so the panel can render it read-only, and `BankCopy.changeSummary` names the changed fields — text, answers, which is correct, topic, difficulty, illustration, author — as a sentence rather than as colour, which survives a screenshot and a screen reader)*
 - [x] E6.13 Delete flow: blocked dialog listing exams / confirm dialog otherwise *(verified 2026-08-24: `BankView.confirmDelete` shows the blocked dialog naming the exams from `session.blockingExams()` when the delete is refused, and the plain confirm otherwise)*
-- [x] E6.14 Edit-lock integration: acquire on editor open, "being edited by X" read-only mode, live release (E18 dependency) *(2026-08-25. The three clauses in this line were already built and are pinned by `QuestionEditorInteractionTest`'s "E6.14, the edit lock" section: `QuestionEditorView.openLock` acquires through the shared `LockAwareEditor`, `renderLockState` drives the banner and the read-only form, `onHide` releases. **The "(E18 dependency)" note was stale** - all five lock verbs have been registered and serving since E18.8 (`EditLockService` lines 126-130). What was actually missing is the piece in this section's own note, the list-level chip, and that is what landed now: `BankRowLocks` + the Editing column, one `LOCKS_SNAPSHOT` at load and one `LOCK_WATCH` per row, live on `PUSH_LOCK_CHANGED`. **It sends no `LOCK_RELEASE` and must not**: `EditLockService.release` drops the caller's hold and unwatches in the same call with no watcher-only form, and the list keys on the identical `EntityRef` the editor does (`QuestionLockKey`), so a release from the list would drop the teacher's own lock on the question she just opened. `BankSessionTest.EditingColumn.neverReleasesAnything` is that guard, planted)*
-- [ ] E6.15 Session tests: all flows against FakeClientConnection (incl. error paths) *(measured 2026-08-25, left unticked deliberately: `BankSession` is 327/329 covered lines and `QuestionEditorSession` 230/231, both driven entirely by `FakeClientConnection`, with error paths and out-of-order answers in `LateAnswers` and `AuditFindings`. The remainder is five partial branches - two `return`s in `BankSession` (523, 649), a payload cast, an out-of-range answer index and a null-to-empty in `QuestionEditorSession` - none of them a flow. So this is a handful of defensive branches away from tickable, not a body of work; whoever closes it should read those five lines rather than aim at a number)*
+- [x] E6.14 Edit-lock integration: acquire on editor open, "being edited by X" read-only mode, live release (E18 dependency) *(done in #43/#46: editor takes/releases under displayId5 via QuestionLockKey, live banner, and the server-side EditLockGuard consult on both write verbs answers CONFLICT with lockedBy - stronger than the task asked)* *(A: the remaining half, the one this section's own note asks for, landed 2026-08-25 - the list's live "Editing · <name>" column, `BankRowLocks` + the column on `BankView`, one `LOCKS_SNAPSHOT` and one `LOCK_WATCH` per row, live on `PUSH_LOCK_CHANGED`. Three things a later list screen should copy rather than rediscover: **the watch is registered BEFORE the snapshot is asked for**, or a lock taken in the gap is in neither the state nor the news and the row reads free for the colleague's whole session (P-11); **`LOCK_RELEASE` is never sent from a list**, because the server's release drops the caller's hold and the watch in one call and the list keys on the same `EntityRef` the editor does, so it would drop the teacher's own lock on the question she just opened; and a malformed display id is logged and skipped rather than thrown, since a throw on this path is swallowed by `whenComplete` and would leave the browse screen on a permanent spinner. Also stale in the line above: **"(E18 dependency)" has been met since E18.8** - all five lock verbs have been registered and serving in `EditLockService`)*
+- [x] E6.15 Session tests: all flows against FakeClientConnection (incl. error paths) *(done across #41/#43: BankSessionTest 1016 lines + QuestionEditorSessionTest 844 lines, all flows and error paths against FakeClientConnection)*
 - [x] E6.16 Integration test: add/edit/version/delete/browse round-trip; Hebrew text round-trip *(2026-08-25: `BankRoundTripIntegrationTest`, 25 assertions against real MySQL - the first database-backed test in `server.features.bank`, which was the only feature package without one. Every assertion is a re-read in a new transaction and every question arrives through `QUESTION_CREATE`, so the validator, the allocator, the mappers and the transaction boundary are all on the path. It found a live defect: `QuestionValidator` was looser than `utf8mb4_unicode_ci` on Hebrew final forms, so two answers differing only in a final form passed validation and then violated `ck_question_versions_distinct` as an internal error on the add-question screen. Fixed, and the same divergence on supplementary-plane characters and Yiddish digraphs fixed with it; P-9 records the class)*
 - [ ] E6.17 Acceptance pass vs T-2 scenarios with [L] ⚑
 
 ## E7 — Exam builder [A]
 
 Server:
-- [ ] E7.1 ExamService: create draft (name, duration, texts, author recorded), allocate 6-digit id
-- [ ] E7.2 Composition update: set questions (by question_version), points, order; reject duplicates
-- [ ] E7.3 Points rule: save requires Σ=100; API returns per-question breakdown for live UI sum
+- [x] E7.1 ExamService: create draft (name, duration, texts, author recorded), allocate 6-digit id *(merged #45/#46 + lead assembly 2026-08-25; reachable)*
+- [x] E7.2 Composition update: set questions (by question_version), points, order; reject duplicates *(merged #45/#46 + assembly; full-replace per ARCHITECTURE section 5)*
+- [x] E7.3 Points rule: save requires Σ=100; API returns per-question breakdown for live UI sum *(merged #45/#46 + assembly; ExamValidator.pointsProblem public for E7.12 live sum)*
 - [ ] E7.4 AutoExamGenerator (Builder): criteria (total, topic breakdown, difficulty mix) → selection or precise infeasibility report (which topic/difficulty short, by how much); deterministic seed option for tests ⚑
-- [ ] E7.5 Edit approved/pending exam → new DRAFT version; old versions retained and listed (C-2)
-- [ ] E7.6 Submit for approval: DRAFT → PENDING, notify coordinator (E17)
-- [ ] E7.7 Newer-question-version indicator data (exam uses vN, bank has vN+1)
-- [ ] E7.8 ExamValidator unit tests (all rules)
+- [x] E7.5 Edit approved/pending exam → new DRAFT version; old versions retained and listed (C-2) *(merged #45/#46 + assembly; revise refuses retired questions per lead ruling)*
+- [x] E7.6 Submit for approval: DRAFT → PENDING, notify coordinator (E17) *(merged #46 + assembly; hook is the HANDLER post-commit per amended section 5.5, crash window named)*
+- [x] E7.7 Newer-question-version indicator data (exam uses vN, bank has vN+1) *(on the wire since the types: ComposedQuestion.pinnedVersionNo vs latestVersionNo; served by #45)*
+- [x] E7.8 ExamValidator unit tests (all rules) *(#45/#46/#48: 12 criteria tests, twelve mutation plants, collation-safe topic fold via sameTopic)*
 
 > **Open after the E7 store PR, and enforced by nothing on disk until the handlers land.** The
 > repository and its two-engine tests are in, so the *writes* are held. These five rules are not,
@@ -153,7 +161,7 @@ Server:
 > **(5)** only a DRAFT is savable, and REVISE refuses a DRAFT (§5.4, answering CONFLICT not
 > VALIDATION).
 > Listed here because the store PR is the last artefact reviewed before these get assumed done.
-- [ ] E7.9 Verbs + DTOs frozen with [L] *(types landed by [L] 2026-08-23, freeze on handlers PR — `common/protocol/Verb.java` has its `Exam builder (E7)` section with all seven verbs, and `common/dto/authoring` holds the fourteen records of the contract's §4, reusing `Difficulty` and `ApprovalState`. The five rulings are §12 of `docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md`; what Member A must know before writing handlers — the constants to cite and the tolerance boundaries his validator has to cover because the constructors deliberately do not — is `docs/reports/lead/E7-TYPES.md`. Not ticked: the tick is the freeze, and the contract still says DRAFT so a handler author who finds a real problem with a shape still gets to say so.)*
+- [x] E7.9 Verbs + DTOs frozen with [L] *(types landed by [L] 2026-08-23, freeze on handlers PR — `common/protocol/Verb.java` has its `Exam builder (E7)` section with all seven verbs, and `common/dto/authoring` holds the fourteen records of the contract's §4, reusing `Difficulty` and `ApprovalState`. The five rulings are §12 of `docs/contracts/EXAM_BUILDER_WIRE_CONTRACT.md`; what Member A must know before writing handlers — the constants to cite and the tolerance boundaries his validator has to cover because the constructors deliberately do not — is `docs/reports/lead/E7-TYPES.md`. Not ticked: the tick is the freeze, and the contract still says DRAFT so a handler author who finds a real problem with a shape still gets to say so.)* **FROZEN v1 for sections 1-6 and 8 on #46 (2026-08-25); section 7 alone stays open for PR B per the laminar ruling.**
 Client:
 - [ ] E7.10 Exam list screen: teacher's exams, status chips, versions expandable, actions per state
 - [ ] E7.11 Builder — metadata step (name, duration, texts with student/teacher tabs)
@@ -374,7 +382,7 @@ Client:
 - [ ] E22.2 Submission doc: cover page (group, names, IDs), per-member responsibilities, test table, design/coding-problem answer (from PROBLEMS.md — pick the best story, e.g. exam-vs-execution modeling or timer race)
 - [ ] E22.3 Export to required format, assemble `G<Num>_Assignment3.zip` (doc + 2 JARs), verify zip contents against spec ⚑
 - [ ] E22.4 Cross-walkthrough sessions (spec §11): each member walks the other two through her components until all three can answer defense questions on ANY component; verified with a mock Q&A round ⚑ *Member B's half is written: `docs/briefs/member-b-e12-e13-walkthrough.md` covers E12 and E13 — the five-step pipeline, the four decisions most likely to be pushed on, seven anticipated questions with answers, the demo order, and the one gap (E12.6's paper review) stated rather than hidden. Not ticked: the session itself and the mock Q&A round.*
-- [ ] E22.4 Demo script: ordered walkthrough matching scenarios 1–21 + wow-moments (theme switch, live extension, edit locks, bot fallback) + break-it invitation
+- [ ] E22.4b Demo script (renumbered from a duplicate E22.4, maintenance 2026-08-25): ordered walkthrough matching scenarios 1–21 + wow-moments (theme switch, live extension, edit locks, bot fallback) + break-it invitation
 - [ ] E22.5 Defense Q&A prep sheet: patterns, decisions, "what would you change for phase 2 (internet)", concurrency story
 - [ ] E22.6 Dry-run defense #1 (full, timed, two machines) → fix list
 - [ ] E22.7 Dry-run defense #2 (clean run) ⚑
