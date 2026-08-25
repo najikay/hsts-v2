@@ -3,7 +3,7 @@ package server.core;
 import common.dto.ErrorPayload;
 import common.dto.auth.LoginRequest;
 import common.dto.auth.Role;
-import common.dto.bank.Question;
+import common.dto.bank.QuestionRequest;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Status;
@@ -64,15 +64,15 @@ class MessageRouterFuzzTest {
         router = new MessageRouter(new SessionManager());
         handlerInvocations = new AtomicInteger();
         // One open and one guarded handler, both hostile to bad input themselves.
-        router.registerOpen(Verb.GET_ALL_QUESTIONS, (caller, request) -> {
+        router.registerOpen(Verb.BANK_LIST, (caller, request) -> {
             handlerInvocations.incrementAndGet();
             return Message.ok(request, List.of());
         });
-        router.registerOpen(Verb.UPDATE_QUESTION, (caller, request) -> {
+        router.registerOpen(Verb.QUESTION_UPDATE, (caller, request) -> {
             handlerInvocations.incrementAndGet();
-            // Deliberately careless: a cast that fails on anything but a Question.
-            Question question = (Question) request.getPayload();
-            return Message.ok(request, question.getId());
+            // Deliberately careless: a cast that fails on anything but a QuestionRequest.
+            QuestionRequest question = (QuestionRequest) request.getPayload();
+            return Message.ok(request, question.displayId5());
         });
         router.register(Verb.LOGOUT, (caller, request) -> {
             handlerInvocations.incrementAndGet();
@@ -123,7 +123,7 @@ class MessageRouterFuzzTest {
     @Test
     @DisplayName("a response-shaped message arriving as a request is still handled safely")
     void inboundResponseShapeIsSafe() throws Exception {
-        router.handle(Message.error(Verb.GET_ALL_QUESTIONS, "id", ErrorCode.INTERNAL, "spoofed"), connection);
+        router.handle(Message.error(Verb.BANK_LIST, "id", ErrorCode.INTERNAL, "spoofed"), connection);
 
         Message response = captureSingleResponse(connection);
         assertThat(response.getStatus()).isEqualTo(Status.OK); // the verb is open and the handler ignores payloads
@@ -132,7 +132,7 @@ class MessageRouterFuzzTest {
     @Test
     @DisplayName("a payload of the wrong type crashes the handler and comes back as INTERNAL")
     void wrongPayloadTypeIsContained() throws Exception {
-        router.handle(Message.request(Verb.UPDATE_QUESTION, "not a question"), connection);
+        router.handle(Message.request(Verb.QUESTION_UPDATE, "not a question"), connection);
 
         Message response = captureSingleResponse(connection);
         assertThat(response.getErrorCode()).isEqualTo(ErrorCode.INTERNAL);
@@ -143,7 +143,7 @@ class MessageRouterFuzzTest {
     @Test
     @DisplayName("a payload whose toString() explodes cannot stop the answer")
     void hostileToStringIsContained() throws Exception {
-        router.handle(Message.request(Verb.UPDATE_QUESTION, new ExplodingPayload()), connection);
+        router.handle(Message.request(Verb.QUESTION_UPDATE, new ExplodingPayload()), connection);
 
         Message response = captureSingleResponse(connection);
         assertThat(response.isError()).isTrue();
@@ -155,7 +155,7 @@ class MessageRouterFuzzTest {
         List<Object> loop = new ArrayList<>();
         loop.add(loop);
 
-        router.handle(Message.request(Verb.GET_ALL_QUESTIONS, loop), connection);
+        router.handle(Message.request(Verb.BANK_LIST, loop), connection);
 
         assertThat(captureSingleResponse(connection).isOk()).isTrue();
     }
@@ -218,7 +218,7 @@ class MessageRouterFuzzTest {
         return switch (random.nextInt(6)) {
             case 0 -> null;
             case 1 -> randomString(random);
-            case 2 -> new Question(random.nextInt(), randomString(random), null);
+            case 2 -> new QuestionRequest(randomString(random));
             case 3 -> new ExplodingPayload();
             case 4 -> Arrays.asList(null, randomString(random), new Object());
             default -> new HashMap<>();

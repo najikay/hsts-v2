@@ -298,7 +298,9 @@
                              would silently un-instrument whole logic subpackages. -->
                         <exclude>client/features/connect/ConnectView*</exclude>
                         <exclude>client/features/login/LoginView*</exclude>
-                        <exclude>client/features/bank/QuestionsView*</exclude>
+                        <!-- client/features/bank/QuestionsView* stood here; the legacy screen
+                             retired with its FXML, its scoped app.css and its two verbs. The
+                             versioned bank's own view is excluded further down. -->
                         <exclude>client/features/settings/SettingsView*</exclude>
                         <exclude>client/features/home/DashboardPage*</exclude>
                         <exclude>client/features/home/TeacherHomeView*</exclude>
@@ -457,7 +459,6 @@
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>client/core/ScreenManager*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
-                        <exclude>client/core/AbstractScreenUI*</exclude>
                         <!-- legacy prototype, rewritten in E4/E6 -->
                         <exclude>client/net/HSTSClient*</exclude>
                         <!-- Assembly glue: parses nothing, decides nothing. Every rule it
@@ -483,10 +484,11 @@
                         <exclude>server/console/ConsoleView*</exclude>
                         <exclude>server/console/ConsoleTheme*</exclude>
                         <exclude>server/console/ServerConsoleApp*</exclude>
-                        <!-- legacy prototype pair only — retired in E6; all other server/db/** code
-                             (E2 entities, repositories, DbBootstrap, allocators) IS measured -->
-                        <exclude>server/db/QuestionDAO*</exclude>
-                        <exclude>server/db/DatabaseConfig*</exclude>
+                        <!-- server/db/QuestionDAO* and server/db/DatabaseConfig* — the legacy
+                             prototype pair — stood here until the retirement PR deleted both.
+                             All server/db/** code (E2 entities, repositories, DbBootstrap,
+                             allocators) IS measured. -->
+
                     </excludes>
                 </configuration>
                 <executions>

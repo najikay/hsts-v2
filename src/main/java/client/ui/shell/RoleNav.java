@@ -71,7 +71,9 @@ public final class RoleNav {
         boolean coordinator = role == Role.COORDINATOR;
         List<NavItem> items = new ArrayList<>();
         items.add(dashboard(role));
-        // The legacy bank screen still works over the DAO, so this one is live.
+        // Live since E5.4 and unchanged by the retirement PR: the id and the label stayed put
+        // while the screen behind them became the versioned bank (E6.9). The rail is the part
+        // a teacher remembers, so it was the part that did not move.
         items.add(NavItem.of(Routes.QUESTIONS.id(), "Question Bank", Icons.BANK));
         // Live since E8, but only half of it: this screen shows where each submitted exam
         // stands and what a coordinator said about it (F4.2), which is the surface a

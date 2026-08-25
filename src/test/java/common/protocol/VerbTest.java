@@ -39,10 +39,10 @@ class VerbTest {
     void expectedVerbsExist() {
         assertThat(Verb.values()).contains(
                 Verb.LOGIN, Verb.LOGOUT,
-                Verb.GET_ALL_QUESTIONS, Verb.UPDATE_QUESTION,
+                Verb.BANK_LIST, Verb.QUESTION_UPDATE,
                 Verb.PUSH_NOTIFICATION, Verb.PUSH_LOCK_CHANGED, Verb.PUSH_TIMER_EXTENDED,
                 Verb.PUSH_FORCE_SUBMITTED, Verb.PUSH_EXECUTION_STATUS, Verb.PUSH_GRADE_PUBLISHED);
-        assertThat(Verb.valueOf("GET_ALL_QUESTIONS")).isEqualTo(Verb.GET_ALL_QUESTIONS);
+        assertThat(Verb.valueOf("BANK_LIST")).isEqualTo(Verb.BANK_LIST);
     }
 
     @Test
@@ -146,10 +146,15 @@ class VerbTest {
         assertThat(Arrays.stream(Verb.values()).map(Verb::name))
                 .doesNotContain("GET_QUESTION_IMAGE");
 
-        // The legacy prototype pair keeps working verbatim through protocol v2, and is a
-        // different verb from E6's QUESTION_UPDATE despite the similar spelling.
-        assertThat(Verb.UPDATE_QUESTION).isNotEqualTo(Verb.QUESTION_UPDATE);
-        assertThat(Verb.valueOf("GET_ALL_QUESTIONS")).isEqualTo(Verb.GET_ALL_QUESTIONS);
+        // The verb-first spellings the convention displaced. GET_ALL_QUESTIONS and
+        // UPDATE_QUESTION were the prototype pair and retired with the legacy screen; this
+        // used to assert UPDATE_QUESTION was a DIFFERENT verb from E6's QUESTION_UPDATE,
+        // because the two spellings were one transposition apart and both were live. Only one
+        // is live now, and asserting the retired names are absent is what stops a reader of the
+        // old TODO reintroducing either as a synonym for a bank verb that already exists.
+        assertThat(Arrays.stream(Verb.values()).map(Verb::name))
+                .doesNotContain("GET_ALL_QUESTIONS", "UPDATE_QUESTION");
+        assertThat(Verb.valueOf("QUESTION_UPDATE")).isEqualTo(Verb.QUESTION_UPDATE);
     }
 
     @Test

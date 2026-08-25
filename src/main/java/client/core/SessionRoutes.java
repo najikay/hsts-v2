@@ -5,7 +5,6 @@ import client.features.approval.ExamPreviewView;
 import client.features.approval.MyApprovalsView;
 import client.features.bank.BankView;
 import client.features.bank.QuestionEditorView;
-import client.features.bank.QuestionsView;
 import client.features.bot.BotAnalyticsView;
 import client.features.bot.BotChatView;
 import client.features.bot.BotHistoryView;
@@ -70,14 +69,11 @@ public final class SessionRoutes {
         routes.add(Routes.home(role));
         routes.add(Routes.SETTINGS);
         if (teaches(role)) {
-            // The legacy bank screen is the one feature screen that already works
-            // end-to-end (over the DAO); E6 replaces it with the versioned bank.
+            // The versioned bank (E6.9), on the rail id the E0 prototype list used to answer
+            // to. Teaching roles only: it carries Delete and Edit, so the principal reads the
+            // bank through the Data screen instead (the lead's ruling on #41). The interim
+            // id `bank` and the banner that pointed at it retired with the legacy screen.
             routes.add(Routes.QUESTIONS);
-            // The versioned bank (E6.9). Teaching roles only: it carries Delete, and E6.10
-            // adds Edit, so the principal reads the bank through the Data screen instead
-            // (the lead's ruling on #41). Off the rail until the retirement PR; reached
-            // from the legacy screen's banner.
-            routes.add(Routes.BANK);
             // The question editor (E6.10). Registered with the bank, reached from it; the
             // server re-checks the write scope and the edit lock on every save, so this
             // list decides what is offered and never what is permitted.
@@ -185,9 +181,6 @@ public final class SessionRoutes {
             return SettingsView::new;
         }
         if (Routes.QUESTIONS.id().equals(route.id())) {
-            return QuestionsView::new;
-        }
-        if (Routes.BANK.id().equals(route.id())) {
             return BankView::new;
         }
         if (Routes.QUESTION_EDIT.id().equals(route.id())) {

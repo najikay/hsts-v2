@@ -3,34 +3,32 @@ package client.features.bank;
 /**
  * The two route ids this feature's screens are registered under (E6.9, E6.10).
  *
- * <p>Written once each, because both are about to move. {@code client.core.Routes} is where they
- * are actually declared and that file is not this epic's to edit, so these constants are the
- * feature's own copy of the spelling, and the one place a rename has to be applied when the
- * retirement PR swaps the list behind {@code questions}.
+ * <p>{@code client.core.Routes} is where they are actually declared; these constants are the
+ * feature's own copy of the spelling, used by every button and every navigation in the package,
+ * so a screen in here never hard-codes a string that only the route table knows.
  *
- * <p>{@code BankScreenWiringGuardTest} pins both against {@code SessionRoutes}, so a copy that
- * drifts from the declaration fails the build rather than producing a button that navigates
- * nowhere.
+ * <p>{@code BankScreenWiringGuardTest} pins both against {@code client.core.Routes} through
+ * {@code SessionRoutes}, so a copy that drifts from the declaration fails the build rather than
+ * producing a button that navigates nowhere. Both files move together or neither does.
  */
 public final class BankRoutes {
 
     /**
      * The question bank list.
      *
-     * <p><b>Temporary.</b> The lead ruled on 2026-08-23 that rail id {@code questions} keeps
-     * serving the legacy screen until E6's retirement PR, so the replacement list is registered
-     * under its own non-rail id and reached from a banner on the legacy screen. At retirement
-     * this becomes {@code "questions"} and the legacy screen is deleted.
+     * <p>The rail id, and the end state. It read {@code "bank"} while the E0 prototype list still
+     * answered to {@code questions} — the lead's ruling of 2026-08-23, which kept exactly one bank
+     * on the rail at every moment. The retirement PR deleted that screen and moved this constant
+     * onto the rail id, which is the only spelling either half needs now.
      */
-    public static final String LIST = "bank";
+    public static final String LIST = "questions";
 
     /**
      * The question editor.
      *
-     * <p>Spelled for the end state rather than the interim one: it is a view of one question
-     * reached from the list, the same shape as {@code approvals.preview} and
-     * {@code grades.checked}, and naming it after the rail id it will finally sit under means the
-     * retirement PR does not rename it.
+     * <p>Spelled for the end state from the start: it is a view of one question reached from the
+     * list, the same shape as {@code approvals.preview} and {@code grades.checked}, and naming it
+     * after the rail id it would finally sit under meant the retirement PR renamed nothing here.
      */
     public static final String EDITOR = "questions.edit";
 

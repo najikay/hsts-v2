@@ -1,6 +1,6 @@
 package client.net;
 
-import common.dto.bank.Question;
+import common.dto.bank.QuestionRequest;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Status;
@@ -66,12 +66,12 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("send() writes a REQUEST envelope carrying the verb and payload")
         void writesARequest() {
-            Question payload = new Question(1, "q", "a");
+            QuestionRequest payload = new QuestionRequest("21014");
 
-            dispatcher.send(Verb.UPDATE_QUESTION, payload);
+            dispatcher.send(Verb.QUESTION_UPDATE, payload);
 
             Message sent = connection.lastSent();
-            assertThat(sent.getVerb()).isEqualTo(Verb.UPDATE_QUESTION);
+            assertThat(sent.getVerb()).isEqualTo(Verb.QUESTION_UPDATE);
             assertThat(sent.getStatus()).isEqualTo(Status.REQUEST);
             assertThat(sent.getPayload()).isSameAs(payload);
             assertThat(sent.getRequestId()).isNotBlank();
@@ -84,7 +84,7 @@ class RequestDispatcherTest {
             IOException boom = new IOException("socket closed");
             connection.failSendsWith(boom);
 
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
 
             assertThat(future).isCompletedExceptionally();
             assertThatThrownBy(future::get).hasCause(boom);
@@ -117,10 +117,10 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("a matching response completes the future and clears the pending entry")
         void matchingResponseCompletes() throws Exception {
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
             Message request = connection.lastSent();
 
-            dispatcher.dispatchIncoming(Message.ok(request, List.of(new Question(1, "q", "a"))));
+            dispatcher.dispatchIncoming(Message.ok(request, List.of(new QuestionRequest("21014"))));
 
             assertThat(future).isCompleted();
             assertThat(future.get().isOk()).isTrue();
@@ -130,7 +130,7 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("an ERROR response completes the future normally — the code is data, not an exception")
         void errorResponseCompletesNormally() throws Exception {
-            CompletableFuture<Message> future = dispatcher.send(Verb.UPDATE_QUESTION, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.QUESTION_UPDATE, null);
 
             dispatcher.dispatchIncoming(
                     Message.error(connection.lastSent(), ErrorCode.VALIDATION, "Answer is required."));
@@ -144,7 +144,7 @@ class RequestDispatcherTest {
         void concurrentRequestsAreCorrelatedIndependently() throws Exception {
             List<CompletableFuture<Message>> futures = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
-                futures.add(dispatcher.send(Verb.GET_ALL_QUESTIONS, "payload-" + i));
+                futures.add(dispatcher.send(Verb.BANK_LIST, "payload-" + i));
             }
             List<Message> requests = new ArrayList<>(connection.sentMessages());
             assertThat(dispatcher.pendingCount()).isEqualTo(5);
@@ -165,10 +165,10 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("a response for an unknown requestId is dropped, not thrown")
         void unmatchedResponseIsDropped() {
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
 
             assertThatCode(() -> dispatcher.dispatchIncoming(
-                    Message.ok(Verb.GET_ALL_QUESTIONS, "some-other-id", List.of())))
+                    Message.ok(Verb.BANK_LIST, "some-other-id", List.of())))
                     .doesNotThrowAnyException();
 
             assertThat(future).isNotDone();
@@ -179,7 +179,7 @@ class RequestDispatcherTest {
         @DisplayName("a response with no requestId at all is dropped")
         void responseWithoutIdIsDropped() {
             assertThatCode(() -> dispatcher.dispatchIncoming(
-                    new Message(Verb.GET_ALL_QUESTIONS, null, Status.OK, null, "orphan")))
+                    new Message(Verb.BANK_LIST, null, Status.OK, null, "orphan")))
                     .doesNotThrowAnyException();
         }
 
@@ -192,7 +192,7 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("a duplicated response is dropped — a future completes exactly once")
         void duplicateResponseIsDropped() throws Exception {
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
             Message request = connection.lastSent();
 
             dispatcher.dispatchIncoming(Message.ok(request, "first"));
@@ -209,7 +209,7 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("no answer within the window fails the future with ErrorCode.TIMEOUT")
         void timeoutFailsTheFuture() {
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
 
             scheduler.fireAll();
 
@@ -218,7 +218,7 @@ class RequestDispatcherTest {
                     .isInstanceOf(ExecutionException.class)
                     .cause()
                     .isInstanceOf(RequestTimeoutException.class)
-                    .hasMessageContaining("GET_ALL_QUESTIONS")
+                    .hasMessageContaining("BANK_LIST")
                     .hasMessageContaining("10000 ms");
             assertThat(dispatcher.pendingCount()).isZero();
         }
@@ -242,7 +242,7 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("an answered request ignores its timeout when it later fires")
         void timeoutAfterAnAnswerIsANoOp() throws Exception {
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
             dispatcher.dispatchIncoming(Message.ok(connection.lastSent(), "done"));
 
             scheduler.fireAll();
@@ -253,7 +253,7 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("a late answer after a timeout is dropped, not thrown")
         void lateAnswerIsDropped() {
-            CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
             Message request = connection.lastSent();
             scheduler.fireAll();
 
@@ -275,7 +275,7 @@ class RequestDispatcherTest {
         void realSchedulerFires() {
             RequestDispatcher real = new RequestDispatcher(connection, Duration.ofMillis(30));
 
-            CompletableFuture<Message> future = real.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> future = real.send(Verb.BANK_LIST, null);
 
             assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS))
                     .cause().isInstanceOf(RequestTimeoutException.class);
@@ -291,7 +291,7 @@ class RequestDispatcherTest {
         void pushGoesToTheListener() {
             AtomicReference<Message> received = new AtomicReference<>();
             dispatcher.setPushListener(received::set);
-            CompletableFuture<Message> pending = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
+            CompletableFuture<Message> pending = dispatcher.send(Verb.BANK_LIST, null);
 
             dispatcher.dispatchIncoming(Message.push(Verb.PUSH_NOTIFICATION, "hello"));
 
@@ -339,8 +339,8 @@ class RequestDispatcherTest {
         @Test
         @DisplayName("failAllPending fails every in-flight request and reports the count")
         void failAllPendingFailsEveryone() {
-            CompletableFuture<Message> first = dispatcher.send(Verb.GET_ALL_QUESTIONS, null);
-            CompletableFuture<Message> second = dispatcher.send(Verb.UPDATE_QUESTION, null);
+            CompletableFuture<Message> first = dispatcher.send(Verb.BANK_LIST, null);
+            CompletableFuture<Message> second = dispatcher.send(Verb.QUESTION_UPDATE, null);
             IOException cause = new IOException("connection reset");
 
             int failed = dispatcher.failAllPending(cause);
@@ -368,7 +368,7 @@ class RequestDispatcherTest {
         List<CompletableFuture<Message>> futures = Collections.synchronizedList(new ArrayList<>());
 
         // Every request is answered synchronously, echoing its own payload back.
-        connection.respondTo(Verb.GET_ALL_QUESTIONS,
+        connection.respondTo(Verb.BANK_LIST,
                 request -> Message.ok(request, "echo:" + request.getPayload()));
 
         ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -380,7 +380,7 @@ class RequestDispatcherTest {
                     start.await();
                     for (int i = 0; i < perThread; i++) {
                         String tag = thread + "-" + i;
-                        CompletableFuture<Message> future = dispatcher.send(Verb.GET_ALL_QUESTIONS, tag);
+                        CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, tag);
                         futures.add(future);
                         answers.put(tag, String.valueOf(future.get(5, TimeUnit.SECONDS).getPayload()));
                     }

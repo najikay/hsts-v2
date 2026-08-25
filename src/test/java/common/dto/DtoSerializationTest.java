@@ -5,7 +5,6 @@ import common.dto.auth.CourseRef;
 import common.dto.auth.LoginRequest;
 import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
-import common.dto.bank.Question;
 import common.dto.grading.AnswerReviewRow;
 import common.dto.grading.ApproveRequest;
 import common.dto.grading.ApproveResult;
@@ -388,15 +387,10 @@ class DtoSerializationTest {
                 GradeState.AUTO, null, null, null);
     }
 
-    @Test
-    @DisplayName("the legacy bank DTO still travels unchanged")
-    void questionStillRoundTrips() throws Exception {
-        Question restored = roundTrip(new Question(5, "מהי בירת צרפת?", "פריז"));
-
-        assertThat(restored.getId()).isEqualTo(5);
-        assertThat(restored.getQuestionText()).isEqualTo("מהי בירת צרפת?");
-        assertThat(restored.getAnswer()).isEqualTo("פריז");
-    }
+    // "the legacy bank DTO still travels unchanged" stood here, round-tripping the prototype's
+    // Question with Hebrew text. The type retired with GET_ALL_QUESTIONS and UPDATE_QUESTION, and
+    // no coverage went with it: the bank package has BankDtoTest, and Hebrew survival across the
+    // wire is pinned by six other cases in this file.
 
     private static <T extends Serializable> T roundTrip(T original) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();

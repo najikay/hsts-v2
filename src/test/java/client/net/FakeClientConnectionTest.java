@@ -54,13 +54,13 @@ class FakeClientConnectionTest {
     @DisplayName("records every message in order")
     void recordsTraffic() throws IOException {
         connection.send(Message.request(Verb.LOGIN, "a"));
-        connection.send(Message.request(Verb.GET_ALL_QUESTIONS, null));
+        connection.send(Message.request(Verb.BANK_LIST, null));
 
         assertThat(connection.sentCount()).isEqualTo(2);
         assertThat(connection.sentMessages())
                 .extracting(Message::getVerb)
-                .containsExactly(Verb.LOGIN, Verb.GET_ALL_QUESTIONS);
-        assertThat(connection.lastSent().getVerb()).isEqualTo(Verb.GET_ALL_QUESTIONS);
+                .containsExactly(Verb.LOGIN, Verb.BANK_LIST);
+        assertThat(connection.lastSent().getVerb()).isEqualTo(Verb.BANK_LIST);
     }
 
     @Test
@@ -80,9 +80,9 @@ class FakeClientConnectionTest {
     void scriptedOkIsCorrelated() throws IOException {
         List<Message> received = new ArrayList<>();
         connection.setServerMessageHandler(received::add);
-        connection.replyOk(Verb.GET_ALL_QUESTIONS, List.of("one", "two"));
+        connection.replyOk(Verb.BANK_LIST, List.of("one", "two"));
 
-        Message request = Message.request(Verb.GET_ALL_QUESTIONS, null);
+        Message request = Message.request(Verb.BANK_LIST, null);
         connection.send(request);
 
         assertThat(received).hasSize(1);
@@ -109,9 +109,9 @@ class FakeClientConnectionTest {
     void customResponder() throws IOException {
         List<Message> received = new ArrayList<>();
         connection.setServerMessageHandler(received::add);
-        connection.respondTo(Verb.UPDATE_QUESTION, request -> Message.ok(request, "saved:" + request.getPayload()));
+        connection.respondTo(Verb.QUESTION_UPDATE, request -> Message.ok(request, "saved:" + request.getPayload()));
 
-        connection.send(Message.request(Verb.UPDATE_QUESTION, 42));
+        connection.send(Message.request(Verb.QUESTION_UPDATE, 42));
 
         assertThat(received.get(0).getPayload()).isEqualTo("saved:42");
     }
