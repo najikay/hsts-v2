@@ -396,6 +396,107 @@ class ExamValidatorTest {
             assertThat(ExamValidator.quotaProblem(criteria())).isPresent();
         }
 
+        /**
+         * §7.3a, the shape rule every other rule in §7 rests on (ruled 2026-08-24) ⚑
+         *
+         * <p>A topic row drawing on {@code any} and a course-wide row drawing on {@code hard}
+         * <b>cross</b>: neither pool contains the other. On crossing pools no single bucket is
+         * short while the request as a whole is impossible, so §7.3 names no row to emit,
+         * {@code AutoComposeResult} refuses a report with nothing in it, and she meets an
+         * internal error on the one verb F3.3 exists to make helpful. Refusing the shape is what
+         * makes every pool nest, which is what makes the bucket checks exact.
+         *
+         * <p>The contract stated this rule was enforced here before it was. Found by reading the
+         * two against each other.
+         */
+        @Test
+        @DisplayName("⚑ a graded course-wide quota beside topic quotas is refused (§7.3a)")
+        void crossingPoolsAreRefused() {
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    TopicQuota.ofAnyDifficulty("Recursion", 3),
+                    new TopicQuota(null, 0, 0, 5, 0))))
+                    .as("topic-any crosses course-hard, and neither contains the other")
+                    .hasValueSatisfying(v -> assertThat(v.message())
+                            .isEqualTo(ExamBuildMessages.QUOTA_SHAPE_MIXED));
+        }
+
+        @Test
+        @DisplayName("the refusal names both legal shapes, which was the lead's condition")
+        void theShapeRefusalNamesBothWaysOut() {
+            assertThat(ExamBuildMessages.QUOTA_SHAPE_MIXED)
+                    .as("a sentence saying only 'not allowed' leaves her guessing which half of "
+                            + "her screen to delete")
+                    .contains("a row per topic")
+                    .contains("split the whole course by difficulty");
+        }
+
+        @Test
+        @DisplayName("both legal shapes pass (§7.3a)")
+        void bothLegalShapesPass() {
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    TopicQuota.ofAnyDifficulty("Recursion", 3),
+                    TopicQuota.ofAnyDifficulty(null, 5))))
+                    .as("topic rows plus a course-wide TOTAL: the course-wide any pool contains "
+                            + "every topic pool, so the family nests")
+                    .isEmpty();
+
+            assertThat(ExamValidator.quotaProblem(criteria(new TopicQuota(null, 2, 3, 5, 0))))
+                    .as("one course-wide row split by difficulty, standing alone")
+                    .isEmpty();
+
+            assertThat(ExamValidator.quotaProblem(criteria(new TopicQuota("Recursion", 1, 0, 2, 4))))
+                    .as("a topic row may grade itself: its buckets nest inside its own topic")
+                    .isEmpty();
+        }
+
+        /**
+         * The points ceiling, which the contract does not state and arithmetic forces.
+         *
+         * <p>{@code MIN_POINTS} is 1 and {@code POINTS_TOTAL} is 100, both frozen. §7.4 requires
+         * a proposal to arrive summing to exactly 100, so 101 questions cannot each be worth a
+         * point. Without this the composer would propose a paper that violates
+         * {@code ck_evq_points} on save, which is a service accepting what the database rejects
+         * (P-9).
+         */
+        @Test
+        @DisplayName("⚑ more questions than 100 points can cover is refused, not proposed")
+        void overThePointsCeilingIsRefused() {
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    TopicQuota.ofAnyDifficulty(null, ExamCreateRequest.POINTS_TOTAL + 1))))
+                    .hasValueSatisfying(v -> assertThat(v.message())
+                            .isEqualTo(ExamBuildMessages.quotaOverPointsCeiling(
+                                    ExamCreateRequest.POINTS_TOTAL + 1)));
+
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    TopicQuota.ofAnyDifficulty(null, ExamCreateRequest.POINTS_TOTAL))))
+                    .as("exactly 100 is the boundary and is allowed: one point each")
+                    .isEmpty();
+        }
+
+        /**
+         * A blank grid row must not make a legal request illegal ⚑
+         *
+         * <p>A criteria grid always carries empty rows - that is what a grid is. An empty topic
+         * row draws on nothing and crosses nothing, so §7.3a's hazard cannot arise from it, and
+         * refusing here tells her to delete a row that asks for nothing on the one verb whose
+         * whole point is saying exactly what is wrong.
+         *
+         * <p>It also made the validator and {@code AutoComposer} disagree about what "a topic
+         * quota is present" means: the composer skips empty quotas in two places and the
+         * validator counted them. Two expressions of one question, checked against each other
+         * nowhere, which is P-6's shape.
+         */
+        @Test
+        @DisplayName("⚑ an empty topic row does not turn a legal shape into a refused one")
+        void anEmptyTopicRowIsNotATopicQuota() {
+            assertThat(ExamValidator.quotaProblem(criteria(
+                    new TopicQuota("Recursion", 0, 0, 0, 0),
+                    new TopicQuota(null, 0, 0, 5, 0))))
+                    .as("one course-wide row split by difficulty, standing alone, with a blank "
+                            + "grid row beside it: nothing crosses anything")
+                    .isEmpty();
+        }
+
         @Test
         @DisplayName("a null quota is named by position rather than throwing")
         void nullQuotaNamedByPosition() {

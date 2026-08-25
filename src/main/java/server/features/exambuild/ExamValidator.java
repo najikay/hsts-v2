@@ -307,9 +307,14 @@ public final class ExamValidator {
      * otherwise open exactly the hazard above while looking like two distinct rows.
      *
      * <p><b>And it is collation-safe, which a {@code HashSet} was not</b> <i>(corrected
-     * 2026-08-24, found by a cold read)</i>. The pool these buckets draw on is selected with
-     * {@code qv.topic = :topic} against a {@code utf8mb4_unicode_ci} column, so Java string
-     * equality is strictly looser than the thing it is protecting: {@code "Algebra"} and
+     * 2026-08-24, found by a cold read)</i>. This paragraph said the pool was selected with
+     * {@code qv.topic = :topic}; <b>it is not, and was not once E7.4 landed</b> (corrected
+     * 2026-08-25, found by a cold read). {@code ExamBuildRepository.findAutoCandidates} filters
+     * by course alone and {@link AutoComposer} buckets by topic in memory, precisely so one
+     * comparison decides both. What survives unchanged is why the comparison must be this one:
+     * the bank browse screen she checks a shortfall against still filters with SQL {@code =}
+     * under {@code utf8mb4_unicode_ci}, so Java string equality here is strictly looser than the
+     * thing it is protecting: {@code "Algebra"} and
      * {@code "algebra"} passed as two distinct buckets and drew from one set of rows, which is
      * the hazard this rule exists for rather than an edge case beside it. The comparison is
      * {@link QuestionValidator#sameTopic}, shared rather than reimplemented, for the reason
@@ -355,13 +360,82 @@ public final class ExamValidator {
                                 ExamBuildMessages.topicRequestedTwice(quota.topic()));
                     }
                 }
-                seenTopics.add(quota.topic());
+                // Only a row that ASKS for something counts as a topic quota being present.
+                // A criteria grid always carries blank rows, and an empty one draws on nothing,
+                // so it crosses nothing and cannot raise §7.3a's hazard. Counting it refused a
+                // legal request and told her to delete a row asking for nothing.
+                //
+                // It also has to agree with AutoComposer, which skips empty quotas in both its
+                // demand pass and its topic-shortfall pass. Two expressions of "is there a topic
+                // quota here" that disagree is P-6's shape, and this is the one that was wrong.
+                //
+                // The duplicate-topic scan above reads this same list, so it stops seeing empty
+                // rows too, and that is correct rather than incidental: the rule it enforces is
+                // "two buckets over one candidate pool with no rule saying which is short", and
+                // a row demanding nothing is not a bucket. A blank Recursion row beside a real
+                // one is one demand on Recursion, which is what the composer already computes.
+                if (!quota.isEmpty()) {
+                    seenTopics.add(quota.topic());
+                }
             }
         }
         if (request.totalRequested() < 1) {
             return violation(FIELD_QUOTAS, ExamBuildMessages.QUOTA_EMPTY);
         }
+        // §7.3a, ruled 2026-08-24, and the rule every other rule in §7 rests on.
+        //
+        // Last, deliberately: it is a statement about the request AS A WHOLE, so it can only be
+        // decided once every row has been seen. Reporting it before a negative bucket or a
+        // duplicate topic would answer a question about the shape of criteria that are not yet
+        // known to be well formed.
+        //
+        // What it forbids is a graded course-wide quota standing beside topic quotas. Those two
+        // CROSS: a topic row asking for `any` draws on a pool that overlaps the course-wide
+        // `hard` pool, and neither contains the other. On crossing pools no single bucket is
+        // short while the request as a whole is impossible, so §7.3 has no row to emit, the
+        // result record refuses an empty report, and the teacher meets INTERNAL on the one verb
+        // F3.3 exists for. Refuse the shape and every pool nests: topic quotas are pairwise
+        // disjoint, a topic's difficulty buckets nest inside it, the course-wide `any` bucket is
+        // a superset of all of them. On a nesting family Hall's condition collapses to exactly
+        // the per-bucket comparisons §7.3 already makes, which is what lets AutoComposer call
+        // its check complete rather than approximate.
+        if (anyNullTopic && !seenTopics.isEmpty() && courseWideIsGraded(quotas)) {
+            return violation(FIELD_QUOTAS, ExamBuildMessages.QUOTA_SHAPE_MIXED);
+        }
+        // The points ceiling, which the contract does not state and arithmetic forces. MIN_POINTS
+        // is 1 and POINTS_TOTAL is 100, both frozen, so a proposal of 101 questions cannot exist:
+        // §7.4 requires it to arrive summing to exactly 100 with every question worth at least
+        // one. Refusing here is the only outcome that does not hand her a proposal which then
+        // violates ck_evq_points on save - a service accepting what the database rejects, which
+        // is the class P-9 records. Raised with the lead rather than left implicit.
+        if (request.totalRequested() > ExamCreateRequest.POINTS_TOTAL) {
+            return violation(FIELD_QUOTAS,
+                    ExamBuildMessages.quotaOverPointsCeiling(request.totalRequested()));
+        }
         return Optional.empty();
+    }
+
+    /**
+     * Whether the course-wide quota asks for any graded bucket (§7.3a).
+     *
+     * <p>A course-wide row using {@code any} alone is the shape that nests, and it is the one
+     * that may stand beside topic rows. The moment it names {@code easy}, {@code medium} or
+     * {@code hard} it becomes a pool that crosses every topic row's {@code any} pool instead of
+     * containing it.
+     *
+     * <p>Scans for a graded course-wide row rather than trusting the first one found, because
+     * two course-wide rows are refused earlier by {@code topicRequestedTwice} but only when this
+     * method's caller has already walked the whole list; keeping the scan total means the two
+     * rules cannot disagree about which row they were talking about.
+     */
+    private static boolean courseWideIsGraded(List<TopicQuota> quotas) {
+        for (TopicQuota quota : quotas) {
+            if (quota != null && quota.isCourseWide()
+                    && (quota.easy() > 0 || quota.medium() > 0 || quota.hard() > 0)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Optional<Violation> violation(String field, String message) {

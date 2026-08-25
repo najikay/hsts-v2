@@ -301,4 +301,48 @@ public final class ExamBuildMessages {
     public static final String QUOTA_EMPTY =
             "The criteria ask for no questions at all. Set how many questions you want before "
                     + "generating.";
+
+    /**
+     * The two shapes of criteria the builder can answer (contract §7.3a, ruled 2026-08-24).
+     *
+     * <p><b>It names both legal shapes, and that was the lead's condition on accepting the
+     * rule.</b> A sentence saying only "that combination is not allowed" leaves her holding a
+     * screen with two halves and no way to tell which one to delete, on the verb whose whole
+     * point is telling her exactly what is wrong.
+     *
+     * <p>Why the combination is refused at all, since the sentence cannot carry it: a topic
+     * quota drawing on {@code any} and a course-wide quota drawing on {@code hard} cross rather
+     * than nest, so neither contains the other, no single bucket is short, and the request is
+     * still impossible. §7.3 then names no row to emit, {@code AutoComposeResult} refuses a
+     * report with nothing in it, and she gets an internal error on the one verb F3.3 exists to
+     * make helpful. Refusing the shape is what keeps every pool nested, which is what makes the
+     * bucket comparisons exact rather than approximate.
+     */
+    /**
+     * More questions asked for than 100 points can be spread across (E7.4).
+     *
+     * <p><b>Forced by two frozen constants rather than chosen.</b> {@code QuestionPin.MIN_POINTS}
+     * is 1 and {@code ExamCreateRequest.POINTS_TOTAL} is 100, so 101 questions cannot each be
+     * worth at least one point and still total exactly 100. §7.4 requires a proposal to arrive
+     * already summing to 100, which for such a request is unsatisfiable.
+     *
+     * <p>Refused here rather than proposed and rejected later. The alternative is a proposal that
+     * looks fine on screen, gets one click, and then violates {@code ck_evq_points} as an
+     * internal error on save - which is P-9's shape exactly: a service producing something the
+     * database refuses.
+     *
+     * <p>The ceiling reads from the constant, never typed, for the reason the class javadoc
+     * gives.
+     */
+    public static String quotaOverPointsCeiling(int requested) {
+        return "The criteria ask for " + requested + " questions, and an exam can hold at most "
+                + ExamCreateRequest.POINTS_TOTAL + " because every question is worth at least "
+                + QuestionPin.MIN_POINTS + " point out of " + ExamCreateRequest.POINTS_TOTAL
+                + ". Ask for fewer.";
+    }
+
+    public static final String QUOTA_SHAPE_MIXED =
+            "The criteria mix two ways of asking. Either give a row per topic and a total for "
+                    + "the whole course, or split the whole course by difficulty on its own "
+                    + "with no topic rows.";
 }

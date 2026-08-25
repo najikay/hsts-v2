@@ -1,5 +1,8 @@
 package server.features.exambuild;
 
+import server.db.projections.AutoCandidate;
+import common.dto.authoring.TopicQuota;
+import common.dto.authoring.AutoComposeRequest;
 import common.dto.approval.ApprovalState;
 import common.dto.auth.Role;
 import common.dto.authoring.ExamCreateRequest;
@@ -138,6 +141,13 @@ class ExamServiceTest {
         return new PinCandidate(versionId, questionId, "1100" + questionId, COURSE, deleted);
     }
 
+    /** One row of the auto-composer's pool (E7.4). Carries no answer key, by its type. */
+    private static AutoCandidate autoCandidate(long id, String topic,
+                                               server.db.entities.Difficulty difficulty) {
+        return new AutoCandidate(id, id, "1100" + id, "Question " + id, topic, difficulty,
+                false, 1);
+    }
+
     private static ExamCreateRequest aCreate(List<QuestionPin> questions) {
         return new ExamCreateRequest(COURSE, "Algebra Midterm", 90, null, null, questions);
     }
@@ -195,6 +205,101 @@ class ExamServiceTest {
                 .thenReturn(Optional.of(aHeader(TEACHER_ID, status)));
         lenient().when(exams.findComposition(session, VERSION_ID))
                 .thenReturn(List.of(stored(10, 1, 1, 100)));
+    }
+
+    // ===================== EXAM_AUTO_COMPOSE (E7.4) =======================
+
+    @Nested
+    @DisplayName("auto-compose")
+    class AutoCompose {
+
+        private AutoComposeRequest criteria() {
+            return new AutoComposeRequest(COURSE,
+                    List.of(TopicQuota.ofAnyDifficulty(null, 2)), 7L);
+        }
+
+        /**
+         * The scope guard, which nothing defended until an adversarial read said so ⚑
+         *
+         * <p>Contract §3 gives this verb the <b>throwing</b> {@code requireTeachesCourse}, like
+         * {@code EXAM_CREATE}, because the caller supplies the course. Deleting that one line
+         * left the entire suite green: {@code AutoComposerTest} is pure, {@code ExamHandlersTest}
+         * covers only the role gate, and the wiring guard checks registration rather than scope.
+         *
+         * <p>What it costs to be missing is a shape oracle rather than a data leak. Every
+         * shortfall's {@code available} is a real count from the named course, so a teacher who
+         * could auto-compose against a course she does not teach would read that course's topic
+         * and difficulty spread straight out of the report - which is P-5's class, and the reason
+         * this verb's refusal is a throw rather than an empty answer.
+         */
+        @Test
+        @DisplayName("⚑ a course she does not teach is refused, and the bank is never read")
+        void aCourseSheDoesNotTeachIsRefused() {
+            when(courses.teaches(session, TEACHER_ID, COURSE)).thenReturn(false);
+
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.autoCompose(session, teacher(), criteria()));
+
+            verify(exams, never()).findAutoCandidates(any(), any());
+        }
+
+        @Test
+        @DisplayName("⚑ nothing is written, which is what makes T-3.5 true by construction")
+        void autoComposeWritesNothing() {
+            when(courses.teaches(session, TEACHER_ID, COURSE)).thenReturn(true);
+            when(exams.findAutoCandidates(session, COURSE)).thenReturn(List.of(
+                    autoCandidate(1, "OOP", server.db.entities.Difficulty.EASY),
+                    autoCandidate(2, "OOP", server.db.entities.Difficulty.HARD)));
+
+            ExamService.AutoOutcome outcome =
+                    service.autoCompose(session, teacher(), criteria());
+
+            assertThat(outcome.status()).isEqualTo(ExamService.BuildStatus.OK);
+            assertThat(outcome.result().feasible()).isTrue();
+            verify(exams, never()).insertExam(any(), any(), anyLong());
+            verify(exams, never()).insertDraftVersion(any(), anyLong(), anyInt(), any(), anyInt(),
+                    any(), any(), any());
+            verify(exams, never()).replaceComposition(any(), anyLong(), any());
+        }
+
+        /**
+         * Criteria are judged before scope, and the order is deliberate.
+         *
+         * <p>A malformed grid is her typing; a course that is not hers is her scope. Answering
+         * the scope question first would let a teacher probing course codes learn which ones
+         * exist from the shape of the refusal she gets back.
+         */
+        @Test
+        @DisplayName("malformed criteria are refused before the course guard runs")
+        void criteriaAreJudgedBeforeScope() {
+            AutoComposeRequest negative = new AutoComposeRequest(COURSE,
+                    List.of(new TopicQuota("Recursion", -1, 0, 0, 0)), null);
+
+            ExamService.AutoOutcome outcome =
+                    service.autoCompose(session, teacher(), negative);
+
+            assertThat(outcome.status()).isEqualTo(ExamService.BuildStatus.INVALID);
+            assertThat(outcome.message()).isEqualTo(ExamBuildMessages.QUOTA_NEGATIVE);
+            verify(courses, never()).teaches(any(), anyLong(), any());
+            verify(exams, never()).findAutoCandidates(any(), any());
+        }
+
+        @Test
+        @DisplayName("an infeasible request is an OK answer, not an error")
+        void infeasibleIsStillOk() {
+            when(courses.teaches(session, TEACHER_ID, COURSE)).thenReturn(true);
+            when(exams.findAutoCandidates(session, COURSE)).thenReturn(List.of());
+
+            ExamService.AutoOutcome outcome =
+                    service.autoCompose(session, teacher(), criteria());
+
+            assertThat(outcome.status())
+                    .as("she asked what her bank could do and was told precisely; mapping that "
+                            + "to an error puts F3.3's whole report behind a red banner")
+                    .isEqualTo(ExamService.BuildStatus.OK);
+            assertThat(outcome.result().feasible()).isFalse();
+            assertThat(outcome.result().shortfalls()).isNotEmpty();
+        }
     }
 
     // ===================== EXAM_CREATE ====================================

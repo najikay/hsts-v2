@@ -13,6 +13,7 @@ import server.db.entities.ExamVersionStatus;
 import server.db.entities.Question;
 import server.db.entities.QuestionVersion;
 import server.db.projections.AuthoredExamHeader;
+import server.db.projections.AutoCandidate;
 import server.db.projections.AuthoredVersionRow;
 import server.db.projections.ExamCompositionHeader;
 import server.db.projections.PinCandidate;
@@ -566,6 +567,119 @@ abstract class ExamBuildRepositoryContract extends RepositoryTestBase {
     // ===================== Fixture ========================================
 
     /** An exam with one draft version, which most composition tests want and none vary. */
+    // ===================== The auto-composer's pool (E7.4) ================
+
+    /**
+     * The three rules §7.3 puts on {@code available}, each planted by a row that breaks it.
+     *
+     * <p>Every one of these is a way the number in an infeasibility sentence could stop matching
+     * what the teacher sees when she filters her own bank to the same topic and difficulty. §7.2
+     * property 2 calls that the worst failure available here, because she is explicitly invited to
+     * go and check it.
+     */
+    @Test
+    @DisplayName("⚑ the auto pool is this course's live latest versions, and nothing else")
+    void autoCandidatesObeyTheThreeRules() {
+        long plain = questionWithVersions("שאלה רגילה", 1);
+        long edited = questionWithVersions("נערכה", 3);
+        long deleted = questionWithVersions("נמחקה", 1);
+        softDelete(deleted);
+
+        List<AutoCandidate> pool =
+                inTx(session -> repository.findAutoCandidates(session, COURSE_ALGEBRA));
+
+        assertThat(pool).extracting(AutoCandidate::questionId)
+                .as("a soft-deleted question is not a candidate. Contract section 5.2 assigns "
+                        + "that rule to E7 by name and no schema constraint stands behind it, so "
+                        + "this clause IS the enforcement")
+                .contains(plain, edited)
+                .doesNotContain(deleted);
+
+        assertThat(pool).filteredOn(c -> c.questionId() == edited)
+                .as("one row per question, not one per version")
+                .hasSize(1)
+                .first()
+                .extracting(AutoCandidate::versionNo)
+                .as("the LATEST version: pinning an older one because it used to be Hard puts a "
+                        + "question on the paper the bank no longer describes that way")
+                .isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("the pool is scoped to the course, and an absent course is empty rather than all")
+    void autoCandidatesAreScopedToTheCourse() {
+        questionWithVersions("אלגברה", 1);
+
+        List<AutoCandidate> otherCourse =
+                inTx(session -> repository.findAutoCandidates(session, COURSE_CALCULUS));
+        List<AutoCandidate> nullCourse =
+                inTx(session -> repository.findAutoCandidates(session, null));
+        List<AutoCandidate> blankCourse =
+                inTx(session -> repository.findAutoCandidates(session, "  "));
+
+        assertThat(otherCourse)
+                .as("another course's questions are not candidates for this exam")
+                .isEmpty();
+        assertThat(nullCourse)
+                .as("an unscoped pool is the one mistake here that would put a colleague's "
+                        + "questions on her paper, so null is empty and never everything")
+                .isEmpty();
+        assertThat(blankCourse).isEmpty();
+    }
+
+    /**
+     * The ordering §7.5's reproducibility rests on, which nothing asserted ⚑
+     *
+     * <p>{@code AutoComposer} shuffles each demand's pool with a seeded {@code Random}, so the
+     * selection is reproducible only if the pool arrives in a stable order. MySQL guarantees no
+     * row order without an {@code ORDER BY}, and it can change between plans and between runs.
+     *
+     * <p>Deleting {@code order by q.displayId} left the whole suite green: the three cases beside
+     * this one assert membership, scope and fields, and {@code theSeedReproduces} calls a pure
+     * function twice with the same list so it cannot see the query at all. The symptom would be a
+     * teacher whose "it gave me a strange set" cannot be reproduced from her seed - which is the
+     * one thing §7.5 exists to make possible.
+     */
+    @Test
+    @DisplayName("⚑ the pool is ordered, or a seeded selection stops being reproducible")
+    void autoCandidatesAreOrderedByDisplayId() {
+        questionWithVersions("שלישית", 1);
+        questionWithVersions("ראשונה", 1);
+        questionWithVersions("שנייה", 1);
+
+        List<AutoCandidate> pool =
+                inTx(session -> repository.findAutoCandidates(session, COURSE_ALGEBRA));
+
+        assertThat(pool).hasSizeGreaterThan(1);
+        assertThat(pool).extracting(AutoCandidate::displayId5)
+                .as("no ORDER BY means no order at all on MySQL, and the seed then reproduces "
+                        + "nothing")
+                .isSorted();
+    }
+
+    @Test
+    @DisplayName("the pool carries what a proposal needs and no answer key")
+    void autoCandidatesCarryTheProposalFields() {
+        long illustrated = questionWithImage();
+
+        List<AutoCandidate> pool =
+                inTx(session -> repository.findAutoCandidates(session, COURSE_ALGEBRA));
+
+        assertThat(pool).first().satisfies(candidate -> {
+            assertThat(candidate.displayId5()).hasSize(5);
+            assertThat(candidate.text()).isNotBlank();
+            assertThat(candidate.topic()).isNotBlank();
+            assertThat(candidate.difficulty()).isNotNull();
+        });
+        assertThat(pool).filteredOn(c -> c.questionId() == illustrated)
+                .first()
+                .extracting(AutoCandidate::hasImage)
+                .as("computed with a case so the MEDIUMBLOB never enters the SELECT list: a "
+                        + "criteria grid asking for forty questions would otherwise move up to "
+                        + "80MB to decide which forty display ids to propose")
+                .isEqualTo(true);
+    }
+
     private long draftVersion() {
         long examId = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
         return inTx(session -> repository.insertDraftVersion(session, examId, 1,
