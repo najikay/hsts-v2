@@ -441,9 +441,24 @@ public final class ExamBuildRepository {
      *
      * <p>Consumer: {@code ExamService.list} ({@code EXAM_LIST}).
      *
+     * <h2>Newest exam first, which this query did not do until E7.10's screen ⚑</h2>
+     *
+     * <p>It ended {@code order by e.displayId} and was pinned that way on both engines. The
+     * contract's ruling of 2026-08-25 settled the disagreement in the contract's favour and named
+     * this PR or PR B as where the fix lands: {@code displayId6} is
+     * {@code subjectCode + courseCode + serial}, so ascending sorted by subject, then course, then
+     * <em>oldest</em> first within a course, and a teacher with exams in two courses got neither
+     * recency nor anything else she was looking for.
+     *
+     * <p>Recency is the latest version's {@code createdAt}, because that is the moment she last
+     * touched the exam and {@code v} is already bound to that version. <b>{@code e.id desc} is a
+     * tiebreak, not decoration:</b> two versions written inside the same clock tick are ordinary
+     * in a seeded database, and MySQL guarantees no row order for the ties without it, which is
+     * the defect class that survived a whole green suite in #50.
+     *
      * @param session  the session inside the current transaction
      * @param authorId the authenticated caller
-     * @return her exams ordered by display id; empty when she has written none
+     * @return her exams, the most recently touched first; empty when she has written none
      */
     public List<AuthoredExamHeader> findAuthoredExams(Session session, long authorId) {
         return session.createQuery("""
@@ -456,7 +471,7 @@ public final class ExamBuildRepository {
                           and v.versionNo = (
                               select max(later.versionNo) from ExamVersion later
                               where later.examId = e.id)
-                        order by e.displayId
+                        order by v.createdAt desc, e.id desc
                         """, AuthoredExamHeader.class)
                 .setParameter("authorId", authorId)
                 .getResultList();

@@ -465,25 +465,94 @@ abstract class ExamBuildRepositoryContract extends RepositoryTestBase {
         assertThat(mine).extracting(AuthoredExamHeader::courseName).containsExactly("אלגברה");
     }
 
+    /**
+     * The exam list is newest first, and the display id is not what "newest" means (E7.10 ⚑).
+     *
+     * <p>Replaces {@code examListIsOrderedByDisplayId}, which pinned the opposite. The contract's
+     * ruling of 2026-08-25 settled that disagreement in the contract's favour and named this PR
+     * as where the query changes: {@code displayId6} sorts by subject, then course, then oldest
+     * first within a course, which is a filing order and not a recency one.
+     *
+     * <p><b>The two exams are deliberately arranged so display id and recency disagree.</b>
+     * Algebra is course 11 and Calculus is 12, so the retired ordering put Algebra first; here
+     * Calculus was touched later and must come first. An assertion that only checked recency on
+     * a fixture where the two orderings agreed would pass under either query, which is how the
+     * old pin would have survived this change unnoticed.
+     *
+     * <p>Recency is the <em>latest version's</em> {@code createdAt}, not the exam's creation, so
+     * Algebra is created last and still sorts second: an exam she started in March and revised
+     * yesterday is an exam she touched yesterday.
+     */
     @Test
-    @DisplayName("the exam list is ordered by display id, which needs two exams to mean anything")
-    void examListIsOrderedByDisplayId() {
-        // Every other list test seeds one exam per author, so the ORDER BY could be deleted with
-        // nothing failing and the list would then render in whatever order the engine returned -
-        // which differs between H2 and InnoDB.
+    @DisplayName("the exam list is newest first, and display id is not what newest means ⚑")
+    void examListIsNewestFirst() {
+        Instant march = WHEN.minus(150, ChronoUnit.DAYS);
+        Instant yesterday = WHEN.minus(1, ChronoUnit.DAYS);
+
         long calculus = inTx(session -> repository.insertExam(session, COURSE_CALCULUS, danaId));
-        inTx(session -> repository.insertDraftVersion(session, calculus, 1, "חשבון", 60, null, null, WHEN));
+        inTx(session -> repository.insertDraftVersion(session, calculus, 1, "חשבון", 60, null, null, yesterday));
         long algebra = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
-        inTx(session -> repository.insertDraftVersion(session, algebra, 1, "אלגברה", 60, null, null, WHEN));
+        inTx(session -> repository.insertDraftVersion(session, algebra, 1, "אלגברה", 60, null, null, march));
 
         List<AuthoredExamHeader> mine = inTx(session -> repository.findAuthoredExams(session, danaId));
 
-        // Algebra is course 11 and Calculus is 12, so display id orders Algebra first even though
-        // it was created second.
-        assertThat(mine).extracting(AuthoredExamHeader::examId).containsExactly(algebra, calculus);
+        assertThat(mine).extracting(AuthoredExamHeader::examId)
+                .as("Calculus was touched yesterday, Algebra in March")
+                .containsExactly(calculus, algebra);
         assertThat(mine).extracting(AuthoredExamHeader::displayId6)
-                .containsExactly(SUBJECT_MATH + COURSE_ALGEBRA + "01",
-                        SUBJECT_MATH + COURSE_CALCULUS + "01");
+                .as("and this is the reverse of display-id order, which is the point")
+                .containsExactly(SUBJECT_MATH + COURSE_CALCULUS + "01",
+                        SUBJECT_MATH + COURSE_ALGEBRA + "01");
+    }
+
+    /**
+     * A revision is what makes an exam recent, not its creation.
+     *
+     * <p>The half {@link #examListIsNewestFirst} cannot show, because there every exam has one
+     * version. An implementation ordering by the exam's own creation, or by version 1's, passes
+     * that test and fails this one.
+     */
+    @Test
+    @DisplayName("an old exam revised yesterday sorts above a newer one left alone ⚑")
+    void revisingLiftsAnExamUpTheList() {
+        Instant march = WHEN.minus(150, ChronoUnit.DAYS);
+        Instant lastWeek = WHEN.minus(7, ChronoUnit.DAYS);
+        Instant yesterday = WHEN.minus(1, ChronoUnit.DAYS);
+
+        long old = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
+        inTx(session -> repository.insertDraftVersion(session, old, 1, "ישן", 60, null, null, march));
+        long newer = inTx(session -> repository.insertExam(session, COURSE_CALCULUS, danaId));
+        inTx(session -> repository.insertDraftVersion(session, newer, 1, "חדש", 60, null, null, lastWeek));
+        // She came back to the March exam yesterday.
+        inTx(session -> repository.insertDraftVersion(session, old, 2, "ישן, מתוקן", 60, null, null, yesterday));
+
+        List<AuthoredExamHeader> mine = inTx(session -> repository.findAuthoredExams(session, danaId));
+
+        assertThat(mine).extracting(AuthoredExamHeader::examId).containsExactly(old, newer);
+        assertThat(mine).extracting(AuthoredExamHeader::latestVersionNo).containsExactly(2, 1);
+    }
+
+    /**
+     * Two exams touched in the same tick still come back in one fixed order.
+     *
+     * <p>A seeded database writes many rows against one clock instant, so ties are ordinary here
+     * rather than exotic. Without the {@code e.id desc} tiebreak neither engine promises an
+     * order for them, and the list would shuffle between runs while every other assertion above
+     * kept passing. That is exactly the defect class that survived a green suite in #50.
+     */
+    @Test
+    @DisplayName("exams sharing an instant are still ordered, by id, on both engines ⚑")
+    void tiesAreBrokenDeterministically() {
+        long first = inTx(session -> repository.insertExam(session, COURSE_ALGEBRA, danaId));
+        inTx(session -> repository.insertDraftVersion(session, first, 1, "א", 60, null, null, WHEN));
+        long second = inTx(session -> repository.insertExam(session, COURSE_CALCULUS, danaId));
+        inTx(session -> repository.insertDraftVersion(session, second, 1, "ב", 60, null, null, WHEN));
+
+        List<AuthoredExamHeader> mine = inTx(session -> repository.findAuthoredExams(session, danaId));
+
+        assertThat(mine).extracting(AuthoredExamHeader::examId)
+                .as("same instant, so the id tiebreak decides and the newer row wins")
+                .containsExactly(second, first);
     }
 
     @Test
