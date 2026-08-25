@@ -556,6 +556,20 @@ describes the way she asked for.
 Topic matching is **exact equality**, inherited from the bank contract's ruling 7.6 (option A) so
 that the auto-composer and the bank's own filter can never disagree about what a topic is.
 
+> **Clarification, needs [L] to confirm before §7 freezes** *(Member A, 2026-08-25, from a cold
+> read of §7 against the code)*. "Exact" here means **the column's own exactness**, which is
+> `utf8mb4_unicode_ci` and therefore folds case and accents. It does **not** mean Java
+> `String.equals`. Ruling 7.6 chose option A over a normalising filter; it did not choose Java
+> equality over the collation, and it could not have, because the filter it was ruling on runs in
+> SQL. The implementation buckets with `QuestionValidator.sameTopic`, which is at least as strict
+> as the collation in every dimension (C-7 / ADR-016).
+>
+> Stated because the sentence above, read literally, is the one line in §7 a client author or a
+> second query would rely on, and reading it as Java equality would split one candidate pool into
+> two buckets that the database serves from the same rows - the exact hazard `docs/PROBLEMS.md`
+> P-9 records. The same phrase appears on `TopicQuota.topic`'s javadoc, which is lead-owned
+> (`common/dto/**`) and is not edited here.
+
 **`available` never changes meaning, and which row is emitted does** *(lead ruling, 2026-08-24,
 freeze text)*. It is always the **raw** count above: what she gets by filtering the bank screen to
 that same topic and difficulty. Section 7.2's property 2 is non-negotiable, and a count net of what

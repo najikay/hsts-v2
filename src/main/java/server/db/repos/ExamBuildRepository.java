@@ -10,6 +10,7 @@ import server.db.ids.ExamIdAllocator;
 import server.db.projections.AuthoredExamHeader;
 import server.db.projections.AuthoredVersionRow;
 import server.db.projections.ExamCompositionHeader;
+import server.db.projections.AutoCandidate;
 import server.db.projections.PinCandidate;
 import server.db.projections.PinnedQuestion;
 
@@ -349,6 +350,77 @@ public final class ExamBuildRepository {
                           and q.id = qv.questionId
                         """, PinCandidate.class)
                 .setParameter("ids", questionVersionIds)
+                .getResultList();
+    }
+
+    // ===================== The auto-composer's pool (E7.4) ================
+
+    /**
+     * Every question the auto-composer may draw on, for one course (E7.4 — F3.2, contract §7.3).
+     *
+     * <p><b>One query for the whole course, not one per quota bucket, and that is a correctness
+     * choice rather than a performance one.</b> §7.2 property 2 requires that the {@code
+     * available} number in a shortfall be the count the teacher would see by filtering her own
+     * bank to the same topic and difficulty. If the counting and the picking ran as separate
+     * queries, a colleague saving a question between them would make the report describe a bank
+     * that no longer exists - and the number in the sentence is precisely the thing she is
+     * invited to go and check. Returning the pool once and bucketing it in memory means the
+     * count and the selection are the same rows by construction.
+     *
+     * <p>It also keeps the query count independent of how many topic rows she typed, which is
+     * the performance argument, and it is the lesser of the two.
+     *
+     * <h2>What "available" counts, per §7.3</h2>
+     *
+     * <ul>
+     *   <li><b>In the exam's course.</b> Scoped in the WHERE clause, never filtered afterwards.</li>
+     *   <li><b>Not soft-deleted.</b> {@code q.deletedAt is null}. Contract §5.2 assigns this rule
+     *       to E7 by name, and the MySQL leaf's {@code softDeleteHasNoDatabaseBackstop} exists to
+     *       record that nothing in the schema enforces it - so this clause is the enforcement.</li>
+     *   <li><b>The latest version only.</b> Not any version: pinning an old one because it used
+     *       to be Hard would put a question on the paper that the bank no longer describes the
+     *       way she asked for it. The {@code max(versionNo)} subquery is the same idiom the bank
+     *       browse uses, deliberately, so the two screens cannot disagree about which version a
+     *       question currently is.</li>
+     * </ul>
+     *
+     * <p>Topic is <b>not</b> filtered here. The composer buckets by topic in memory using
+     * {@code QuestionValidator.sameTopic}, because a SQL {@code =} on a
+     * {@code utf8mb4_unicode_ci} column and a Java comparison would be two expressions of one
+     * rule (P-6), and the service-side one must be at least as strict in every dimension
+     * (C-7 / ADR-016). Filtering here would make the database the authority for the pool and the
+     * service the authority for the quota buckets, which is exactly the split P-9 was.
+     *
+     * <p>Carries no answer key; see {@link AutoCandidate}.
+     *
+     * <p>Consumer: {@code AutoComposer}, on the {@code EXAM_AUTO_COMPOSE} path, which writes
+     * nothing at all.
+     *
+     * @param session    the session inside the current transaction
+     * @param courseCode the exam's course; {@code null} or blank yields an empty pool rather than
+     *                   every course, because an unscoped pool is the one mistake here that would
+     *                   put another teacher's questions on her paper
+     * @return the pool, ordered by display id so a seeded selection is reproducible across runs
+     */
+    public List<AutoCandidate> findAutoCandidates(Session session, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return List.of();
+        }
+        return session.createQuery("""
+                        select new server.db.projections.AutoCandidate(
+                            qv.id, q.id, q.displayId, qv.text, qv.topic, qv.difficulty,
+                            case when qv.image is null then false else true end,
+                            qv.versionNo)
+                        from QuestionVersion qv, Question q
+                        where qv.questionId = q.id
+                          and q.courseCode = :courseCode
+                          and q.deletedAt is null
+                          and qv.versionNo = (
+                              select max(latest.versionNo) from QuestionVersion latest
+                              where latest.questionId = q.id)
+                        order by q.displayId
+                        """, AutoCandidate.class)
+                .setParameter("courseCode", courseCode.strip())
                 .getResultList();
     }
 

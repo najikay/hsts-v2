@@ -1,5 +1,6 @@
 package server.features.exambuild;
 
+import common.dto.authoring.AutoComposeRequest;
 import common.dto.auth.Role;
 import common.dto.authoring.ExamCreateRequest;
 import common.dto.authoring.ExamVersionAction;
@@ -22,14 +23,19 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 
 /**
- * The six exam builder verbs that read and write one teacher's own exams (Logic tier, E7.1, E7.2,
- * E7.3, E7.5, E7.6, E7.10).
+ * The seven exam builder verbs that read and write one teacher's own exams (Logic tier, E7.1,
+ * E7.2, E7.3, E7.4, E7.5, E7.6, E7.10).
  *
- * <p>{@code EXAM_AUTO_COMPOSE} is deliberately not here and is not registered anywhere yet. It is
- * the one verb of the group whose rules are still DRAFT: contract §7 does not determine what to
- * report for quotas whose candidate pools cross rather than nest, and a generator written against
- * an undecided rule is the expensive thing to unwind. It lands with {@code AutoComposer} once §7
- * is ruled on, in its own class, because its guard is the other one (see below).
+ * <p><b>{@code EXAM_AUTO_COMPOSE} is now here too, and this note used to say why it was not.</b>
+ * It was held back because contract §7 did not determine what to report for quotas whose
+ * candidate pools cross rather than nest. §7.3a settled that on 2026-08-24 by making crossing
+ * pools <em>unrepresentable</em> rather than by naming a row for them:
+ * {@link ExamValidator#quotaProblem} refuses a graded course-wide quota beside topic quotas, so
+ * every remaining family nests and the bucket comparisons in {@link AutoComposer} are exact. The
+ * rule had been written into the contract and not into the validator; both now agree.
+ *
+ * <p>Its guard is the other one, like {@code EXAM_CREATE}: the caller supplies the course, so
+ * {@code requireTeachesCourse} throws rather than folding into {@code NOT_FOUND}.
  *
  * <h2>Two guards, chosen by verb, never composed</h2>
  *
@@ -103,7 +109,7 @@ public class ExamHandlers {
     }
 
     /**
-     * Puts the six verbs on the router.
+     * Puts the seven verbs on the router.
      *
      * @param router the router to register on
      */
@@ -115,6 +121,7 @@ public class ExamHandlers {
         router.register(Verb.EXAM_VERSION_SAVE, this::save);
         router.register(Verb.EXAM_VERSION_REVISE, this::revise);
         router.register(Verb.EXAM_SUBMIT, this::submit);
+        router.register(Verb.EXAM_AUTO_COMPOSE, this::autoCompose);
     }
 
     // ===================== The shared gates ===============================
@@ -249,6 +256,48 @@ public class ExamHandlers {
     Message create(CallerContext caller, Message request) {
         return withPayload(request, caller, ExamCreateRequest.class,
                 (session, draft) -> exams.create(session, caller, draft));
+    }
+
+    // ===================== EXAM_AUTO_COMPOSE (E7.4) =======================
+
+    /**
+     * {@code EXAM_AUTO_COMPOSE} - a proposal, or exactly what is missing (E7.4 ⚑, F3.2, F3.3).
+     *
+     * <p><b>An infeasible request answers {@code OK}, and that is the important line here.</b>
+     * She asked what her bank could do and was told precisely; nothing failed. Mapping it to an
+     * error code would put F3.3's whole report behind a red banner and drop the shortfall rows on
+     * the way, which is the one outcome that would make the feature pointless. Only criteria that
+     * are malformed - a negative bucket, a topic twice, the two shapes mixed, more questions than
+     * 100 points can cover - are a {@code VALIDATION}.
+     *
+     * <p>Not routed through {@link #withPayload}, deliberately: that helper answers a
+     * {@code BuildOutcome} whose {@code OK} payload is a stored {@code ExamComposition}, and this
+     * verb stores nothing and answers a different type. Bending the helper to carry both would
+     * make the write path's answer shape depend on a read-only verb.
+     *
+     * @param caller  the authenticated teacher or coordinator
+     * @param request the request, carrying an {@link AutoComposeRequest}
+     * @return {@code OK} with an {@code AutoComposeResult}, feasible or not; {@code VALIDATION}
+     *         for criteria that cannot be interpreted
+     * @throws server.core.AuthorizationException {@code FORBIDDEN} when the course is not hers
+     */
+    Message autoCompose(CallerContext caller, Message request) {
+        requireStaff(caller);
+
+        if (!(request.getPayload() instanceof AutoComposeRequest criteria)) {
+            log.debug("{} from {} carried {} rather than AutoComposeRequest", request.getVerb(),
+                    caller, request.getPayload() == null ? "no payload"
+                            : request.getPayload().getClass().getName());
+            return Message.error(request, ErrorCode.VALIDATION,
+                    ExamBuildMessages.MALFORMED_REQUEST);
+        }
+
+        ExamService.AutoOutcome outcome = Transactions.inTx(sessionFactory,
+                session -> exams.autoCompose(session, caller, criteria));
+
+        return outcome.status() == ExamService.BuildStatus.OK
+                ? Message.ok(request, outcome.result())
+                : Message.error(request, ErrorCode.VALIDATION, outcome.message());
     }
 
     // ===================== EXAM_VERSION_SAVE (E7.2, E7.3) =================

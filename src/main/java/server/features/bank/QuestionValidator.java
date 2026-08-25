@@ -244,11 +244,21 @@ public final class QuestionValidator {
      *
      * <p><b>The same comparison as {@link #sameAnswer}, deliberately, because it is the same
      * job.</b> {@code question_versions.topic VARCHAR(100)} sits in the same
-     * {@code utf8mb4_unicode_ci} table as the answer columns, and the bank's own filter and
-     * E7's auto-composer both select candidates with {@code qv.topic = :topic}, which the
-     * database evaluates under that collation. So a service-side comparison that folds
-     * <em>less</em> than the collation splits one candidate pool into two buckets that the
-     * database will then serve from the same rows.
+     * {@code utf8mb4_unicode_ci} table as the answer columns, and <b>the bank's own filter</b>
+     * selects with {@code qv.topic = :topic}, which the database evaluates under that collation.
+     * So a service-side comparison that folds <em>less</em> than the collation splits one
+     * candidate pool into two buckets that the database will then serve from the same rows.
+     *
+     * <p><b>E7's auto-composer does not use that query, and this paragraph said it did</b>
+     * (corrected 2026-08-25, found by a cold read). It reads its pool by course and buckets by
+     * topic through this method, so here the method is the <em>sole</em> authority for what one
+     * topic is. That flips which direction is dangerous, and the flip is worth stating because
+     * {@link #sameAnswer}'s "stricter is the safe direction" argument does <b>not</b> carry over:
+     * a pair MySQL folds together and this method keeps apart makes an auto-composer shortfall's
+     * {@code available} <em>smaller</em> than the count the teacher gets by filtering the bank
+     * screen to the same topic - and she is explicitly invited to go and check it (E7 contract
+     * §7.2 property 2). Agreement in both directions is what that consumer needs, which is what
+     * {@code BankRoundTripIntegrationTest}'s bidirectional agreement test measures.
      *
      * <p>That is the failure contract §5.3 and §7.2 property 2 exist to prevent: two quotas
      * drawing on one pool with no rule saying which of them is short, and a shortfall the

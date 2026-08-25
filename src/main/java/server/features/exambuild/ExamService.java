@@ -1,5 +1,8 @@
 package server.features.exambuild;
 
+import server.db.projections.AutoCandidate;
+import common.dto.authoring.AutoComposeResult;
+import common.dto.authoring.AutoComposeRequest;
 import common.dto.authoring.ComposedQuestion;
 import common.dto.authoring.ExamComposition;
 import common.dto.authoring.ExamCreateRequest;
@@ -328,6 +331,86 @@ public class ExamService {
      * @throws server.core.AuthorizationException {@code FORBIDDEN} when this is not one of her
      *                                            courses
      */
+    /**
+     * The outcome of an auto-composition (E7.4).
+     *
+     * <p>Its own type rather than {@link BuildOutcome}, because the payload is different in kind:
+     * a {@code BuildOutcome} carries a stored {@code ExamComposition} and this carries a proposal
+     * that was never stored. Two statuses only - the criteria were acceptable or they were not -
+     * because <b>an infeasible request is a successful answer</b>. She asked what the bank could
+     * do and was told precisely; nothing failed. Mapping it to an error code would put F3.3's
+     * whole report behind a red banner and lose the shortfall rows on the way.
+     *
+     * @param status  {@code OK} or {@code INVALID}, never the other two
+     * @param result  the proposal or the report; null when the criteria were refused
+     * @param message the refusal sentence; null on {@code OK}
+     */
+    public record AutoOutcome(BuildStatus status, AutoComposeResult result, String message) {
+
+        static AutoOutcome ok(AutoComposeResult result) {
+            return new AutoOutcome(BuildStatus.OK, result, null);
+        }
+
+        static AutoOutcome invalid(ExamValidator.Violation violation) {
+            return new AutoOutcome(BuildStatus.INVALID, null, violation.message());
+        }
+    }
+
+    /**
+     * Proposes a composition from a criteria grid, or says exactly what is missing
+     * (E7.4 ⚑ — F3.2, F3.3, contract §7).
+     *
+     * <p><b>It writes nothing.</b> No exam, no version, no allocated serial, and no call on this
+     * path reaches a method that inserts. That is what makes T-3.5's "No exam is created" true by
+     * construction rather than by a rollback that has to work: there is nothing to undo. A
+     * proposal she likes is sent on to {@code EXAM_CREATE} by the client.
+     *
+     * <p>Runs inside a transaction anyway, because the pool read must see one consistent moment.
+     * Counting candidates in one snapshot and picking from another would let the {@code
+     * available} number in a shortfall describe a bank that no longer exists, and §7.2 property 2
+     * makes that number the one thing she is invited to go and check.
+     *
+     * <p>Order: the criteria are validated <b>before</b> the course guard runs. A malformed grid
+     * is her typing and a course that is not hers is her scope, and answering the scope question
+     * first would tell a teacher probing courses which ones exist by the shape of the refusal.
+     * {@code requireTeachesCourse} <b>throws</b> here, as it does on create, because she supplied
+     * the course and a {@code FORBIDDEN} naming it discloses nothing she did not type.
+     *
+     * @param session the session inside the reading transaction
+     * @param caller  the authenticated teacher or coordinator
+     * @param request the criteria as they arrived
+     * @return the proposal, the report, or the sentence refusing the criteria
+     * @throws server.core.AuthorizationException {@code FORBIDDEN} when the course is not hers
+     */
+    public AutoOutcome autoCompose(Session session, CallerContext caller,
+                                   AutoComposeRequest request) {
+        Objects.requireNonNull(session, "session");
+        Objects.requireNonNull(request, "request");
+
+        Optional<ExamValidator.Violation> courseProblem =
+                ExamValidator.courseProblem(request.courseCode());
+        if (courseProblem.isPresent()) {
+            return AutoOutcome.invalid(courseProblem.get());
+        }
+        Optional<ExamValidator.Violation> quotaProblem = ExamValidator.quotaProblem(request);
+        if (quotaProblem.isPresent()) {
+            return AutoOutcome.invalid(quotaProblem.get());
+        }
+        Authorization.requireTeachesCourse(caller, request.courseCode(),
+                (teacherId, code) -> courses.teaches(session, teacherId, code));
+
+        List<AutoCandidate> pool = exams.findAutoCandidates(session, request.courseCode());
+        AutoComposeResult result = AutoComposer.compose(request, pool);
+
+        // The seed is logged whether or not it was hers, which is what makes §7.5's promise real:
+        // a teacher who says "it gave me a strange set" can have that exact set reproduced.
+        log.debug("Auto-compose in course {} for user {}: feasible={}, {} questions, {} "
+                        + "shortfalls, seed={}", request.courseCode(), caller.userId(),
+                result.feasible(), result.questionCount(), result.shortfallCount(),
+                request.seed());
+        return AutoOutcome.ok(result);
+    }
+
     public BuildOutcome create(Session session, CallerContext caller, ExamCreateRequest request) {
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(request, "request");

@@ -1,5 +1,7 @@
 package server.features.exambuild;
 
+import common.dto.authoring.TopicQuota;
+import common.dto.authoring.AutoComposeRequest;
 import common.dto.ErrorPayload;
 import common.dto.auth.Role;
 import common.dto.authoring.ComposedQuestion;
@@ -43,8 +45,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link ExamHandlers} - the six builder verbs, their shared gate, and the one call in this epic
- * whose <em>placement</em> is the feature (E7.1, E7.2, E7.3, E7.5, E7.6, E7.10).
+ * {@link ExamHandlers} - the seven builder verbs, their shared gate, and the one call in this epic
+ * whose <em>placement</em> is the feature (E7.1, E7.2, E7.3, E7.4, E7.5, E7.6, E7.10).
  *
  * <p>Written against the gate and the seams rather than the happy paths, which are
  * {@link ExamServiceTest}'s. Three things here are load-bearing:
@@ -57,9 +59,10 @@ import static org.mockito.Mockito.when;
  *       other assertion in this file green.</li>
  *   <li>{@code TheGate} - role before payload on every verb, so a caller who may not use one
  *       cannot read its refusals to learn what it expects.</li>
- *   <li>{@code Registration} - the six verbs, asserted as a set. A seventh added here without a
- *       decision fails this rather than passing quietly, which matters while
- *       {@code EXAM_AUTO_COMPOSE} is deliberately unregistered pending contract §7.</li>
+ *   <li>{@code Registration} - the seven verbs, asserted as a set. An eighth added here without a
+ *       decision fails this rather than passing quietly. It named six until 2026-08-25 and that
+ *       is what held {@code EXAM_AUTO_COMPOSE} out while contract §7 was undecided: the absence
+ *       was a decision somebody had to change a test to reverse, which is what §7.3a then did.</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -132,22 +135,39 @@ class ExamHandlersTest {
     class Registration {
 
         @Test
-        @DisplayName("exactly the six verbs, and none of them open")
-        void exactlyTheSixVerbs() {
+        @DisplayName("exactly the seven verbs, and none of them open")
+        void exactlyTheSevenVerbs() {
             MessageRouter router = new MessageRouter(new SessionManager());
 
             handlers.registerOn(router);
 
-            // A set rather than six isRegistered calls: this fails when a seventh verb is added
-            // here, which is the case that matters. EXAM_AUTO_COMPOSE is deliberately absent
-            // until contract section 7 is ruled on, and this is what makes that absence a
-            // decision somebody has to change a test to reverse.
+            // A set rather than seven isRegistered calls: this fails when an eighth verb is
+            // added here, which is the case that matters.
+            //
+            // It named six until 2026-08-25, and it did its job: EXAM_AUTO_COMPOSE was held back
+            // while contract section 7 left the crossing-pool report undecided, and this
+            // assertion is what made that absence a decision somebody had to change a test to
+            // reverse rather than an oversight. Section 7.3a settled it by making crossing pools
+            // unrepresentable, so the verb is registered and the count moves with it.
             assertThat(router.registeredVerbs()).containsExactlyInAnyOrder(
                     Verb.EXAM_LIST, Verb.EXAM_VERSION_GET, Verb.EXAM_CREATE,
-                    Verb.EXAM_VERSION_SAVE, Verb.EXAM_VERSION_REVISE, Verb.EXAM_SUBMIT);
-            assertThat(router.registeredVerbs()).doesNotContain(Verb.EXAM_AUTO_COMPOSE);
+                    Verb.EXAM_VERSION_SAVE, Verb.EXAM_VERSION_REVISE, Verb.EXAM_SUBMIT,
+                    Verb.EXAM_AUTO_COMPOSE);
             assertThat(router.registeredVerbs())
                     .allSatisfy(verb -> assertThat(router.isOpen(verb)).isFalse());
+        }
+
+        @Test
+        @DisplayName("⚑ auto-compose wears the same role gate as the rest")
+        void autoComposeIsGated() {
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .as("a student who could auto-compose would be reading the bank's topics and "
+                            + "difficulty spread through a verb nobody gated")
+                    .isThrownBy(() -> handlers.autoCompose(student(),
+                            request(Verb.EXAM_AUTO_COMPOSE,
+                                    new AutoComposeRequest("11",
+                                            List.of(TopicQuota.ofAnyDifficulty(null, 3))))));
+            verifyNoInteractions(exams);
         }
     }
 
