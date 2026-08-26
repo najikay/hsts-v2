@@ -30,10 +30,16 @@ prevent.
 > draft per exam, ruled 2026-08-25 with its service change landing in PR23.
 >
 > **Additive amendments, in place rather than in a list at the end:** §4-A1 `latestVersionId` on
-> `ComposedQuestion` (2026-08-26, E7.14's update action), and §5.4-A1 above. Both are additive and
-> neither renames, retypes or removes anything the freeze covered. The lead ruled §4-A1 and
+> `ComposedQuestion` (2026-08-26, E7.14's update action), §5.3-A1 the unnamed topic row and the
+> client guard that carries it (2026-08-26), and §5.4-A1 above. All three are additive and none
+> renames, retypes or removes anything the freeze covered. The lead ruled §4-A1 and
 > delegated the whole vertical to Member A in PR24, which is why a Member A commit appears in
 > `common/dto/authoring` for the first and only time.
+>
+> §5.3-A1 changes no behaviour at all: it records three rulings the lead made on PR24 that until
+> now existed only in the merge comment on #53 — the client's `TOPIC_REQUIRED` guard being
+> load-bearing, that sentence being the one the client owns, and `courseWide` as the v2 shape
+> (also listed in §9 with the other deliberate absences).
 
 *Types landed 2026-08-23; §12 records the five rulings applied while landing them, and the in-place
 corrections they required are marked where they sit. Written for the lead to land the verbs and
@@ -455,6 +461,50 @@ the field:
   `AutoComposeRequest.totalRequested()`, derived from the buckets in one place — see §4 on why
   there is no total field.
 
+#### 5.3-A1 — the unnamed topic row, and why the client's guard is load-bearing *(amendment ruled 2026-08-26)*
+
+**`TOPIC_REQUIRED` is the one sentence in E7 that the client owns, and ruling 4 is not breached by
+it.** Ruling 4 — "the client composes nothing" — governs the rules `ExamBuildMessages` states. This
+is not one of those rules, because the request it refuses is one the server never receives. It is
+form completeness, not a §7 rule, and it is named here so the next reader finds the exception
+recorded rather than discovering it as a breach.
+
+**The mechanism, and why it is invisible after the fold.** `TopicQuota`'s compact constructor strips
+the topic and folds blank to `null` (§4), and **a `null` topic is the course-wide bucket** (§7.3).
+So "a topic row that has not been named yet" is **not expressible on this wire**: it arrives as a
+deliberate request for the whole course, indistinguishable from one a teacher meant.
+
+**The server already refuses half of that space, and is blind to the other half.** When row 0 also
+carries counts, the unnamed row makes a *second* null-topic quota, and `ExamValidator.quotaProblem`
+refuses the request by name with `ExamBuildMessages.topicRequestedTwice(null)`: "The criteria ask
+for questions from the whole course twice. Combine those two rows into one." When row 0 asks for
+nothing, the unnamed row is the **only** null-topic quota in the request. It is then a perfectly
+well formed course-wide draw, there is nothing left for the server to say about it, and it is
+answered rather than refused. **That second case is the one the client guard exists for**, and any
+v2 rule has to be reconciled with `topicRequestedTwice(null)` rather than written from scratch, or
+one grid will draw two different refusals.
+
+**That makes the client guard load-bearing rather than cosmetic.**
+`ExamBuilderSession.criteriaProblem` refuses any row after the first that carries counts and no
+topic. Without it, the case above fails silently: the teacher believes she has asked for ten
+questions on Inequalities and is handed ten drawn from the whole course, with nothing on screen
+having gone wrong. Row 0 is exempt by design — it *is* the course-wide row, and it carries no topic
+field at all (`ExamBuilderView.criterionRow` renders it as the label "Anywhere in this course",
+where every other index gets a `TextField`). Being **exempt from the guard while nameless** is what
+makes "ten more, anywhere" expressible at all.
+
+**The harm is bounded, which is why this stands for v1.** A compose writes nothing, and the
+proposal it returns is editable before it is saved, so the worst case is a paper drawn wider than
+intended and visibly so on the page she is looking at. That bound is the argument; it is not an
+argument that the shape is right.
+
+**The v2 shape, named so it is not re-derived.** An explicit `boolean courseWide` on `TopicQuota`
+would separate "I mean the whole course" from "I have not named this row yet", and the refusal
+would move to the server where every other §7 rule lives. It is deliberately not in v1: it is
+additive whenever it comes, it is not needed while the harm stays bounded and visible, and adding
+it today would put a second representation of the course-wide bucket on the wire beside `null`.
+Recorded as a deliberate absence in §9.
+
 ### 5.4 State rules (F3.6)
 
 - **Only a `DRAFT` version is savable.** `EXAM_VERSION_SAVE` against `PENDING`, `APPROVED` or
@@ -818,6 +868,13 @@ written down here so it is a known gap rather than a discovered one.
 - **No draft autosave.** Section 1: there is no work-in-progress row to autosave into. This is the
   most likely thing to be asked for later, and it is additive if it is: it would need its own
   storage, not a relaxation of the points rule.
+- **No `courseWide` flag on `TopicQuota`** *(recorded 2026-08-26)*. Section 5.3-A1. The course-wide
+  bucket is a `null` topic and nothing else, so an unnamed row and a deliberate whole-course row are
+  one value on this wire. The server catches the case where that makes **two** null-topic quotas
+  (`topicRequestedTwice(null)`); the client's `TOPIC_REQUIRED` guard is the only thing covering the
+  case where it makes **one**. **This is the v2 shape**: additive whenever it lands, and it would
+  move that second refusal from the client to `ExamBuildMessages`, where every other rule in §7
+  already lives - reconciled with `topicRequestedTwice(null)`, not written beside it.
 
 ---
 

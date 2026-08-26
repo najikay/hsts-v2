@@ -318,7 +318,9 @@ public final class ExamValidator {
      * {@code "algebra"} passed as two distinct buckets and drew from one set of rows, which is
      * the hazard this rule exists for rather than an edge case beside it. The comparison is
      * {@link QuestionValidator#sameTopic}, shared rather than reimplemented, for the reason
-     * P-6 gives. C-7 / ADR-016: at least as strict as the collation, in every dimension.
+     * P-6 gives. C-7 / ADR-016: it must <b>agree with</b> the collation in <b>both</b> directions
+     * - never looser (P-9) and never stricter (P-12). This line said "at least as strict, in every
+     * dimension" until 2026-08-26, which P-12 retracted.
      *
      * <p>The scan is pairwise and quadratic. A request carries a handful of quotas - one per
      * topic row on her screen - and a collation-folded key that could be hashed would be a
