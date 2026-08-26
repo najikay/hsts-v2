@@ -113,19 +113,25 @@ public final class BankMessages {
      * retypes one of them with a different space, and gets the same refusal again. The hint is
      * what turns a wall into a rule she can satisfy.
      *
-     * <p><b>"Spacing or hyphens", not "punctuation", and the difference was measured.</b> The
-     * ruling's own wording said punctuation, but {@code sameAnswer} does not fold it: at
-     * {@code Collator} PRIMARY strength only whitespace and the hyphen are ignorable. Verified on
-     * JDK 21 against the shipped validator - {@code "1 2 3"}/{@code "123"}, {@code "co-op"}/
-     * {@code "coop"} and {@code "e-mail"}/{@code "email"} all fold, while {@code "cat."}/
-     * {@code "cat"}, {@code "it's"}/{@code "its"} and {@code "3+4"}/{@code "34"} do not. Telling
-     * her punctuation will not save her would be false in the direction that costs her work: she
-     * would rewrite an answer semantically when a full stop would in fact have been accepted.
+     * <p><b>"Spacing", not "spacing or hyphens", and not "punctuation" - and every narrowing was
+     * measured.</b> The ruling's own wording said punctuation; {@code sameAnswer} has never folded
+     * it, so the sentence said "spacing or hyphens" instead. <b>The hyphen half stopped being true
+     * on 2026-08-26</b> (B-7, BANK contract amendment A1): dashes now separate two answers, as
+     * {@code utf8mb4_unicode_ci} does, so {@code "co-op"}/{@code "coop"} and {@code "e-mail"}/
+     * {@code "email"} are two different answers and telling her otherwise would send her rewriting
+     * one semantically when a hyphen would in fact have saved her.
+     *
+     * <p>What remains true, verified on JDK 21 against the shipped validator: {@code "1 2 3"} and
+     * {@code "123"} fold, and so do {@code "red car"} and {@code "redcar"}, while {@code "cat."}/
+     * {@code "cat"}, {@code "it's"}/{@code "its"}, {@code "3+4"}/{@code "34"} and
+     * {@code "A(1)"}/{@code "A1"} do not. So the rule this sentence has to name is <b>spacing</b>,
+     * and naming it is the difference between a rule and a wall: without it she retypes one answer
+     * with a different space and meets the identical refusal.
      */
     public static String answersDuplicated(int first, int second) {
         return "Answers " + first + " and " + second + " are the same. Two identical answers make "
                 + "the correct one ambiguous, so change one of them. They have to differ by more "
-                + "than spacing or hyphens.";
+                + "than spacing.";
     }
 
     /**

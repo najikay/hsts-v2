@@ -212,6 +212,32 @@ class BotChatSessionTest {
         assertThat(model.sessionId()).isEqualTo(9L);
     }
 
+    /**
+     * ⚑ The generation-guard sweep. {@code BotChatView.onShow} calls {@code reopen} whenever it
+     * is navigated to carrying a session parameter, and it keeps one session per course, so two
+     * deep links into two conversations can overlap. Nothing checked which conversation an
+     * arriving transcript belonged to.
+     */
+    @Test
+    @DisplayName("⚑ a transcript for the conversation she left loses to the one she reopened")
+    void aLateTranscriptForAnotherConversationIsDropped() {
+        // No responder, so both futures stay pending and the answers are delivered by hand.
+        session.reopen(9L);
+        session.reopen(10L);
+
+        connection.deliver(Message.ok(connection.sentMessages().get(1),
+                new BotConversation(10L, "22", "Databases 22", NOW, NOW,
+                        List.of(BotTurn.asked("newer", NOW)))));
+        connection.deliver(Message.ok(connection.sentMessages().get(0),
+                new BotConversation(9L, "22", "Databases 22", NOW, NOW,
+                        List.of(BotTurn.asked("older", NOW), BotTurn.answered("reply", NOW)))));
+
+        assertThat(model.sessionId())
+                .as("the transcript on screen must be the conversation she asked for")
+                .isEqualTo(10L);
+        assertThat(model.entries()).hasSize(1);
+    }
+
     @Test
     @DisplayName("a reopen that fails says so instead of leaving a blank screen")
     void reopenFailures() {

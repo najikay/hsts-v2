@@ -339,11 +339,26 @@ allotted duration rather than a number someone chose.
 |---|---|---|---|---|---|
 | 1 | 1 / v2 | `4821` | T−14d 09:00 → T−14d 11:00 | **CLOSED** | Fully graded, stats frozen |
 | 2 | 4 / v1 | `7390` | T−3d 10:00 → T−3d 11:30 | **CLOSED** | Awaiting grading — nothing approved yet |
-| 3 | 6 / v1 | `5164` | T+0 14:00 → T+0 16:00 | **SCHEDULED** | "Today", for the live release demo |
-| 4 | 1 / v2 | `2075` | T−1h → T+1h | **LIVE** | Second execution of exam 1 — the S-2 proof |
+| 3 | 6 / v1 | `5164` | T+3h → T+5h | **SCHEDULED** | Opening later today, for the release demo |
+| 4 | 1 / v2 | `2075` | T−30m → T+90m | **LIVE** | Second execution of exam 1 — the S-2 proof |
 
 Executions 3 and 4 are the two non-CLOSED rows, and their codes differ — the E9 service
 rule (unique code among non-CLOSED executions) holds on the seed as loaded.
+
+**Two different kinds of `T` in that column, and the difference is load-bearing** (corrected
+2026-08-26, B-10). Executions 1 and 2 are historical, so their `T−14d 09:00` and `T−3d 10:00`
+mean *a wall-clock hour on a date relative to the load date* — the loader resolves them with
+`SeedTimes.dayOffsetAt`, which discards the load's own time of day. Executions 3 and 4 are the two
+the demo needs to be *happening*, so their offsets are from the **load instant** itself, through
+`SeedTimes.fromNow`: execution 4 opened half an hour ago and closes ninety minutes from now,
+execution 3 opens three hours from now and runs for two.
+
+Execution 3 used to read `T+0 14:00 → T+0 16:00`, resolved the historical way. That is "scheduled
+for later today" only when the seed is loaded before 14:00 UTC — before 17:00 Israel time. Loaded
+any afternoon it stored a `SCHEDULED` row whose window had already closed, and a single
+`ReleaseScheduler` tick drove it `SCHEDULED → LIVE → CLOSED` within thirty seconds of the server
+starting. **Anything this document wants to be in the future when it is read must be written as an
+offset from the load instant**, never as an hour on the load date.
 
 Execution 4 being the *same exam version* as execution 1 is the point: one exam, two
 releases, separate codes, windows, participants and statistics.
@@ -672,10 +687,10 @@ The `#` column is presentation order only and carries no meaning.
 
 | seed_id | # | recipient | type | title | read |
 |---|---|---|---|---|---|
-| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | EXAM_REJECTED | Exam sent back for revision — version 1 of "Midterm — Algebra" | read |
-| `N-EXAM-PENDING-CALC` | 2 | 2 dana.cohen | EXAM_PENDING | The exam was sent to the subject coordinator for approval | unread |
-| `N-APPROVAL-REQ-MATH` | 3 | 3 rina.barak | APPROVAL_REQUEST | An exam is waiting for your approval in Mathematics | unread |
-| `N-EXAM-REJECTED-JAVA` | 4 | 5 tamar.shani | EXAM_REJECTED | Collections Quiz was returned for revision | unread |
+| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | APPROVAL_REJECTED | Exam sent back for revision — version 1 of "Midterm — Algebra" | read |
+| `N-EXAM-PENDING-CALC` | 2 | 2 dana.cohen | APPROVAL_REQUESTED | The exam was sent to the subject coordinator for approval | unread |
+| `N-APPROVAL-REQ-MATH` | 3 | 3 rina.barak | APPROVAL_REQUESTED | An exam is waiting for your approval in Mathematics | unread |
+| `N-EXAM-REJECTED-JAVA` | 4 | 5 tamar.shani | APPROVAL_REJECTED | Collections Quiz was returned for revision | unread |
 | `N-GRADE-NOA` | 5 | 7 noa.friedman | GRADE_PUBLISHED | Your grade for Midterm — Algebra is available | read |
 | `N-GRADE-YAEL` | 6 | 13 yael.azulay | GRADE_PUBLISHED | Your grade is available, including a teacher's comment | unread |
 | `N-GRADING-DUE-JAVA` | 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |

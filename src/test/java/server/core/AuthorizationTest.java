@@ -169,6 +169,38 @@ class AuthorizationTest {
                     .hasMessageContaining("PRINCIPAL");
         }
 
+        /**
+         * ⚑ B-12. The sentence is pinned in full, on purpose, because the defect it replaces was
+         * invisible to every assertion above it: {@code describe} ended with
+         * {@code Arrays.toString(allowed)}, so the message <em>did</em> contain "TEACHER" and
+         * "COORDINATOR" and also contained <b>{@code [}</b> and <b>{@code ]}</b>. A student who
+         * reached any staff verb was shown a Java array literal, which is what PRD §4.1's "never
+         * an error code" rule is about and what acceptance case 21.3 reads.
+         *
+         * <p>{@code doesNotContain("[")} is the half that would have failed before; the exact
+         * equality is what stops the phrasing drifting back towards a rendered collection.
+         */
+        @Test
+        @DisplayName("⚑ the multi-role refusal is a sentence, with no array literal in it")
+        void theMultiRoleRefusalReadsAsEnglish() {
+            assertThatThrownBy(() -> Authorization.requireRole(
+                    caller(1L, Role.STUDENT), Role.TEACHER, Role.COORDINATOR))
+                    .hasMessage("This action requires the TEACHER or COORDINATOR role.")
+                    .satisfies(refusal -> assertThat(refusal.getMessage())
+                            .as("brackets are how a Java array renders, not how a sentence does")
+                            .doesNotContain("[").doesNotContain("]"));
+
+            // Three roles keep the same shape: commas until the last join, which is "or".
+            assertThatThrownBy(() -> Authorization.requireRole(caller(1L, Role.STUDENT),
+                    Role.TEACHER, Role.COORDINATOR, Role.PRINCIPAL))
+                    .hasMessage("This action requires the TEACHER, COORDINATOR or PRINCIPAL role.");
+
+            // And the single-role branch, which always read correctly, is unchanged.
+            assertThatThrownBy(() -> Authorization.requireRole(
+                    caller(1L, Role.STUDENT), Role.COORDINATOR))
+                    .hasMessage("This action requires the COORDINATOR role.");
+        }
+
         @Test
         @DisplayName("checks the session first: anonymous is UNAUTHORIZED, not FORBIDDEN")
         void anonymousIsUnauthorizedNotForbidden() {

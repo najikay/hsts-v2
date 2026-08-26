@@ -151,6 +151,48 @@ abstract class JpaNotificationStoreContract extends NotificationStoreContract {
                 .isEqualTo(1);
     }
 
+    /**
+     * ⚑ <b>B-11's read half: one unreadable row must cost that row and nothing else.</b>
+     *
+     * <p>{@code notifications.type} is a VARCHAR, so the column can hold a string this build has
+     * no constant for — and on a freshly seeded database it did, for six of eight rows.
+     * {@code toDto} mapped it with a bare {@code NotificationType.valueOf}, the
+     * {@code IllegalArgumentException} escaped through the {@code map}, and
+     * {@code NOTIFICATIONS_GET} answered {@code INTERNAL}: the user's bell did not open at all,
+     * including the well-formed rows sitting beside the bad one.
+     *
+     * <p>The hostile value is written with a raw insert on purpose. Going through
+     * {@link JpaNotificationStore#save} is impossible by construction — it takes the enum and
+     * writes {@code name()} — and that is exactly why no test could see this: every existing
+     * notification test builds its rows through the service, so the column always round-tripped.
+     * The seed did not, and nothing joined the two.
+     */
+    @Test
+    @DisplayName("⚑ a stored type this build does not know costs that row, not the page")
+    void anUnknownStoredTypeDoesNotTakeThePageDown() {
+        store.save(danaId, NotificationType.APPROVAL_REJECTED, "before", "", NavRef.none(), T0);
+        Transactions.runInTx(factory(), session -> {
+            // Straight into the column, bypassing the enum the setter would have demanded.
+            Notification hostile = new Notification(danaId, "EXAM_REJECTED_LEGACY_2019",
+                    "the bad row", null, null, null, T0.plusSeconds(1));
+            session.persist(hostile);
+        });
+        store.save(danaId, NotificationType.GRADE_PUBLISHED, "after", "", NavRef.none(),
+                T0.plusSeconds(2));
+
+        var page = store.listRecent(danaId, 50);
+
+        assertThat(page).extracting(common.dto.notify.NotificationDto::title)
+                .as("the page survives minus the row that cannot be read - before B-11 this "
+                        + "threw and the caller got no page at all")
+                .containsExactlyInAnyOrder("before", "after");
+        assertThat(store.unreadCount(danaId))
+                .as("the badge counts in SQL and never parses a type, so it still counts the "
+                        + "skipped row: a badge larger than the list is a visible symptom, and "
+                        + "quietly adjusting it would hide the defect instead")
+                .isEqualTo(3);
+    }
+
     private SessionFactory factory() {
         return database.factory();
     }

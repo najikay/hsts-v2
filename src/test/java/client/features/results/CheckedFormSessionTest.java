@@ -11,6 +11,7 @@ import common.dto.grading.CheckedFormRequest;
 import common.dto.grading.GradeState;
 import common.dto.grading.StudentGradeRow;
 import common.protocol.ErrorCode;
+import common.protocol.Message;
 import common.protocol.Verb;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,8 +49,13 @@ class CheckedFormSessionTest {
     }
 
     private static CheckedForm aForm() {
+        return aForm(GRADE_ID);
+    }
+
+    /** The same paper under a chosen grade id, so two in-flight answers can be told apart. */
+    private static CheckedForm aForm(long gradeId) {
         return new CheckedForm(
-                new StudentGradeRow(GRADE_ID, 11, "מאיה לוי", 71, 71, 71, GradeState.APPROVED,
+                new StudentGradeRow(gradeId, 11, "מאיה לוי", 71, 71, 71, GradeState.APPROVED,
                         null, null, Instant.parse("2026-08-20T09:00:00Z"),
                         "Algebra midterm", "11"),
                 "Algebra midterm", "11", AttemptState.SUBMITTED, 70,
@@ -151,6 +157,30 @@ class CheckedFormSessionTest {
         // in the frame of another request.
         assertThat(session.answers()).isEmpty();
         assertThat(session.form()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚑ a different grade opened mid-flight travels, and the late answer loses")
+    void aLateAnswerForAnotherGradeIsDropped() {
+        // No responder, so both futures stay pending and the answers are delivered by hand in
+        // the order the network chose rather than the order the clicks did.
+        session.open(GRADE_ID);
+        session.open(901);
+
+        assertThat(connection.sentCount())
+                .as("the request for the grade she actually asked for has to travel; the old "
+                        + "guard was 'am I loading' rather than 'am I already asking THIS', so "
+                        + "the second open was dropped and she was shown the first grade")
+                .isEqualTo(2);
+
+        connection.deliver(Message.ok(connection.sentMessages().get(1), aForm(901)));
+        connection.deliver(Message.ok(connection.sentMessages().get(0), aForm(GRADE_ID)));
+
+        assertThat(session.form()).isPresent();
+        assertThat(session.form().orElseThrow().grade().gradeId())
+                .as("the answer for the grade she left has to lose to the one she opened, "
+                        + "however late it lands")
+                .isEqualTo(901);
     }
 
     @Test

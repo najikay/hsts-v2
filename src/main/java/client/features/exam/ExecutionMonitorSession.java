@@ -131,9 +131,10 @@ public final class ExecutionMonitorSession {
      * @return a future completing when the model has been updated
      */
     public CompletableFuture<Void> refresh() {
-        return dispatcher.send(Verb.EXECUTION_MONITOR_GET, new MonitorRequest(executionId))
+        long asked = executionId;
+        return dispatcher.send(Verb.EXECUTION_MONITOR_GET, new MonitorRequest(asked))
                 .handle((response, failure) -> {
-                    apply(Verb.EXECUTION_MONITOR_GET, response, failure);
+                    apply(Verb.EXECUTION_MONITOR_GET, asked, response, failure);
                     return null;
                 });
     }
@@ -155,9 +156,10 @@ public final class ExecutionMonitorSession {
             publish();
             return CompletableFuture.completedFuture(null);
         }
+        long asked = executionId;
         return dispatcher.send(Verb.EXECUTION_EXTEND, ask)
                 .handle((response, failure) -> {
-                    apply(Verb.EXECUTION_EXTEND, response, failure);
+                    apply(Verb.EXECUTION_EXTEND, asked, response, failure);
                     return null;
                 });
     }
@@ -211,7 +213,22 @@ public final class ExecutionMonitorSession {
 
     // ===================== Internals =====================================
 
-    private void apply(Verb verb, Message response, Throwable failure) {
+    /**
+     * Applies one answer, unless the screen has moved to another execution ⚑.
+     *
+     * <p>{@code ExecutionMonitorView.onShow} calls {@link #start(long)} on every navigation and
+     * the view is built once, so {@link #executionId} can change while an answer is in flight.
+     * The push path has always checked {@code pushed.executionId()} against the field; the request
+     * path did not, so a snapshot for the sitting she had just left could repaint the sitting she
+     * had just opened — with the wrong students, the wrong counts and the wrong countdowns, and
+     * nothing on screen to say so. The two paths now apply the same rule.
+     *
+     * @param asked the execution this exchange was issued for
+     */
+    private void apply(Verb verb, long asked, Message response, Throwable failure) {
+        if (asked != executionId) {
+            return;
+        }
         if (failure != null) {
             lastError = ExamCopy.OFFLINE;
             log.warn("{} failed: {}", verb, failure.toString());

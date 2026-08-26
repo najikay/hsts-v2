@@ -57,5 +57,33 @@ public enum NotificationType {
      * A student used another course's bot during an attempt (→ the teacher
      * running that execution, C-4). Not an accusation, a flag to look at.
      */
-    INTEGRITY_ALERT
+    INTEGRITY_ALERT,
+
+    /**
+     * A closed execution's papers are waiting to be graded and approved
+     * (→ the teacher who released it).
+     *
+     * <p><b>Added 2026-08-26 under B-11, and the reason is worth recording.</b> Seed §11 has
+     * always held a notification of this kind — {@code N-GRADING-DUE-JAVA}, "8 attempts awaiting
+     * your grade approval" to {@code avi.mizrahi} — and this enum had no constant for it, so the
+     * seed stored the string {@code GRADING_DUE} and {@code NotificationType.valueOf} threw on
+     * every read. The gap was in the vocabulary, not in the fixture: this is an emit point the
+     * PRD names, and the class contract above says constants may be added freely. Re-pointing the
+     * row at {@link #GRADE_PUBLISHED} instead would have traded a crash for a lie, since that one
+     * means "your grade is out" and is addressed to a student.
+     *
+     * <p>No server code raises it yet — E12's grading queue is where it belongs — which puts it in
+     * the same state as several constants above, whose features the class javadoc already notes
+     * are not merged.
+     */
+    GRADING_DUE,
+
+    /**
+     * A sitting finished and its results are available (→ staff who watch it rather than sit it).
+     *
+     * <p>The other half of B-11's vocabulary gap: seed §11's {@code N-EXEC-CLOSED-ALG} is the one
+     * notification the principal has, and S-7 makes her read-only, so it is the only thing that
+     * can ever populate her panel. Nothing else in this enum describes an execution ending.
+     */
+    EXECUTION_CLOSED
 }

@@ -342,6 +342,44 @@ she just hit, that answers must differ by more than spacing or hyphens. Without 
 she retypes one of them with a different space and gets the same refusal, which is a wall rather
 than a rule.
 
+### ⚑ AMENDMENT A1, 2026-08-26 — the hyphen half of that ruling is reversed (B-7)
+
+**The 2026-08-22 ruling is overturned for hyphens and dashes, and stands for spacing.** It is left
+above in full rather than edited, because the ruling was correct on the evidence it had and the
+evidence that overturned it is the kind only an acceptance walk produces.
+
+**What the ruling did not know.** Its argument is "we refuse something the database would have
+accepted, never the reverse", with the cost priced as *a teacher told two similar answers are too
+similar*. The scenario-2 pre-walk priced it properly: **five seeded questions cannot be written
+back through `QUESTION_UPDATE` at all** — `11005`, `11006`, `11008`, `12005`, `12007`, every one a
+pair of distractors differing only by a sign. Acceptance case 2.4's own first step, "open 11005,
+change its text, save", is refused, and the refusal is about answers the teacher never touched.
+Sign-differing distractors are not a confusing edge case in a mathematics bank; they are the
+ordinary shape of one, and the system was refusing to re-store rows it had stored itself.
+
+**What is now true.** `sameAnswer` substitutes a distinct sentinel for each collator-ignorable
+dash, so hyphens and dashes **separate two answers**, as `utf8mb4_unicode_ci` does. Measured, not
+argued: exactly eight BMP characters are ignorable to Java's `Collator` at PRIMARY and all eight
+are dashes (`U+002D`, `U+2010`–`U+2015`, `U+2212`); MySQL calls **none** of the ASCII punctuation
+family ignorable; and of the 28 pairs among those eight, 27 are distinct to the collation and
+exactly one — `U+2010` against `U+2011` — is not, which is why the sentinel table has seven values
+for eight dashes.
+
+**So `co-op`/`coop` and `e-mail`/`email` no longer fold**, and the paragraph above naming them is
+history. The sentence in `BankMessages.answersDuplicated` was corrected in the same change: it says
+*spacing*, not *spacing or hyphens*, because telling her hyphens will not save her is now false in
+the direction that costs her work.
+
+**The spacing half stands, and stands deliberately.** `sameAnswer("1 2 3", "123")` is still `true`,
+and that is still stricter than the collation — measured: MySQL answers `0` for it, and for
+`'a b'`/`'ab'`, `'a  b'`/`'a b'` and `'  Two'`/`'Two'` (only *trailing* spaces are folded, since
+the collation is PAD SPACE). Two differences from the hyphen case justify keeping it: ADR-016
+**names** trimming and whitespace collapse as the rule, so this over-strictness was chosen rather
+than inherited from a `Collator` artefact nobody picked; and no question in the bank, seeded or
+written, has been blocked by it. **It is not a closed question** — it is the same class of defect
+with no observed cost, and it is recorded here so the next walk that trips over it finds a decision
+rather than a surprise.
+
 Exact equivalence with MySQL's UCA table is **not** claimed and is not achievable in Java; the two
 are separate implementations. The implementation is NFKD, strip combining marks, upper-then-lower
 (which folds Greek final sigma), then a `Collator` at primary strength (which folds the ß and œ

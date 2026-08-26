@@ -1,5 +1,6 @@
 package server.db.seed;
 
+import common.dto.notify.NotificationType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -9,6 +10,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * The loaded database, checked against the document it came from (E2.15).
@@ -387,14 +389,32 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
 
         assertThat(minutesBetween(byCode.get("4821"))).as("§9: T-14d 09:00 to 11:00").isEqualTo(120);
         assertThat(minutesBetween(byCode.get("7390"))).as("§9: T-3d 10:00 to 11:30").isEqualTo(90);
-        assertThat(minutesBetween(byCode.get("5164"))).as("§9: T+0 14:00 to 16:00").isEqualTo(120);
+        assertThat(minutesBetween(byCode.get("5164"))).as("§9: T+3h, two hours").isEqualTo(120);
 
         // Execution 4 is the S-2 proof and the take-exam demo's target: it has to straddle the
         // anchor, not merely be two hours long, or "live right now" stops being true.
         List<Object> live = byCode.get("2075");
-        assertThat(minutesBetween(live)).as("§9: T-1h to T+1h").isEqualTo(120);
+        assertThat(minutesBetween(live)).as("§9: T-30m to T+90m").isEqualTo(120);
         assertThat((java.time.Instant) live.get(1)).isBefore(ANCHOR);
         assertThat((java.time.Instant) live.get(2)).isAfter(ANCHOR);
+
+        // ⚑ B-10. The assertion whose absence let the fixture describe the past. Execution 3 is
+        // stored SCHEDULED, and a SCHEDULED row whose window has already closed is not a fixture,
+        // it is a row one ReleaseScheduler tick drives SCHEDULED -> LIVE -> CLOSED. The window used
+        // to be 14:00 UTC on the anchor's DATE, so with this class's own 15:30Z anchor it opened an
+        // hour and a half in the past and every shape assertion above still passed. Asserting the
+        // duration is not enough; the direction is the property.
+        List<Object> scheduled = byCode.get("5164");
+        assertThat((java.time.Instant) scheduled.get(1))
+                .as("a SCHEDULED sitting has to open in the future, whatever hour the seed is "
+                        + "loaded at - B-10")
+                .isAfter(ANCHOR);
+
+        // And the two live-adjacent windows must not overlap, or the release list stops showing
+        // one LIVE row beside one SCHEDULED row, which is what cases 5.5 and 5.6 read.
+        assertThat((java.time.Instant) scheduled.get(1))
+                .as("execution 3 opens after execution 4 has closed")
+                .isAfter((java.time.Instant) live.get(2));
     }
 
     private static long minutesBetween(List<Object> execution) {
@@ -669,6 +689,37 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                             expected.title())
                     .hasSize(1);
         }
+    }
+
+    /**
+     * ⚑ <b>B-11's tripwire, and the one assertion that would have caught it.</b>
+     *
+     * <p>{@link #notificationsMatch} above compares the loaded type against the <em>document's</em>
+     * type, and both said {@code EXAM_REJECTED}. They agreed with each other and with nothing else
+     * — the precise failure mode this class's own javadoc says it exists to remove, reappearing in
+     * a column whose vocabulary lives in a third place: {@link NotificationType}.
+     *
+     * <p>So this asks the enum rather than the document. {@code notifications.type} is a VARCHAR
+     * and {@code JpaNotificationStore} maps it back with {@code valueOf}, so a seeded string that
+     * is not a constant is a row nobody can ever read; six of the eight were, and
+     * {@code NOTIFICATIONS_GET} answered {@code INTERNAL} for every staff account with a
+     * notification. The read path now skips such a row instead of failing the page, which keeps
+     * the bell open but would keep the defect invisible — this assertion is what makes the seed
+     * itself unable to drift again.
+     */
+    @Test
+    @DisplayName("⚑ every seeded notification type is a NotificationType constant (B-11)")
+    void everySeededNotificationTypeParses() {
+        List<String> stored = inTx(session -> session
+                .createQuery("select distinct n.type from Notification n", String.class)
+                .getResultList());
+
+        assertThat(stored).as("the seed should have written some notifications at all").isNotEmpty();
+        assertThat(stored).allSatisfy(type -> assertThatCode(() -> NotificationType.valueOf(type))
+                .as("seeded notifications.type '%s' is not a NotificationType constant, so every "
+                        + "row carrying it is unreadable and its owner's bell is short a row",
+                        type)
+                .doesNotThrowAnyException());
     }
 
     /** @return each result row as a list, with numbers normalised so comparison is by value */

@@ -60,6 +60,15 @@ public final class GradingQueueSession {
     private String error;
     private boolean busy;
 
+    /**
+     * The sitting the rail is currently asking about ⚑.
+     *
+     * <p>Separate from {@code open}, which is the sitting that has <em>arrived</em>. The two differ
+     * for exactly as long as a request is in flight, and that gap is where a stale answer used to
+     * be adopted — see {@link #settleExecution}.
+     */
+    private long requestedExecutionId;
+
     public GradingQueueSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -116,15 +125,30 @@ public final class GradingQueueSession {
     }
 
     private void requestExecution(long executionId) {
+        requestedExecutionId = executionId;
         busy = true;
         error = null;
         onChange.run();
 
         dispatcher.send(Verb.GRADING_EXECUTION_GET, new ExecutionGradesRequest(executionId))
-                .whenComplete((response, failure) -> poster.run(() -> settleExecution(response, failure)));
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settleExecution(executionId, response, failure)));
     }
 
-    private void settleExecution(Message response, Throwable failure) {
+    /**
+     * ⚑ The late answer is dropped, not applied (the generation-guard sweep).
+     *
+     * <p>{@link #openExecution} is wired to the queue list's <em>selection</em> change, so holding
+     * the arrow key down the rail fires one of these per row and every one of them is in flight at
+     * once. Nothing used to check which sitting an arriving answer was about, so whichever the
+     * network happened to deliver last became {@code open} — and the teacher was looking at one
+     * sitting's papers under another sitting's row. The grade ids she then approved would be
+     * internally consistent and belong to the wrong exam.
+     */
+    private void settleExecution(long asked, Message response, Throwable failure) {
+        if (asked != requestedExecutionId) {
+            return;
+        }
         busy = false;
         if (!isOk(response, failure)
                 || !(response.getPayload() instanceof ExecutionGrades payload)) {

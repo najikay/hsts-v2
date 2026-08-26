@@ -2,7 +2,6 @@ package server.core;
 
 import common.dto.auth.Role;
 
-import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -513,9 +512,38 @@ public final class Authorization {
                         + "until then it refuses rather than permits.");
     }
 
+    /**
+     * Names the roles a verb admits, in a sentence a person reads ⚑ (B-12).
+     *
+     * <p>This used to end {@code "one of the roles " + Arrays.toString(allowed)}, so a student who
+     * reached any staff verb was told <i>"This action requires one of the roles <b>[TEACHER,
+     * COORDINATOR]</b>."</i> — square brackets and enum constants in a sentence shown to a user,
+     * which is exactly what PRD §4.1's "never an error code" rule forbids and what acceptance case
+     * 21.3 looks for. {@code Arrays.toString} is a debugging aid; it renders a Java array, not
+     * English, and the moment its output reaches a screen the screen is showing internals.
+     *
+     * <p>Now it reads <i>"This action requires the TEACHER or COORDINATOR role."</i> — one clause,
+     * no brackets, and the same shape as the single-role branch it used to diverge from. The role
+     * names themselves stay upper case deliberately: they are the words {@code DEMO_ACCOUNTS.md}
+     * and every screen in the app use for these three audiences, so lower-casing them here would
+     * introduce a second vocabulary for one thing.
+     *
+     * @param allowed the roles the verb admits; never empty by the time this is called
+     * @return the phrase that completes "This action requires …"
+     */
     private static String describe(Role... allowed) {
-        return allowed.length == 1
-                ? "the " + allowed[0] + " role"
-                : "one of the roles " + Arrays.toString(allowed);
+        if (allowed.length == 1) {
+            return "the " + allowed[0] + " role";
+        }
+        StringBuilder names = new StringBuilder("the ");
+        for (int i = 0; i < allowed.length; i++) {
+            if (i > 0) {
+                // Oxford-comma-free, because the list is two long in every current call site and
+                // "A, B or C" is what a three-role verb would want anyway.
+                names.append(i == allowed.length - 1 ? " or " : ", ");
+            }
+            names.append(allowed[i]);
+        }
+        return names.append(" role").toString();
     }
 }

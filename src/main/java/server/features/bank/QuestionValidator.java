@@ -204,17 +204,36 @@ public final class QuestionValidator {
      * {@code &#x5de;&#x5d9;&#x5de;} as two answers passed validation and hit
      * {@code ck_question_versions_distinct}, and the exception came out of
      * {@code QuestionService.create} as a generic internal error. {@link #foldedForm} now folds
-     * the five, which is step 3 below.
+     * the five, which is step 4 below.
+     *
+     * <p>And measured the same way, MySQL calls all of these <b>different</b> while
+     * {@link Collator} at PRIMARY called them equal — the divergence that runs the other way:
+     *
+     * <pre>
+     *   1 / -1               2, 3 / -2, -3        cos(x) / -cos(x)
+     *   (3, 4) / (-3, 4)     x = 1 / x = -1       a / a-        a- / a--
+     *   a-b / a&#x2013;b   (hyphen-minus vs en dash: the collation tells most dashes apart too)
+     * </pre>
+     *
+     * <p>...with exactly one exception, which is why {@link #DASH_SENTINELS} is a table rather than
+     * a counter: MySQL calls {@code U+2010 HYPHEN} and {@code U+2011 NON-BREAKING HYPHEN}
+     * <b>equal</b>, and nothing else in the dash family equal to anything else.
      *
      * <p>Any pair the service accepts and the constraint rejects becomes a raw
      * {@code SQLIntegrityConstraintViolationException} and a generic internal error, which is
-     * exactly the outcome naming the field was meant to replace. <b>The rule must therefore be
-     * at least as strict as the collation, in every dimension.</b>
+     * exactly the outcome naming the field was meant to replace. Any pair the service refuses and
+     * the constraint would have stored is B-7: a question the teacher cannot save and no error
+     * anywhere to explain why. <b>The rule must therefore agree with the collation in every
+     * dimension, and the CsvSource in {@code BankRoundTripIntegrationTest} carries rows on both
+     * sides so neither branch can go unexecuted.</b>
      *
      * <h2>What it does, and the honest limit</h2>
      *
-     * <p>Four steps, because no single one covers the table above:
+     * <p>Five steps, because no single one covers the table above:
      * <ol>
+     *   <li><b>substitute the ignorable dashes</b>, before anything else: the eight characters
+     *       {@code Collator} drops at PRIMARY and the collation keeps. First because NFKD would
+     *       otherwise merge two of them - see {@link #foldedForm};</li>
      *   <li><b>NFKD</b>, not NFD: compatibility decomposition is what folds the &#xfb01; ligature and
      *       fullwidth &#xff21;. Canonical decomposition leaves both alone;</li>
      *   <li><b>strip combining marks</b>: accents, and Hebrew niqqud;</li>
@@ -226,10 +245,32 @@ public final class QuestionValidator {
      *
      * <p><b>This is not exact equivalence with MySQL's UCA table and does not claim to be.</b>
      * Java's collation data and MySQL's are separate implementations and will differ at some
-     * edge nobody here has found. The design goal is one-directional: never accept a pair the
-     * database will reject. Being <em>stricter</em> than the database is safe, because the worst
-     * case is a teacher told two confusingly similar answers are too similar. Being looser is
-     * the failure that has a stack trace in it.
+     * edge nobody here has found.
+     *
+     * <h2>⚑ "Stricter is safe" was wrong, and B-7 is what it cost</h2>
+     *
+     * <p>This javadoc used to say the goal was one-directional - never accept a pair the database
+     * will reject - and that being <em>stricter</em> than the collation was therefore free, "because
+     * the worst case is a teacher told two confusingly similar answers are too similar". <b>That
+     * argument does not survive the acceptance walk of 2026-08-25</b> and the paragraph is kept here
+     * corrected rather than deleted, because the reasoning is the kind that looks sound until
+     * somebody measures it.
+     *
+     * <p>What it cost: {@code sameAnswer("1", "-1")} answered true, because {@link Collator} at
+     * PRIMARY drops the dash family entirely, while {@code utf8mb4_unicode_ci} keeps every one of
+     * those characters. So the validator refused pairs {@code ck_question_versions_distinct} had
+     * <em>already accepted</em> - five seeded questions could not be written back through
+     * {@code QUESTION_UPDATE} at all, and a teacher editing only the stem of one of them met a
+     * refusal about answers she never touched. The over-strict pair was not "two confusingly similar
+     * answers"; it was {@code 2, 3} against {@code -2, -3}, which is the ordinary shape of a
+     * mathematics distractor. See {@link #IGNORED_DASHES} for the fold and the measurement.
+     *
+     * <p><b>The invariant is therefore agreement in BOTH directions, for both consumers, and the
+     * asymmetry documented on {@link #sameTopic} is about which direction is caught soonest rather
+     * than which is acceptable.</b> Looser than the collation is still the worse failure - it has a
+     * stack trace in it and reaches the teacher as a generic internal error - but stricter is a
+     * defect too, and this one sat in the bank silently until a walk tried to re-save a row the
+     * system had stored itself.
      *
      * @param first  one answer as typed
      * @param second another
@@ -326,13 +367,78 @@ public final class QuestionValidator {
      *
      * <p>{@code U+05F0 double vav, U+05F1 vav-yod, U+05F2 double yod}. Unlike the final forms these
      * are one character folding to <b>two</b>, which is why they need their own table: NFKD does
-     * not decompose them (they have no canonical or compatibility decomposition at all), so step 1
+     * not decompose them (they have no canonical or compatibility decomposition at all), so step 2
      * leaves them intact and nothing else in this method would reach them.
      *
      * <p>Measured, not assumed: MySQL answers {@code 1} for all three against the two-letter form.
      */
     private static final String YIDDISH_DIGRAPHS = "װױײ";
     private static final String[] YIDDISH_EXPANSIONS = {"וו", "וי", "יי"};
+
+    /**
+     * The eight characters Java's {@link Collator} ignores at PRIMARY and the collation does not.
+     *
+     * <p>{@code U+002D hyphen-minus, U+2010 hyphen, U+2011 non-breaking hyphen, U+2012 figure dash,
+     * U+2013 en dash, U+2014 em dash, U+2015 horizontal bar, U+2212 minus sign}.
+     *
+     * <p><b>This list is a measurement, not a guess</b> <i>(taken 2026-08-26, the third divergence
+     * found by executing the comparison instead of reasoning about it)</i>. Every defined non-mark,
+     * non-whitespace, non-control BMP code point was asked of {@code Collator} at PRIMARY - "is
+     * {@code a} equal to {@code a} + this character" - and exactly these eight answered yes. The
+     * whole ASCII punctuation family was then asked of MySQL the same way, and
+     * {@code utf8mb4_unicode_ci} answered <b>no</b> to all of it: not one of
+     * {@code ! " # $ % &amp; ' ( ) * + , - . / : ; &lt; = &gt; ? @ [ \ ] ^ _ ` { | } ~ ± × ÷ ° · ≤ ≥ ≠ √ ∞ € §}
+     * is ignorable to the collation. So the divergence is exactly the dash family and nothing else:
+     * brackets, commas and operators were never the problem, and the fold does not touch them.
+     *
+     * <p><b>Why this direction cost something.</b> {@code sameAnswer("1", "-1")} answered
+     * <em>true</em> while MySQL answered different, which made the validator <b>stricter</b> than
+     * {@code ck_question_versions_distinct} - the constraint it exists to stand in for - and
+     * refused questions the database had already stored. Five seeded questions
+     * ({@code 11005, 11006, 11008, 12005, 12007}) could not be written back through
+     * {@code QUESTION_UPDATE} at all: a teacher editing only the stem met a refusal about answers
+     * she never touched. Sign-differing distractors are not an edge case in a mathematics bank,
+     * they are the normal shape of one, so the class javadoc's "stricter is the safe direction"
+     * argument does not survive contact with this one.
+     */
+    private static final String IGNORED_DASHES =
+            "\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212";
+
+    /**
+     * The sentinel each dash folds to, index-aligned with {@link #IGNORED_DASHES}.
+     *
+     * <p><b>Seven sentinels for eight dashes, and the one repeat is a measurement.</b> All
+     * twenty-eight pairs were put to MySQL as {@code 'a?b' = 'a?b'} under
+     * {@code utf8mb4_unicode_ci}. Twenty-seven answered {@code 0}: the collation tells a hyphen from
+     * an en dash, an em dash, a figure dash, a horizontal bar and a minus sign. <b>Exactly one pair
+     * answered {@code 1}</b> - {@code U+2010 HYPHEN} and {@code U+2011 NON-BREAKING HYPHEN}, which
+     * therefore share {@code U+E001}.
+     *
+     * <p>That single repeat is the whole reason this table exists rather than a loop handing out
+     * consecutive sentinels. A first draft of this fix gave all eight their own, on the assumption
+     * that a collation which keeps the family significant keeps its members apart; the round-trip
+     * test failed on that one pair and nothing else, which is the test doing precisely the job its
+     * javadoc claims. <b>The equivalence classes are measured, not derived</b> - the same discipline
+     * the Hebrew and supplementary folds record, applied to the case where the answer was not the
+     * uniform one.
+     *
+     * <p>(NFKD would merge those same two, since {@code U+2011} decomposes to {@code U+2010}. The
+     * table states the merge anyway, so this fold's verdict is its own rather than a side effect of
+     * where it happens to sit in {@link #foldedForm}.)
+     *
+     * <p>Private-use {@code U+E000..U+E006}, chosen the way {@link #SUPPLEMENTARY_SENTINEL} was and
+     * measured on the same properties: non-ignorable at PRIMARY (so count and position survive -
+     * {@code a} does not equal {@code a-}, and {@code a-} does not equal {@code a--}, which is what
+     * MySQL says too), mutually distinct at PRIMARY, distinct from {@code U+FFFD}, and unchanged by
+     * NFKD, mark-stripping and the case round trip - so a sentinel laid down in step 1 arrives at
+     * the collator intact.
+     *
+     * <p>The one over-strictness this buys is the sibling of the astral one: an answer containing a
+     * literal {@code U+E000} folds together with an answer containing a hyphen. A teacher does not
+     * type private-use characters, and that is the safe direction.
+     */
+    private static final String DASH_SENTINELS =
+            "\uE000\uE001\uE001\uE002\uE003\uE004\uE005\uE006";
 
     /**
      * What every supplementary-plane character folds to.
@@ -346,13 +452,24 @@ public final class QuestionValidator {
     private static final char SUPPLEMENTARY_SENTINEL = '�';
 
     /**
-     * The five normalisation steps that run before collation.
+     * The normalisation steps that run before collation.
      *
-     * <p>Steps 3 and 4 are the ones that were missing, and both were found the same way: by
-     * executing the comparison against MySQL instead of reasoning about it. Step 3 folds Hebrew
-     * final forms and Yiddish digraphs, which {@code Collator} splits and the collation does not.
-     * Step 4 folds the supplementary planes, where the collation is far blunter than Java. See
-     * {@link #sameAnswer} and {@link #foldSupplementary}.
+     * <p>All three of the substitution steps were found the same way: by executing the comparison
+     * against MySQL instead of reasoning about it. {@link #foldHebrew} folds final forms and Yiddish
+     * digraphs, which {@code Collator} splits and the collation does not. {@link #foldSupplementary}
+     * folds the supplementary planes, where the collation is far blunter than Java.
+     * {@link #foldDashes} is the mirror image of those two - the one place measured so far where
+     * {@code Collator} is blunter than the collation - and it fixes the direction that refuses
+     * questions the database would store. See {@link #sameAnswer} for the measurement.
+     *
+     * <p><b>The dash fold runs first, and its correctness does not depend on that.</b>
+     * {@link #DASH_SENTINELS} states the collation's own equivalence classes outright - including
+     * the one pair of dashes MySQL folds together - so the step answers the same thing wherever it
+     * sits. Putting it before NFKD keeps that independence visible rather than resting on NFKD
+     * happening to merge the same pair, and costs nothing: the sentinels survive every later step
+     * unchanged, being NFKD-stable, not combining marks, not Hebrew, not supplementary, caseless
+     * and not whitespace - each of those six measured on {@code U+E000..U+E006} rather than
+     * assumed.
      *
      * @param answer one answer as typed, possibly null
      * @return the folded form, never null
@@ -361,12 +478,45 @@ public final class QuestionValidator {
         if (answer == null) {
             return "";
         }
-        String stripped = Normalizer.normalize(answer, Normalizer.Form.NFKD)
+        String dashFolded = foldDashes(answer);
+        String stripped = Normalizer.normalize(dashFolded, Normalizer.Form.NFKD)
                 .replaceAll("\\p{M}+", "");
         String hebrewFolded = foldHebrew(stripped);
         String astralFolded = foldSupplementary(hebrewFolded);
         String cased = astralFolded.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
         return cased.trim().replaceAll("\\s+", " ");
+    }
+
+    /**
+     * Replaces each collator-ignorable dash with its own sentinel, so the comparison can see it.
+     *
+     * <p>The same technique {@link #foldSupplementary} uses, aimed the other way. There the
+     * collation was blunter than Java and the fold made Java blunter to match; here Java is blunter
+     * than the collation - it drops these eight characters entirely at PRIMARY - and the fold gives
+     * each one a body the collator will weigh. A substitution rather than any collator setting,
+     * because raising the strength to SECONDARY or TERTIARY would stop folding case, accents and
+     * niqqud, which the collation genuinely does fold: the two behaviours are not on one dial.
+     *
+     * <p>Index i of {@link #IGNORED_DASHES} becomes index i of {@link #DASH_SENTINELS}, so the
+     * eight stay eight. Allocates nothing when the answer holds no dash, which is most of them.
+     *
+     * @param text one answer exactly as typed, before any normalisation
+     * @return the same text with each ignorable dash replaced by its own sentinel
+     */
+    private static String foldDashes(String text) {
+        StringBuilder folded = new StringBuilder(text.length());
+        boolean changed = false;
+        for (int i = 0; i < text.length(); i++) {
+            char at = text.charAt(i);
+            int dash = IGNORED_DASHES.indexOf(at);
+            if (dash >= 0) {
+                folded.append(DASH_SENTINELS.charAt(dash));
+                changed = true;
+            } else {
+                folded.append(at);
+            }
+        }
+        return changed ? folded.toString() : text;
     }
 
     /**

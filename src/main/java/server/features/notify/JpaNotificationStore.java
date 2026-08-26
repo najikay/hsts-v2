@@ -5,6 +5,8 @@ import common.dto.notify.NotificationDto;
 import common.dto.notify.NotificationType;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import server.db.Transactions;
 import server.db.entities.Notification;
 
@@ -47,6 +49,8 @@ import java.util.Objects;
  * so it is safe on as many OCSF read threads as the server has.
  */
 public final class JpaNotificationStore implements NotificationStore {
+
+    private static final Logger log = LoggerFactory.getLogger(JpaNotificationStore.class);
 
     private final SessionFactory factory;
 
@@ -105,7 +109,8 @@ public final class JpaNotificationStore implements NotificationStore {
                 .setMaxResults(limit)
                 .getResultList()
                 .stream()
-                .map(JpaNotificationStore::toDto)
+                .map(JpaNotificationStore::toDtoOrSkip)
+                .filter(Objects::nonNull)
                 .toList());
     }
 
@@ -140,11 +145,54 @@ public final class JpaNotificationStore implements NotificationStore {
                 .executeUpdate();
     }
 
-    /** Entity to wire shape. The DTO's own constructor normalises a null body to empty. */
-    private static NotificationDto toDto(Notification row) {
+    /**
+     * Entity to wire shape, or {@code null} when the stored type is not one this build knows ⚑.
+     *
+     * <p><b>One bad row must never take a page down.</b> This method used to be a bare
+     * {@code NotificationType.valueOf(row.getType())}, and an {@code IllegalArgumentException}
+     * from inside a {@code map} aborts the whole stream: the caller got no page at all, the
+     * handler turned it into {@code INTERNAL}, and the user's bell simply did not open. That is
+     * not hypothetical — it is B-11, found by driving {@code NOTIFICATIONS_GET} against a freshly
+     * seeded database, where two malformed seeded rows made a perfectly well-formed
+     * {@code APPROVAL_REJECTED} row unreadable beside them.
+     *
+     * <p>It is the same lesson as #49 and #51: a read path assembles rows it did not write, and
+     * the blast radius of one unreadable row has to be that row. Skipping degrades the page by
+     * exactly what is broken and leaves the rest of the bell working, which is the difference
+     * between a user missing one notification and a user having no notifications.
+     *
+     * <p><b>Skipped loudly, not quietly.</b> The row id and the offending string both go into an
+     * ERROR line, because a silently short page is a defect that hides: the count and the list
+     * disagree and nobody can tell why. ERROR rather than WARN because an unknown type means
+     * either a constant was renamed - which {@link NotificationType} forbids precisely so this
+     * cannot happen - or something wrote the column without going through
+     * {@link #save(long, NotificationType, String, String, NavRef, Instant)}. Both are bugs
+     * somewhere else, and this line is the only place they surface.
+     *
+     * <p>The unread badge is deliberately <em>not</em> filtered to match: {@link #unreadCount}
+     * counts rows in SQL and never parses a type, so a skipped row still counts. A badge of 3
+     * over a list of 2 is a visible sign that something is wrong, which is better than a number
+     * quietly adjusted to agree with a page that is missing something.
+     *
+     * <p>The DTO's own constructor normalises a null body to empty.
+     *
+     * @param row the stored notification
+     * @return the wire shape, or {@code null} when {@code row}'s type does not parse
+     */
+    private static NotificationDto toDtoOrSkip(Notification row) {
+        NotificationType type;
+        try {
+            type = NotificationType.valueOf(row.getType());
+        } catch (IllegalArgumentException | NullPointerException unknown) {
+            log.error("Notification {} carries type '{}', which is not a NotificationType constant "
+                            + "in this build. Skipping the row so the rest of the page still "
+                            + "loads; the badge count still includes it.",
+                    row.getId(), row.getType());
+            return null;
+        }
         return new NotificationDto(
                 row.getId(),
-                NotificationType.valueOf(row.getType()),
+                type,
                 row.getTitle(),
                 row.getBody(),
                 new NavRef(row.getRefType(), row.getRefId()),

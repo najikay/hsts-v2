@@ -35,6 +35,15 @@ import java.util.function.Consumer;
  * coordinator is looking at is out of date, and a retry would send the same stale number
  * again.
  *
+ * <h2>The screen is reused, so a late answer has to name its target ⚑</h2>
+ *
+ * <p>{@code ExamPreviewView} builds this session once and calls {@link #open(long)} from
+ * {@code onShow}, which runs on every navigation. Two visits to two different versions therefore
+ * share one session, and the second can begin before the first has answered. Every load carries
+ * the version it was issued for and {@link #requestedVersionId} is what an answer is checked
+ * against — the same rule {@code BankSession} and {@code TeacherResultsSession} apply, and the
+ * one this class was missing.
+ *
  * <h2>One decision at a time</h2>
  *
  * <p>{@link #isDeciding()} gates both actions. Approve and reject write the same column of
@@ -54,6 +63,16 @@ public final class ExamPreviewSession {
     private String error;
     private String decisionError;
     private boolean deciding;
+
+    /**
+     * The version the screen is currently asking about, and the guard on every late answer ⚑.
+     *
+     * <p>See the class javadoc's "The screen is reused" section. This is the target, not a
+     * counter: {@link #reload} deliberately re-asks for the same version, so a counter would have
+     * to be bumped in two places to mean the same thing, and an answer for the version on screen
+     * is welcome however many requests preceded it.
+     */
+    private long requestedVersionId;
 
     /**
      * @param dispatcher the request correlator
@@ -99,16 +118,35 @@ public final class ExamPreviewSession {
      * somebody presses the same button twice.
      */
     public void reload() {
-        preview().map(p -> p.summary().examVersionId()).ifPresent(id -> {
-            state = AsyncViewState.IDLE;
-            open(id, false);
-        });
+        preview().map(p -> p.summary().examVersionId()).ifPresent(id -> open(id, false, true));
     }
 
     private void open(long examVersionId, boolean clearDecisionError) {
-        if (state == AsyncViewState.LOADING) {
+        open(examVersionId, clearDecisionError, false);
+    }
+
+    /**
+     * Asks for one version, unless that exact question is already outstanding ⚑.
+     *
+     * <p>The re-entrancy guard is scoped <b>to the target</b>, and that scoping is the fix for the
+     * 4.1 defect. It used to read {@code if (state == LOADING) return}, which is right for the
+     * case it was written for — a double-click on the same row must not send two requests — and
+     * wrong for the one it also caught. {@code ExamPreviewView.onShow} calls {@link #open(long)}
+     * on <em>every</em> navigation and the view, hence this session, is built once and reused. So
+     * a coordinator who opened version A, went back to the queue and opened version B before A's
+     * answer landed had her request for B <b>silently dropped</b>, and then watched A paint itself
+     * onto the screen she had asked for B on — with Approve and Reject live against A's id and A's
+     * {@code lockVersion}. Approving the wrong exam is a click away and nothing on screen says so.
+     *
+     * <p>Now a different version always travels, and {@link #settle} discards any answer that is
+     * not about {@link #requestedVersionId}. {@code force} exists for {@link #reload}, whose whole
+     * job is to re-ask about the version already on screen after a {@code CONFLICT}.
+     */
+    private void open(long examVersionId, boolean clearDecisionError, boolean force) {
+        if (!force && state == AsyncViewState.LOADING && examVersionId == requestedVersionId) {
             return;
         }
+        requestedVersionId = examVersionId;
         state = AsyncViewState.LOADING;
         error = null;
         if (clearDecisionError) {
@@ -117,10 +155,16 @@ public final class ExamPreviewSession {
         onChange.run();
 
         dispatcher.send(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(examVersionId))
-                .whenComplete((response, failure) -> poster.run(() -> settle(response, failure)));
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settle(examVersionId, response, failure)));
     }
 
-    private void settle(Message response, Throwable failure) {
+    private void settle(long asked, Message response, Throwable failure) {
+        if (asked != requestedVersionId) {
+            // She moved on while this was in flight. Adopting it would put one exam's paper under
+            // another one's heading, with the decision buttons wired to the one she cannot see.
+            return;
+        }
         if (failure != null || response == null || response.isError()
                 || !(response.getPayload() instanceof ExamPreview loaded)) {
             preview = null;

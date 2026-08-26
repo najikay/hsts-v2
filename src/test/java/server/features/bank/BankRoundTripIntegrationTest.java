@@ -211,6 +211,29 @@ class BankRoundTripIntegrationTest extends RepositoryTestBase {
                 "תשע,   שבע,  two different Hebrew numbers",
                 "Paris, Madrid, two different Latin words",
                 "מים,   מים ורוח, one is a prefix of the other",
+                // ⚑ B-7. The divergence that runs the OTHER way, and the reason this test's
+                // assertion is symmetric. Collator at PRIMARY treats the whole dash family as
+                // ignorable, so before the fix sameAnswer("1", "-1") answered TRUE while the
+                // collation answers different - the validator was STRICTER than the constraint it
+                // stands in for, and five seeded questions could not be re-saved at all. These
+                // rows are the shapes those five actually hold: a bare sign, a signed pair, a
+                // signed function and a signed coordinate.
+                "1,     -1,   ⚑ B-7 a bare minus sign is not nothing",
+                "'2, 3', '-2, -3', ⚑ B-7 both members signed - answers 1 and 3 of 11005",
+                "cos(x), -cos(x), ⚑ B-7 a signed function - answers 3 and 4 of 12005",
+                "'(3, 4)', '(-3, 4)', ⚑ B-7 a signed coordinate - answers 1 and 2 of 11006",
+                "x = 1, x = -1, ⚑ B-7 a signed root - answers 1 and 2 of 12007",
+                "3,     -3,   ⚑ B-7 the sign is the whole difference - answers 3 and 4 of 11008",
+                // Count and position, which pin the sentinel substitution the way the two emoji
+                // rows above pin the astral one. A fold that DELETED the dashes instead of
+                // substituting would call both of these pairs the same.
+                "a,     a-,   ⚑ B-7 a trailing dash is not nothing",
+                "a-,    a--,  ⚑ B-7 one dash is not two",
+                // Eight dashes, and the collation tells them apart, so eight sentinels and not
+                // one. Measured: MySQL answers 0 for every pair among U+002D, U+2010..U+2015 and
+                // U+2212. A single shared sentinel would pass every row above and fail this one.
+                "a-b,   a–b, ⚑ B-7 hyphen-minus is not an en dash",
+                "a‐b, a‑b, ⚑ B-7 hyphen is not a non-breaking hyphen (NFKD merges these)",
                 // These two pin COUNT preservation above the BMP, which nothing else does. The
                 // collation gives every astral character one weight but does not ignore it, so a
                 // fold that DELETED them instead of substituting a sentinel would call both of
@@ -246,6 +269,68 @@ class BankRoundTripIntegrationTest extends RepositoryTestBase {
             assertThat(errorText(answer))
                     .as("the sentence has to point at the two answers that collide")
                     .isEqualTo(BankMessages.answersDuplicated(1, 2));
+        }
+
+        /**
+         * ⚑ <b>B-7, walked as the teacher walks it.</b>
+         *
+         * <p>The row above proves the two verdicts agree on a pair. This proves the consequence the
+         * acceptance walk actually hit: that a question whose distractors differ only by a sign can
+         * be <em>saved</em>, and then <em>re-saved with only the stem changed</em>.
+         *
+         * <p>The five answer sets are the ones the seed holds verbatim - {@code 11005, 11006,
+         * 11008, 12005, 12007} - and before the fix every one of them was refused. That is worth
+         * stating precisely, because it is the shape of the defect rather than a detail: the seed
+         * loads through SQL and so bypasses this validator, which is how five rows the system
+         * refuses to accept came to be sitting in its own bank. Case 2.4's step is "open 11005,
+         * change its text, save"; the answer is untouched by that step and the refusal was about
+         * the answers.
+         *
+         * <p>Driven through {@code QUESTION_CREATE} and {@code QUESTION_UPDATE} rather than against
+         * {@code sameAnswer} directly, because the claim is about a question a teacher can save,
+         * not about a comparison. The edit sends the stored answers <em>back unchanged</em>, which
+         * is exactly what an editor bound to the stored row sends.
+         */
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "11005 | 2, 3      | 1, 6    | -2, -3  | 0, 5",
+                "11006 | (-3, 4)   | (3, 4)  | (3, -4) | (4, 3)",
+                "11008 | 3         | 2       | -1      | 1",
+                "12005 | -sin(x)   | tan(x)  | -cos(x) | cos(x)",
+                "12007 | x = -1    | x = 1   | x = 0   | x = 3"
+        })
+        @DisplayName("⚑ B-7: a sign-differing question saves, and re-saves with only the stem changed")
+        void signDifferingAnswersSaveAndReSave(String seeded, String a1, String a2, String a3,
+                                               String a4) {
+            List<String> answers = List.of(a1, a2, a3, a4);
+
+            Message created = create(draft(answers, 1));
+            assertThat(created.isOk())
+                    .as("%s's own answers were refused by the validator that is supposed to stand "
+                            + "in for ck_question_versions_distinct, while the constraint had "
+                            + "already stored them: %s", seeded,
+                            created.isOk() ? "" : errorText(created))
+                    .isTrue();
+            String id = ((QuestionDetail) created.getPayload()).displayId5();
+
+            // Case 2.4's step: only the stem moves. The answers go back exactly as stored.
+            Message edited = update(new QuestionEdit(id, 1, TEXT + " (2.4)", answers, 1, TOPIC,
+                    Difficulty.MEDIUM, ImageAction.KEEP, null));
+
+            assertThat(edited.isOk())
+                    .as("a teacher editing only the stem of %s must not meet a refusal about "
+                            + "answers she never touched: %s", seeded,
+                            edited.isOk() ? "" : errorText(edited))
+                    .isTrue();
+            QuestionDetail reread = get(id);
+            assertThat(reread.answers())
+                    .as("and the signs survive the round trip through a1..a4 unaltered - a fold "
+                            + "that reached the stored value rather than only the comparison "
+                            + "would show up here")
+                    .containsExactlyElementsOf(answers);
+            assertThat(reread.latestVersionNo())
+                    .as("the edit wrote a new version rather than being silently dropped")
+                    .isEqualTo(2);
         }
 
         /**

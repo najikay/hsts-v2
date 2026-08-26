@@ -58,6 +58,10 @@ public final class NotificationPresenter {
             case BOT_SOURCE_CHANGED -> Icons.BOT;
             case RELEASE_OPENING_SOON -> Icons.RELEASE;
             case INTEGRITY_ALERT -> Icons.WARNING;
+            // Both added under B-11. This switch is exhaustive with no default on purpose, so a
+            // new constant cannot reach the panel without somebody choosing what it looks like.
+            case GRADING_DUE -> Icons.GRADING;
+            case EXECUTION_CLOSED -> Icons.RESULTS;
         };
     }
 
@@ -190,5 +194,8 @@ public final class NotificationPresenter {
             Routes.TAKE_EXAM.id(), "executionId",
             Routes.RELEASES.id(), "executionId",
             // The catalog's gradePublished carries the attempt the grade is for.
-            Routes.MY_GRADES.id(), "attemptId");
+            Routes.MY_GRADES.id(), "attemptId",
+            // Both added with B-11's two catalog drafts; each carries an execution id.
+            Routes.GRADING.id(), "executionId",
+            Routes.RESULTS.id(), "executionId");
 }

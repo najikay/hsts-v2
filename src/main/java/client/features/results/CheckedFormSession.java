@@ -57,6 +57,16 @@ public final class CheckedFormSession {
     private CheckedForm form;
     private String error;
 
+    /**
+     * The grade the screen is currently asking about, and what every late answer is checked
+     * against ⚑ (the generation-guard sweep, B-11's batch).
+     *
+     * <p>{@code CheckedFormView} builds one session in {@code build()} and calls {@link #open}
+     * from {@code onShow}, so two visits to two different grades share it and the second can
+     * begin before the first has answered.
+     */
+    private long requestedGradeId;
+
     public CheckedFormSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -74,19 +84,30 @@ public final class CheckedFormSession {
      * @param gradeId the grade to open; her own, or the server refuses
      */
     public void open(long gradeId) {
-        if (state == AsyncViewState.LOADING) {
+        if (state == AsyncViewState.LOADING && gradeId == requestedGradeId) {
+            // Already asking this exact question. Scoped to the grade rather than to the state:
+            // a bare "am I loading" guard drops a request for a DIFFERENT grade, and since
+            // CheckedFormView calls this from onShow on every navigation with one reused session,
+            // that is a student opening grade B and being shown grade A. See requestedGradeId.
             return;
         }
+        requestedGradeId = gradeId;
         state = AsyncViewState.LOADING;
         error = null;
         form = null;
         onChange.run();
 
         dispatcher.send(Verb.CHECKED_FORM_GET, new CheckedFormRequest(gradeId))
-                .whenComplete((response, failure) -> poster.run(() -> settle(response, failure)));
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settle(gradeId, response, failure)));
     }
 
-    private void settle(Message response, Throwable failure) {
+    private void settle(long asked, Message response, Throwable failure) {
+        if (asked != requestedGradeId) {
+            // She opened another grade while this was in flight. Adopting it would show one
+            // exam's marked paper under another one's heading.
+            return;
+        }
         if (failure != null || response == null) {
             fail(LOAD_FAILED);
             return;

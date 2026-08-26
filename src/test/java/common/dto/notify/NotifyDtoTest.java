@@ -231,7 +231,15 @@ class NotifyDtoTest {
                 NotificationType.TIME_EXTENDED,
                 NotificationType.BOT_SOURCE_CHANGED,
                 NotificationType.RELEASE_OPENING_SOON,
-                NotificationType.INTEGRITY_ALERT);
+                NotificationType.INTEGRITY_ALERT,
+                // ⚑ B-11 added these two. The seed had been writing GRADING_DUE and
+                // EXECUTION_CLOSED into notifications.type since E2.15 while the enum held
+                // neither, so NotificationType.valueOf threw and NOTIFICATIONS_GET answered
+                // INTERNAL for four of the five staff accounts on a fresh database. The gap was
+                // in this vocabulary rather than in the fixture: both name an emit point the
+                // product has, and neither had a constant to be spelled with.
+                NotificationType.GRADING_DUE,
+                NotificationType.EXECUTION_CLOSED);
     }
 
     private static NotificationDto row(long id) {

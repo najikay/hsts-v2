@@ -34,7 +34,14 @@ class NotificationCatalogTest {
             NotificationCatalog.timeExtended("Algebra Midterm", 10, 3L),
             NotificationCatalog.releaseOpeningSoon("Algebra Midterm", 15, 3L),
             NotificationCatalog.botSourceChanged("Java Programming 21", "Dana Cohen", 4L),
-            NotificationCatalog.integrityAlert("Java Programming 21", 3L));
+            NotificationCatalog.integrityAlert("Java Programming 21", 3L),
+            // Both added under B-11, and everyTypeHasASentence is what required them: the seed had
+            // been writing GRADING_DUE and EXECUTION_CLOSED into notifications.type since E2.15
+            // while neither the enum nor this catalog knew the words, so the read path threw and
+            // every staff bell answered INTERNAL. A type with no sentence is a type nothing can
+            // send, and a seed row that writes one anyway is exactly how that happened.
+            NotificationCatalog.gradingDue("Java Midterm", 8, 3L),
+            NotificationCatalog.executionClosed("Algebra Midterm", 8, 72.5, 3L));
 
     @Test
     @DisplayName("no user-visible sentence contains an em dash (PRD §4.1)")

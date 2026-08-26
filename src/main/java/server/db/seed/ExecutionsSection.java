@@ -16,10 +16,18 @@ import java.util.List;
  * <h2>Why the windows are relative and what that costs</h2>
  *
  * <p>Every window is resolved from the load anchor rather than hardcoded, which is the whole
- * reason {@link SeedTimes} exists. Execution 3 is "today at 14:00" and execution 4 straddles
- * "right now", and those two are what the release demo and the take-exam demo need. A database
- * seeded a fortnight ago presents a live exam whose window closed two weeks earlier, which is
- * why {@link SeedMode#RESEED} is documented as the standard pre-demo step.
+ * reason {@link SeedTimes} exists. A database seeded a fortnight ago presents a live exam whose
+ * window closed two weeks earlier, which is why {@link SeedMode#RESEED} is documented as the
+ * standard pre-demo step.
+ *
+ * <p><b>"Relative to the load" has two meanings, and B-10 was the gap between them.</b> Executions
+ * 1 and 2 are historical: a wall-clock hour on a date some days before the anchor is the right
+ * shape for them, and {@link SeedTimes#dayOffsetAt} is what they use. Executions 3 and 4 are the
+ * two the demo needs to be <em>happening</em>, and they now resolve from the anchor <em>instant</em>
+ * through {@link SeedTimes#fromNow}: execution 4 opens 30 minutes ago and closes 90 minutes out, so
+ * it is live; execution 3 opens 3 hours out and runs 2 hours, so it is scheduled. Execution 3 used
+ * to be "today at 14:00", which is a description of the past for any load after lunch - see
+ * {@link #SCHEDULED_OPENS}.
  *
  * <h2>Executions 1 and 4 run the same exam version, deliberately</h2>
  *
@@ -46,29 +54,61 @@ import java.util.List;
  */
 final class ExecutionsSection implements SeedSection {
 
-    /** Frozen only for the closed, fully graded execution. See the record for why. */
+    /**
+     * Frozen only for the closed, fully graded execution. See the record for why.
+     *
+     * @param opensFromNow when non-null, the window opens this far from the load anchor and the
+     *                     wall-clock fields are unused. Null means the historical form: a
+     *                     wall-clock hour on a day relative to the anchor's <em>date</em>
+     */
     private record SeedExecution(String exam, int examVersion, String code,
                                  int openDaysBefore, int openHour, int openMinute,
                                  int windowMinutes, ExecutionStatus status, String releasedBy,
-                                 boolean liveAroundNow) { }
+                                 Duration opensFromNow) { }
+
+    /**
+     * Execution 4 opens half an hour ago, so it is live the moment the load finishes.
+     *
+     * <p>Half an hour rather than the hour it used to be, so that a demo has a plausible amount of
+     * the window left rather than exactly half of it, and so the two relative windows below do not
+     * touch.
+     */
+    private static final Duration LIVE_OPENED = Duration.ofMinutes(-30);
+
+    /**
+     * Execution 3 opens three hours out. ⚑ <b>This is B-10's fix.</b>
+     *
+     * <p>It used to be {@code dayOffsetAt(0, 14, 0)} - 14:00 UTC on the anchor's <em>date</em> -
+     * which is "scheduled for later today" only if the seed is loaded before 14:00 UTC. Loaded any
+     * afternoon, the row is stored {@code SCHEDULED} with a window that closed hours earlier, and
+     * one {@code ReleaseScheduler} tick takes it {@code SCHEDULED -> LIVE -> CLOSED} inside a single
+     * pass. Nothing was wrong with the scheduler; the fixture was describing the past.
+     *
+     * <p>In local terms that made the demo fixture correct only before 17:00 Israel time, which is
+     * not a safe assumption for a defence slot, and it took four acceptance cases with it - 5.6
+     * (cancel a SCHEDULED release), 6.4 (enter a code before its open time), 10.5 (results for a
+     * sitting with no attempts) and hardening item H14.1.
+     *
+     * <p>Three hours, not one: far enough ahead that a demo which starts late still finds the
+     * sitting scheduled, and far enough from execution 4's close (+90 minutes) that the two never
+     * overlap and the release list keeps showing one LIVE row and one SCHEDULED row.
+     */
+    private static final Duration SCHEDULED_OPENS = Duration.ofHours(3);
 
     private static final List<SeedExecution> EXECUTIONS = List.of(
-            // Fully graded, stats frozen. The F9.3 histogram's data.
+            // Fully graded, stats frozen. The F9.3 histogram's data. Genuinely historical, so a
+            // wall-clock hour on a past date is the right shape and stays.
             new SeedExecution("101101", 2, "4821", 14, 9, 0, 120,
-                    ExecutionStatus.CLOSED, "dana.cohen", false),
-            // Closed but awaiting grading: the T-8.2 fixture, nothing approved.
+                    ExecutionStatus.CLOSED, "dana.cohen", null),
+            // Closed but awaiting grading: the T-8.2 fixture, nothing approved. Also historical.
             new SeedExecution("202101", 1, "7390", 3, 10, 0, 90,
-                    ExecutionStatus.CLOSED, "avi.mizrahi", false),
-            // "Today", for the live release demo.
-            new SeedExecution("202201", 1, "5164", 0, 14, 0, 120,
-                    ExecutionStatus.SCHEDULED, "michal.sharon", false),
-            // Live right now: the S-2 proof, and the take-exam demo's target.
-            new SeedExecution("101101", 2, "2075", 0, 0, 0, 0,
-                    ExecutionStatus.LIVE, "dana.cohen", true));
-
-    /** Execution 4 straddles the anchor: an hour behind to an hour ahead. */
-    private static final Duration LIVE_OPENS_BEFORE = Duration.ofHours(-1);
-    private static final Duration LIVE_CLOSES_AFTER = Duration.ofHours(1);
+                    ExecutionStatus.CLOSED, "avi.mizrahi", null),
+            // Scheduled, opening later today: now+3h for two hours. Relative, per B-10.
+            new SeedExecution("202201", 1, "5164", 0, 0, 0, 120,
+                    ExecutionStatus.SCHEDULED, "michal.sharon", SCHEDULED_OPENS),
+            // Live right now: the S-2 proof, and the take-exam demo's target. now-30m to now+90m.
+            new SeedExecution("101101", 2, "2075", 0, 0, 0, 120,
+                    ExecutionStatus.LIVE, "dana.cohen", LIVE_OPENED));
 
     /**
      * §9.1's frozen participation, from its own eight attempt rows.
@@ -130,16 +170,31 @@ final class ExecutionsSection implements SeedSection {
         context.recordInserts("exam_executions", inserted);
     }
 
+    /**
+     * Where the window opens: an offset from the anchor instant, or a wall-clock hour on a date.
+     *
+     * <p>The two forms are not interchangeable and the difference is what B-10 was.
+     * {@link SeedTimes#dayOffsetAt} discards the anchor's time of day, which is exactly right for a
+     * sitting that happened a fortnight ago and exactly wrong for one that has not happened yet: it
+     * describes a wall-clock hour that may already have gone past. Anything the demo needs to be in
+     * the future takes {@link SeedTimes#fromNow}.
+     */
     private static Instant opensAt(SeedContext context, SeedExecution execution) {
-        return execution.liveAroundNow()
-                ? context.times().fromNow(LIVE_OPENS_BEFORE)
+        return execution.opensFromNow() != null
+                ? context.times().fromNow(execution.opensFromNow())
                 : context.times().dayOffsetAt(-execution.openDaysBefore(),
                         execution.openHour(), execution.openMinute());
     }
 
+    /**
+     * Where it closes: always its own length after it opened.
+     *
+     * <p>One expression for all four now, where the live window used to be resolved from the anchor
+     * a second time. Two independent {@code fromNow} calls made the live window's <em>length</em> a
+     * consequence of two offsets rather than a stated duration, so the shape assertion in
+     * {@code SeedLoadedDbContract} was checking arithmetic instead of a decision.
+     */
     private static Instant closesAt(SeedContext context, SeedExecution execution, Instant opens) {
-        return execution.liveAroundNow()
-                ? context.times().fromNow(LIVE_CLOSES_AFTER)
-                : opens.plus(Duration.ofMinutes(execution.windowMinutes()));
+        return opens.plus(Duration.ofMinutes(execution.windowMinutes()));
     }
 }

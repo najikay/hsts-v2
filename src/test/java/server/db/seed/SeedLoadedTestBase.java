@@ -36,7 +36,18 @@ import java.util.function.Function;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class SeedLoadedTestBase {
 
-    /** Fixed so every derived timestamp is assertable to the millisecond. */
+    /**
+     * Fixed so every derived timestamp is assertable to the millisecond.
+     *
+     * <p><b>An afternoon on purpose, and that is now a property rather than an accident.</b> This
+     * value used to sit <em>inside</em> execution 3's 14:00-16:00 window, so the canonical seed test
+     * loaded a "scheduled for later today" sitting that had already opened and no assertion
+     * noticed - B-10. The windows the demo needs are now resolved from this instant rather than from
+     * its date (see {@code ExecutionsSection}), so the fixture is correct at any hour, and
+     * {@code SeedLoadedDbContract} asserts the direction rather than only the duration. Moving this
+     * anchor to a morning would have hidden the defect instead of fixing it; it stays in the
+     * afternoon so the guard is exercised.
+     */
     static final Instant ANCHOR = Instant.parse("2026-08-20T15:30:00Z");
 
     private TestDatabase database;

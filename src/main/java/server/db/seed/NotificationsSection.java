@@ -1,5 +1,6 @@
 package server.db.seed;
 
+import common.dto.notify.NotificationType;
 import org.hibernate.Session;
 import server.db.entities.Notification;
 
@@ -14,6 +15,32 @@ import java.util.List;
  * the approval request to the subject coordinator, grade publications to students who sat the
  * exam. Notification 8 exists because S-7 makes the principal read-only, so she can never
  * generate her own activity and would otherwise face a blank screen.
+ *
+ * <h2>⚑ B-11: the type column is a vocabulary, and this section did not speak it</h2>
+ *
+ * <p>Until 2026-08-26 the eight rows below carried their types as <b>free strings</b>, and six of
+ * the eight were not {@link NotificationType} constants: {@code EXAM_REJECTED} twice,
+ * {@code EXAM_PENDING}, {@code APPROVAL_REQUEST} (the constant is {@code APPROVAL_REQUESTED}),
+ * {@code GRADING_DUE} and {@code EXECUTION_CLOSED}. Only the two {@code GRADE_PUBLISHED} rows
+ * matched. {@code JpaNotificationStore.toDto} maps the column with
+ * {@code NotificationType.valueOf}, so on a freshly seeded database {@code NOTIFICATIONS_GET}
+ * answered {@code INTERNAL} for every staff account the seed gives a notification to —
+ * {@code dana.cohen}, {@code rina.barak}, {@code tamar.shani}, {@code avi.mizrahi} and
+ * {@code principal.avia}. {@code michal.sharon}, the one staff account with no seeded row, was the
+ * control: her bell opened fine and empty.
+ *
+ * <p><b>Two different mistakes, fixed two different ways.</b> Four were spelling: the constant
+ * existed and this list used another name for it. Two — {@code GRADING_DUE} and
+ * {@code EXECUTION_CLOSED} — named events {@link NotificationType} had no constant for at all, so
+ * the constants were added rather than the rows re-pointed at a type that means something else.
+ * Re-pointing the principal's "sitting finished" row at {@code GRADE_PUBLISHED} would have swapped
+ * a crash for a wrong icon and a wrong toast, which is a worse defect for being invisible.
+ *
+ * <p><b>The record now holds the enum, so this cannot recur.</b> A string type column is a place
+ * for a typo to live; the compiler now refuses one, and {@code name()} is written at the last
+ * moment — the same call {@code JpaNotificationStore.save} makes, so seeded rows and
+ * service-written rows are one shape. The read path was hardened in the same batch: one
+ * unparseable row used to take a whole page down, and now it is skipped and logged.
  *
  * <h2>These rows have no natural key, so one is chosen</h2>
  *
@@ -44,24 +71,38 @@ import java.util.List;
  */
 final class NotificationsSection implements SeedSection {
 
-    private record Note(String recipient, String type, String title, boolean read, int daysAgo) { }
+    /**
+     * @param type the notification's kind. <b>A {@link NotificationType}, not a string</b> — see
+     *             the class javadoc's B-11 section for what the string cost
+     */
+    private record Note(String recipient, NotificationType type, String title, boolean read,
+                        int daysAgo) { }
 
     private static final List<Note> NOTIFICATIONS = List.of(
-            new Note("dana.cohen", "EXAM_REJECTED",
+            // was "EXAM_REJECTED"
+            new Note("dana.cohen", NotificationType.APPROVAL_REJECTED,
                     "Exam sent back for revision: version 1 of \"Midterm: Algebra\"", true, 24),
-            new Note("dana.cohen", "EXAM_PENDING",
+            // was "EXAM_PENDING". The event is the submission, and the type names the event
+            // rather than its audience: here the author is told her own exam went out.
+            new Note("dana.cohen", NotificationType.APPROVAL_REQUESTED,
                     "The exam was sent to the subject coordinator for approval", false, 22),
-            new Note("rina.barak", "APPROVAL_REQUEST",
+            // was "APPROVAL_REQUEST" — the constant is APPROVAL_REQUESTED, past tense
+            new Note("rina.barak", NotificationType.APPROVAL_REQUESTED,
                     "An exam is waiting for your approval in Mathematics", false, 22),
-            new Note("tamar.shani", "EXAM_REJECTED",
+            // was "EXAM_REJECTED"
+            new Note("tamar.shani", NotificationType.APPROVAL_REJECTED,
                     "Collections Quiz was returned for revision", false, 20),
-            new Note("noa.friedman", "GRADE_PUBLISHED",
+            // These two were the only well-formed rows, which is why case 8.5's student bell
+            // passed and nobody noticed the staff side.
+            new Note("noa.friedman", NotificationType.GRADE_PUBLISHED,
                     "Your grade for Midterm: Algebra is available", true, 13),
-            new Note("yael.azulay", "GRADE_PUBLISHED",
+            new Note("yael.azulay", NotificationType.GRADE_PUBLISHED,
                     "Your grade is available, including a teacher's comment", false, 13),
-            new Note("avi.mizrahi", "GRADING_DUE",
+            // These two named events the enum had no constant for at all, so both are now real
+            // constants rather than re-pointed onto a type that means something else.
+            new Note("avi.mizrahi", NotificationType.GRADING_DUE,
                     "8 attempts awaiting your grade approval", false, 3),
-            new Note("principal.avia", "EXECUTION_CLOSED",
+            new Note("principal.avia", NotificationType.EXECUTION_CLOSED,
                     "Sitting finished: 8 students, average 72.5", false, 13));
 
     @Override
@@ -76,12 +117,14 @@ final class NotificationsSection implements SeedSection {
 
         for (Note note : NOTIFICATIONS) {
             long userId = SeedLookup.requireUserId(session, note.recipient());
-            if (alreadyNotified(session, userId, note.type(), note.title())) {
+            if (alreadyNotified(session, userId, note.type().name(), note.title())) {
                 continue;
             }
 
             Instant createdAt = context.times().dayOffsetAt(-note.daysAgo(), 8, 0);
-            Notification row = new Notification(userId, note.type(), note.title(),
+            // name(), the same call JpaNotificationStore.save makes, which is what makes the
+            // seeded rows and the service-written ones one shape rather than two.
+            Notification row = new Notification(userId, note.type().name(), note.title(),
                     null, null, null, createdAt);
             if (note.read()) {
                 row.markRead(createdAt.plusSeconds(3600));

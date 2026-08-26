@@ -43,6 +43,7 @@ class ExecutionMonitorSessionTest {
 
     private static final Instant NOW = Instant.parse("2026-08-20T09:00:00Z");
     private static final long EXECUTION = 5001L;
+    private static final long OTHER_EXECUTION = 5002L;
 
     private FakeClientConnection connection;
     private ClientEventBus eventBus;
@@ -81,6 +82,34 @@ class ExecutionMonitorSessionTest {
             assertThat(updates).hasSize(1);
             assertThat(((MonitorRequest) connection.lastSent().getPayload()).executionId())
                     .isEqualTo(EXECUTION);
+        }
+
+        /**
+         * ⚑ The generation-guard sweep. {@code ExecutionMonitorView.onShow} calls
+         * {@code start(executionId)} on every navigation and the view is built once, so the
+         * teacher can leave sitting A and open sitting B while A's snapshot is still in flight.
+         *
+         * <p>The <b>push</b> path has always checked {@code pushed.executionId()} against the
+         * field. The <b>request</b> path did not, so the sitting she left could repaint the
+         * sitting she opened — wrong students, wrong counts, wrong countdowns, and a live-looking
+         * screen with nothing on it to say so. The two paths now apply the same rule.
+         */
+        @Test
+        @DisplayName("⚑ a snapshot for the sitting she left never repaints the one she opened")
+        void aLateSnapshotForAnotherExecutionIsDropped() {
+            // No responder, so both futures stay pending and the answers are delivered by hand.
+            session.start(EXECUTION);
+            session.start(OTHER_EXECUTION);
+
+            connection.deliver(Message.ok(connection.sentMessages().get(1),
+                    otherSnapshot()));
+            connection.deliver(Message.ok(connection.sentMessages().get(0),
+                    snapshot(2, 1, 0)));
+
+            assertThat(session.snapshot()).isPresent();
+            assertThat(session.snapshot().orElseThrow().executionId())
+                    .as("the request path must apply the same target check the push path does")
+                    .isEqualTo(OTHER_EXECUTION);
         }
 
         @Test
@@ -371,6 +400,14 @@ class ExecutionMonitorSessionTest {
         return new ExecutionMonitor(EXECUTION, "Java Midterm", "21", "4B7Q", true, NOW,
                 NOW.plus(Duration.ofHours(2)), 0, 45,
                 new MonitorCounts(started, finished, timedOut), rows);
+    }
+
+    /** A snapshot of a different sitting, so two in-flight answers can be told apart. */
+    private static ExecutionMonitor otherSnapshot() {
+        ExecutionMonitor base = snapshot(1, 0, 0);
+        return new ExecutionMonitor(OTHER_EXECUTION, "Databases Final", "22", "5164",
+                base.live(), base.serverNow(), base.closesAt(), base.extraMinutes(),
+                base.durationMinutes(), base.counts(), base.rows());
     }
 
     private static ExecutionMonitor snapshotWithExtra(int extraMinutes) {

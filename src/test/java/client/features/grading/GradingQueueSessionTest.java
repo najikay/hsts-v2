@@ -14,6 +14,7 @@ import common.dto.grading.GradeState;
 import common.dto.grading.GradingQueue;
 import common.dto.grading.StudentGradeRow;
 import common.protocol.ErrorCode;
+import common.protocol.Message;
 import common.protocol.Verb;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GradingQueueSessionTest {
 
     private static final long EXECUTION = 4822;
+    private static final long OTHER_EXECUTION = 4823;
 
     private FakeClientConnection connection;
     private GradingQueueSession session;
@@ -70,6 +72,17 @@ class GradingQueueSessionTest {
         return new ExecutionGrades(summary(2, 0), List.of(
                 row(1, "מאיה לוי", 100, GradeState.AUTO),
                 row(2, "עומר כץ", 40, GradeState.AUTO)));
+    }
+
+    /** A second sitting, so two in-flight answers can be told apart by what arrived. */
+    private static ExecutionGradingSummary otherSummary() {
+        return new ExecutionGradingSummary(OTHER_EXECUTION, "Databases final", "22", "5164",
+                Instant.parse("2026-06-04T10:00:00Z"), 8, 1, 0);
+    }
+
+    private static ExecutionGrades otherRows() {
+        return new ExecutionGrades(otherSummary(), List.of(
+                row(3, "יעל אזולאי", 80, GradeState.AUTO)));
     }
 
     /** Loads the queue and opens the sitting, leaving the session ready to act. */
@@ -144,6 +157,36 @@ class GradingQueueSessionTest {
 
             assertThat(session.openExecution()).isPresent();
             assertThat(session.rows()).hasSize(2);
+        }
+
+        /**
+         * ⚑ The generation-guard sweep. {@code GradingQueueView} wires {@code openExecution} to
+         * the queue list's <b>selection</b> listener, so holding the arrow key down the rail
+         * fires one request per row and every one of them is in flight at once. Nothing checked
+         * which sitting an arriving answer was about, so whichever the network delivered last
+         * became the open sitting — and the teacher approved one exam's grades while reading
+         * another exam's row.
+         */
+        @Test
+        @DisplayName("⚑ an answer for the sitting she left loses to the one she opened")
+        void aLateAnswerForAnotherSittingIsDropped() {
+            connection.replyOk(Verb.GRADING_QUEUE_GET,
+                    new GradingQueue(List.of(summary(2, 0), otherSummary())));
+            session.load();
+            connection.clearSent();
+
+            // No responder from here on, so both futures stay pending.
+            session.openExecution(summary(2, 0));
+            session.openExecution(otherSummary());
+
+            connection.deliver(Message.ok(connection.sentMessages().get(1), otherRows()));
+            connection.deliver(Message.ok(connection.sentMessages().get(0), twoRows()));
+
+            assertThat(session.openExecution()).isPresent();
+            assertThat(session.openExecution().orElseThrow().summary().executionId())
+                    .as("the rows on screen must belong to the sitting the rail has selected")
+                    .isEqualTo(OTHER_EXECUTION);
+            assertThat(session.rows()).hasSize(1);
         }
 
         @Test

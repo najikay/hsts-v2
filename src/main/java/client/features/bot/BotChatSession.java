@@ -56,6 +56,15 @@ public final class BotChatSession {
     private final Clock clock;
 
     /**
+     * The past conversation {@link #reopen} is currently asking for ⚑.
+     *
+     * <p>The generation-guard sweep. {@code BotChatView.onShow} calls {@code reopen} whenever it
+     * is navigated to with a session parameter, and the view holds one session per course, so two
+     * deep links to two conversations can overlap.
+     */
+    private long requestedSessionId;
+
+    /**
      * @param dispatcher the shared request correlator
      * @param model      the state this session drives
      * @param clock      the client's clock; only ever used for optimistic bubble
@@ -159,8 +168,15 @@ public final class BotChatSession {
      *         attempt failed and the model was left alone
      */
     public CompletableFuture<Void> reopen(long sessionId) {
+        requestedSessionId = sessionId;
         return dispatcher.send(Verb.BOT_SESSION_GET, new BotSessionRequest(sessionId))
                 .handle((response, failure) -> {
+                    if (sessionId != requestedSessionId) {
+                        // She reopened another conversation while this was in flight. Adopting it
+                        // would load one conversation's turns into a screen headed by another.
+                        // BotChatView calls this from onShow, which runs on every navigation.
+                        return null;
+                    }
                     if (failure != null) {
                         log.warn("BOT_SESSION_GET failed: {}", failure.toString());
                         model.failed(BotCopy.HISTORY_FAILED);

@@ -170,6 +170,14 @@ class QuestionEditorSessionTest {
          * The contract's own table of pairs MySQL calls one answer, section 5. If the editor
          * accepted any of these, the save would be refused by a sentence the live check promised
          * would not come.
+         *
+         * <p><b>Two of these rows are spacing rather than collation</b> — {@code '1 2 3'}/{@code 123}
+         * and {@code '  Two  '}/{@code Two}. MySQL calls those two <em>different</em>; the service
+         * folds them anyway because ADR-016 names trimming and whitespace collapse as the rule, and
+         * contract §5 amendment A1 keeps that half deliberately. They belong in this list because
+         * the editor must reach the same verdict as the server, which is what this class is about
+         * — but the docstring's "pairs MySQL calls one answer" is not true of them, and saying so
+         * here is cheaper than the next reader re-deriving it.
          */
         @ParameterizedTest
         @CsvSource({
@@ -180,7 +188,6 @@ class QuestionEditorSessionTest {
                 "τέλος,τέλοσ",
                 "שלום,שָׁלוֹם",
                 "'1 2 3',123",
-                "co-op,coop",
                 "Two,two",
                 "'  Two  ',Two"
         })
@@ -200,8 +207,17 @@ class QuestionEditorSessionTest {
             assertThat(session.canSave()).isFalse();
         }
 
+        /**
+         * ⚑ {@code co-op}/{@code coop} moved here from the refusal list on 2026-08-26 (B-7,
+         * BANK contract amendment A1). It used to fold, because Java's {@code Collator} at PRIMARY
+         * strength drops the hyphen entirely — and {@code utf8mb4_unicode_ci} does not, measured.
+         * The old row therefore pinned the defect: it asserted the editor refuses a pair the
+         * database would have stored, under a docstring claiming these are pairs "MySQL calls one
+         * answer". It was the walk of case 2.4, not this suite, that priced what that cost — five
+         * seeded questions no teacher could re-save.
+         */
         @ParameterizedTest
-        @CsvSource({"cat.,cat", "it's,its", "3+4,34", "A(1),A1", "Two,Three"})
+        @CsvSource({"cat.,cat", "it's,its", "3+4,34", "A(1),A1", "Two,Three", "co-op,coop"})
         @DisplayName("and pairs it would accept are accepted, so the rule is not merely strict")
         void acceptsWhatTheServerWould(String first, String second) {
             QuestionEditorSession session = creating();

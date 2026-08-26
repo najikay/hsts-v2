@@ -16,6 +16,7 @@ import common.dto.approval.PreviewAnswerRow;
 import common.dto.approval.TeacherOnlyBlock;
 import common.dto.exam.ExamQuestion;
 import common.protocol.ErrorCode;
+import common.protocol.Message;
 import common.protocol.Verb;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +54,16 @@ class ApprovalSessionTest {
             "שאלה 1", "1, 6", "2, 3", "-2, -3", "0, 5", null);
     private static final ExamQuestion QUESTION_TWO = new ExamQuestion(902, "12002", 2, 50,
             "שאלה 2", "א", "ב", "ג", "ד", null);
+
+    /** A second version, so two in-flight previews can be told apart by what arrived. */
+    private static final long ALGEBRA_V2 = 42L;
+    private static final ApprovalRow OTHER_PENDING = new ApprovalRow(ALGEBRA_V2, "101101",
+            "מבחן אמצע — אלגברה", "11", "אלגברה", 2, "דנה כהן", SUBMITTED, 2, 60,
+            ApprovalState.PENDING, "", false, 0);
+    private static final ExamPreview OTHER_PREVIEW = new ExamPreview(OTHER_PENDING,
+            "ענו על כל השאלות.", List.of(QUESTION_ONE),
+            new TeacherOnlyBlock("For the marker only.", "דנה כהן",
+                    List.of(new PreviewAnswerRow(901, 1, (byte) 2))));
 
     private static final ExamPreview PREVIEW = new ExamPreview(PENDING, "ענו על כל השאלות.",
             List.of(QUESTION_ONE, QUESTION_TWO),
@@ -219,6 +230,44 @@ class ApprovalSessionTest {
             assertThat(session.correctOptionFor(QUESTION_TWO)).isEqualTo(4);
             assertThat(connection.lastSent().getPayload())
                     .isEqualTo(new ExamPreviewRequest(CALCULUS_V1));
+        }
+
+        /**
+         * ⚑ The 4.1 defect, and the reason the whole session sweep happened.
+         *
+         * <p>{@code ExamPreviewView} is built once and calls {@code session.open(id)} from
+         * {@code onShow}, which runs on <b>every</b> navigation. The old guard was
+         * {@code if (state == LOADING) return}, so a coordinator who opened version A, went back
+         * to the queue and opened version B before A answered had her request for B dropped on
+         * the floor — and then watched A paint itself onto the screen she had asked for B on,
+         * with Approve and Reject wired to A.
+         *
+         * <p>Two assertions, because the fix has two halves: the request for B must travel, and
+         * A's answer must lose when it eventually lands.
+         */
+        @Test
+        @DisplayName("⚑ a second version opened mid-flight travels, and the first answer loses")
+        void aLateAnswerForAnotherVersionIsDropped() {
+            // No responder, so both futures stay pending and the answers can be delivered in the
+            // order the network chose rather than the order the clicks did.
+            session.open(CALCULUS_V1);
+            session.open(ALGEBRA_V2);
+
+            assertThat(connection.sentCount())
+                    .as("the version she actually asked for has to be requested; dropping it is "
+                            + "how she ends up reviewing the exam she left")
+                    .isEqualTo(2);
+            assertThat(connection.lastSent().getPayload())
+                    .isEqualTo(new ExamPreviewRequest(ALGEBRA_V2));
+
+            connection.deliver(Message.ok(connection.sentMessages().get(1), OTHER_PREVIEW));
+            connection.deliver(Message.ok(connection.sentMessages().get(0), PREVIEW));
+
+            assertThat(session.preview()).isPresent();
+            assertThat(session.preview().orElseThrow().summary().examVersionId())
+                    .as("the paper on screen has to be the one she opened, and the decision "
+                            + "buttons read their lockVersion off exactly this object")
+                    .isEqualTo(ALGEBRA_V2);
         }
 
         @Test

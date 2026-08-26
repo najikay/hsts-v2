@@ -57,6 +57,18 @@ public final class NotificationCatalog {
     /** Release manager (E9). */
     public static final String ROUTE_RELEASE = "release";
 
+    /** Teacher's grading queue (E12). Added with {@link #gradingDue} under B-11. */
+    public static final String ROUTE_GRADING = "grading";
+
+    /**
+     * Teacher and principal results (E14), where a finished sitting is read.
+     *
+     * <p>Added with {@link #executionClosed} under B-11. Matches {@code Routes.RESULTS.id()}; the
+     * literal is repeated rather than imported for the reason stated at the top of this block -
+     * these ids cross the wire and the two tiers ship as separate JARs.
+     */
+    public static final String ROUTE_RESULTS = "results";
+
     private NotificationCatalog() {
     }
 
@@ -166,6 +178,42 @@ public final class NotificationCatalog {
                 NavRef.to(ROUTE_GRADES, attemptId));
     }
 
+    /**
+     * A closed sitting's papers are waiting to be graded and approved (→ its teacher) ⚑.
+     *
+     * <p><b>Added 2026-08-26 under B-11, and it exists because the seed was already sending it.</b>
+     * Seed §11 holds {@code N-GRADING-DUE-JAVA} — "8 attempts awaiting your grade approval" to
+     * {@code avi.mizrahi} — and until this batch there was neither a {@link NotificationType}
+     * constant nor a sentence for it, so the seed wrote a string the read path could not parse and
+     * every staff bell answered {@code INTERNAL}. The copy below is the seed document's own,
+     * parameterised: it is content the owner already wrote and reviewed, not new product text
+     * invented here.
+     *
+     * <p><b>No server code raises it yet</b> — E12's grading queue is where it belongs — which is
+     * the same state several drafts above are in, and is why
+     * {@code NotificationCatalogTest.everyTypeHasASentence} is the invariant that matters: a type
+     * with no sentence is a type nothing can send, and a seed row that bypasses the catalog to
+     * write one anyway is exactly how B-11 happened.
+     *
+     * @param examName    the sitting's exam, as its teacher knows it
+     * @param waiting     how many attempts are awaiting approval
+     * @param executionId the sitting to open on click
+     */
+    public static Draft gradingDue(String examName, int waiting, long executionId) {
+        return new Draft(NotificationType.GRADING_DUE,
+                "Grading waiting for you",
+                waiting + " " + attempts(waiting) + " for " + examName
+                        + " are awaiting your grade approval.",
+                // ROUTE_GRADING, not ROUTE_GRADES: this is the teacher's queue, and ROUTE_GRADES
+                // is a student's own My Grades screen, which reads an attempt id.
+                NavRef.to(ROUTE_GRADING, executionId));
+    }
+
+    /** Keeps "1 attempt" from reading as "1 attempts". */
+    private static String attempts(int count) {
+        return count == 1 ? "attempt" : "attempts";
+    }
+
     // ===================== Execution & timing (E11) =====================
 
     /** A teacher granted extra time on a live execution. */
@@ -182,6 +230,34 @@ public final class NotificationCatalog {
                 "Exam opens soon",
                 examName + " opens in " + minutesAway + " " + minutes(minutesAway) + ".",
                 NavRef.to(ROUTE_RELEASE, executionId));
+    }
+
+    /**
+     * A sitting finished and its results are available (→ staff who watch it rather than sit it) ⚑.
+     *
+     * <p>The other half of B-11's vocabulary gap. Seed §11's {@code N-EXEC-CLOSED-ALG} is the one
+     * notification {@code principal.avia} has, and S-7 makes her read-only, so it is the only thing
+     * that can ever populate her panel (NFR-21). The mean travels in the sentence because that is
+     * what the seed's own title does — and it is derived data in a text column, so anything that
+     * changes the seeded grades changes this string too.
+     *
+     * @param examName    the exam that was sat
+     * @param sitters     how many students sat it
+     * @param mean        the class mean, already rounded by the caller
+     * @param executionId the sitting to open on click
+     */
+    public static Draft executionClosed(String examName, int sitters, double mean,
+                                        long executionId) {
+        return new Draft(NotificationType.EXECUTION_CLOSED,
+                "Sitting finished",
+                examName + " is over: " + sitters + " " + students(sitters)
+                        + ", average " + mean + ".",
+                NavRef.to(ROUTE_RESULTS, executionId));
+    }
+
+    /** Keeps "1 student" from reading as "1 students". */
+    private static String students(int count) {
+        return count == 1 ? "student" : "students";
     }
 
     // ===================== Study bot (E16) ==============================
