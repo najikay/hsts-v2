@@ -291,6 +291,17 @@ final class InMemoryExamStore implements ExamStore {
         }
 
         @Override
+        public void moveCloseAt(long executionId, Instant closeAt) {
+            ExecutionContext ctx = executions.get(executionId);
+            if (ctx != null && closeAt != null && closeAt.isAfter(ctx.closeAt())) {
+                // Widen only, exactly as ExecutionRepository does: the B-14 rule is a max,
+                // and a fixture that let it shrink would let a test pass on a shape the real
+                // repository refuses to write.
+                executions.put(executionId, ctx.withCloseAt(closeAt));
+            }
+        }
+
+        @Override
         public void closeExecution(long executionId, ParticipationCounts counts) {
             ExecutionContext ctx = executions.get(executionId);
             executions.put(executionId, new ExecutionContext(ctx.executionId(), ctx.examVersionId(),

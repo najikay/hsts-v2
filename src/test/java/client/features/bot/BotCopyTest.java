@@ -150,6 +150,21 @@ class BotCopyTest {
     }
 
     @Test
+    @DisplayName("⚑ the edit dialog says what makes an edit different from a re-upload (B-21)")
+    void editCopy() {
+        assertThat(BotCopy.EDIT).isEqualTo("Edit");
+        assertThat(BotCopy.EDIT_CONFIRM)
+                .as("a verb on the button, never OK")
+                .isEqualTo("Save changes");
+        assertThat(BotCopy.EDIT_TEXT_EXPLANATION)
+                .as("the two facts a teacher who has been deleting and re-adding needs")
+                .containsIgnoringCase("keeps its place")
+                .containsIgnoringCase("co-teachers will be told")
+                .doesNotContain("—")
+                .doesNotContain("–");
+    }
+
+    @Test
     @DisplayName("every source kind has an icon, and no two share one")
     void everyKindHasItsOwnIcon() {
         List<String> icons = new ArrayList<>();

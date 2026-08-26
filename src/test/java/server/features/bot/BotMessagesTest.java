@@ -131,6 +131,25 @@ class BotMessagesTest {
     }
 
     @Test
+    @DisplayName("⚑ the edit-lock refusal names the colleague to go and ask (B-21)")
+    void sourceLockedByAColleague() {
+        String message = BotMessages.sourceLockedBy("Avi Mizrahi");
+
+        assertThat(message)
+                .startsWith("Avi Mizrahi is editing this source right now.")
+                .as("a refusal that says what to do next, per PRD §4.1")
+                .containsIgnoringCase("Wait for them to finish")
+                .containsIgnoringCase("take over the edit")
+                .doesNotContain("—")
+                .doesNotContain("–");
+        assertThat(BotMessages.sourceLockedBy(null))
+                .as("still a sentence when the lock service cannot say who")
+                .startsWith("Another teacher is editing this source");
+        assertThat(BotMessages.sourceLockedBy("   "))
+                .startsWith("Another teacher is editing this source");
+    }
+
+    @Test
     @DisplayName("the S-32 sentence is the one the specification asks for, word for word")
     void s32Sentence() {
         assertThat(BotAnswer.S32_FALLBACK)

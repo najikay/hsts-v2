@@ -1,6 +1,7 @@
 package server.features.results;
 
 import common.dto.auth.Role;
+import common.dto.exam.AttemptState;
 import common.dto.grading.GradeState;
 import common.dto.grading.StudentGradeRow;
 import common.dto.results.ExamResultRow;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import server.core.Authorization;
 import server.core.CallerContext;
 import server.core.MessageRouter;
+import server.db.entities.AttemptStatus;
 import server.db.entities.ExecutionStatus;
 import server.db.entities.GradeStatus;
 import server.db.projections.AuthoredExam;
@@ -263,7 +265,32 @@ public final class TeacherResultsService {
         return new StudentGradeRow(row.gradeId(), row.studentId(), row.studentName(),
                 row.autoScore(), row.finalScore(), row.effectiveScore(),
                 row.status() == GradeStatus.APPROVED ? GradeState.APPROVED : GradeState.AUTO,
-                row.overrideReason(), row.teacherComment(), row.approvedAt());
+                row.overrideReason(), row.teacherComment(), row.approvedAt(),
+                // v1.1's labels stay null here: ExecutionResults already carries the exam and
+                // the course once for the whole table, and repeating them per row would be the
+                // same two strings thirty times over.
+                null, null,
+                // ⚑ B-16. The projection had read actualMinutes since E14 and this mapper
+                // dropped it on the floor - the one field with no reader anywhere on the path.
+                // It and the attempt's status now travel, and the table has a column for each.
+                toWire(row.attemptStatus()), row.actualMinutes());
+    }
+
+    /**
+     * Stored attempt status to the wire enum. Exhaustive, so a new status is a compile error.
+     *
+     * <p>The same three values and the same mapping the student's own checked form uses
+     * (E13.2): one fact, one type, whichever audience is reading it.
+     */
+    private static AttemptState toWire(AttemptStatus status) {
+        if (status == null) {
+            return null;
+        }
+        return switch (status) {
+            case IN_PROGRESS -> AttemptState.IN_PROGRESS;
+            case SUBMITTED -> AttemptState.SUBMITTED;
+            case TIMED_OUT -> AttemptState.TIMED_OUT;
+        };
     }
 
     /** Stored status to wire state. Exhaustive, so a new status is a compile error here. */

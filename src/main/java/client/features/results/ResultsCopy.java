@@ -1,6 +1,7 @@
 package client.features.results;
 
 import client.ui.components.logic.StatChartLogic;
+import common.dto.exam.AttemptState;
 import common.dto.grading.GradeState;
 import common.dto.grading.StudentGradeRow;
 import common.dto.results.ExecutionResultRow;
@@ -308,6 +309,52 @@ public final class ResultsCopy {
     public static boolean wasAdjusted(StudentGradeRow row) {
         Objects.requireNonNull(row, "row");
         return row.finalScore() != null && row.finalScore() != row.autoScore();
+    }
+
+    /**
+     * How the attempt ended, as a word ⚑ (B-16 — T-10.2, F9.2).
+     *
+     * <p>A word and never only a colour, per the wave rules: "timed out" is the fact a teacher
+     * acts on, and a row tinted amber tells a colour-blind reader, a printed page and a
+     * screenshot nothing at all. The ordinary case is "Submitted" rather than blank, because a
+     * column whose only content is the exception reads as data that failed to load.
+     *
+     * <p>Blank only when the path did not carry a status, which no teacher results row does.
+     *
+     * @param status how the attempt ended, or {@code null}
+     * @return "Submitted", "Timed out", "In progress", or an empty string
+     */
+    public static String attemptStatusLabel(AttemptState status) {
+        if (status == null) {
+            return "";
+        }
+        return switch (status) {
+            case SUBMITTED -> "Submitted";
+            case TIMED_OUT -> "Timed out";
+            case IN_PROGRESS -> "In progress";
+            case NOT_STARTED -> "";
+        };
+    }
+
+    /**
+     * Recorded solving time (S-19, B-16).
+     *
+     * @param minutes what the server recorded, or {@code null} when it recorded nothing
+     * @return "43 min", or "Not recorded" — which is a different fact from zero and is said as
+     *         one rather than shown as an empty cell a reader would read as a bug
+     */
+    public static String solvingTimeLabel(Integer minutes) {
+        return minutes == null ? "Not recorded" : minutes + " min";
+    }
+
+    /**
+     * @param row a result row
+     * @return whether the server handed this paper in at the bell rather than the student
+     *         (F6.4). What the table tints behind the word, never instead of it
+     */
+    public static boolean wasTimedOut(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        return row.attemptStatus() == AttemptState.TIMED_OUT;
     }
 
     // ===================== Formatting =====================================

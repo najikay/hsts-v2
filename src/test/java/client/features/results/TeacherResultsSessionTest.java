@@ -7,6 +7,7 @@ import client.ui.components.logic.AsyncViewState;
 import client.ui.components.logic.StatChartData;
 import client.ui.components.logic.StatChartLogic;
 import common.dto.grading.GradeState;
+import common.dto.exam.AttemptState;
 import common.dto.grading.StudentGradeRow;
 import common.dto.results.ExamResultRow;
 import common.dto.results.ExecutionResultRow;
@@ -90,7 +91,10 @@ class TeacherResultsSessionTest {
 
     private static ExecutionResults gradedResults() {
         return new ExecutionResults(graded(), "מבחן אמצע: אלגברה", "11", "אלגברה",
-                List.of(row(1, "Maya Levi", 60, null), row(2, "Yael Azulay", 45, 55)),
+                // ⚑ B-16: Omer's timed-out 45 beside Yael's submitted 45. Same score, and
+                // the whole point is that the table can now tell them apart.
+                List.of(row(1, "Maya Levi", 60, null), row(2, "Yael Azulay", 45, 55),
+                        timedOutRow(3, "Omer Katz", 45)),
                 seededStats());
     }
 
@@ -102,7 +106,14 @@ class TeacherResultsSessionTest {
     private static StudentGradeRow row(long id, String name, int auto, Integer finalScore) {
         return new StudentGradeRow(id, 2000 + id, name, auto, finalScore,
                 finalScore == null ? auto : finalScore, GradeState.APPROVED,
-                finalScore == null ? null : "ניתן ניקוד חלקי.", null, CLOSED);
+                finalScore == null ? null : "ניתן ניקוד חלקי.", null, CLOSED,
+                null, null, AttemptState.SUBMITTED, 55);
+    }
+
+    /** A paper the server handed in at the bell, as the results wire now carries it (B-16). */
+    private static StudentGradeRow timedOutRow(long id, String name, int auto) {
+        return new StudentGradeRow(id, 2000 + id, name, auto, null, auto, GradeState.APPROVED,
+                null, null, CLOSED, null, null, AttemptState.TIMED_OUT, 90);
     }
 
     private void serverHasEverything() {
@@ -527,10 +538,36 @@ class TeacherResultsSessionTest {
         session.load();
 
         assertThat(session.rows()).extracting(StudentGradeRow::studentName)
-                .containsExactly("Maya Levi", "Yael Azulay");
+                .containsExactly("Maya Levi", "Yael Azulay", "Omer Katz");
         assertThat(session.rows().get(1).overrideReason())
                 .as("the teacher path keeps the justification (S-23)")
                 .isNotNull();
+    }
+
+    @Test
+    @DisplayName("⚑ the session hands the table a timed-out row it can tell apart (B-16)")
+    void attemptStatusAndSolvingTimeReachTheTable() {
+        serverHasEverything();
+
+        session.load();
+
+        StudentGradeRow omer = session.rows().get(2);
+        StudentGradeRow yael = session.rows().get(1);
+        assertThat(omer.effectiveScore()).isEqualTo(yael.effectiveScore() - 10);
+        assertThat(omer.autoScore())
+                .as("the same machine score, and now a visibly different situation")
+                .isEqualTo(yael.autoScore());
+        assertThat(ResultsCopy.attemptStatusLabel(omer.attemptStatus()))
+                .as("a word, not only a colour: the B-5 / wave rule")
+                .isEqualTo("Timed out");
+        assertThat(ResultsCopy.attemptStatusLabel(yael.attemptStatus())).isEqualTo("Submitted");
+        assertThat(ResultsCopy.solvingTimeLabel(omer.actualMinutes())).isEqualTo("90 min");
+        assertThat(ResultsCopy.solvingTimeLabel(yael.actualMinutes())).isEqualTo("55 min");
+        assertThat(ResultsCopy.solvingTimeLabel(null))
+                .as("absent is a different fact from zero and is said as one")
+                .isEqualTo("Not recorded");
+        assertThat(ResultsCopy.wasTimedOut(omer)).isTrue();
+        assertThat(ResultsCopy.wasTimedOut(yael)).isFalse();
     }
 
     @Test

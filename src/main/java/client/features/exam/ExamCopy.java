@@ -154,6 +154,30 @@ public final class ExamCopy {
     }
 
     /**
+     * The entry sentence for a sitting the window cuts short ⚑ (B-14 — F6.1).
+     *
+     * <p>Two facts and no hedging: when this sitting ends, and how long that leaves her. It
+     * is said <em>before</em> she confirms her identity, because that is the moment the clock
+     * starts and the last moment the information is any use to her.
+     *
+     * <p>Before B-14 nothing said it at all. A student who joined legally, two minutes before
+     * a window shut, was told she had the paper's full seventy-five minutes, and her attempt
+     * was force-submitted at the bell with her own countdown still running — promised
+     * seventy-five, given two, and told neither. The server now derives every deadline as the
+     * earlier of the two clocks; this is the half that tells her.
+     *
+     * <p>The time is rendered in her own zone, like every other time on these screens.
+     *
+     * @param closesAt when the execution's window shuts
+     * @param minutes  the minutes she really gets, already computed by the server
+     * @return "This sitting closes at 13:00. You have 26 minutes."
+     */
+    public static String sittingShortened(Instant closesAt, int minutes) {
+        return "This sitting closes at " + ExamClock.localTime(closesAt) + ". You have "
+                + minutes(Math.max(0, minutes)) + ".";
+    }
+
+    /**
      * The remaining-time note in the submit dialog (F6.9).
      *
      * @param remaining what the countdown says

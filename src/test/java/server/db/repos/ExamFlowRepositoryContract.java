@@ -150,8 +150,31 @@ abstract class ExamFlowRepositoryContract extends RepositoryTestBase {
 
         // Nothing was written to the attempt: the extension moved its deadline anyway,
         // which is what makes E11.4's "applies on resume" work with no migration at all.
-        assertThat(attempt.deadline(ctx.allottedMinutes()))
+        assertThat(attempt.deadline(ctx))
                 .isEqualTo(WHEN.plus(Duration.ofMinutes(DURATION + 15)));
+    }
+
+    @Test
+    @DisplayName("the derived deadline never outlives the execution's window (B-14 ⚑)")
+    void deadlineIsCappedByTheWindow() {
+        // A window that shuts twenty minutes from the start, against a 45-minute paper: the
+        // exact shape a student who joins legally late is in, and the shape every existing
+        // fixture avoided by building a window generously wider than the exam.
+        long executionId = execution("CD34", ExecutionStatus.LIVE, WHEN.minus(Duration.ofHours(3))
+                .plus(Duration.ofMinutes(20)));
+        long attemptId = startAttempt(executionId, mayaId, WHEN);
+
+        ExecutionContext ctx = inTx(session -> executions.findContext(session, executionId)).orElseThrow();
+        AttemptRecord attempt = inTx(session -> attempts.findRecordById(session, attemptId)).orElseThrow();
+
+        assertThat(ctx.effectiveCloseAt()).isEqualTo(WHEN.plus(Duration.ofMinutes(20)));
+        assertThat(attempt.deadline(ctx))
+                .as("min(started + allotted, the window's close) - the window wins here")
+                .isEqualTo(WHEN.plus(Duration.ofMinutes(20)));
+        assertThat(ctx.sittingMinutesFrom(WHEN))
+                .as("what she must be told at entry, rather than the paper's own 45")
+                .isEqualTo(20);
+        assertThat(ctx.windowShortensSittingFrom(WHEN)).isTrue();
     }
 
     @Test

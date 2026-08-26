@@ -165,6 +165,31 @@ public final class BotCopy {
     /** The add-text button. */
     public static final String ADD_TEXT = "Add text";
 
+    /**
+     * The edit button on a free-text source row ⚑ (F12.3, B-21).
+     *
+     * <p>Offered on typed sources only. A PDF or a Word row has no body this screen can open —
+     * what it holds is the parse, not the document — so those keep Remove and Add rather than
+     * an affordance that would promise in-place editing and then hand over a file chooser.
+     */
+    public static final String EDIT = "Edit";
+
+    /** The edit dialog's title. */
+    public static final String EDIT_TEXT_TITLE = "Edit this source";
+
+    /**
+     * Its explanation.
+     *
+     * <p>Says the two things that make an edit different from a delete and a re-add, which is
+     * exactly what a teacher who has been doing the latter needs to know.
+     */
+    public static final String EDIT_TEXT_EXPLANATION =
+            "Change the text the bot answers from. The source keeps its place in the list and "
+                    + "your co-teachers will be told it changed.";
+
+    /** Its confirm button. */
+    public static final String EDIT_CONFIRM = "Save changes";
+
     /** The remove button on a source row. */
     public static final String REMOVE = "Remove";
 

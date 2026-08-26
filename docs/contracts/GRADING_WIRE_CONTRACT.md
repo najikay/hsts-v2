@@ -188,6 +188,59 @@ execution is closed, and that failing any of them answers `NOT_FOUND` indistingu
 tests were always the licence and they still hold. The sharing is the right design — one place
 in the product turns an answer key into rows, with two different gates in front of it.
 
+### A5 — `StudentGradeRow` v1.2: `attemptStatus` and `actualMinutes` (E14.1 / T-10.2, B-16, added 2026-08-26, lead)
+
+**What was missing.** T-10.2 asks the teacher's results table for "score, submitted vs timed
+out, solving time" and only the score reached the wire. A shape fact, not a null: `StudentGradeRow`
+had twelve components and none of them was either. On the seed, `omer.katz`'s timed-out 45 read
+exactly like the seven submitted papers, so **the one attempt in the whole dataset that
+distinguishes "did not finish" from "did badly" was invisible on the screen built to show it.**
+
+**And the data was already being read and thrown away.** `GradeRepository.findResultRows` has
+selected `a.actualMinutes` into `StudentResultRow` since E14 — the projection's own javadoc
+documents it as "recorded solving time (S-19)" — and `TeacherResultsService.toWire` mapped ten of
+its eleven components and dropped that one. `actualMinutes` had **no reader anywhere on the E14
+path**. Attempt status was never selected at all. This is B-3's shape turned around: a field read
+but never delivered rather than written but never read, and it is why every test stayed green —
+`TeacherResultsServiceTest` asserted what the record carried, and the record carried what it was
+built to carry.
+
+**The record, appended last:**
+
+```
+StudentGradeRow(long gradeId, long studentId, String studentName, int autoScore,
+                Integer finalScore, int effectiveScore, GradeState state, String overrideReason,
+                String teacherComment, Instant approvedAt, String examName, String courseCode,
+                AttemptState attemptStatus, Integer actualMinutes)
+```
+
+- `attemptStatus` is `common.dto.exam.AttemptState` and `actualMinutes` is a boxed `Integer` —
+  **the same two types the student's own `CheckedForm` has carried since the 2026-08-22
+  amendment.** One fact, one type, whichever audience is reading it; two shapes would be two
+  answers to one question. `actualMinutes` stays boxed because "not recorded" is a different
+  fact from "took zero minutes".
+- **Populated on the teacher results path only** (`RESULTS_EXECUTION_GET`), where the table
+  renders them. Null everywhere else, and null is honest there: the grading queue, the review
+  header and both student containers are about grades, and `findResultRows` is the only read that
+  joins the attempt at all.
+- The **twelve-component constructor is retained** and delegates with both null, so every
+  existing caller keeps compiling and keeps meaning what it meant. `withoutJustification()` and
+  `withExam()` carry the new components through unchanged.
+- `serialVersionUID` goes **2 → 3**, on the precedent this record and `CheckedForm` set.
+
+**`CheckedForm` is unaffected.** It keeps its own `attemptStatus`/`actualMinutes`, which the
+2026-08-22 ruling put there rather than on this record because case 9.5's "open his result and
+*see*" happens on the marked paper. That ruling was about the **student** wire and it stands;
+this is the teacher's table, which is a different screen asking a different question, and it is
+the screen T-10.2 names.
+
+**Server side:** `a.status` joins `a.actualMinutes` in `findResultRows`' select, and
+`StudentResultRow` gains an eleventh component to carry it. **Client side:** two columns,
+*Attempt* and *Time*, sized to their content. Both render **words** — "Submitted", "Timed out",
+"43 min" — never a tint alone, per the B-5 / wave rule: a colour survives neither a printout, a
+screenshot, nor a colour-blind reader. The ordinary case says "Submitted" rather than staying
+blank, because a column whose only content is the exception reads as data that failed to load.
+
 ## What is deliberately absent
 
 - No stats DTOs — teacher statistics/histogram are E14's contract, drafted when E14 starts.

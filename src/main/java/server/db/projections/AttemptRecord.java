@@ -43,12 +43,19 @@ public record AttemptRecord(long attemptId,
     }
 
     /**
-     * The derived deadline (ADR-010).
+     * The derived deadline (ADR-010, B-14).
      *
-     * @param allottedMinutes the execution's duration plus its extensions
-     * @return when this attempt runs out
+     * <p>Takes the whole execution rather than a minute count, and that is the fix rather
+     * than a convenience: the deadline is <b>min(started + allotted, the execution's
+     * effective close)</b>, and a signature that accepted only the minutes had no way to
+     * express the second half. Every caller now inherits the reconciliation from
+     * {@link ExecutionContext#deadlineFor(Instant)} instead of each deciding for itself
+     * whether the window matters.
+     *
+     * @param ctx the execution this attempt belongs to
+     * @return when this attempt truly runs out
      */
-    public Instant deadline(int allottedMinutes) {
-        return startedAt.plusSeconds(Math.max(0, allottedMinutes) * 60L);
+    public Instant deadline(ExecutionContext ctx) {
+        return ctx.deadlineFor(startedAt);
     }
 }

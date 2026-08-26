@@ -180,6 +180,44 @@ public interface BotData {
                    byte[] raw, String text, long addedBy, Instant at);
 
     /**
+     * Replaces one source's title and content in place (F12.3 ⚑, B-21).
+     *
+     * <p>The row keeps its id, its {@code added_by} and its place in the list, and its domain
+     * version is bumped so a stale extraction stays detectable. That is the whole point of the
+     * verb: before it existed, correcting a source meant a remove and an add, which lost all
+     * three and told the course's other teachers about two unrelated events.
+     *
+     * <p>Called only after {@link SourceExtractor} has produced text, on the same rule
+     * {@link #addSource} obeys: a replacement that cannot be parsed leaves the original row
+     * exactly as it was rather than half-overwritten.
+     *
+     * @param botId    the bot the caller is authorised for
+     * @param sourceId the source to replace
+     * @param kind     what the new content is
+     * @param title    what to call it now
+     * @param raw      the new original bytes
+     * @param text     the newly extracted text
+     * @param at       now, UTC
+     * @return {@code true} when a row was replaced; {@code false} when the source does not
+     *         exist or belongs to another course's bot
+     */
+    boolean updateSource(long botId, long sourceId, BotSourceKind kind, String title,
+                         byte[] raw, String text, Instant at);
+
+    /**
+     * The bodies of one bot's free-text sources (B-21).
+     *
+     * <p>What lets the Edit dialog open on what is actually stored rather than on an empty
+     * box. Scoped to {@code TEXT} rows in the query and not filtered afterwards, because the
+     * reason PDF and Word bodies are excluded is that they are megabytes of parse output the
+     * manager's table has no use for — {@code BotSourceRow}'s "no bytes" rule, kept.
+     *
+     * @param botId the bot
+     * @return source id → its pasted text, for the TEXT sources only
+     */
+    Map<Long, String> textSourceBodies(long botId);
+
+    /**
      * Removes one source, checked against its bot.
      *
      * @param botId    the bot the caller is authorised for

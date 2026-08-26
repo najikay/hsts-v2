@@ -69,6 +69,7 @@ reachable from `BotAnalytics` and fails on any identity-shaped component name.
 | `BOT_CREATE` | teacher | `BotCreateRequest` | `BotManagerPage` |
 | `BOT_ACTIVE_SET` | teacher | `BotActiveRequest` | `BotManagerPage` |
 | `BOT_SOURCE_ADD` | teacher | `SourceAddRequest` | `BotManagerPage` |
+| `BOT_SOURCE_UPDATE` *(A1)* | teacher | `SourceUpdateRequest` | `BotManagerPage` |
 | `BOT_SOURCE_REMOVE` | teacher | `SourceRemoveRequest` | `BotManagerPage` |
 | `BOT_ANALYTICS_GET` | teacher | `BotCourseRequest` | `BotAnalytics` |
 
@@ -185,12 +186,16 @@ hers. The provider is recorded per row and in one structured log line per ask
   `BotSourceType`. `ofFileName` maps an extension, defaulting to `TEXT`.
 - `BotProfile(long botId, String courseCode, String courseName, String name, boolean active)`
 - `BotSourceRow(long sourceId, BotSourceKind kind, String title, String addedBy, Instant updatedAt,
-  int version, int characters)` — **no bytes**; `addedBy` is a display name, not an id.
+  int version, int characters, String text)` — **no bytes**; `addedBy` is a display name, not an
+  id. `text` is **A1** and is the pasted body of a `TEXT` source only, `null` for `PDF` and
+  `DOCX`; `isEditable()` is what the screen switches on.
 - `BotManagerPage(BotProfile bot, List<BotSourceRow> sources)` — `bot` is **null** for a course
   with no bot, which is an empty state the screen draws, not an error.
 - `BotCourseRequest(String courseCode)`, `BotCreateRequest(String courseCode, String name)`,
   `BotActiveRequest(String courseCode, boolean active)`,
-  `SourceRemoveRequest(String courseCode, long sourceId)`
+  `SourceRemoveRequest(String courseCode, long sourceId)`,
+  `SourceUpdateRequest(String courseCode, long sourceId, BotSourceKind kind, String title,
+  byte[] content)` **(A1)**
 - `SourceAddRequest(String courseCode, BotSourceKind kind, String title, byte[] content)` — bytes
   copied in and out; `toString` never prints them; `MAX_BYTES = 8 MiB`, `MAX_TITLE = 200`.
 
@@ -237,3 +242,80 @@ hers. The provider is recorded per row and in one structured log line per ask
    the person; a future filter affordance adds an id additively under this contract's rules.
 4. **Per-process rate limit — APPROVED.** Phase 1 is single-server by architecture
    (ARCHITECTURE §10); a second instance is out of scope and documented as such.
+
+---
+
+## 10. Additive amendments
+
+Everything below was added **after** the 2026-08-20 freeze, under the additive-only rule: no verb
+renamed, no payload component removed or reordered, no semantics changed for any existing field.
+
+### A1 — `BOT_SOURCE_UPDATE`, and `BotSourceRow.text` (E16.9 / F12.3, B-21, added 2026-08-26, lead-ruled)
+
+**What was missing.** PRD **F12.3** specifies "Sources list with add/**edit**/remove for any
+teacher of the course; edit-locked (F10)", and acceptance case 13.4 asks for it. Nothing
+implemented the middle verb: the frozen contract had `BOT_SOURCE_ADD` and `BOT_SOURCE_REMOVE`,
+`BotData` had `addSource`/`removeSource`, and `BotManagerView` offered "Add a file", "Add text"
+and "Remove". Correcting a typo meant deleting the row and re-adding it, which loses the source
+id, its author, its `updated_at` and its version — and loses them **silently**, because the
+remove notifies co-teachers as a removal and the re-add as an addition, so one correction reads
+to a colleague as two unrelated events. **Ruled 2026-08-26: build it.** The current state matched
+neither the PRD nor the acceptance document, and the second-order effect settled it — the
+advisory lock on `EntityRef.BOT_SOURCE` is wired end to end and works (probed in 13.6), and until
+now the only thing it could protect was a *remove*, so F10.2's "read-only view while another
+teacher edits" had no editor to be read-only in.
+
+**The verb.**
+
+| Verb | Caller | Request payload | OK payload |
+|---|---|---|---|
+| `BOT_SOURCE_UPDATE` | teacher | `SourceUpdateRequest` | `BotManagerPage` |
+
+`SourceUpdateRequest(String courseCode, long sourceId, BotSourceKind kind, String title,
+byte[] content)` — the add request's shape plus the row it addresses. Deliberately its own record
+and not a nullable-id variant of `SourceAddRequest`: an add creates and an update replaces, they
+answer to different rules, and one record for both is how a handler ends up doing the wrong one.
+Bytes copied in and out, `toString` never prints them, same `MAX_BYTES` and `MAX_TITLE`.
+
+**Semantics.**
+
+1. **The row survives.** Its id and its `added_by` are untouched; its domain `version` is bumped,
+   so a stale extraction stays detectable. That is the whole difference from remove-and-re-add.
+2. **Parse before write**, exactly as `BOT_SOURCE_ADD` does. A replacement that cannot be read
+   answers `VALIDATION` with the extractor's own sentence and **leaves the stored source exactly
+   as it was** rather than half-overwritten.
+3. **Gate order is E6.14's: scope, then the lock, then the row.** The teaches-check runs first, so
+   a teacher who does not teach the course is refused before anything about the source is read or
+   reported; the advisory-lock consult runs second, inside the transaction. `BOT_SOURCE_REMOVE`
+   consults its lock *before* its transaction, which is a shape that predates the ruling and is
+   left alone; the new verb follows the write-path rule so that a `CONFLICT` cannot become a way
+   for an outsider to learn that a source exists and who is holding it.
+4. **The lock refusal names its holder.** `BotMessages.sourceLockedBy(name)` — *"Avi Mizrahi is
+   editing this source right now. Wait for them to finish, or take over the edit from the
+   banner."* — falling back to `BotMessages.SOURCE_LOCKED` when the lock service cannot say who.
+   The caller has already passed the scope check by then, so the name gives away nothing she
+   cannot see on the page, and it turns a wall into a colleague she can go and ask.
+   `BotAdminService.SourceLocks` therefore answers `Optional<LockHolder>` rather than a boolean,
+   in `EditLockGuard`'s own shape; `mayEdit` is retained as a default over it.
+5. **Co-teachers are told**, through the same `BOT_SOURCE_CHANGED` notification an add or a remove
+   raises, and the editor is not told about her own edit. No new notification type.
+6. **Error codes**, all reusing §4's sentences: `VALIDATION` malformed, incomplete, oversized, or
+   a replacement that will not parse · `FORBIDDEN` not your course · `NOT_FOUND` the course has no
+   bot, or the source id does not belong to this course's bot · `CONFLICT` another teacher holds
+   the advisory lock.
+
+**`BotSourceRow` gains a component, appended last:** `String text`. It carries the pasted body of
+a `TEXT` source so the Edit dialog opens on what is actually stored, and it is **null for `PDF`
+and `DOCX`** — enforced in the record's own compact constructor, not by the caller. The "no bytes"
+rule is intact and this is the reason for the asymmetry: a typed source is something a human wrote
+and can sensibly re-open; a file row holds the *parse*, which is hundreds of kilobytes of no use
+to a dialog. The seven-component constructor is retained and delegates with `null`.
+`BotSourceRow.isEditable()` is what the screen switches on.
+
+**So the manager screen offers Edit on free-text rows only, and that is stated rather than
+quietly done.** Editing a file source could only ever mean choosing a replacement file, which is
+what the existing chooser already does and is indistinguishable from Remove-then-Add except that
+it keeps the id. That is a real difference and a smaller one than an "Edit" button on a PDF row
+would imply, so file kinds keep Add and Remove. If the affordance is wanted later, the verb
+already accepts any `BotSourceKind` and the server already handles it — only the button is
+missing.

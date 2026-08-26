@@ -36,6 +36,8 @@ public final class ExamEntryView extends StackPane {
     private final Button startButton = Buttons.primary(ExamCopy.START_BUTTON);
     private final Label summaryTitle = new Label();
     private final Label summaryMeta = new Label();
+    /** The B-14 disclosure: shown only when the window cuts the sitting short. */
+    private final Label summaryWindow = new Label();
     private final Label blockedText = new Label();
 
     private final VBox codeCard;
@@ -105,17 +107,39 @@ public final class ExamEntryView extends StackPane {
         }
     }
 
+    /**
+     * The exam summary above the ID field, and the one sentence B-14 added to it ⚑.
+     *
+     * <p>The meta line still names the paper's own length, because that is what the exam is
+     * worth and she may well be comparing it with what her teacher said. When the execution's
+     * window shuts before that length is up, a second line states plainly when this sitting
+     * ends and how long that actually leaves her — said here, on the screen before the one
+     * that starts her clock, because afterwards it is not information any more.
+     *
+     * <p>The line is hidden entirely rather than blanked when the window is wide enough,
+     * which is the normal case: a reassuring "you have all 75 minutes" on every entry would
+     * make the sentence that matters just another line she has learned to skip.
+     */
     private void showSummary(ExamHeader header) {
         summaryTitle.setText(header.examName());
         summaryMeta.setText(header.courseLabel()
                 + " · " + ExamCopy.minutes(header.durationMinutes())
                 + " · " + header.questionCount() + " questions");
+        boolean shortened = header.isSittingShortened();
+        if (shortened) {
+            summaryWindow.setText(
+                    ExamCopy.sittingShortened(header.windowClosesAt(), header.sittingMinutes()));
+        }
+        show(summaryWindow, shortened);
     }
 
     private VBox identityCard() {
         summaryTitle.getStyleClass().add("h2");
         summaryMeta.getStyleClass().addAll("small", "muted");
-        VBox summary = new VBox(2, summaryTitle, summaryMeta);
+        summaryWindow.getStyleClass().addAll("small", "exam-summary-window");
+        summaryWindow.setWrapText(true);
+        show(summaryWindow, false);
+        VBox summary = new VBox(2, summaryTitle, summaryMeta, summaryWindow);
         summary.getStyleClass().add("exam-summary");
 
         VBox card = card(ExamCopy.ID_TITLE, ExamCopy.ID_SUBTITLE, idField, startButton);

@@ -226,6 +226,36 @@ final class InMemoryBotStore implements BotStore, BotData {
     }
 
     @Override
+    public boolean updateSource(long botId, long sourceId, BotSourceKind kind, String title,
+                                byte[] raw, String text, Instant at) {
+        for (int index = 0; index < sources.size(); index++) {
+            StoredSource stored = sources.get(index);
+            if (stored.botId() != botId || stored.sourceId() != sourceId) {
+                continue;
+            }
+            // Faithful about the two things the B-21 rules depend on: the id and the author
+            // survive, and the domain version is bumped, exactly as BotSource.replaceContent
+            // does. A fixture that reassigned either would let a delete-and-re-add pass as an
+            // edit, which is the whole defect.
+            sources.set(index, new StoredSource(sourceId, botId, kind, title, text,
+                    stored.addedBy(), at, stored.version() + 1));
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public Map<Long, String> textSourceBodies(long botId) {
+        Map<Long, String> bodies = new LinkedHashMap<>();
+        for (StoredSource source : sources) {
+            if (source.botId() == botId && source.kind() == BotSourceKind.TEXT) {
+                bodies.put(source.sourceId(), source.text());
+            }
+        }
+        return bodies;
+    }
+
+    @Override
     public boolean removeSource(long botId, long sourceId) {
         return sources.removeIf(source ->
                 source.botId() == botId && source.sourceId() == sourceId);

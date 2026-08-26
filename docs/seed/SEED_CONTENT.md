@@ -368,8 +368,8 @@ allotted duration rather than a number someone chose.
 |---|---|---|---|---|---|
 | 1 | 1 / v2 | `4821` | T−14d 09:00 → T−14d 11:00 | **CLOSED** | Fully graded, stats frozen |
 | 2 | 4 / v1 | `7390` | T−3d 10:00 → T−3d 11:30 | **CLOSED** | Awaiting grading — nothing approved yet |
-| 3 | 6 / v1 | `5164` | T+3h → T+5h | **SCHEDULED** | Opening later today, for the release demo |
-| 4 | 1 / v2 | `2075` | T−30m → T+90m | **LIVE** | Second execution of exam 1 — the S-2 proof |
+| 3 | 6 / v1 | `5164` | T+4h → T+6h | **SCHEDULED** | Opening later today, for the release demo |
+| 4 | 1 / v2 | `2075` | T−30m → T+3h | **LIVE** | Second execution of exam 1 — the S-2 proof |
 
 Executions 3 and 4 are the two non-CLOSED rows, and their codes differ — the E9 service
 rule (unique code among non-CLOSED executions) holds on the seed as loaded.
@@ -379,8 +379,16 @@ rule (unique code among non-CLOSED executions) holds on the seed as loaded.
 mean *a wall-clock hour on a date relative to the load date* — the loader resolves them with
 `SeedTimes.dayOffsetAt`, which discards the load's own time of day. Executions 3 and 4 are the two
 the demo needs to be *happening*, so their offsets are from the **load instant** itself, through
-`SeedTimes.fromNow`: execution 4 opened half an hour ago and closes ninety minutes from now,
-execution 3 opens three hours from now and runs for two.
+`SeedTimes.fromNow`: execution 4 opened half an hour ago and closes three hours from now,
+execution 3 opens four hours from now and runs for two.
+
+**Execution 4's window is three and a half hours, not two** (widened 2026-08-26, **B-14**). It straddles
+the anchor, so what a student actually gets is whatever is left of it when she joins — and a two-hour
+window around exam 1 v2's **75-minute** paper hands a walkthrough that reaches the take-exam step forty
+minutes in a sitting shorter than the paper, which the server then ends at the bell. That is the fixture
+reproducing B-14 rather than demonstrating S-2. Execution 3 moved `T+3h → T+4h` with it, because
+`SeedLoadedDbContract` asserts that a SCHEDULED sitting opens strictly *after* the live one closes and two
+windows meeting at an instant is not a property worth relying on.
 
 Execution 3 used to read `T+0 14:00 → T+0 16:00`, resolved the historical way. That is "scheduled
 for later today" only when the seed is loaded before 14:00 UTC — before 17:00 Israel time. Loaded

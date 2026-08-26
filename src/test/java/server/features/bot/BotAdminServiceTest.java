@@ -7,9 +7,11 @@ import common.dto.bot.BotCourseRequest;
 import common.dto.bot.BotCreateRequest;
 import common.dto.bot.BotManagerPage;
 import common.dto.bot.BotSourceKind;
+import common.dto.bot.BotSourceRow;
 import common.dto.bot.BotTopQuestion;
 import common.dto.bot.SourceAddRequest;
 import common.dto.bot.SourceRemoveRequest;
+import common.dto.bot.SourceUpdateRequest;
 import common.dto.notify.NotificationType;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
@@ -67,6 +69,32 @@ class BotAdminServiceTest {
     private BotAdminService newService(BotAdminService.SourceLocks locks) {
         return new BotAdminService(store, new SourceExtractor(), notifier, locks,
                 Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /**
+     * A lock seam where somebody else always holds every source (B-21).
+     *
+     * <p>Named rather than anonymous because the holder's <em>name</em> is now part of the
+     * refusal {@code BOT_SOURCE_UPDATE} answers with, and a fixture returning a bare "no"
+     * could not have asserted it.
+     */
+    private static BotAdminService.SourceLocks heldBy(String holderName) {
+        return (sourceId, userId) ->
+                java.util.Optional.of(new common.dto.lock.LockHolder(999L, holderName));
+    }
+
+    /** Sends BOT_SOURCE_UPDATE with a free-text body, which is the only editable kind. */
+    private Message update(long teacherId, long sourceId, String title, String body) {
+        return service.updateSource(teacher(teacherId),
+                Message.request(Verb.BOT_SOURCE_UPDATE, new SourceUpdateRequest(
+                        DATABASES, sourceId, BotSourceKind.TEXT, title, text(body))));
+    }
+
+    /** @return the Databases bot's single source as the manager page carries it. */
+    private BotSourceRow onlySource() {
+        BotManagerPage page = (BotManagerPage) managerPage(DANA, DATABASES).getPayload();
+        assertThat(page.sources()).hasSize(1);
+        return page.sources().get(0);
     }
 
     private static CallerContext teacher(long id) {
@@ -374,7 +402,7 @@ class BotAdminServiceTest {
                     new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
                             text("A foreign key points at a primary key."))));
             long sourceId = store.lastSourceId();
-            BotAdminService locked = newService((id, userId) -> false);
+            BotAdminService locked = newService(heldBy("Avi Mizrahi"));
 
             Message response = locked.removeSource(teacher(MICHAL),
                     Message.request(Verb.BOT_SOURCE_REMOVE,
@@ -383,6 +411,125 @@ class BotAdminServiceTest {
             assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
             assertThat(response.errorMessage()).isEqualTo(BotMessages.SOURCE_LOCKED);
             assertThat(store.sourceInfos(store.botIdOf(DATABASES))).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("⚑ editing replaces the row in place, keeping its id and its author (B-21)")
+        void editingKeepsTheRow() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foriegn key points at a primary key."))));
+            long sourceId = store.lastSourceId();
+            BotSourceRow before = onlySource();
+            notifier.sent.clear();
+
+            Message response = update(DANA, sourceId, "Week 3",
+                    "A foreign key points at a primary key.");
+
+            assertThat(response.isOk()).as(response.errorMessage()).isTrue();
+            BotSourceRow after = onlySource();
+            assertThat(after.sourceId())
+                    .as("the same row, which is the whole difference from remove-and-re-add")
+                    .isEqualTo(before.sourceId());
+            assertThat(after.addedBy())
+                    .as("still hers; an edit does not change whose material it is")
+                    .isEqualTo(before.addedBy());
+            assertThat(after.version())
+                    .as("bumped, so a stale extraction stays detectable")
+                    .isEqualTo(before.version() + 1);
+            assertThat(after.text()).isEqualTo("A foreign key points at a primary key.");
+            assertThat(store.sourceInfos(store.botIdOf(DATABASES)))
+                    .as("one source before and one after, never two")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("the course's other teachers are told, and the editor is not (F12.3)")
+        void editingNotifiesCoTeachers() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            long sourceId = store.lastSourceId();
+            notifier.sent.clear();
+
+            update(DANA, sourceId, "Week 3", "A foreign key points at a primary key, always.");
+
+            assertThat(notifier.sent).hasSize(1);
+            assertThat(notifier.sent.get(0).type()).isEqualTo(NotificationType.BOT_SOURCE_CHANGED);
+            assertThat(notifier.recipients())
+                    .as("her co-teacher is told; she is not told about her own edit")
+                    .containsExactly(MICHAL);
+        }
+
+        @Test
+        @DisplayName("a source another teacher is holding cannot be edited, and it says who (B-21)")
+        void editingRespectsTheEditLockAndNamesTheHolder() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            long sourceId = store.lastSourceId();
+            BotAdminService locked = newService(heldBy("Avi Mizrahi"));
+
+            Message response = locked.updateSource(teacher(MICHAL),
+                    Message.request(Verb.BOT_SOURCE_UPDATE, new SourceUpdateRequest(
+                            DATABASES, sourceId, BotSourceKind.TEXT, "Week 3",
+                            text("Overwritten by a colleague mid-edit."))));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+            assertThat(response.errorMessage())
+                    .as("a refusal she can act on: it names the door to knock on")
+                    .isEqualTo(BotMessages.sourceLockedBy("Avi Mizrahi"));
+            assertThat(onlySource().text())
+                    .as("the advisory lock is more than a banner because the write is refused")
+                    .isEqualTo("A foreign key points at a primary key.");
+        }
+
+        @Test
+        @DisplayName("⚑ scope is checked before the lock, so a CONFLICT is not an oracle (B-21)")
+        void scopeIsCheckedBeforeTheLock() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            long sourceId = store.lastSourceId();
+            BotAdminService locked = newService(heldBy("Avi Mizrahi"));
+
+            Message response = locked.updateSource(teacher(OTHER_TEACHER),
+                    Message.request(Verb.BOT_SOURCE_UPDATE, new SourceUpdateRequest(
+                            DATABASES, sourceId, BotSourceKind.TEXT, "Week 3",
+                            text("A teacher of another course entirely."))));
+
+            // E6.14's gate order. A CONFLICT here would tell an outsider both that the source
+            // exists and who is holding it, which is a membership oracle wearing a lock's hat.
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+            assertThat(response.errorMessage()).isEqualTo(BotMessages.NOT_YOUR_COURSE);
+        }
+
+        @Test
+        @DisplayName("a source id from another course's bot is not found rather than overwritten")
+        void cannotEditAnotherCoursesSource() {
+            Message response = update(DANA, 424242L, "Week 3", "Some replacement material.");
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+            assertThat(response.errorMessage()).isEqualTo(BotMessages.SOURCE_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("a replacement that will not parse leaves the original alone (F12.2)")
+        void aFailedParseChangesNothing() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            long sourceId = store.lastSourceId();
+
+            Message response = service.updateSource(teacher(DANA),
+                    Message.request(Verb.BOT_SOURCE_UPDATE, new SourceUpdateRequest(
+                            DATABASES, sourceId, BotSourceKind.TEXT, "Week 3", text("too short"))));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+            assertThat(onlySource().text())
+                    .as("extraction happens before the transaction, so nothing is half-written")
+                    .isEqualTo("A foreign key points at a primary key.");
+            assertThat(onlySource().version()).isEqualTo(1);
         }
 
         @Test
@@ -504,14 +651,15 @@ class BotAdminServiceTest {
     }
 
     @Test
-    @DisplayName("all six teacher verbs register, and none of them is open")
+    @DisplayName("all seven teacher verbs register, and none of them is open")
     void registersItsVerbs() {
         MessageRouter router = new MessageRouter(new SessionManager());
 
         service.registerOn(router);
 
         List.of(Verb.BOT_MANAGER_GET, Verb.BOT_CREATE, Verb.BOT_ACTIVE_SET,
-                Verb.BOT_SOURCE_ADD, Verb.BOT_SOURCE_REMOVE, Verb.BOT_ANALYTICS_GET)
+                Verb.BOT_SOURCE_ADD, Verb.BOT_SOURCE_UPDATE, Verb.BOT_SOURCE_REMOVE,
+                Verb.BOT_ANALYTICS_GET)
                 .forEach(verb -> {
                     assertThat(router.isRegistered(verb)).as("%s", verb).isTrue();
                     assertThat(router.isOpen(verb)).as("%s", verb).isFalse();

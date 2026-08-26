@@ -49,6 +49,19 @@ import java.util.Optional;
  * instant she resumes (E11.4), and the only thing this service has to do afterwards is
  * re-arm the timers, which it does from the same recomputed deadline.
  *
+ * <h2>The window moves out of their way ⚑ (B-14)</h2>
+ *
+ * <p>Deriving the deadlines is not enough on its own, because an attempt ends at
+ * <b>min(started + allotted, this execution's effective close)</b> and the second half used
+ * to be ignored here. A grant made inside a window that shut earlier bought the student
+ * nothing: the minutes were written, the toast announced them, and the scheduler closed the
+ * execution at the old bell with her {@code TIMED_OUT} well short of her allotted time.
+ *
+ * <p>So this verb writes two numbers, in one transaction: {@code extra_minutes}, and — only
+ * when the window is genuinely in the way — {@code close_at}, moved to
+ * {@code max(current close, the latest new deadline)}. An execution whose window already
+ * outlasts every new deadline is untouched. See {@link #widenWindowFor}.
+ *
  * <h2>Nobody finds out by accident</h2>
  *
  * <p>Every student sitting it gets {@code PUSH_TIMER_EXTENDED} <em>and</em> a durable
@@ -156,6 +169,7 @@ public final class ExtendService {
         int newTotal = data.addExtraMinutes(ctx.executionId(), ask.extraMinutes());
         ExecutionContext extended = ctx.withExtraMinutes(newTotal);
         List<AttemptRecord> live = data.liveAttemptsOf(ctx.executionId());
+        extended = widenWindowFor(data, extended, live);
         String teacherName = data.user(teacherId).map(StudentIdentity::displayName).orElse("Your teacher");
 
         log.info("Teacher {} added {} min to execution {} (now +{} total, {} live attempt(s))",
@@ -163,12 +177,66 @@ public final class ExtendService {
         return Granted.of(extended, live, teacherName);
     }
 
+    /**
+     * Moves the bell out of the way of the minutes just granted (B-14 ⚑ — F7.1, S-20).
+     *
+     * <p><b>The rule: the new close is {@code max(current close, the latest new deadline)}.</b>
+     * Two clocks govern a sitting — the attempt's allotted duration and the execution's
+     * window — and an attempt ends at whichever comes first. Adding minutes moves only the
+     * first, so before this method a grant made inside a window that shut earlier bought the
+     * student nothing at all: {@code dana} granted fifteen, the toast announced them, the
+     * deadlines moved to 11:00, and the scheduler closed the execution at 10:15 with her
+     * {@code TIMED_OUT} at 45 minutes of an allotted 90. The whole point of the verb is to
+     * deliver minutes, so the verb is what moves the window.
+     *
+     * <p>A {@code max} and never a set: an execution whose window already outlasts every new
+     * deadline is left exactly where the teacher who released it put it, and a window is only
+     * ever widened here — shortening one is {@code RELEASE_CLOSE_EARLY}'s job and has its own
+     * rules about the students inside it.
+     *
+     * <p>The <em>latest</em> deadline, not each student's own, because there is one window
+     * for the room: the last student to have started is the one it has to outlast, and the
+     * others were never going to be truncated by it.
+     *
+     * <p>In the same transaction as the grant, deliberately. A window written afterwards
+     * could fail on its own and leave minutes granted that nobody can take, which is the
+     * exact state B-14 describes; failing together means the teacher is told it did not
+     * happen and can press the button again.
+     *
+     * @return the context to derive from and to answer with, carrying the window as it now is
+     */
+    private ExecutionContext widenWindowFor(ExamData data, ExecutionContext extended,
+                                            List<AttemptRecord> live) {
+        Instant latest = null;
+        for (AttemptRecord attempt : live) {
+            // The uncapped deadline: what the student would get if the window were no object.
+            // Capping here would compare the window against itself and never move anything.
+            Instant uncapped = attempt.startedAt()
+                    .plusSeconds(Math.max(0, extended.allottedMinutes()) * 60L);
+            if (latest == null || uncapped.isAfter(latest)) {
+                latest = uncapped;
+            }
+        }
+        if (latest == null || !latest.isAfter(extended.effectiveCloseAt())) {
+            // Nobody is sitting it, or the window already outlasts every new deadline. The
+            // common case, and the one where the release's own window is left alone.
+            return extended;
+        }
+        // effectiveCloseAt() is closeAt plus the granted minutes, so the stored column has to
+        // be set below the target by exactly those minutes for the derived close to land on it.
+        Instant newCloseAt = latest.minusSeconds(Math.max(0, extended.extraMinutes()) * 60L);
+        data.moveCloseAt(extended.executionId(), newCloseAt);
+        log.info("Execution {} window widened to {} so the extension is not eaten by it (B-14)",
+                extended.executionId(), latest);
+        return extended.withCloseAt(newCloseAt);
+    }
+
     /** Re-arms every live attempt against its recomputed deadline. */
     private void rearm(Granted granted) {
         List<TimerService.Armed> armed = new ArrayList<>();
         for (AttemptRecord attempt : granted.attempts()) {
             armed.add(new TimerService.Armed(attempt.attemptId(),
-                    attempt.deadline(granted.context().allottedMinutes())));
+                    attempt.deadline(granted.context())));
         }
         timers.rearmAll(armed);
     }
@@ -187,7 +255,7 @@ public final class ExtendService {
         for (AttemptRecord attempt : granted.attempts()) {
             students.add(attempt.studentId());
             AttemptTiming timing = AttemptTiming.between(now, attempt.startedAt(),
-                    attempt.deadline(ctx.allottedMinutes()));
+                    attempt.deadline(ctx));
             pushGateway.toUser(attempt.studentId(), Verb.PUSH_TIMER_EXTENDED,
                     new TimerExtended(ctx.executionId(), ctx.examName(), granted.teacherName(),
                             addedMinutes, timing));

@@ -4,12 +4,15 @@ import org.hibernate.Session;
 import server.db.entities.Bot;
 import server.db.entities.BotSession;
 import server.db.entities.BotSource;
+import server.db.entities.BotSourceType;
 import server.db.projections.BotActivityCount;
 import server.db.projections.BotSourceInfo;
 import server.db.projections.BotSourceText;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -157,6 +160,38 @@ public final class BotRepository {
                 .setParameter("sourceId", sourceId)
                 .setParameter("botId", botId)
                 .uniqueResultOptional();
+    }
+
+    /**
+     * The pasted bodies of one bot's free-text sources (B-21, F12.3 ⚑).
+     *
+     * <p>What lets the manager's Edit dialog open on what is actually stored rather than on an
+     * empty box. A scalar projection and not the entity, for the reason {@code BotSource}'s own
+     * javadoc gives: {@code raw} is a {@code MEDIUMBLOB} that loads with its row, so reading
+     * entities here would drag every uploaded PDF across to draw a dialog.
+     *
+     * <p><b>Filtered in the query, to {@code TEXT} only.</b> Not a convenience: a PDF's
+     * extracted text is a parse artefact of a document the teacher cannot edit here, and it is
+     * measured in hundreds of kilobytes. Selecting it and discarding it afterwards would put
+     * exactly that on the wire's critical path before anybody noticed.
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @return source id → its pasted text, for the TEXT sources of this bot
+     */
+    public Map<Long, String> findTextSourceBodies(Session session, long botId) {
+        Map<Long, String> bodies = new LinkedHashMap<>();
+        for (Object[] row : session.createQuery("""
+                        select s.id, s.extractedText from BotSource s
+                        where s.botId = :botId and s.type = :type
+                        order by s.id
+                        """, Object[].class)
+                .setParameter("botId", botId)
+                .setParameter("type", BotSourceType.TEXT)
+                .getResultList()) {
+            bodies.put((Long) row[0], (String) row[1]);
+        }
+        return bodies;
     }
 
     /**

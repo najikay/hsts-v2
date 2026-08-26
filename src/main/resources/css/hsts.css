@@ -1073,6 +1073,16 @@
     -fx-background-radius: 8px;
 }
 
+/* B-14: "This sitting closes at 13:00. You have 26 minutes." Shown only when the
+   execution's window shuts before the paper's own length is up, so it is never
+   background noise. Warn-coloured and weighted rather than muted like the meta line
+   above it: it is the one fact on this card she cannot recover after pressing Start. */
+.exam-summary-window {
+    -fx-text-fill: -hsts-warn;
+    -fx-font-weight: 600;
+    -fx-padding: 4px 0 0 0;
+}
+
 /* ---- The form (E10.10/E10.11) ---- */
 
 .exam-header  { -fx-background-color: -hsts-surface; -fx-border-color: transparent transparent -hsts-border transparent; -fx-border-width: 0 0 1px 0; }

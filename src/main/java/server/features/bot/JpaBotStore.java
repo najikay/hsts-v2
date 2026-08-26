@@ -183,6 +183,33 @@ public final class JpaBotStore implements BotStore {
         }
 
         @Override
+        public boolean updateSource(long botId, long sourceId, BotSourceKind kind, String title,
+                                    byte[] raw, String text, Instant at) {
+            Optional<BotSource> found = bots.findSourceOfBot(session, botId, sourceId);
+            if (found.isEmpty()) {
+                return false;
+            }
+            BotSource source = found.get();
+            // Same rule the add path obeys: a TEXT source's pasted text IS its original, so it
+            // is stored as both columns rather than making `raw` nullable for one kind.
+            byte[] bytes = raw != null && raw.length > 0
+                    ? raw : text.getBytes(StandardCharsets.UTF_8);
+            source.setType(toEntityType(kind));
+            source.setTitle(title);
+            // replaceContent bumps the domain version, which is the whole difference between
+            // this and a remove-then-add: the row keeps its id and its author, and a reader
+            // can still tell that its extraction has moved on.
+            source.replaceContent(bytes, text, at);
+            session.flush();
+            return true;
+        }
+
+        @Override
+        public Map<Long, String> textSourceBodies(long botId) {
+            return bots.findTextSourceBodies(session, botId);
+        }
+
+        @Override
         public boolean removeSource(long botId, long sourceId) {
             Optional<BotSource> found = bots.findSourceOfBot(session, botId, sourceId);
             found.ifPresent(session::remove);

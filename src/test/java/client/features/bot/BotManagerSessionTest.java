@@ -11,6 +11,7 @@ import common.dto.bot.BotSourceKind;
 import common.dto.bot.BotSourceRow;
 import common.dto.bot.SourceAddRequest;
 import common.dto.bot.SourceRemoveRequest;
+import common.dto.bot.SourceUpdateRequest;
 import common.protocol.ErrorCode;
 import common.protocol.Verb;
 import org.junit.jupiter.api.BeforeEach;
@@ -139,6 +140,64 @@ class BotManagerSessionTest {
 
         assertThat(session.status()).startsWith("This PDF has no text in it.");
         assertThat(session.isBusy()).isFalse();
+    }
+
+    @Test
+    @DisplayName("⚑ editing a source names the row it replaces, and keeps it (B-21)")
+    void updateSource() {
+        BotManagerPage edited = BotManagerPage.of(
+                new BotProfile(9L, "22", "Databases 22", "Databases study bot", true),
+                List.of(new BotSourceRow(6L, BotSourceKind.TEXT, "Week 3 notes",
+                        "Dana Cohen", WHEN, 2, 41, "A foreign key points at a primary key.")));
+        connection.replyOk(Verb.BOT_SOURCE_UPDATE, edited);
+
+        session.updateSource(6L, BotSourceKind.TEXT, "Week 3 notes",
+                "A foreign key points at a primary key.".getBytes(StandardCharsets.UTF_8)).join();
+
+        SourceUpdateRequest sent = (SourceUpdateRequest) connection.lastSent().getPayload();
+        assertThat(connection.lastSent().getVerb()).isEqualTo(Verb.BOT_SOURCE_UPDATE);
+        assertThat(sent.courseCode()).isEqualTo("22");
+        assertThat(sent.sourceId()).isEqualTo(6L);
+        assertThat(sent.kind()).isEqualTo(BotSourceKind.TEXT);
+        assertThat(sent.title()).isEqualTo("Week 3 notes");
+        assertThat(session.sources()).hasSize(1);
+        assertThat(session.sources().get(0).version())
+                .as("the server's own page comes back, so the bumped version is what is drawn")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a refused edit keeps the server's sentence, holder's name and all (B-21)")
+    void updateRefusedByTheLock() {
+        connection.replyOk(Verb.BOT_MANAGER_GET, WITH_BOT);
+        session.refresh().join();
+        connection.replyError(Verb.BOT_SOURCE_UPDATE, ErrorCode.CONFLICT,
+                "Avi Mizrahi is editing this source right now. Wait for them to finish, "
+                        + "or take over the edit from the banner.");
+
+        session.updateSource(5L, BotSourceKind.TEXT, "Week 3",
+                "replacement".getBytes(StandardCharsets.UTF_8)).join();
+
+        assertThat(session.status()).startsWith("Avi Mizrahi is editing this source");
+        assertThat(session.sources())
+                .as("the page she was looking at survives a refusal")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("only free-text rows offer an edit, and they carry what to open (B-21)")
+    void onlyTextRowsAreEditable() {
+        BotSourceRow pdf = new BotSourceRow(5L, BotSourceKind.PDF, "Week 3 handout",
+                "Dana Cohen", WHEN, 1, 4200, "should never survive the constructor");
+        BotSourceRow typed = new BotSourceRow(6L, BotSourceKind.TEXT, "Week 3 notes",
+                "Dana Cohen", WHEN, 1, 41, "A foreign key points at a primary key.");
+
+        assertThat(pdf.isEditable()).isFalse();
+        assertThat(pdf.text())
+                .as("a file row holds the parse, not the document; the record enforces that")
+                .isNull();
+        assertThat(typed.isEditable()).isTrue();
+        assertThat(typed.text()).isEqualTo("A foreign key points at a primary key.");
     }
 
     @Test

@@ -341,8 +341,15 @@ public final class GradeRepository {
      * Every marked student in one execution, by name (E14.1 — F9.2, T-10).
      *
      * <p>The teacher's results table, in one read: the grade, the attempt's recorded solving
-     * time and the student's name, which is what the table shows and what neither
-     * {@link #findAwaitingApproval} nor {@code AttemptRepository.findRows} supplies on its own.
+     * time, <b>how the attempt ended</b> and the student's name, which is what the table shows
+     * and what neither {@link #findAwaitingApproval} nor {@code AttemptRepository.findRows}
+     * supplies on its own.
+     *
+     * <p>⚑ <b>B-16.</b> {@code a.status} joined this select on 2026-08-26, beside the
+     * {@code a.actualMinutes} that was already here. T-10.2 asks for "score, submitted vs
+     * timed out, solving time"; the solving time was being read and then dropped by the
+     * service's mapper, and the status was never selected at all, so a timed-out paper read
+     * exactly like a submitted one on the screen built to show the difference.
      *
      * <p><b>This read is not scoped to a teacher, and must not be.</b> Authorship is settled
      * one step earlier, on the execution ({@code ExecutionRepository.findContext} against
@@ -365,7 +372,7 @@ public final class GradeRepository {
                         select new server.db.projections.StudentResultRow(
                             g.id, a.studentId, u.fullName, g.autoScore, g.finalScore,
                             g.status, g.overrideReason, g.teacherComment, g.approvedAt,
-                            a.actualMinutes)
+                            a.actualMinutes, a.status)
                         from Grade g, ExamAttempt a, User u
                         where g.attemptId = a.id
                           and u.id = a.studentId

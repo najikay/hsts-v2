@@ -230,10 +230,16 @@ public final class TeacherResultsView extends AbstractScreen {
         table.column(numberColumn("Auto", StudentGradeRow::autoScore));
         table.column(numberColumn("Final", StudentGradeRow::finalScore));
         table.column("State", row -> ResultsCopy.gradeStateLabel(row.state()));
+        // ⚑ B-16. T-10.2 asks for "score, submitted vs timed out, solving time" and only the
+        // score used to arrive. Both are words rather than a tint: "Timed out" survives a
+        // printout, a screenshot and a colour-blind reader, and it is the fact that separates
+        // "did not finish" from "did badly" for the one seeded student it applies to.
+        table.column("Attempt", row -> ResultsCopy.attemptStatusLabel(row.attemptStatus()));
+        table.column("Time", row -> ResultsCopy.solvingTimeLabel(row.actualMinutes()));
         table.column("", ResultsCopy::adjustedMarker);
-        // F-9: the student name is the only wide column here; four numeric ones and
-        // the unheaded marker were each being given a sixth of the width.
-        table.columnWidths(260, 110, 110, 110, 150, 60);
+        // F-9: the student name is the only wide column here; the numeric ones, the two
+        // B-16 columns and the unheaded marker are each sized to what they hold.
+        table.columnWidths(240, 100, 100, 100, 150, 120, 110, 60);
         // UI wave 2: the three score columns are numbers and line up as such.
         table.numericColumns(1, 2, 3);
         table.searchable("Find a student",

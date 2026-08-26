@@ -177,6 +177,11 @@ public final class JpaExamStore implements ExamStore {
         }
 
         @Override
+        public void moveCloseAt(long executionId, Instant closeAt) {
+            executions.moveCloseAt(session, executionId, closeAt);
+        }
+
+        @Override
         public void closeExecution(long executionId, ParticipationCounts counts) {
             executions.freezeParticipation(session, executionId, counts);
         }

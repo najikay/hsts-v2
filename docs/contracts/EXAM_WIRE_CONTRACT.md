@@ -157,6 +157,11 @@ added is never silent (F7.1).
 `exam_executions` carries `lock_version`, so two teachers granting at the same moment produce one
 `CONFLICT` rather than one silent grant.
 
+⚑ **It also moves the window when the window would eat the grant** — `close_at` becomes
+`max(current close, the latest new deadline)`, in the same transaction. See **A8**: an attempt
+ends at `min(started + allotted, the execution's effective close)`, so minutes granted inside a
+window that shuts first are minutes nobody receives.
+
 ### `EXECUTION_MONITOR_GET` — watch it live (F7.2)
 
 Asking **subscribes**: the caller is registered as a watcher and receives `PUSH_MONITOR_UPDATED` on
@@ -444,6 +449,73 @@ may act on, so an id from anywhere else did not come from this screen; its two a
 answer `NOT_FOUND` with one sentence for both cases. The sentences live in
 `server.features.release.ReleaseMessages` and are checked by one test against the §4.1 copy
 rules, exactly as `ExamMessages` is.
+
+### A8 — the deadline is reconciled with the window, and the entry screen says so (E10/E11, B-14, added 2026-08-26, lead)
+
+**No new verb, no new payload type, two components appended to one record.** B-14 found that two
+independent clocks governed a sitting and nothing compared them: the **entry window**
+(`open_at` … `close_at + extra_minutes`) decided who could join, the **attempt deadline** was
+`started_at + duration + extra_minutes`, and a student who joined legally late was told the
+second one while the first was what actually ended her exam. Observed: promised 75 minutes,
+given 2, told neither. On the extension path it was worse, because delivering minutes is the
+whole point of the verb — `+15` granted, the toast shown, and `actual_minutes 45 of an allotted 90`.
+
+**The rule, everywhere a deadline is derived or shipped:**
+
+```
+deadline = min(startedAt + durationMinutes + extraMinutes, closeAt + extraMinutes)
+```
+
+It lives in exactly one method, `ExecutionContext.deadlineFor(Instant startedAt)`, and
+`AttemptRecord.deadline(ExecutionContext)` delegates to it. The countdown on the wire, the
+expiry timer, the late-answer check, the force-submit and the teacher's monitor rows all read
+that one method, so **the number a client is told and the moment the server ends the attempt
+are the same fact**. There is still **no stored deadline field** — nothing changed about that,
+and nothing has to be migrated.
+
+**`ExamHeader` gains two components, appended last:**
+
+```
+ExamHeader(long executionId, String examName, String courseCode, String courseName,
+           int durationMinutes, String generalText, int questionCount,
+           AttemptState attemptState, Instant windowClosesAt, int sittingMinutes)
+```
+
+- `durationMinutes` is **unchanged in meaning** — the paper's length with extensions, which is
+  what it always was.
+- `windowClosesAt` is the execution's effective close. Nullable, and null only on a header
+  built by code that predates this amendment; the eight-argument constructor is retained and
+  delegates with `null` and `sittingMinutes = durationMinutes`, which is exactly what a
+  pre-amendment caller meant.
+- `sittingMinutes` is what this sitting can actually deliver: `min(durationMinutes, minutes
+  until windowClosesAt)`. Equal to `durationMinutes` in the normal case.
+
+Both are measured from **the instant the clock starts** — `now` on the `EXAM_JOIN` answer, the
+attempt's own `startedAt` on `ATTEMPT_START`/`ATTEMPT_RESUME` — so a header read before and
+after a start describes the same sitting rather than drifting a minute per request.
+`ExamHeader.isSittingShortened()` is what the entry screen switches on, and the sentence is
+`ExamCopy.sittingShortened`: *"This sitting closes at 13:00. You have 26 minutes."* Said before
+the identity step, because afterwards it is not information.
+
+**`EXECUTION_EXTEND` now writes two numbers, in one transaction.** `extra_minutes`, as before;
+and `close_at`, moved to **`max(current close, the latest new deadline)`** — and only when the
+window is genuinely in the way, so an execution whose window already outlasts every new
+deadline keeps the window its teacher released it with. The latest deadline and not each
+student's own, because there is one window for the room. It only ever widens; shortening a
+sitting is `RELEASE_CLOSE_EARLY`'s verb and has its own rules. Both writes share one
+`lock_version` generation, so two teachers extending at once still produce one `CONFLICT`
+rather than a half-applied grant. The monitor push that follows re-reads, so the teacher's
+screen shows the moved close without asking.
+
+**The monitor is internally consistent again.** `MonitorService` used to add the allotted
+minutes itself when building a row's `remainingMillis`, which is a second copy of the
+arithmetic that did not know about the window — `closesAt` in the header read `10:15:00Z` while
+the rows beneath it counted down to `10:30:00Z`. It now calls the same `deadlineFor`, so the
+header and the rows cannot part company.
+
+**Nothing in this amendment refuses anything.** No join is rejected, no release is blocked, and
+the four `EXAM_JOIN` refusals are untouched: the fix is that what the client is told now agrees
+with what the server was always going to do.
 
 ## What is deliberately absent
 

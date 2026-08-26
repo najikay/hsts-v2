@@ -1171,6 +1171,23 @@ public enum Verb {
     BOT_SOURCE_ADD,
 
     /**
+     * Replace one source's title and content in place (F12.3 ⚑, B-21).
+     * Request payload: {@code SourceUpdateRequest}; response: {@code BotManagerPage}.
+     * F12.3 asks for "add/<b>edit</b>/remove" and only two of the three existed:
+     * correcting a typo meant deleting the row and re-adding it, which loses the
+     * source id, its author and its version — and loses them silently, because the
+     * remove notifies co-teachers as a removal and the re-add as an addition, so one
+     * correction reads to a colleague as two unrelated events.
+     * Parsed before anything is written, exactly as {@link #BOT_SOURCE_ADD} is, and
+     * subject to the same advisory edit lock as {@link #BOT_SOURCE_REMOVE} — which is
+     * also the first thing on this screen that lock has ever had an <em>editor</em> to
+     * protect (F10.2). The row keeps its id and its author; its domain version is
+     * bumped, so a stale extraction is detectable.
+     * Co-teachers of the course get a {@code BOT_SOURCE_CHANGED} notification.
+     */
+    BOT_SOURCE_UPDATE,
+
+    /**
      * Remove one source from a taught course's bot (F12.3).
      * Request payload: {@code SourceRemoveRequest}; response: {@code BotManagerPage}.
      * Requires the advisory edit lock on that source (E18.5), so two teachers

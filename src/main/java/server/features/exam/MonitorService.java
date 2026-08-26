@@ -202,7 +202,12 @@ public final class MonitorService implements MonitorPublisher {
                               int answered, int questionCount) {
         long remaining = 0;
         if (row.status() == AttemptStatus.IN_PROGRESS) {
-            Instant deadline = row.startedAt().plusSeconds(ctx.allottedMinutes() * 60L);
+            // ⚑ B-14: through the one derivation, not a second copy of the arithmetic. This
+            // line used to add the allotted minutes itself and ignore the window, which is how
+            // the teacher's own screen came to disagree with itself — `closesAt` in the header
+            // saying 10:15 while the rows beneath it counted down to 10:30, and the window
+            // winning. One method, so the header and the rows cannot part company again.
+            Instant deadline = ctx.deadlineFor(row.startedAt());
             remaining = Math.max(0, Duration.between(now, deadline).toMillis());
         }
         return new MonitorRow(row.studentId(), row.studentName(), toWire(row.status()),

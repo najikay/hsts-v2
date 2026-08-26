@@ -12,6 +12,8 @@ import common.dto.bot.BotSourceRow;
 import common.dto.bot.BotTopQuestion;
 import common.dto.bot.SourceAddRequest;
 import common.dto.bot.SourceRemoveRequest;
+import common.dto.bot.SourceUpdateRequest;
+import common.dto.lock.LockHolder;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -41,7 +43,7 @@ import java.util.stream.Collectors;
  * Managing a course's study bot, server-side (Logic tier, E16.9/E16.10 —
  * F12.1/F12.2/F12.3/F12.4/F12.11).
  *
- * <p>The teacher's half of the feature. Six verbs, one authorisation rule, and one
+ * <p>The teacher's half of the feature. Seven verbs, one authorisation rule, and one
  * rule about what a teacher-facing aggregate is allowed to contain.
  *
  * <h2>Authorisation: role plus ownership, on every verb (P-5)</h2>
@@ -101,14 +103,30 @@ public final class BotAdminService {
     public interface SourceLocks {
 
         /** Everything is editable; the default when no lock service is wired. */
-        SourceLocks OPEN = (sourceId, userId) -> true;
+        SourceLocks OPEN = (sourceId, userId) -> Optional.empty();
+
+        /**
+         * The consult, in {@code EditLockGuard}'s own shape (E18, B-21).
+         *
+         * <p>Answers <em>who</em> rather than only <em>whether</em>, because a refusal that
+         * names its holder is one a teacher can act on: "Avi Mizrahi is editing this" tells
+         * her whose door to knock on, and a bare "somebody is" tells her to keep clicking.
+         *
+         * @param sourceId the {@code bot_sources} row
+         * @param userId   the teacher asking
+         * @return the other teacher holding a live lock on it, or empty when the row is
+         *         unlocked, the hold has lapsed, or the caller holds it herself
+         */
+        Optional<LockHolder> heldByAnother(long sourceId, long userId);
 
         /**
          * @param sourceId the {@code bot_sources} row
          * @param userId   the teacher asking
          * @return {@code true} when nobody else holds the advisory lock on it
          */
-        boolean mayEdit(long sourceId, long userId);
+        default boolean mayEdit(long sourceId, long userId) {
+            return heldByAnother(sourceId, userId).isEmpty();
+        }
     }
 
     private final BotStore store;
@@ -133,13 +151,14 @@ public final class BotAdminService {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** Registers the six teacher verbs; all authenticated, none open. */
+    /** Registers the seven teacher verbs; all authenticated, none open. */
     public void registerOn(server.core.MessageRouter router) {
         Objects.requireNonNull(router, "router");
         router.register(Verb.BOT_MANAGER_GET, this::managerPage);
         router.register(Verb.BOT_CREATE, this::create);
         router.register(Verb.BOT_ACTIVE_SET, this::setActive);
         router.register(Verb.BOT_SOURCE_ADD, this::addSource);
+        router.register(Verb.BOT_SOURCE_UPDATE, this::updateSource);
         router.register(Verb.BOT_SOURCE_REMOVE, this::removeSource);
         router.register(Verb.BOT_ANALYTICS_GET, this::analytics);
     }
@@ -263,6 +282,87 @@ public final class BotAdminService {
         return Message.ok(request, outcome.page());
     }
 
+    // ===================== BOT_SOURCE_UPDATE =============================
+
+    /**
+     * Replaces one source's title and content in place ⚑ (F12.3, B-21).
+     *
+     * <p>The third of F12.3's "add/<b>edit</b>/remove", which until B-21 was the one nothing
+     * implemented anywhere in the stack. Correcting a typo meant removing the row and adding
+     * it again, which lost the source id, its author, its {@code updated_at} and its version —
+     * and lost them <b>silently</b>, because the remove notified the course's other teachers
+     * as a removal and the re-add as an addition, so one correction read to a colleague as two
+     * unrelated events. This is one event, on one row, and the row survives it.
+     *
+     * <p><b>The gate order is deliberate and it is E6.14's, not this class's remove path's.</b>
+     * Scope first — a teacher who does not teach the course is refused before anything about
+     * the source is read or reported — then the advisory lock, then the row's own existence.
+     * {@code BOT_SOURCE_REMOVE} consults its lock before its transaction, which is a shape
+     * that predates the ruling; the write path everywhere else consults <em>after</em> the
+     * scope check, so a lock refusal cannot become a way for an outsider to learn that a
+     * source exists and who is holding it.
+     *
+     * <p>The lock refusal names its holder, which is what makes it act on rather than a wall:
+     * a teacher told "Avi Mizrahi is editing this" knows whose door to knock on. That is also
+     * the first thing on this screen the {@code EntityRef.BOT_SOURCE} lock has ever had an
+     * actual <em>editor</em> to protect (F10.2, and case 13.6's outstanding half).
+     *
+     * <p>Extraction happens outside the transaction and before it, exactly as on the add path,
+     * so a replacement that cannot be parsed leaves the stored source exactly as it was rather
+     * than half-overwritten.
+     */
+    Message updateSource(CallerContext caller, Message request) {
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
+        if (!(request.getPayload() instanceof SourceUpdateRequest ask)) {
+            return Message.error(request, ErrorCode.VALIDATION, BotMessages.MALFORMED_REQUEST);
+        }
+        if (!ask.isWellFormed()) {
+            return Message.error(request, ErrorCode.VALIDATION, BotMessages.SOURCE_INCOMPLETE);
+        }
+        if (!ask.isWithinSizeLimit()) {
+            return Message.error(request, ErrorCode.VALIDATION, BotMessages.SOURCE_TOO_LARGE);
+        }
+        long teacherId = caller.userId();
+
+        String text;
+        try {
+            text = extractor.extract(ask.kind(), ask.content());
+        } catch (SourceExtractionException e) {
+            log.info("Source extraction refused for teacher {}: {}", teacherId, e.getMessage());
+            return Message.error(request, ErrorCode.VALIDATION, e.getMessage());
+        }
+
+        Outcome outcome = store.inTx(data -> {
+            if (!data.teaches(teacherId, ask.courseCode())) {
+                return Outcome.refused(ErrorCode.FORBIDDEN, BotMessages.NOT_YOUR_COURSE);
+            }
+            Optional<BotData.BotRecord> bot = data.botForCourse(ask.courseCode());
+            if (bot.isEmpty()) {
+                return Outcome.refused(ErrorCode.NOT_FOUND, BotMessages.BOT_NOT_CREATED);
+            }
+            // The lock consult, between the scope check and the write. Inside the transaction
+            // rather than before it, so an outsider cannot use a CONFLICT to learn that a
+            // source exists in a course that is none of hers.
+            if (!locks.mayEdit(ask.sourceId(), teacherId)) {
+                return Outcome.refused(ErrorCode.CONFLICT, lockedMessage(ask.sourceId(), teacherId));
+            }
+            if (!data.updateSource(bot.get().botId(), ask.sourceId(), ask.kind(), ask.title(),
+                    ask.content(), text, clock.instant())) {
+                return Outcome.refused(ErrorCode.NOT_FOUND, BotMessages.SOURCE_NOT_FOUND);
+            }
+            return Outcome.done(page(data, ask.courseCode()), bot.get(),
+                    data.otherTeachersOf(ask.courseCode(), teacherId),
+                    data.displayNames(Set.of(teacherId)).getOrDefault(teacherId, "A colleague"));
+        });
+        if (outcome.refusal() != null) {
+            return Message.error(request, outcome.refusalCode(), outcome.refusal());
+        }
+        notifyCoTeachers(outcome, "changed");
+        log.info("Teacher {} replaced source {} of the {} study bot with {} characters",
+                teacherId, ask.sourceId(), ask.courseCode(), text.length());
+        return Message.ok(request, outcome.page());
+    }
+
     // ===================== BOT_SOURCE_REMOVE =============================
 
     /** Removes one source, subject to the advisory edit lock (F12.3, E18.5). */
@@ -363,6 +463,20 @@ public final class BotAdminService {
 
     // ===================== Shared internals ==============================
 
+    /**
+     * The lock refusal, naming its holder when the lock service can say who it is (B-21).
+     *
+     * @param sourceId  the source somebody else is editing
+     * @param teacherId the teacher who was refused
+     * @return the sentence to answer {@code CONFLICT} with
+     */
+    private String lockedMessage(long sourceId, long teacherId) {
+        return locks.heldByAnother(sourceId, teacherId)
+                .map(LockHolder::displayName)
+                .map(BotMessages::sourceLockedBy)
+                .orElse(BotMessages.SOURCE_LOCKED);
+    }
+
     /** @return a refusal message, or {@code null} when the caller teaches the course. */
     private Message refuseUnlessTeaches(BotData data, Message request, long teacherId, String courseCode) {
         if (data.courseName(courseCode).isEmpty()) {
@@ -391,6 +505,10 @@ public final class BotAdminService {
         List<BotSourceInfo> infos = data.sourceInfos(record.botId());
         Map<Long, String> names = data.displayNames(
                 infos.stream().map(BotSourceInfo::addedBy).collect(Collectors.toSet()));
+        // B-21: the bodies of the free-text sources only, so Edit opens on what is stored.
+        // One extra scalar read for the whole page rather than a round trip per dialog, and
+        // it never touches a PDF's bytes or its extraction - see BotRepository's own javadoc.
+        Map<Long, String> bodies = data.textSourceBodies(record.botId());
         List<BotSourceRow> rows = new ArrayList<>();
         for (BotSourceInfo info : infos) {
             rows.add(new BotSourceRow(info.sourceId(),
@@ -399,7 +517,8 @@ public final class BotAdminService {
                     names.getOrDefault(info.addedBy(), "A colleague"),
                     info.updatedAt(),
                     info.version(),
-                    info.characters()));
+                    info.characters(),
+                    bodies.get(info.sourceId())));
         }
         return BotManagerPage.of(new BotProfile(record.botId(), record.courseCode(),
                 record.courseName(), record.name(), record.active()), rows);

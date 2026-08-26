@@ -76,9 +76,14 @@ would be subscribing to something that cannot move.
   client could use to widen its own scope.
 - `ExecutionResults(ExecutionResultRow execution, String examName, String courseCode,
   String courseName, List<StudentGradeRow> rows, ResultStatistics stats)`
-  - `rows` **reuses `common.dto.grading.StudentGradeRow` unchanged.** This is the teacher path,
-    so `overrideReason` is populated (S-23); the structural stripping that protects students
-    lives in `MyGrades`/`CheckedForm` and is untouched by this.
+  - `rows` **reuses `common.dto.grading.StudentGradeRow`.** This is the teacher path, so
+    `overrideReason` is populated (S-23); the structural stripping that protects students lives
+    in `MyGrades`/`CheckedForm` and is untouched by this.
+  - ⚑ **2026-08-26 (B-16):** the row is at **v1.2** and this is the one path that populates its
+    `attemptStatus` and `actualMinutes` — see `GRADING_WIRE_CONTRACT` **A5**, which owns the
+    record. T-10.2 asks for "score, submitted vs timed out, solving time"; before that amendment
+    only the score arrived, and a timed-out paper was indistinguishable from a submitted one.
+    Additive: the twelve-component constructor is retained and every other path still gets null.
   - One row per **grade**, not per attempt: an unmarked paper has no score and is absent. The
     gap is never silent — `execution.participants()` against `rows.size()` is the
     "6 of 8 papers marked" line the screen prints.

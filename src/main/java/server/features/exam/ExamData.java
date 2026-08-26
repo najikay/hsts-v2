@@ -241,6 +241,25 @@ public interface ExamData {
     int addExtraMinutes(long executionId, int minutes);
 
     /**
+     * Moves the window's close so granted minutes can actually be taken (B-14 ⚑ — F7.1).
+     *
+     * <p>The other half of an extension. Adding minutes moves every derived deadline, and
+     * before B-14 nothing checked that the window they now land in is still open: a teacher
+     * granted fifteen, the toast announced them, and {@code ReleaseScheduler} closed the
+     * execution at the old bell with the student forty-five minutes short of what she had
+     * been promised.
+     *
+     * <p>Only ever called with a <b>later</b> close than the stored one — the extend path
+     * takes a {@code max} first — so this can widen a sitting and can never shorten one out
+     * from under the students in it. Closing early is a different verb with its own rules
+     * (F5.5).
+     *
+     * @param executionId the execution
+     * @param closeAt     the new stored close, extensions <b>not</b> included
+     */
+    void moveCloseAt(long executionId, Instant closeAt);
+
+    /**
      * Closes an execution and freezes its counts into the documentation record (S-21, F7.3).
      *
      * @param executionId the execution

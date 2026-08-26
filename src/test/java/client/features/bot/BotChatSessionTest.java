@@ -178,6 +178,84 @@ class BotChatSessionTest {
     }
 
     @Test
+    @DisplayName("a second ask after confirming does not notice again ⚑ (B-20)")
+    void theNoticeIsShownOncePerAttempt() {
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Databases 22", "notice"));
+        session.ask("what is a foreign key").join();
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "what is a foreign key", "a", NOW));
+        session.acknowledgeAndAsk().join();
+
+        // Her next question in the same sitting. Before B-20 this went out with
+        // integrityAcknowledged=false, the server had no reason not to ask again, and she got
+        // the confirmation dialog on every message for the rest of the exam.
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "and a primary key", "b", NOW));
+        session.ask("and a primary key").join();
+
+        BotAskRequest second = (BotAskRequest) connection.lastSent().getPayload();
+        assertThat(second.integrityAcknowledged())
+                .as("the client remembers what she agreed to")
+                .isTrue();
+        assertThat(model.state())
+                .as("answered, not asked again")
+                .isEqualTo(ChatState.IDLE);
+        assertThat(model.entries()).hasSize(4);
+    }
+
+    @Test
+    @DisplayName("a new attempt notices again rather than being waved through ⚑ (B-20)")
+    void aNewAttemptNoticesAgain() {
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Databases 22", "notice"));
+        session.ask("first").join();
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "first", "a", NOW));
+        session.acknowledgeAndAsk().join();
+        assertThat(model.hasAcknowledged()).isTrue();
+
+        // She finished that exam and started another. The server decides C-4 from its own
+        // live registry, so it asks about the new sitting — and the client must put the
+        // question rather than answer it from a confirmation that belonged to the old one.
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Databases 22", "notice"));
+        session.ask("second").join();
+
+        assertThat(model.state()).isEqualTo(ChatState.NEEDS_ACKNOWLEDGEMENT);
+        assertThat(model.heldQuestion()).isEqualTo("second");
+        assertThat(model.hasAcknowledged())
+                .as("the stale consent is discarded, not reused")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("declining leaves the next ask unacknowledged (B-20)")
+    void decliningRecordsNoConsent() {
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Databases 22", "notice"));
+        session.ask("what is a foreign key").join();
+        session.decline();
+
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "something else", "a", NOW));
+        session.ask("something else").join();
+
+        assertThat(((BotAskRequest) connection.lastSent().getPayload()).integrityAcknowledged())
+                .as("no is an answer, and it has to survive one message")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("the same-course lockout drops any consent (B-20)")
+    void beingLockedOutDropsConsent() {
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Databases 22", "notice"));
+        session.ask("first").join();
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "first", "a", NOW));
+        session.acknowledgeAndAsk().join();
+
+        // She started sitting THIS course's exam: the server refuses with the C-4 lockout,
+        // which no payload field can lift and which ends the situation she consented to.
+        connection.replyError(Verb.BOT_ASK, ErrorCode.CONFLICT, "The Databases 22 bot is locked");
+        session.ask("second").join();
+
+        assertThat(model.state()).isEqualTo(ChatState.UNAVAILABLE);
+        assertThat(model.hasAcknowledged()).isFalse();
+    }
+
+    @Test
     @DisplayName("confirming with nothing held sends nothing")
     void acknowledgeWithoutAHeldQuestion() {
         session.acknowledgeAndAsk().join();

@@ -179,6 +179,36 @@ public final class ExecutionRepository {
     }
 
     /**
+     * Widens a live execution's window so an extension can actually be taken (B-14 ⚑ — F7.1).
+     *
+     * <p>The companion write to {@link #addExtraMinutes}. Attempt deadlines are derived as
+     * {@code min(started + allotted, this execution's effective close)}, so minutes granted
+     * inside a window that shuts first are minutes nobody receives. {@code ExtendService}
+     * computes {@code max(current close, the latest new deadline)} and calls this only when
+     * the window is genuinely in the way.
+     *
+     * <p>Through the entity for the same reason {@link #addExtraMinutes} is: {@code
+     * exam_executions} carries {@code lock_version}, and both writes belong to one
+     * optimistic-lock generation, so two teachers extending at once still produce one
+     * {@code CONFLICT} rather than a half-applied grant.
+     *
+     * @param session     the current session
+     * @param executionId the execution
+     * @param closeAt     the new stored close; must not be earlier than the current one
+     * @throws IllegalStateException when the execution does not exist
+     */
+    public void moveCloseAt(Session session, long executionId, Instant closeAt) {
+        ExamExecution execution = session.get(ExamExecution.class, executionId);
+        if (execution == null) {
+            throw new IllegalStateException("No execution " + executionId + " to widen");
+        }
+        if (closeAt != null && closeAt.isAfter(execution.getCloseAt())) {
+            execution.setCloseAt(closeAt);
+            session.flush();
+        }
+    }
+
+    /**
      * Freezes the derived participation counts into the execution's documentation record
      * (S-21, F7.3, E11.5).
      *

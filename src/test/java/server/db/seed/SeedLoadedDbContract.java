@@ -393,12 +393,17 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
 
         assertThat(minutesBetween(byCode.get("4821"))).as("§9: T-14d 09:00 to 11:00").isEqualTo(120);
         assertThat(minutesBetween(byCode.get("7390"))).as("§9: T-3d 10:00 to 11:30").isEqualTo(90);
-        assertThat(minutesBetween(byCode.get("5164"))).as("§9: T+3h, two hours").isEqualTo(120);
+        assertThat(minutesBetween(byCode.get("5164"))).as("§9: T+4h, two hours").isEqualTo(120);
 
         // Execution 4 is the S-2 proof and the take-exam demo's target: it has to straddle the
         // anchor, not merely be two hours long, or "live right now" stops being true.
+        // ⚑ B-14. Three and a half hours, not two: the window straddles the anchor, so what a
+        // student gets is whatever is left of it when she joins, and a two-hour window around a
+        // 75-minute paper hands a walkthrough that reaches take-exam forty minutes in a sitting
+        // shorter than the paper. The duration is asserted rather than merely the straddle
+        // because "live right now" was already true of the failing shape.
         List<Object> live = byCode.get("2075");
-        assertThat(minutesBetween(live)).as("§9: T-30m to T+90m").isEqualTo(120);
+        assertThat(minutesBetween(live)).as("§9: T-30m to T+3h - B-14").isEqualTo(210);
         assertThat((java.time.Instant) live.get(1)).isBefore(ANCHOR);
         assertThat((java.time.Instant) live.get(2)).isAfter(ANCHOR);
 

@@ -2,6 +2,7 @@ package client.features.bot;
 
 import common.dto.bot.BotAnswer;
 import common.dto.bot.BotConversation;
+import common.dto.bot.BotIntegrityNotice;
 import common.dto.bot.BotSpeaker;
 import common.dto.bot.BotTurn;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,11 @@ class BotChatModelTest {
 
     private BotChatModel model() {
         return new BotChatModel("22", "Databases 22");
+    }
+
+    /** The C-4 notice as the server sends it: a course and a sentence, and nothing else. */
+    private static BotIntegrityNotice notice(String message) {
+        return new BotIntegrityNotice("Databases 22", message);
     }
 
     @Test
@@ -167,7 +173,7 @@ class BotChatModelTest {
         BotChatModel model = model();
         model.asking("what is a foreign key", NOW);
 
-        model.needsAcknowledgement("You are taking an exam right now.");
+        model.needsAcknowledgement(notice("You are taking an exam right now."));
 
         assertThat(model.state()).isEqualTo(ChatState.NEEDS_ACKNOWLEDGEMENT);
         assertThat(model.state().acceptsInput()).isFalse();
@@ -183,7 +189,7 @@ class BotChatModelTest {
     void acknowledging() {
         BotChatModel model = model();
         model.asking("what is a foreign key", NOW);
-        model.needsAcknowledgement("notice");
+        model.needsAcknowledgement(notice("notice"));
 
         String held = model.acknowledged();
 
@@ -194,11 +200,78 @@ class BotChatModelTest {
     }
 
     @Test
+    @DisplayName("confirming records the consent, so the next ask carries it ⚑ (B-20)")
+    void acknowledgingIsRemembered() {
+        BotChatModel model = model();
+        BotIntegrityNotice shown = notice("You are taking an exam right now.");
+        model.asking("what is a foreign key", NOW);
+        model.needsAcknowledgement(shown);
+
+        assertThat(model.hasAcknowledged())
+                .as("nothing is agreed until she agrees")
+                .isFalse();
+
+        model.acknowledged();
+
+        assertThat(model.hasAcknowledged()).isTrue();
+        assertThat(model.acknowledgedNotice())
+                .as("keyed on what she was actually shown, not on a bare flag")
+                .contains(shown);
+    }
+
+    @Test
+    @DisplayName("a notice arriving again discards the old consent (B-20)")
+    void aNoticeIsNeverSwallowed() {
+        BotChatModel model = model();
+        model.asking("first", NOW);
+        model.needsAcknowledgement(notice("notice"));
+        model.acknowledged();
+
+        model.asking("second", NOW);
+        model.needsAcknowledgement(notice("notice"));
+
+        assertThat(model.state()).isEqualTo(ChatState.NEEDS_ACKNOWLEDGEMENT);
+        assertThat(model.hasAcknowledged()).isFalse();
+        assertThat(model.heldQuestion()).isEqualTo("second");
+    }
+
+    @Test
+    @DisplayName("declining, blocking, loading and starting fresh all forget it (B-20)")
+    void consentIsDroppedWithTheSituationItBelongedTo() {
+        BotChatModel declined = consented();
+        declined.declined();
+        assertThat(declined.hasAcknowledged()).isFalse();
+
+        BotChatModel blocked = consented();
+        blocked.blocked("This bot is locked while you are taking that exam.");
+        assertThat(blocked.hasAcknowledged()).isFalse();
+
+        BotChatModel reopened = consented();
+        reopened.load(new BotConversation(9L, "22", "Databases 22", NOW, NOW,
+                List.of(BotTurn.asked("stored", NOW))));
+        assertThat(reopened.hasAcknowledged()).isFalse();
+
+        BotChatModel fresh = consented();
+        fresh.startFresh();
+        assertThat(fresh.hasAcknowledged()).isFalse();
+    }
+
+    /** A model that has been shown a C-4 notice and has confirmed it. */
+    private BotChatModel consented() {
+        BotChatModel model = model();
+        model.asking("what is a foreign key", NOW);
+        model.needsAcknowledgement(notice("notice"));
+        model.acknowledged();
+        assertThat(model.hasAcknowledged()).isTrue();
+        return model;
+    }
+
+    @Test
     @DisplayName("declining hands it back too, so nothing she typed is lost")
     void declining() {
         BotChatModel model = model();
         model.asking("what is a foreign key", NOW);
-        model.needsAcknowledgement("notice");
+        model.needsAcknowledgement(notice("notice"));
 
         String held = model.declined();
 

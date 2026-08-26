@@ -110,6 +110,47 @@ class ExamDtoTest {
         }
 
         @Test
+        @DisplayName("⚑ a truncated sitting carries both numbers and says so (B-14, A8)")
+        void sittingMinutesAndWindow() throws Exception {
+            Instant closesAt = Instant.parse("2026-08-20T10:00:00Z");
+            ExamHeader truncated = new ExamHeader(2075, "Midterm: Algebra", "11", "Algebra",
+                    75, "", 7, AttemptState.NOT_STARTED, closesAt, 2);
+
+            ExamHeader restored = roundTrip(truncated);
+
+            assertThat(restored.durationMinutes())
+                    .as("the paper is still worth 75 and the screen still says so")
+                    .isEqualTo(75);
+            assertThat(restored.sittingMinutes())
+                    .as("and this sitting is worth 2, which is what she is actually given")
+                    .isEqualTo(2);
+            assertThat(restored.windowClosesAt()).isEqualTo(closesAt);
+            assertThat(restored.isSittingShortened()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a wide-enough window says nothing, and the v1 shape still means what it did")
+        void theNormalCaseAndTheOldConstructor() {
+            ExamHeader roomy = new ExamHeader(2075, "Midterm: Algebra", "11", "Algebra", 75, "",
+                    7, AttemptState.NOT_STARTED, Instant.parse("2026-08-20T13:00:00Z"), 75);
+            assertThat(roomy.isSittingShortened()).isFalse();
+
+            // The pre-A8 constructor: no window, and the sitting is the paper's own length.
+            ExamHeader legacy = new ExamHeader(2075, "Midterm: Algebra", "11", "Algebra", 75, "",
+                    7, AttemptState.NOT_STARTED);
+            assertThat(legacy.windowClosesAt()).isNull();
+            assertThat(legacy.sittingMinutes()).isEqualTo(75);
+            assertThat(legacy.isSittingShortened())
+                    .as("a header from code that predates the amendment claims nothing")
+                    .isFalse();
+
+            assertThat(new ExamHeader(1, "x", "21", "Java", 75, "", 1, null, null, -5)
+                    .sittingMinutes())
+                    .as("never negative; no screen has to remember to clamp")
+                    .isZero();
+        }
+
+        @Test
         @DisplayName("the course label falls back to the code when there is no name")
         void courseLabel() {
             assertThat(new ExamHeader(1, "x", "21", "Java", 45, "", 1, null).courseLabel())

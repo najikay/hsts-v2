@@ -1,5 +1,7 @@
 package common.dto.grading;
 
+import common.dto.exam.AttemptState;
+
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
@@ -48,6 +50,27 @@ import java.util.Objects;
  * it is not politeness to old code: it means a teacher path cannot start populating per-row
  * exam labels without somebody deliberately changing the call.
  *
+ * <h2>Amendment v1.2 — {@code attemptStatus} and {@code actualMinutes} (B-16)</h2>
+ *
+ * <p>Additive, 2026-08-26. T-10.2 asks the teacher's results table for "score, submitted vs
+ * timed out, solving time" and only the score reached the wire — a shape fact, not a null:
+ * this record had twelve components and none of them was either. On the seed, {@code
+ * omer.katz}'s timed-out 45 read exactly like the seven submitted papers, so the one attempt
+ * in the dataset that distinguishes "did not finish" from "did badly" was invisible on the
+ * screen built to show it.
+ *
+ * <p><b>The same two facts the student's checked form already carries</b>, in the same types
+ * ({@link AttemptState}, and a boxed {@code Integer} because "not recorded" is a different
+ * fact from "took zero minutes"). {@link CheckedForm} shows one student her own paper and this
+ * shows a teacher the whole room; carrying them differently would be two answers to one
+ * question.
+ *
+ * <p><b>Populated on the teacher results path</b> ({@code RESULTS_EXECUTION_GET}), where the
+ * table renders them as two columns. Null on every other path, and null is honest there: the
+ * grading queue and the student list are about grades, {@code GradeRepository.findResultRows}
+ * is the only read that joins the attempt, and the twelve-component constructor is retained so
+ * every existing caller keeps compiling and keeps meaning what it meant.
+ *
  * <p>Range validation (scores 0..100) is not done here — see the package javadoc: it belongs
  * to E12's handlers, which can answer {@code VALIDATION} with a sentence instead of throwing
  * inside a socket read thread.
@@ -66,6 +89,11 @@ import java.util.Objects;
  * @param approvedAt     when it was approved, UTC, or {@code null} while unapproved
  * @param examName       the exam this grade is for, or {@code null} on the teacher paths (v1.1)
  * @param courseCode     its 2-character course code, or {@code null} on the teacher paths (v1.1)
+ * @param attemptStatus  how the attempt ended — {@code SUBMITTED} when she handed in,
+ *                       {@code TIMED_OUT} when the server did it for her — or {@code null} on
+ *                       every path but the teacher's results table (v1.2)
+ * @param actualMinutes  recorded solving time (S-19), or {@code null} when none was recorded
+ *                       or the path does not carry it (v1.2)
  */
 public record StudentGradeRow(long gradeId,
                               long studentId,
@@ -78,13 +106,52 @@ public record StudentGradeRow(long gradeId,
                               String teacherComment,
                               Instant approvedAt,
                               String examName,
-                              String courseCode) implements Serializable {
+                              String courseCode,
+                              AttemptState attemptStatus,
+                              Integer actualMinutes) implements Serializable {
 
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
 
     public StudentGradeRow {
         Objects.requireNonNull(studentName, "studentName");
         Objects.requireNonNull(state, "state");
+    }
+
+    /**
+     * The v1.1 shape: a row that says nothing about how the attempt ended.
+     *
+     * <p>Retained for the grading queue, the review header and both student containers, none
+     * of which joins the attempt. It delegates with both components null, which is what those
+     * paths mean, and keeping it means none of them can start carrying an attempt status
+     * without somebody deliberately changing the call.
+     *
+     * @param gradeId        the {@code grades} row id
+     * @param studentId      whose grade it is
+     * @param studentName    full name, for the teacher's table
+     * @param autoScore      what the machine computed
+     * @param finalScore     the teacher's score, or {@code null}
+     * @param effectiveScore the score that counts
+     * @param state          {@code AUTO} or {@code APPROVED}
+     * @param overrideReason why the teacher changed it, or {@code null}
+     * @param teacherComment optional note for the student, or {@code null}
+     * @param approvedAt     when it was approved, or {@code null}
+     * @param examName       the exam this grade is for, or {@code null}
+     * @param courseCode     its 2-character course code, or {@code null}
+     */
+    public StudentGradeRow(long gradeId,
+                           long studentId,
+                           String studentName,
+                           int autoScore,
+                           Integer finalScore,
+                           int effectiveScore,
+                           GradeState state,
+                           String overrideReason,
+                           String teacherComment,
+                           Instant approvedAt,
+                           String examName,
+                           String courseCode) {
+        this(gradeId, studentId, studentName, autoScore, finalScore, effectiveScore, state,
+                overrideReason, teacherComment, approvedAt, examName, courseCode, null, null);
     }
 
     /**

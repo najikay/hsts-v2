@@ -76,6 +76,30 @@ final class ExecutionsSection implements SeedSection {
     private static final Duration LIVE_OPENED = Duration.ofMinutes(-30);
 
     /**
+     * Execution 4's window is three and a half hours long. ⚑ <b>This is B-14's seed half.</b>
+     *
+     * <p>It used to be two hours, which is longer than the 75-minute paper it releases and
+     * therefore looks safe — but the window <em>straddles</em> the anchor, so what a student
+     * actually gets is whatever is left of it when she joins. Thirty minutes of it are already
+     * gone at load time, and the demo does not begin the moment the loader finishes: a
+     * walkthrough that reaches the take-exam step forty minutes in used to hand its student a
+     * sitting shorter than the paper, and the attempt would close at the bell with her
+     * countdown still showing time left. That is the fixture reproducing B-14 rather than
+     * demonstrating S-2.
+     *
+     * <p>Thirty minutes behind the anchor and three hours ahead of it: the window is live the
+     * instant the load finishes (the S-2 proof needs that), and it outlasts the paper by a
+     * comfortable margin for the whole of any plausible defence slot, so the reconciliation in
+     * {@code ExecutionContext.deadlineFor} never has to truncate anybody on seeded data.
+     *
+     * <p>The code fix stands on its own — a truncated sitting is now disclosed at entry and an
+     * extension widens the window it needs — and this is still worth doing, because a fixture
+     * that only ever exercises the sad path is a fixture nobody can demonstrate the happy one
+     * from.
+     */
+    private static final int LIVE_WINDOW_MINUTES = 210;
+
+    /**
      * Execution 3 opens three hours out. ⚑ <b>This is B-10's fix.</b>
      *
      * <p>It used to be {@code dayOffsetAt(0, 14, 0)} - 14:00 UTC on the anchor's <em>date</em> -
@@ -89,11 +113,18 @@ final class ExecutionsSection implements SeedSection {
      * (cancel a SCHEDULED release), 6.4 (enter a code before its open time), 10.5 (results for a
      * sitting with no attempts) and hardening item H14.1.
      *
-     * <p>Three hours, not one: far enough ahead that a demo which starts late still finds the
-     * sitting scheduled, and far enough from execution 4's close (+90 minutes) that the two never
-     * overlap and the release list keeps showing one LIVE row and one SCHEDULED row.
+     * <p>Four hours, not one: far enough ahead that a demo which starts late still finds the
+     * sitting scheduled, and far enough past execution 4's close that the two never overlap and
+     * the release list keeps showing one LIVE row and one SCHEDULED row.
+     *
+     * <p>It was three hours until B-14's seed fix, which is exactly where execution 4's widened
+     * window now ends ({@link #LIVE_WINDOW_MINUTES}). Two adjacent windows touching is not an
+     * overlap, but {@code SeedLoadedDbContract} asserts the stronger property on purpose — a
+     * fixture whose two demo rows meet at an instant is one clock skew away from the release
+     * list showing something nobody designed — so the scheduled sitting moved rather than the
+     * assertion loosening.
      */
-    private static final Duration SCHEDULED_OPENS = Duration.ofHours(3);
+    private static final Duration SCHEDULED_OPENS = Duration.ofHours(4);
 
     private static final List<SeedExecution> EXECUTIONS = List.of(
             // Fully graded, stats frozen. The F9.3 histogram's data. Genuinely historical, so a
@@ -106,8 +137,8 @@ final class ExecutionsSection implements SeedSection {
             // Scheduled, opening later today: now+3h for two hours. Relative, per B-10.
             new SeedExecution("202201", 1, "5164", 0, 0, 0, 120,
                     ExecutionStatus.SCHEDULED, "michal.sharon", SCHEDULED_OPENS),
-            // Live right now: the S-2 proof, and the take-exam demo's target. now-30m to now+90m.
-            new SeedExecution("101101", 2, "2075", 0, 0, 0, 120,
+            // Live right now: the S-2 proof, and the take-exam demo's target. now-30m to now+3h.
+            new SeedExecution("101101", 2, "2075", 0, 0, 0, LIVE_WINDOW_MINUTES,
                     ExecutionStatus.LIVE, "dana.cohen", LIVE_OPENED));
 
     /**

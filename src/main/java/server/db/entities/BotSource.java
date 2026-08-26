@@ -145,4 +145,22 @@ public class BotSource {
     public void setTitle(String title) {
         this.title = title;
     }
+
+    /**
+     * Changes what kind of material this row holds (F12.3 ⚑, B-21).
+     *
+     * <p>Needed because an edit may replace a pasted source with an uploaded one, or the other
+     * way round, and the row has to keep its id through that: the whole point of
+     * {@code BOT_SOURCE_UPDATE} is that a correction is one event on one row rather than a
+     * delete and an insert that lose the id, the author and the history.
+     *
+     * <p>Always set together with {@link #replaceContent}, and never on its own — a type that
+     * disagreed with the bytes beside it would make the extraction unreadable and the row a
+     * lie. The service does both inside one transaction.
+     *
+     * @param type what the new content is
+     */
+    public void setType(BotSourceType type) {
+        this.type = type;
+    }
 }

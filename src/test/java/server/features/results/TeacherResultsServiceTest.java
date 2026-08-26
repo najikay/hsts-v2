@@ -1,6 +1,7 @@
 package server.features.results;
 
 import common.dto.auth.Role;
+import common.dto.exam.AttemptState;
 import common.dto.grading.GradeState;
 import common.dto.grading.StudentGradeRow;
 import common.dto.results.ExamResultRow;
@@ -27,6 +28,7 @@ import server.core.AuthorizationException;
 import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.core.SessionManager;
+import server.db.entities.AttemptStatus;
 import server.db.entities.ExecutionStats;
 import server.db.entities.ExecutionStatus;
 import server.db.entities.GradeStatus;
@@ -294,6 +296,57 @@ class TeacherResultsServiceTest {
         }
 
         @Test
+        @DisplayName("⚑ a timed-out paper is distinguishable from a submitted one (B-16)")
+        void timedOutIsDistinguishableFromSubmitted() {
+            ExecutionResults results = payloadOf(service.execution(teacher(DANA), ask(EXECUTION_4821)));
+
+            StudentGradeRow omer = rowFor(results, "Omer Katz");
+            StudentGradeRow yael = rowFor(results, "Yael Azulay");
+
+            // T-10.2 asks for "score, submitted vs timed out, solving time". Before B-16 the
+            // projection read the solving time and the mapper dropped it, and the status was
+            // never selected at all - so these two rows, both scoring 45 on the machine, were
+            // identical on the wire and identical on the screen built to tell them apart.
+            assertThat(omer.attemptStatus()).isEqualTo(AttemptState.TIMED_OUT);
+            assertThat(omer.actualMinutes()).isEqualTo(90);
+            assertThat(yael.attemptStatus()).isEqualTo(AttemptState.SUBMITTED);
+            assertThat(yael.actualMinutes()).isEqualTo(55);
+            assertThat(omer.autoScore())
+                    .as("the same machine score, and now visibly a different situation")
+                    .isEqualTo(yael.autoScore());
+        }
+
+        @Test
+        @DisplayName("every row carries both new facts, not only the exceptional one (B-16)")
+        void everyRowCarriesTheAttemptFacts() {
+            ExecutionResults results = payloadOf(service.execution(teacher(DANA), ask(EXECUTION_4821)));
+
+            assertThat(results.rows()).hasSize(8);
+            assertThat(results.rows())
+                    .as("a column whose only content is the exception reads as data that "
+                            + "failed to load")
+                    .allSatisfy(row -> {
+                        assertThat(row.attemptStatus()).isNotNull();
+                        assertThat(row.actualMinutes()).isNotNull();
+                    });
+            assertThat(results.rows())
+                    .filteredOn(row -> row.attemptStatus() == AttemptState.TIMED_OUT)
+                    .as("seed §9.1: seven submitted and one timed out")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("the exam labels stay null on the teacher path (v1.1 is unchanged)")
+        void teacherRowsCarryNoPerRowExamLabels() {
+            ExecutionResults results = payloadOf(service.execution(teacher(DANA), ask(EXECUTION_4821)));
+
+            assertThat(results.rows()).allSatisfy(row -> {
+                assertThat(row.examName()).isNull();
+                assertThat(row.courseCode()).isNull();
+            });
+        }
+
+        @Test
         @DisplayName("rows arrive in the order the read produced, by student name")
         void rowsKeepTheirOrder() {
             ExecutionResults results = payloadOf(service.execution(teacher(DANA), ask(EXECUTION_4821)));
@@ -355,7 +408,8 @@ class TeacherResultsServiceTest {
             contradictory.statistics(EXECUTION_4821, FROZEN);
             for (int i = 0; i < 8; i++) {
                 contradictory.row(EXECUTION_4821, new StudentResultRow(100 + i, 2000 + i,
-                        "Student " + i, 100, null, GradeStatus.APPROVED, null, null, CLOSED_AT, 40));
+                        "Student " + i, 100, null, GradeStatus.APPROVED, null, null, CLOSED_AT, 40,
+                        AttemptStatus.SUBMITTED));
             }
 
             ExecutionResults answer = payloadOf(new TeacherResultsService(contradictory)
@@ -424,7 +478,10 @@ class TeacherResultsServiceTest {
         store.row(EXECUTION_4821, grade(3, 2003, "Lior Gabay", 100, null, null));
         store.row(EXECUTION_4821, grade(4, 2004, "Maya Levi", 60, null, null));
         store.row(EXECUTION_4821, grade(5, 2005, "Noa Friedman", 90, null, null));
-        store.row(EXECUTION_4821, grade(6, 2006, "Omer Katz", 45, null, null));
+        // ⚑ B-16. Seed §9.1's one timed-out attempt: the paper the server handed in for him at
+        // the bell, and the only row in the whole dataset that distinguishes "did not finish"
+        // from "did badly". His 45 used to be indistinguishable from Yael's.
+        store.row(EXECUTION_4821, timedOut(6, 2006, "Omer Katz", 45));
         store.row(EXECUTION_4821, grade(7, 2007, "Shira Dahan", 85, null, null));
         store.row(EXECUTION_4821, grade(8, 2008, "Yael Azulay", 45, 55,
                 "בשאלה 11011 ניתן ניקוד חלקי."));
@@ -433,7 +490,22 @@ class TeacherResultsServiceTest {
     private static StudentResultRow grade(long gradeId, long studentId, String name,
                                           int auto, Integer finalScore, String reason) {
         return new StudentResultRow(gradeId, studentId, name, auto, finalScore,
-                GradeStatus.APPROVED, reason, null, CLOSED_AT.plus(Duration.ofDays(2)), 55);
+                GradeStatus.APPROVED, reason, null, CLOSED_AT.plus(Duration.ofDays(2)), 55,
+                AttemptStatus.SUBMITTED);
+    }
+
+    /** A paper the server handed in at the bell, with the shorter time that implies (B-16). */
+    private static StudentResultRow timedOut(long gradeId, long studentId, String name, int auto) {
+        return new StudentResultRow(gradeId, studentId, name, auto, null,
+                GradeStatus.APPROVED, null, null, CLOSED_AT.plus(Duration.ofDays(2)), 90,
+                AttemptStatus.TIMED_OUT);
+    }
+
+    private static StudentGradeRow rowFor(ExecutionResults results, String studentName) {
+        return results.rows().stream()
+                .filter(row -> row.studentName().equals(studentName))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no row for " + studentName));
     }
 
     private CallerContext teacher(long userId) {

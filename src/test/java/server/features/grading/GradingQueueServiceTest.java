@@ -88,7 +88,8 @@ class GradingQueueServiceTest {
         return new StudentResultRow(gradeId, 11, name, auto, finalScore, status,
                 status == GradeStatus.APPROVED ? "credit for a bad question" : null,
                 "well done", status == GradeStatus.APPROVED
-                        ? Instant.parse("2026-06-03T10:00:00Z") : null, 45);
+                        ? Instant.parse("2026-06-03T10:00:00Z") : null, 45,
+                server.db.entities.AttemptStatus.SUBMITTED);
     }
 
     // ===================== What is in the queue ===========================

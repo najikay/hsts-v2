@@ -109,6 +109,23 @@ public final class BotMessages {
     // ===================== Composed sentences ============================
 
     /**
+     * The same refusal, naming the colleague who is holding it (F10.4, B-21).
+     *
+     * <p>Used by {@code BOT_SOURCE_UPDATE}, where the lock is consulted after the scope check
+     * and the caller is therefore already known to teach the course — so telling her whose
+     * edit is in the way gives away nothing she could not see on the page, and turns a wall
+     * into a person she can go and ask. {@link #SOURCE_LOCKED} is the fallback for the case
+     * where the lock service cannot say who it is.
+     *
+     * @param holderName the other teacher's display name
+     * @return the sentence
+     */
+    public static String sourceLockedBy(String holderName) {
+        return blankTo(holderName, "Another teacher") + " is editing this source right now. "
+                + "Wait for them to finish, or take over the edit from the banner.";
+    }
+
+    /**
      * The C-4 same-course lockout (F6.8, ADR-018).
      *
      * @param courseName the course whose bot she asked for

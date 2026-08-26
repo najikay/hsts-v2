@@ -107,6 +107,29 @@ class ExamCopyTest {
         }
 
         @Test
+        @DisplayName("⚑ the truncated-sitting sentence says when it ends and how long she has (B-14)")
+        void sittingShortened() {
+            Instant closesAt = Instant.parse("2026-08-20T10:00:00Z");
+
+            String sentence = ExamCopy.sittingShortened(closesAt, 26);
+
+            // Two facts, in her own zone, said before the screen that starts her clock. B-14:
+            // she was promised 75 minutes, given 2, and told neither.
+            assertThat(sentence)
+                    .startsWith("This sitting closes at ")
+                    .endsWith(". You have 26 minutes.")
+                    .contains(ExamClock.localTime(closesAt))
+                    .doesNotContain("—")
+                    .doesNotContain("–");
+            assertThat(ExamCopy.sittingShortened(closesAt, 1))
+                    .as("a singular minute reads as one")
+                    .endsWith("You have 1 minute.");
+            assertThat(ExamCopy.sittingShortened(closesAt, -5))
+                    .as("never a negative on a screen a student is reading under pressure")
+                    .endsWith("You have 0 minutes.");
+        }
+
+        @Test
         @DisplayName("the extension toast names the teacher and the new end time (F7.1 ⚑)")
         void extensionToast() {
             TimerExtended extension = new TimerExtended(5001, "Java Midterm", "Dana Cohen", 15,

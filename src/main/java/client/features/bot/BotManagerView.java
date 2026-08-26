@@ -248,9 +248,21 @@ public final class BotManagerView extends AbstractScreen {
 
         Button remove = Buttons.styled(BotCopy.REMOVE, Buttons.GHOST, Buttons.SMALL);
         remove.setOnAction(e -> confirmRemove(row));
-        remove.setDisable(locks != null && lockedSourceId == row.sourceId() && !locks.isEditable());
+        boolean heldByAnother = locks != null && lockedSourceId == row.sourceId()
+                && !locks.isEditable();
+        remove.setDisable(heldByAnother);
 
-        HBox line = new HBox(12, icon, new VBox(2, title, meta), Buttons.spacer(), remove);
+        HBox line = new HBox(12, icon, new VBox(2, title, meta), Buttons.spacer());
+        // ⚑ B-21. F12.3's third verb, and the first thing on this screen the BOT_SOURCE edit
+        // lock has ever had an actual editor to protect (F10.2). Free text only: see
+        // BotSourceRow.isEditable() for why a PDF row does not get one.
+        if (row.isEditable()) {
+            Button edit = Buttons.styled(BotCopy.EDIT, Buttons.GHOST, Buttons.SMALL);
+            edit.setOnAction(e -> editText(row));
+            edit.setDisable(heldByAnother);
+            line.getChildren().add(edit);
+        }
+        line.getChildren().add(remove);
         line.setAlignment(Pos.CENTER_LEFT);
         line.getStyleClass().add("source-row");
         line.setOnMouseClicked(e -> openLockFor(row));
@@ -342,6 +354,41 @@ public final class BotManagerView extends AbstractScreen {
                 .info());
         if (confirmed && !area.getText().isBlank()) {
             session.addSource(BotSourceKind.TEXT, firstLineOf(area.getText()),
+                    area.getText().getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Edits a free-text source in place ⚑ (F12.3, B-21).
+     *
+     * <p>The same {@code WarnConfirm} the Add text action uses, opened on what is actually
+     * stored rather than on an empty box — {@code BotSourceRow.text} carries the body of a
+     * typed source for exactly this. Editing a typo means seeing the typo.
+     *
+     * <p>The advisory lock is taken on the row before the dialog opens, which is what makes
+     * F10.2's "read-only view while another teacher edits" mean something on this screen: a
+     * colleague's remove or edit is refused behind it, with her name in the sentence.
+     *
+     * <p>A dialog closed with the text unchanged still sends, and deliberately: the teacher
+     * pressed Save, the server bumps the version and tells her co-teachers, and a client that
+     * silently decided her edit was not worth sending would be guessing at intent.
+     */
+    private void editText(BotSourceRow row) {
+        openLockFor(row);
+        TextArea area = new TextArea(row.text() == null ? "" : row.text());
+        area.setPrefRowCount(12);
+        area.setWrapText(true);
+        TextField title = new TextField(row.title());
+        title.setPromptText("Title");
+
+        boolean confirmed = WarnConfirm.show(window(), WarnConfirm.spec(BotCopy.EDIT_TEXT_TITLE)
+                .explanation(BotCopy.EDIT_TEXT_EXPLANATION)
+                .confirmText(BotCopy.EDIT_CONFIRM)
+                .cancelText("Cancel")
+                .detail(new VBox(8, title, area))
+                .info());
+        if (confirmed && !area.getText().isBlank() && !title.getText().isBlank()) {
+            session.updateSource(row.sourceId(), BotSourceKind.TEXT, title.getText().trim(),
                     area.getText().getBytes(StandardCharsets.UTF_8));
         }
     }

@@ -515,10 +515,12 @@ public class HSTSServer extends AbstractServer {
                 new AskRateLimiter(config.asksPerMinute(), clock), clock)
                 .registerOn(router);
 
+        // B-21: the consult answers who rather than only whether, so BOT_SOURCE_UPDATE can name
+        // the colleague in its refusal. Same EditLockGuard semantics: the caller's own hold and
+        // a lapsed one are both "nobody else".
         BotAdminService.SourceLocks sourceLocks = (sourceId, userId) ->
                 locks.holderOf(new EntityRef(EntityRef.BOT_SOURCE, sourceId))
-                        .map(holder -> holder.is(userId))
-                        .orElse(true);
+                        .filter(holder -> !holder.is(userId));
         new BotAdminService(botStore, new SourceExtractor(), notifications, sourceLocks, clock)
                 .registerOn(router);
     }

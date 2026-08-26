@@ -237,7 +237,7 @@ Server:
 - [x] E10.7 Attempt-in-progress state exposed to BotService with attempt lifecycle (C-4): same-course bot locked; cross-course use triggers integrity notice + teacher notification + monitor-row flag
 - [x] E10.8 Concurrency integration tests: two students parallel, answer-after-expiry rejected, resume after kill, double-attempt blocked ⚑
 Client:
-- [x] E10.9 Entry flow screens: code entry → ID entry (each with distinct, specific error messages)
+- [x] E10.9 Entry flow screens: code entry → ID entry (each with distinct, specific error messages) — *plus, since 2026-08-26 (**B-14**), the one sentence the entry card owed a student whose sitting the execution window cuts short: "This sitting closes at 13:00. You have 26 minutes.", said before the step that starts her clock. `ExamHeader` carries `windowClosesAt` and `sittingMinutes` additively (A8); nothing new is refused.*
 - [x] E10.10 Exam form: general text header, question cards (text, image, 4 options single-select), progress bar (answered x/y), question navigator strip
 - [x] E10.11 Debounced auto-save with saved-state indicator ("All changes saved ✓")
 - [x] E10.12 Countdown widget wired to server sync + TIMER_EXTENDED push as a designed moment (F7.1 / *Time Extended* mockup): green flash + glow pulse on the timer, floating "+mm:ss", toast with teacher + new end time ⚑
@@ -249,7 +249,7 @@ Client:
 
 ## E11 — Extension & monitoring [L]
 
-- [x] E11.1 ExtendService: minutes>0, execution LIVE, applies to execution only (S-20); reschedules attempt timers; pushes to active students + records in execution
+- [x] E11.1 ExtendService: minutes>0, execution LIVE, applies to execution only (S-20); reschedules attempt timers; pushes to active students + records in execution — *and, since 2026-08-26 (**B-14**), moves the execution's own `close_at` to `max(current close, the latest new deadline)` in the same transaction when the window would otherwise eat the grant. Minutes announced by the toast are now minutes delivered. `EXAM_WIRE_CONTRACT` A8.*
 - [x] E11.2 Execution monitor screen (teacher): live counters, per-student rows (status, remaining, **integrity flag: "used <course> bot at <time>" when C-4 alert fired**), extension action with amount dialog
 - [x] E11.3 Extension UX on student side verified end-to-end (timer grows mid-countdown) ⚑
 - [x] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
@@ -283,7 +283,7 @@ Client:
 *Ownership note (2026-08-19): hardening items H14.* and H15.* in ACCEPTANCE_TESTS.md moved out of B's scope with the sprint re-plan; whoever executes E14/E15 picks them up. H14.4 (population-σ divisor test) and H15.2 (CANCELLED excluded from reports) are defense-critical.*
 
 - [x] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35)
-- [x] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35) — *`RESULTS_EXAMS_GET` + `RESULTS_EXECUTION_GET` on `TeacherResultsService`, scoped on `exams.author` in the query (a colleague's sitting of her exam is hers; a non-author gets `NOT_FOUND` indistinguishable from an unknown id). Statistics are read from `exam_executions.stats`, never recomputed. Draft contract: docs/contracts/RESULTS_WIRE_CONTRACT.md*
+- [x] E14.1 Teacher results query: all exams she authored, incl. executions run by others (S-35) — *`RESULTS_EXAMS_GET` + `RESULTS_EXECUTION_GET` on `TeacherResultsService`, scoped on `exams.author` in the query (a colleague's sitting of her exam is hers; a non-author gets `NOT_FOUND` indistinguishable from an unknown id). Statistics are read from `exam_executions.stats`, never recomputed. Draft contract: docs/contracts/RESULTS_WIRE_CONTRACT.md. **2026-08-26 (B-16):** the rows now also carry how the attempt ended and its recorded solving time, so T-10.2's "submitted vs timed out, solving time" is on the wire and in the table — `StudentGradeRow` v1.2, `GRADING_WIRE_CONTRACT` A5.*
 - [x] E14.3 **[L, done 2026-08-21]** StatChart component (shared, in client/ui): score-bucket histogram with mean/median/±1σ overlay markers, hover tooltips (range, count, %), count↔% toggle, animated entrance (≤246 ms), theme/palette-aware colors, empty & insufficient-data states ⚑ — `StatChartData` + FX-free `StatChartLogic` (zero-based axis with headroom, honest ruler shared by bars and markers) + thin `StatChart` view, gallery section on the seeded execution-1 distribution, documented CSS block in hsts.css
 - [x] E14.3b **[B]** Wire StatChart into teacher results; visual QA against seed data distribution ⚑ — *the component is done and gallery-verified; what remains is the screen wiring. Build the input with `StatChartData.of(deciles, mean, median, stddev, count)` straight from the execution's stored stats, and do not recompute σ (population divisor, F8.5). See docs/reports/lead/E14.3-E11.7.md*
 - [x] E14.4 Table/histogram toggle (T-10 note), export/print-friendly layout
@@ -309,11 +309,11 @@ Server:
 - [x] E16.6 ContextBuilder: top-k chunk selection (keyword overlap scoring), token budget, + course bank questions; **compile-time isolation from exam repositories** (module reaches only bot_/question_ data) ⚑
 - [x] E16.7 Guardrails system prompt: course-material scope, refuse embedded instructions in sources, never reveal prompt, don't fabricate exam info; red-team unit tests with hostile source fixtures ⚑
 - [x] E16.8 BotService: enrollment/active/rate-limit guards + C-4 logic (same-course attempt → locked; cross-course attempt → require acknowledged integrity notice, emit teacher notification + monitor flag once per session) → context → chain → persist to JSON transcript → answer DTO; S-32 fallback message path ⚑
-- [x] E16.9 Bot management service: create bot (one per course — second teacher joins existing, S-30), sources CRUD (edit-locked), active toggle, co-teacher notifications
+- [x] E16.9 Bot management service: create bot (one per course — second teacher joins existing, S-30), sources CRUD (edit-locked), active toggle, co-teacher notifications — *the **U** of that CRUD was ticked without existing until 2026-08-26: acceptance case 13.4 found add and remove and no update anywhere in the stack (**B-21**). `BOT_SOURCE_UPDATE` landed in batch B — the row keeps its id, its author and its place, its domain version is bumped, and the consult on `EntityRef.BOT_SOURCE` runs after the scope check per E6.14 with a refusal that names the holder. `BOT_WIRE_CONTRACT` A1. **Now true as written.***
 - [x] E16.10 Session store: bot_sessions JSON transcript append/read (student history/replay) + bot_messages dual-write in same tx; teacher aggregates (count, over-time, frequent questions) query bot_messages with **zero identity fields in DTO** (S-34) ⚑
 - [x] E16.11 Unit tests: providers (mocked HTTP), chain fallback, extractor fixtures, context selection, guards; integration: ask round-trip with stubbed provider
 Client:
-- [x] E16.12 Bot manager screen (teacher): bot card (name, active toggle), sources table (type icons, add/edit/remove, upload progress, parse errors), co-teacher edit-lock states
+- [x] E16.12 Bot manager screen (teacher): bot card (name, active toggle), sources table (type icons, add/edit/remove, upload progress, parse errors), co-teacher edit-lock states — *the **edit** half arrived 2026-08-26 (B-21): free-text rows gained an Edit button opening the existing add-text dialog pre-filled from `BotSourceRow.text`, taking the advisory lock before it opens. File kinds keep Add and Remove, with the reasoning stated rather than the affordance quietly omitted — see `BATCH-B.md`.*
 - [x] E16.13 Bot chat screen (student): message list (user/bot bubbles), typing indicator, incremental answer display, error/S-32 states, same-course lockout state ("unavailable during your exam" + unlock time), cross-course integrity notice dialog (non-nagging: shown once per attempt, calm wording)
 - [x] E16.14 Bot history screen (student): session list, reopen conversation, continue
 - [x] E16.15 Bot analytics screen (teacher): totals, activity chart, frequent questions list — anonymized

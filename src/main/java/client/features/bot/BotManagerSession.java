@@ -9,6 +9,7 @@ import common.dto.bot.BotSourceKind;
 import common.dto.bot.BotSourceRow;
 import common.dto.bot.SourceAddRequest;
 import common.dto.bot.SourceRemoveRequest;
+import common.dto.bot.SourceUpdateRequest;
 import common.protocol.Message;
 import common.protocol.Verb;
 import org.slf4j.Logger;
@@ -152,6 +153,28 @@ public final class BotManagerSession {
     public CompletableFuture<Void> addSource(BotSourceKind kind, String title, byte[] content) {
         return send(Verb.BOT_SOURCE_ADD,
                 new SourceAddRequest(courseCode, kind, title, content), null);
+    }
+
+    /**
+     * Replaces one source's title and content in place ⚑ (F12.3, B-21).
+     *
+     * <p>The row keeps its id and its author, which is the whole difference between this and
+     * removing it and adding it again: a correction reaches the course's other teachers as one
+     * change rather than as an unexplained removal followed by an unexplained addition.
+     *
+     * <p>Refusals carry the server's own sentence, exactly as {@link #addSource} does — most
+     * of all the {@code CONFLICT} that names the colleague whose edit lock is in the way.
+     *
+     * @param sourceId the row to replace
+     * @param kind     what the new content is
+     * @param title    what to call it now
+     * @param content  the new bytes, or UTF-8 text for a free-text source
+     * @return a future completing when the answer has been applied
+     */
+    public CompletableFuture<Void> updateSource(long sourceId, BotSourceKind kind,
+                                                String title, byte[] content) {
+        return send(Verb.BOT_SOURCE_UPDATE,
+                new SourceUpdateRequest(courseCode, sourceId, kind, title, content), null);
     }
 
     /**

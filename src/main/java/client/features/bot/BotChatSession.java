@@ -84,11 +84,17 @@ public final class BotChatSession {
     /**
      * Sends a question (F12.5).
      *
+     * <p>⚑ <b>B-20.</b> This used to pass {@code false} unconditionally, which is why the
+     * C-4 notice came back on every message rather than once per attempt: the server returns
+     * it whenever the request says she has not acknowledged, and nothing on either side
+     * remembered that she had. It now asks the model, which records the consent when she
+     * gives it and discards it whenever the situation it belonged to ends.
+     *
      * @param question what she typed; blank is ignored rather than sent
      * @return a future that completes when the model has been updated
      */
     public CompletableFuture<Void> ask(String question) {
-        return ask(question, false);
+        return ask(question, model.hasAcknowledged());
     }
 
     /**
@@ -149,7 +155,9 @@ public final class BotChatSession {
             return;
         }
         if (response.getPayload() instanceof BotIntegrityNotice notice) {
-            model.needsAcknowledgement(notice.message());
+            // The whole notice, not just its sentence: the model keys her consent on it
+            // (B-20), and a bare String had nothing to key on.
+            model.needsAcknowledgement(notice);
             return;
         }
         if (!(response.getPayload() instanceof BotAnswer answer)) {

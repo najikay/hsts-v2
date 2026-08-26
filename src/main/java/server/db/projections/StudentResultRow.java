@@ -1,5 +1,6 @@
 package server.db.projections;
 
+import server.db.entities.AttemptStatus;
 import server.db.entities.GradeStatus;
 
 import java.time.Instant;
@@ -29,6 +30,8 @@ import java.time.Instant;
  * @param teacherComment the note written for the student, or {@code null}
  * @param approvedAt     when it was approved, UTC, or {@code null} while unapproved
  * @param actualMinutes  recorded solving time (S-19), or {@code null} when it was not recorded
+ * @param attemptStatus  how the attempt ended — SUBMITTED when she handed in, TIMED_OUT when
+ *                       the server did it for her at the bell (B-16, T-10.2)
  */
 public record StudentResultRow(long gradeId,
                                long studentId,
@@ -39,7 +42,8 @@ public record StudentResultRow(long gradeId,
                                String overrideReason,
                                String teacherComment,
                                Instant approvedAt,
-                               Integer actualMinutes) {
+                               Integer actualMinutes,
+                               AttemptStatus attemptStatus) {
 
     /**
      * @return the score that counts — the teacher's when she set one, the machine's otherwise.

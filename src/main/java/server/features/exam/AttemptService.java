@@ -186,7 +186,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
             for (AttemptRecord attempt : data.allLiveAttempts()) {
                 data.executionById(attempt.executionId()).ifPresent(ctx -> {
                     found.add(new TimerService.Armed(attempt.attemptId(),
-                            attempt.deadline(ctx.allottedMinutes())));
+                            attempt.deadline(ctx)));
                     registry.started(activeAttempt(attempt, ctx));
                 });
             }
@@ -242,7 +242,10 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
             AttemptState state = data.attemptOf(ctx.executionId(), studentId)
                     .map(AttemptService::toWire)
                     .orElse(AttemptState.NOT_STARTED);
-            return Message.ok(request, headerOf(ctx, data.questionCountOf(ctx.examVersionId()), state));
+            // ⚑ B-14: the join is where a student decides whether to sit, so the figure it
+            // hands her is measured from now — the moment ATTEMPT_START would begin her clock.
+            return Message.ok(request,
+                    headerOf(ctx, data.questionCountOf(ctx.examVersionId()), state, now));
         });
     }
 
@@ -289,7 +292,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
         }
         if (outcome.attempt().isInProgress()) {
             timers.arm(outcome.attempt().attemptId(),
-                    outcome.attempt().deadline(outcome.context().allottedMinutes()));
+                    outcome.attempt().deadline(outcome.context()));
             registry.started(activeAttempt(outcome.attempt(), outcome.context()));
         }
         if (outcome.fresh()) {
@@ -412,7 +415,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
         if (attempt.isInProgress()) {
             // Re-arm rather than assume: the process may have restarted, or the extension
             // that moved this deadline may have landed while nothing was watching.
-            timers.arm(attempt.attemptId(), attempt.deadline(outcome.context().allottedMinutes()));
+            timers.arm(attempt.attemptId(), attempt.deadline(outcome.context()));
             registry.started(activeAttempt(attempt, outcome.context()));
         } else if (attempt.status() == AttemptStatus.TIMED_OUT
                 && outcome.form().outcome() != null) {
@@ -467,7 +470,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
                 return Saved.refused(ErrorCode.CONFLICT, closedMessage(attempt), null, null);
             }
             Instant now = clock.instant();
-            if (!now.isBefore(attempt.deadline(ctx.allottedMinutes()))) {
+            if (!now.isBefore(attempt.deadline(ctx))) {
                 // The bell has gone and the timer has not fired yet. Close it here rather
                 // than merely refusing: leaving it open is exactly the v1 bug.
                 Closed closed = expireIfOverdue(data, ctx, attempt, now);
@@ -581,7 +584,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
             }
 
             Instant now = clock.instant();
-            Instant deadline = attempt.deadline(ctx.allottedMinutes());
+            Instant deadline = attempt.deadline(ctx);
             boolean inTime = now.isBefore(deadline);
             Instant endedAt = inTime ? now : deadline;
             AttemptStatus status = inTime ? AttemptStatus.SUBMITTED : AttemptStatus.TIMED_OUT;
@@ -704,7 +707,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
                 return Saved.refused(ErrorCode.CONFLICT, ExamMessages.ALREADY_SUBMITTED, ctx, attempt);
             }
             Instant now = clock.instant();
-            Instant deadline = attempt.deadline(ctx.allottedMinutes());
+            Instant deadline = attempt.deadline(ctx);
             if (requireOverdue && now.isBefore(deadline)) {
                 // Fired early: an extension landed between the task being scheduled and it
                 // running. Say so and let the caller re-arm rather than ending an exam that
@@ -723,7 +726,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
             if (outcome.attempt() != null && outcome.attempt().isInProgress()) {
                 // Still live: re-arm for its (possibly extended) deadline.
                 timers.arm(outcome.attempt().attemptId(),
-                        outcome.attempt().deadline(outcome.context().allottedMinutes()));
+                        outcome.attempt().deadline(outcome.context()));
             } else {
                 timers.disarm(attemptId);
             }
@@ -853,7 +856,7 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
         if (!attempt.isInProgress()) {
             return new Closed(attempt, false);
         }
-        Instant deadline = attempt.deadline(ctx.allottedMinutes());
+        Instant deadline = attempt.deadline(ctx);
         boolean overdue = !now.isBefore(deadline);
         if (requireOverdue && !overdue) {
             return new Closed(attempt, false);
@@ -923,7 +926,10 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
                 .toList();
         AttemptState state = toWire(attempt);
         return new AttemptForm(attempt.attemptId(),
-                headerOf(ctx, questions.size(), state),
+                // Her clock started when the attempt did, so that is what the honest figure
+                // is measured from: the header on the paper agrees with the countdown beside
+                // it rather than re-deciding from `now` and drifting a minute every request.
+                headerOf(ctx, questions.size(), state, attempt.startedAt()),
                 questions, answers,
                 timingOf(attempt, ctx, now),
                 state,
@@ -950,14 +956,29 @@ public final class AttemptService implements AttemptTracker, TimerService.Expiry
                 summary.size(), summary);
     }
 
-    private ExamHeader headerOf(ExecutionContext ctx, int questionCount, AttemptState state) {
+    /**
+     * The header both entry verbs answer with (E10.9 — F6.1, B-14 ⚑).
+     *
+     * <p>{@code startsAt} is when this student's clock starts or started — {@code now} on a
+     * join, the attempt's own {@code startedAt} once it is running — and it is a parameter
+     * rather than read from the clock here because those are genuinely different instants
+     * and the honest figure depends on which one applies.
+     *
+     * <p>The header therefore carries both numbers: the paper's allotted length, which is
+     * what it always carried, and the minutes this sitting can actually deliver before the
+     * window shuts. Before B-14 only the first travelled, and a student who joined two
+     * minutes before a legal window closed was told she had seventy-five.
+     */
+    private ExamHeader headerOf(ExecutionContext ctx, int questionCount, AttemptState state,
+                                Instant startsAt) {
         return new ExamHeader(ctx.executionId(), ctx.examName(), ctx.courseCode(), ctx.courseName(),
-                ctx.allottedMinutes(), ctx.generalText(), questionCount, state);
+                ctx.allottedMinutes(), ctx.generalText(), questionCount, state,
+                ctx.effectiveCloseAt(), ctx.sittingMinutesFrom(startsAt));
     }
 
     /** The authoritative clock for one attempt, extensions included. */
     private AttemptTiming timingOf(AttemptRecord attempt, ExecutionContext ctx, Instant now) {
-        Instant deadline = attempt.deadline(ctx.allottedMinutes());
+        Instant deadline = attempt.deadline(ctx);
         if (!attempt.isInProgress()) {
             Instant ended = attempt.endedAt() == null ? deadline : attempt.endedAt();
             return AttemptTiming.finished(now, ended,
