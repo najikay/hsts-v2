@@ -359,15 +359,37 @@ public final class ExamListSession {
     }
 
     /**
+     * Whether Revise is worth offering on this version.
+     *
+     * <p>Two rules, not one, and the second arrived after this screen made it reachable:
+     *
+     * <ol>
+     *   <li><b>The version itself must not be a draft</b> (§5.4, E7.5). A draft is already the
+     *       thing revise would make.</li>
+     *   <li><b>The exam must have no open draft anywhere</b> (§5.4 as amended 2026-08-25, the
+     *       lead's ruling). Revising an approved v1 while v3 sits unfinished used to insert a
+     *       second draft of one exam, which left E7.11's builder with no defined answer for
+     *       which one "the draft" means.</li>
+     * </ol>
+     *
+     * <p><b>Taking the exam rather than looking it up</b> is the same defence
+     * {@link #submit(ExamListRow, ExamVersionRow)} makes: the caller hands over the row the
+     * button was drawn from, so the versions this reads are the versions she is looking at.
+     *
+     * <p>This predicts the server's refusal; it does not replace it. The rule lives in
+     * {@code ExamService.revise} inside a transaction, which is the only place it can be true
+     * of two teachers at once. What this buys is a button that is absent rather than present
+     * and refused, which is the same F1.2 principle as not offering a student the bank.
+     *
+     * @param exam    the exam the version belongs to
      * @param version a version on screen
-     * @return {@code true} when revising it is a thing the server would accept, which is every
-     *         state <b>except</b> {@code DRAFT} (contract §5.4, E7.5). A draft is already the
-     *         thing revise would make, which the server answers {@code CONFLICT} rather than
-     *         {@code VALIDATION}, and offering the button anyway would be the client inviting a
-     *         refusal it could have predicted
+     * @return {@code true} when revising it is a thing the server would accept
      */
-    public boolean canRevise(ExamVersionRow version) {
-        return version != null && !version.isEditable();
+    public boolean canRevise(ExamListRow exam, ExamVersionRow version) {
+        if (exam == null || version == null || version.isEditable()) {
+            return false;
+        }
+        return exam.versions().stream().noneMatch(ExamVersionRow::isEditable);
     }
 
     // ===================== The two actions ===============================
@@ -389,7 +411,7 @@ public final class ExamListSession {
      * @param version the version to copy, whose {@code lockVersion} travels with it
      */
     public void revise(ExamListRow exam, ExamVersionRow version) {
-        act(Verb.EXAM_VERSION_REVISE, exam, version, canRevise(version));
+        act(Verb.EXAM_VERSION_REVISE, exam, version, canRevise(exam, version));
     }
 
     /**
@@ -424,11 +446,16 @@ public final class ExamListSession {
      * re-read</b>, which is not symmetry for its own sake. Clearing it before {@link #reload()}
      * re-enables both buttons while {@code rows} is still the <i>pre-action</i> list, so for one
      * network round trip the card for the version she just revised is on screen, unchanged, with
-     * a live Revise on it. Revise has no idempotency anywhere: the server's guard only refuses a
-     * version that is <i>itself</i> a draft, it does not touch the predecessor's row, so the
-     * second press passes the same lock-token check and inserts again at
-     * {@code findLatestVersionNo + 1}. One approved version, pressed twice inside that window,
-     * becomes two drafts. Found by a cold read, not by the suite.
+     * a live Revise on it.
+     *
+     * <p><b>The server now refuses that second press, and this guard is still worth keeping.</b>
+     * When this was written, {@code ExamService.revise} checked only whether the version she
+     * addressed was itself a draft, so a double press inserted a second draft of one exam. §5.4
+     * was amended on 2026-08-25 to one open draft per exam and the service enforces it, so the
+     * second press now answers {@code CONFLICT} naming the draft. What is left is a teacher
+     * pressing a live button and reading a refusal for something she did not do wrong, which is
+     * a worse screen rather than a worse database. The rule the comment used to justify is gone;
+     * the reason to hold the flag is not.
      */
     private void settleAction(Verb verb, Message response, Throwable failure) {
         if (failure != null || response == null) {

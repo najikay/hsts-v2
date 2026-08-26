@@ -95,6 +95,18 @@ public final class ExamListCopy {
 
     // ===================== Actions =======================================
 
+    /** The button that opens a draft in the builder (E7.11). */
+    public static final String EDIT = "Edit";
+
+    /**
+     * The button that opens a finished version read-only (contract §8's read path).
+     *
+     * <p>A different word from {@link #EDIT} on purpose, and the same button underneath: the
+     * version's state decides which of the two it says, so she is told what will happen before
+     * she presses rather than after.
+     */
+    public static final String VIEW = "View";
+
     /** The button that sends a draft to the coordinator (E7.6). */
     public static final String SUBMIT = "Submit for approval";
 

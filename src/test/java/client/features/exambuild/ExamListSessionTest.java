@@ -54,6 +54,7 @@ class ExamListSessionTest {
 
     private static final long MIDTERM = 900L;
     private static final long FINAL_EXAM = 901L;
+    private static final long GEOMETRY = 902L;
 
     // Version ids, kept distinct from version NUMBERS on purpose: a session that confused the
     // two would still pass every assertion if they were 1, 2, 3 here.
@@ -61,6 +62,9 @@ class ExamListSessionTest {
     private static final long MIDTERM_V2 = 9002L;
     private static final long MIDTERM_V3 = 9003L;
     private static final long FINAL_V1 = 9101L;
+    private static final long GEOMETRY_V1 = 9201L;
+    private static final long GEOMETRY_V2 = 9202L;
+    private static final long GEOMETRY_V3 = 9203L;
 
     private static final String SENT_BACK = "Question 4 has two correct answers.";
 
@@ -110,9 +114,25 @@ class ExamListSessionTest {
                 List.of(version(FINAL_V1, 1, ApprovalState.PENDING, "", 20, 120, 1)));
     }
 
+    /**
+     * An exam with several versions and <b>no open draft</b>, which is what makes it revisable.
+     *
+     * <p>Added when §5.4 was amended to one open draft per exam. {@link #midterm()} cannot serve
+     * the revise cases any more and that is correct rather than inconvenient: it has a DRAFT at
+     * v3, so under the amended rule <em>nothing</em> on it may be revised. This exam is the other
+     * side of that rule, and it keeps two distinct non-draft versions with distinct lock tokens
+     * so {@code reviseCarriesTheOlderToken} still has an older token to get wrong.
+     */
+    private static ExamListRow geometry() {
+        return new ExamListRow(GEOMETRY, "110201", "11", "אלגברה", "Geometry quiz", 3,
+                List.of(version(GEOMETRY_V3, 3, ApprovalState.REJECTED, SENT_BACK, 8, 45, 6),
+                        version(GEOMETRY_V2, 2, ApprovalState.APPROVED, "", 8, 45, 3),
+                        version(GEOMETRY_V1, 1, ApprovalState.APPROVED, "", 6, 30, 2)));
+    }
+
     private void serverHasTheExams() {
         connection.respondTo(Verb.EXAM_LIST, request ->
-                Message.ok(request, new ExamList(List.of(midterm(), finalExam()))));
+                Message.ok(request, new ExamList(List.of(midterm(), finalExam(), geometry()))));
     }
 
     private static ExamComposition composition(long versionId, int versionNo,
@@ -136,6 +156,19 @@ class ExamListSessionTest {
                 .count();
     }
 
+    /**
+     * The loaded geometry quiz, which is the fixture's only revisable exam.
+     *
+     * <p>Named rather than indexed at every call site: {@code rows().get(2)} says nothing about
+     * <em>why</em> that row and not the first, and the reason is the whole amendment.
+     */
+    private ExamListRow geometryRow() {
+        return session.rows().stream()
+                .filter(row -> row.examId() == GEOMETRY)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the geometry quiz is not loaded"));
+    }
+
     // ===================== Loading ========================================
 
     @Nested
@@ -150,7 +183,7 @@ class ExamListSessionTest {
 
             assertThat(session.state()).isEqualTo(AsyncViewState.READY);
             assertThat(session.rows()).extracting(ExamListRow::name)
-                    .containsExactly("Algebra midterm", "Calculus final");
+                    .containsExactly("Algebra midterm", "Calculus final", "Geometry quiz");
             assertThat(session.error()).isEmpty();
         }
 
@@ -488,15 +521,40 @@ class ExamListSessionTest {
         }
 
         @Test
-        @DisplayName("a draft may not be revised, and everything else may")
+        @DisplayName("on an exam with no open draft, everything that is not a draft may be "
+                + "revised")
         void reviseNeverDraft() {
             serverHasTheExams();
             session.load();
+            session.select(GEOMETRY);
+            ExamListRow exam = session.selectedExam().orElseThrow();
             List<ExamVersionRow> versions = session.versions();
 
-            assertThat(session.canRevise(versions.get(0))).isFalse();  // v3 DRAFT
-            assertThat(session.canRevise(versions.get(1))).isTrue();   // v2 REJECTED
-            assertThat(session.canRevise(versions.get(2))).isTrue();   // v1 APPROVED
+            assertThat(session.canRevise(exam, versions.get(0))).isTrue();   // v3 REJECTED
+            assertThat(session.canRevise(exam, versions.get(1))).isTrue();   // v2 APPROVED
+            assertThat(session.canRevise(exam, versions.get(2))).isTrue();   // v1 APPROVED
+        }
+
+        /**
+         * One open draft per exam, on the client (§5.4 as amended 2026-08-25).
+         *
+         * <p>The midterm has a DRAFT at v3, so <b>nothing</b> on it may be revised, including the
+         * approved v1 that the old rule offered. This is the whole amendment: without it the list
+         * offers a button whose only possible outcome is now a refusal.
+         */
+        @Test
+        @DisplayName("⚑ an exam with an open draft offers Revise on none of its versions")
+        void anOpenDraftBlocksEveryRevise() {
+            serverHasTheExams();
+            session.load();
+            ExamListRow exam = session.selectedExam().orElseThrow();
+
+            assertThat(exam.versions()).extracting(ExamVersionRow::state)
+                    .as("guard against the guard: this exam really does have a draft")
+                    .contains(ApprovalState.DRAFT);
+            assertThat(session.canRevise(exam, exam.versions().get(0))).isFalse(); // v3 DRAFT
+            assertThat(session.canRevise(exam, exam.versions().get(1))).isFalse(); // v2 REJECTED
+            assertThat(session.canRevise(exam, exam.versions().get(2))).isFalse(); // v1 APPROVED
         }
 
         @Test
@@ -505,15 +563,22 @@ class ExamListSessionTest {
             serverHasTheExams();
             session.load();
             session.select(FINAL_EXAM);
+            ExamListRow exam = session.selectedExam().orElseThrow();
 
-            assertThat(session.canRevise(session.versions().get(0))).isTrue();
+            assertThat(session.canRevise(exam, session.versions().get(0))).isTrue();
         }
 
         @Test
         @DisplayName("null is neither, rather than a null pointer on a write path")
         void nullPermitsNothing() {
+            serverHasTheExams();
+            session.load();
+            ExamListRow exam = session.selectedExam().orElseThrow();
+
             assertThat(session.canSubmit(null)).isFalse();
-            assertThat(session.canRevise(null)).isFalse();
+            assertThat(session.canRevise(exam, null)).isFalse();
+            assertThat(session.canRevise(null, exam.versions().get(2))).isFalse();
+            assertThat(session.canRevise(null, null)).isFalse();
         }
 
         @Test
@@ -565,17 +630,19 @@ class ExamListSessionTest {
         void reviseCarriesTheOlderToken() {
             serverHasTheExams();
             connection.respondTo(Verb.EXAM_VERSION_REVISE, request ->
-                    Message.ok(request, composition(9004L, 4, ApprovalState.DRAFT)));
+                    Message.ok(request, composition(9204L, 4, ApprovalState.DRAFT)));
             session.load();
-            ExamListRow exam = session.rows().get(0);
+            // The geometry quiz, because the midterm has an open draft and the amended §5.4
+            // makes every version of it unrevisable.
+            ExamListRow exam = geometryRow();
             ExamVersionRow approvedV1 = exam.versions().get(2);
 
             session.revise(exam, approvedV1);
 
-            // v1's token is 2; the latest version's is 7. A session that looked the row up by
-            // selection instead of using the object handed to it would send 7 here.
+            // v1's token is 2; the latest version's is 6. A session that looked the row up by
+            // selection instead of using the object handed to it would send 6 here.
             assertThat(lastAction(Verb.EXAM_VERSION_REVISE))
-                    .isEqualTo(new ExamVersionAction(MIDTERM_V1, 2));
+                    .isEqualTo(new ExamVersionAction(GEOMETRY_V1, 2));
         }
 
         @Test
@@ -625,9 +692,9 @@ class ExamListSessionTest {
             serverHasTheExams();
             // The server allocated 9, not the 4 a client counting from latestVersionNo would.
             connection.respondTo(Verb.EXAM_VERSION_REVISE, request ->
-                    Message.ok(request, composition(9009L, 9, ApprovalState.DRAFT)));
+                    Message.ok(request, composition(9209L, 9, ApprovalState.DRAFT)));
             session.load();
-            ExamListRow exam = session.rows().get(0);
+            ExamListRow exam = geometryRow();
 
             session.revise(exam, exam.versions().get(1));
 
@@ -638,24 +705,24 @@ class ExamListSessionTest {
         @Test
         @DisplayName("after a revise she is looking at what she just made")
         void reviseFocusesTheNewDraft() {
-            ExamListRow revised = new ExamListRow(MIDTERM, "110101", "11", "אלגברה",
-                    "Algebra midterm", 4,
-                    List.of(version(9004L, 4, ApprovalState.DRAFT, "", 12, 90, 1),
-                            version(MIDTERM_V3, 3, ApprovalState.DRAFT, "", 12, 90, 7),
-                            version(MIDTERM_V2, 2, ApprovalState.REJECTED, SENT_BACK, 12, 90, 4),
-                            version(MIDTERM_V1, 1, ApprovalState.APPROVED, "", 10, 60, 2)));
+            ExamListRow revised = new ExamListRow(GEOMETRY, "110201", "11", "אלגברה",
+                    "Geometry quiz", 4,
+                    List.of(version(9204L, 4, ApprovalState.DRAFT, "", 8, 45, 1),
+                            version(GEOMETRY_V3, 3, ApprovalState.REJECTED, SENT_BACK, 8, 45, 6),
+                            version(GEOMETRY_V2, 2, ApprovalState.APPROVED, "", 8, 45, 3),
+                            version(GEOMETRY_V1, 1, ApprovalState.APPROVED, "", 6, 30, 2)));
             serverHasTheExams();
             connection.respondTo(Verb.EXAM_VERSION_REVISE, request ->
-                    Message.ok(request, composition(9004L, 4, ApprovalState.DRAFT)));
+                    Message.ok(request, composition(9204L, 4, ApprovalState.DRAFT)));
             session.load();
-            ExamListRow exam = session.rows().get(0);
+            ExamListRow exam = geometryRow();
             connection.respondTo(Verb.EXAM_LIST, request ->
-                    Message.ok(request, new ExamList(List.of(revised, finalExam()))));
+                    Message.ok(request, new ExamList(List.of(midterm(), finalExam(), revised))));
 
             session.revise(exam, exam.versions().get(2));
 
             assertThat(session.focusedVersion()).get()
-                    .extracting(ExamVersionRow::examVersionId).isEqualTo(9004L);
+                    .extracting(ExamVersionRow::examVersionId).isEqualTo(9204L);
         }
 
         @Test
@@ -699,7 +766,7 @@ class ExamListSessionTest {
             connection.replyError(Verb.EXAM_VERSION_REVISE, ErrorCode.VALIDATION,
                     "Question 11005 was deleted from the bank.");
             session.load();
-            ExamListRow exam = session.rows().get(0);
+            ExamListRow exam = geometryRow();
 
             session.revise(exam, exam.versions().get(1));
 
@@ -716,7 +783,7 @@ class ExamListSessionTest {
             serverHasTheExams();
             connection.replyError(Verb.EXAM_VERSION_REVISE, ErrorCode.VALIDATION, "  ");
             session.load();
-            ExamListRow exam = session.rows().get(0);
+            ExamListRow exam = geometryRow();
 
             session.revise(exam, exam.versions().get(1));
 
@@ -752,10 +819,10 @@ class ExamListSessionTest {
         @DisplayName("a second revise inside the post-write reload window is refused ⚑")
         void noSecondActionWhileTheReloadIsInFlight() {
             connection.respondTo(Verb.EXAM_VERSION_REVISE, request ->
-                    Message.ok(request, composition(9004L, 4, ApprovalState.DRAFT)));
+                    Message.ok(request, composition(9204L, 4, ApprovalState.DRAFT)));
             serverHasTheExams();
             session.load();
-            ExamListRow exam = session.rows().get(0);
+            ExamListRow exam = geometryRow();
             ExamVersionRow approved = exam.versions().get(2);
 
             // No responder from here on, so the write settles and its re-read never does: that

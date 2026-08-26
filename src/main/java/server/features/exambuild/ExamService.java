@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * The exam builder's writes and the reads that answer them (E7.1, E7.2, E7.3, E7.5, E7.6, E7.7).
@@ -560,20 +561,26 @@ public class ExamService {
 
         if (previous.getStatus() == ExamVersionStatus.DRAFT) {
             // She edits and saves instead: the version she addressed is already the thing revise
-            // would make her.
-            //
-            // NOTE, corrected 2026-08-25 after a cold read of E7.10's screen. This used to say
-            // the guard exists because "revising a draft would leave two drafts of one exam".
-            // It does not deliver that: the check is on the ADDRESSED version only, and nothing
-            // here asks whether the exam already has a draft somewhere else. Revising v1 while
-            // v3 is a DRAFT passes this guard and inserts a second one - reachable from E7.10's
-            // list, which renders a card per version and offers Revise on every non-draft.
-            // Contract §5.4 says only "EXAM_VERSION_REVISE refuses a DRAFT", so the CODE matches
-            // the contract and the sentence was the thing that was wrong. Left as behaviour
-            // rather than widened here: "one open draft per exam" is a new rule, it is the
-            // lead's to rule on, and E7.11's builder is what has to decide which draft it opens.
-            // Raised with him; the wrong comment is not left standing in the meantime.
+            // would make her. This check is about the ADDRESSED version; the one below is about
+            // the exam, and the two are not the same question.
             return BuildOutcome.conflict(ExamBuildMessages.ALREADY_A_DRAFT);
+        }
+        // ONE OPEN DRAFT PER EXAM (§5.4 as amended 2026-08-25, the lead's ruling).
+        //
+        // The check above is not this one and never was. It reads the version she addressed, so
+        // revising an approved v1 while v3 sat unfinished walked straight past it and inserted a
+        // second draft. Nothing underneath refuses that: two DRAFT rows of one exam break no
+        // constraint, uq_exam_versions_no is satisfied by the new number, and the composition
+        // copy is valid. It became reachable when E7.10's list started rendering a card per
+        // version with Revise on every non-draft, which is where a cold read found it.
+        //
+        // The rule is the lead's, and it earns its place beyond tidiness: E7.11's builder opens
+        // "the draft" of an exam, and with two of them that phrase has no referent. Refusing at
+        // the write is what lets every reader downstream say "the draft" and mean something.
+        OptionalInt openDraft = exams.findOpenDraftVersionNo(session, header.get().examId());
+        if (openDraft.isPresent()) {
+            return BuildOutcome.conflict(
+                    ExamBuildMessages.draftAlreadyOpen(openDraft.getAsInt()));
         }
         // REVISE's own consult. A revision reads the predecessor's whole composition forward, so
         // somebody editing it is somebody whose work would be copied mid-write.

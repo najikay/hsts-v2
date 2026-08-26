@@ -50,6 +50,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -530,6 +531,70 @@ class ExamServiceTest {
             assertThat(outcome.message()).isEqualTo(ExamBuildMessages.ALREADY_A_DRAFT);
             verify(exams, never()).insertDraftVersion(any(), anyLong(), anyInt(), any(), anyInt(),
                     any(), any(), any());
+        }
+
+        /**
+         * One open draft per exam (§5.4 as amended 2026-08-25).
+         *
+         * <p>The case {@link #revisingADraftIsRefused} does <b>not</b> cover, and the reason the
+         * amendment exists. That check reads the version she addressed; this one is a fact about
+         * the exam. Revising an approved v1 while v3 sits unfinished walked past it and inserted
+         * a second draft, and nothing underneath refuses that: two DRAFT rows break no
+         * constraint, {@code uq_exam_versions_no} is satisfied by the new number, and the copied
+         * composition is valid.
+         */
+        @Test
+        @DisplayName("⚑ revising while the exam already has a draft is refused, and names it")
+        void refusedWhenTheExamAlreadyHasADraft() {
+            versionExistsFor(TEACHER_ID, ExamVersionStatus.APPROVED, 2);
+            when(exams.findOpenDraftVersionNo(session, EXAM_ID)).thenReturn(OptionalInt.of(3));
+
+            ExamService.BuildOutcome outcome =
+                    service.revise(session, teacher(), new ExamVersionAction(VERSION_ID, 2));
+
+            assertThat(outcome.status()).isEqualTo(ExamService.BuildStatus.CONFLICT);
+            assertThat(outcome.message())
+                    .as("naming the draft is what makes this an instruction rather than a wall")
+                    .isEqualTo(ExamBuildMessages.draftAlreadyOpen(3));
+            verify(exams, never()).insertDraftVersion(any(), anyLong(), anyInt(), any(), anyInt(),
+                    any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("an exam with no open draft revises normally, so the rule refuses only "
+                + "what it is for")
+        void noOpenDraftStillRevises() {
+            versionExistsFor(TEACHER_ID, ExamVersionStatus.APPROVED, 2);
+            when(exams.findOpenDraftVersionNo(session, EXAM_ID)).thenReturn(OptionalInt.empty());
+            when(exams.findLatestVersionNo(session, EXAM_ID)).thenReturn(1);
+            when(exams.findComposition(session, VERSION_ID))
+                    .thenReturn(List.of(stored(10, 1, 1, 100)));
+            when(exams.insertDraftVersion(eq(session), eq(EXAM_ID), eq(2), any(), eq(90), any(),
+                    any(), any())).thenReturn(VERSION_ID);
+
+            assertThat(service.revise(session, teacher(), new ExamVersionAction(VERSION_ID, 2))
+                    .status()).isEqualTo(ExamService.BuildStatus.OK);
+        }
+
+        /**
+         * Which of two true refusals she is told about.
+         *
+         * <p>Both apply, and the order is a decision rather than an accident: the draft sentence
+         * tells her where to go, while the lock sentence tells her to wait for a colleague who
+         * may be editing a version this revise was never going to touch. The more actionable
+         * refusal wins, and pinning it is what stops a later reorder changing the answer quietly.
+         */
+        @Test
+        @DisplayName("⚑ the draft refusal is chosen over the lock refusal when both apply")
+        void draftRefusalBeatsTheLockRefusal() {
+            versionExistsFor(TEACHER_ID, ExamVersionStatus.APPROVED, 2);
+            when(exams.findOpenDraftVersionNo(session, EXAM_ID)).thenReturn(OptionalInt.of(4));
+            lockService.acquire(RINA_ID, VERSION_LOCK);
+
+            ExamService.BuildOutcome outcome =
+                    service.revise(session, teacher(), new ExamVersionAction(VERSION_ID, 2));
+
+            assertThat(outcome.message()).isEqualTo(ExamBuildMessages.draftAlreadyOpen(4));
         }
 
         @Test

@@ -176,22 +176,45 @@ public final class ExamListView extends AbstractScreen {
 
         HBox actions = new HBox(8, Buttons.spacer());
         actions.setAlignment(Pos.CENTER_LEFT);
+        // Every version opens, and which of two things that means is the BUILDER's to decide
+        // from the state the server answers with: a draft opens for editing, anything else opens
+        // read-only. This screen deliberately does not pass that decision along - it has an
+        // ExamVersionRow that a push could have made stale, and the builder has the fresh answer.
+        //
+        // The read half is contract §8's read path (ruled 2026-08-25). The retirement of
+        // MyApprovalsView took away the only way to open a version and read the paper, and this
+        // is where it comes back.
+        Button open = Buttons.outline(version.isEditable()
+                ? ExamListCopy.EDIT
+                : ExamListCopy.VIEW);
+        open.setOnAction(e -> openInBuilder(version));
+        actions.getChildren().add(open);
         if (session.canSubmit(version)) {
             Button submit = Buttons.primary(ExamListCopy.SUBMIT);
             submit.setDisable(session.isActing());
             submit.setOnAction(e -> confirmSubmit(exam, version));
             actions.getChildren().add(submit);
         }
-        if (session.canRevise(version)) {
+        if (session.canRevise(exam, version)) {
             Button revise = Buttons.secondary(ExamListCopy.REVISE);
             revise.setDisable(session.isActing());
             revise.setOnAction(e -> confirmRevise(exam, version));
             actions.getChildren().add(revise);
         }
-        if (actions.getChildren().size() > 1) {
-            card.getChildren().add(actions);
-        }
+        card.getChildren().add(actions);
         return card;
+    }
+
+    /**
+     * Opens one version in the builder (E7.11, and §8's read path).
+     *
+     * <p>Carries only the version id. The builder asks {@code EXAM_VERSION_GET} for it and reads
+     * the mode off the answer, so a row that went stale between the render and the click cannot
+     * open an approved exam in an editable form.
+     */
+    private void openInBuilder(ExamVersionRow version) {
+        navigator().navigate(ExamBuildRoutes.BUILDER,
+                NavParams.of("examVersionId", version.examVersionId()));
     }
 
     /** Success as a toast, refusal as a toast; both dismissed so they do not repeat. */
