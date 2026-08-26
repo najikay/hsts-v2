@@ -174,7 +174,7 @@ class ExamServiceTest {
 
     private static PinnedQuestion stored(long versionId, long questionId, int ord, int points) {
         return new PinnedQuestion(questionId, versionId, "1100" + questionId, ord, points,
-                "What is recursion?", "Recursion", Difficulty.MEDIUM, false, 1, 1);
+                "What is recursion?", "Recursion", Difficulty.MEDIUM, false, 1, 1, versionId);
     }
 
     /**
@@ -918,7 +918,7 @@ class ExamServiceTest {
                     .thenReturn(Optional.of(aHeader(TEACHER_ID, status)));
             when(exams.findComposition(session, VERSION_ID)).thenReturn(List.of(
                     new PinnedQuestion(1, 10, "11001", 1, 100, "What is recursion?", "Recursion",
-                            difficulty, false, 1, 1)));
+                            difficulty, false, 1, 1, 10)));
 
             return service.get(session, teacher(), new ExamVersionRequest(VERSION_ID))
                     .composition();

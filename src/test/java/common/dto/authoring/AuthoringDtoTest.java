@@ -59,9 +59,10 @@ class AuthoringDtoTest {
     }
 
     private static ComposedQuestion question(int ord, int points, int pinned, int latest) {
+        long latestId = latest == pinned ? 4000L + ord : 9000L + ord;
         return new ComposedQuestion(4000L + ord, "1100" + ord, ord, points,
                 "כמה צלעות יש למשושה משוכלל?", "גאומטריה", Difficulty.MEDIUM, false,
-                pinned, latest);
+                pinned, latest, latestId);
     }
 
     private static ExamVersionRow versionRow(int versionNo, ApprovalState state, String reason) {
@@ -484,12 +485,20 @@ class AuthoringDtoTest {
             // The contract's section 9 claim, asserted rather than remembered: E7 adds no type
             // to the correctness boundary, so common.dto.WireDtoLeakGuardTest's licence list
             // does not grow. This is the local, readable half of that guarantee.
+            //
+            // The exact list is the point. It caught latestVersionId on 2026-08-26 and made
+            // adding it a reviewable act rather than a slip, which is what an exact list buys
+            // over a "contains no key" scan: the scan below would have passed silently on any
+            // component whose name happened to avoid three words. Growing this list is allowed
+            // and is meant to cost an argument - the licence for this one is EXAM_BUILDER §4
+            // amendment A1 and the reason it carries no key is that a version id is an address,
+            // not an answer, exactly as questionVersionId beside it has always been.
             List<String> components = Arrays.stream(ComposedQuestion.class.getRecordComponents())
                     .map(java.lang.reflect.RecordComponent::getName).toList();
 
             assertThat(components).containsExactly("questionVersionId", "questionDisplayId5",
                     "ord", "points", "text", "topic", "difficulty", "hasImage",
-                    "pinnedVersionNo", "latestVersionNo");
+                    "pinnedVersionNo", "latestVersionNo", "latestVersionId");
             assertThat(components)
                     .as("no answers, no key: the builder is not a preview of the paper")
                     .noneMatch(name -> name.toLowerCase(java.util.Locale.ROOT).contains("answer")
@@ -501,18 +510,72 @@ class AuthoringDtoTest {
         @DisplayName("a composed question refuses every null the server should never send")
         void composedQuestionRefusesNulls() {
             assertThatThrownBy(() -> new ComposedQuestion(1L, null, 1, 10, "t", "topic",
-                    Difficulty.EASY, false, 1, 1))
+                    Difficulty.EASY, false, 1, 1, 1L))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("questionDisplayId5");
             assertThatThrownBy(() -> new ComposedQuestion(1L, "11001", 1, 10, null, "topic",
-                    Difficulty.EASY, false, 1, 1))
+                    Difficulty.EASY, false, 1, 1, 1L))
                     .isInstanceOf(NullPointerException.class).hasMessageContaining("text");
             assertThatThrownBy(() -> new ComposedQuestion(1L, "11001", 1, 10, "t", null,
-                    Difficulty.EASY, false, 1, 1))
+                    Difficulty.EASY, false, 1, 1, 1L))
                     .isInstanceOf(NullPointerException.class).hasMessageContaining("topic");
             assertThatThrownBy(() -> new ComposedQuestion(1L, "11001", 1, 10, "t", "topic",
-                    null, false, 1, 1))
+                    null, false, 1, 1, 1L))
                     .isInstanceOf(NullPointerException.class).hasMessageContaining("difficulty");
+        }
+
+        /**
+         * E7.7 draws the badge, E7.14 presses it, and they need different fields ⚑.
+         *
+         * <p>{@code latestVersionId} landed 2026-08-26 (EXAM_BUILDER §4 A1) because the two
+         * version <em>numbers</em> are enough to say the bank has moved on and not enough to say
+         * what to move to: {@link QuestionPin} keys on an id. This pins that the id really
+         * travels, rather than being computed on one side of the wire.
+         */
+        @Test
+        @DisplayName("⚑ a superseded question carries the id of what superseded it, not just a number")
+        void latestVersionIdTravels() throws Exception {
+            ComposedQuestion pinnedAtOne = new ComposedQuestion(4001L, "11001", 1, 10, "שאלה",
+                    "גאומטריה", Difficulty.EASY, false, 1, 3, 4009L);
+
+            ComposedQuestion back = roundTrip(pinnedAtOne);
+
+            assertThat(back.hasNewerVersion()).isTrue();
+            assertThat(back.latestVersionId())
+                    .as("the row E7.14 re-pins to, which no comparison of version numbers yields")
+                    .isEqualTo(4009L);
+            assertThat(back.questionVersionId())
+                    .as("and the pin itself has not moved: an exam does not change under her")
+                    .isEqualTo(4001L);
+        }
+
+        @Test
+        @DisplayName("an up-to-date question is its own latest, so re-pinning it is a no-op")
+        void anUpToDateQuestionIsItsOwnLatest() {
+            ComposedQuestion current = new ComposedQuestion(4001L, "11001", 1, 10, "שאלה",
+                    "גאומטריה", Difficulty.EASY, false, 2, 2, 4001L);
+
+            assertThat(current.hasNewerVersion()).isFalse();
+            assertThat(current.latestVersionId()).isEqualTo(current.questionVersionId());
+        }
+
+        /**
+         * The two halves of E7.7 must describe one row ⚑.
+         *
+         * <p>{@code uq_question_versions_no} makes (question, versionNo) unique, so "the latest
+         * number is the pinned number" and "the latest id is the pinned id" are one statement. A
+         * row where they disagree has resolved the id by a different rule than the number, which
+         * is exactly what {@code max(id)} instead of "the id AT max(versionNo)" would do: right
+         * until it is not, and the symptom is an update action re-pinning a question to the wrong
+         * version of itself, with no points rule, duplicate rule or constraint to catch it.
+         */
+        @Test
+        @DisplayName("⚑ a latest id that disagrees with the latest number is refused outright")
+        void aDisagreeingLatestIdIsRefused() {
+            assertThatThrownBy(() -> new ComposedQuestion(4001L, "11001", 1, 10, "t", "topic",
+                    Difficulty.EASY, false, 2, 2, 4009L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("the same version cannot have two ids");
         }
 
         @ParameterizedTest
@@ -520,7 +583,7 @@ class AuthoringDtoTest {
         @DisplayName("every bank difficulty survives a round-trip on a composed question")
         void everyDifficultyRoundTrips(Difficulty difficulty) throws Exception {
             ComposedQuestion original = new ComposedQuestion(4001L, "11001", 1, 10, "שאלה",
-                    "גאומטריה", difficulty, true, 1, 1);
+                    "גאומטריה", difficulty, true, 1, 1, 4001L);
 
             assertThat(roundTrip(original).difficulty()).isEqualTo(difficulty);
         }

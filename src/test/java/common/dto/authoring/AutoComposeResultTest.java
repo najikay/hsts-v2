@@ -56,7 +56,7 @@ class AutoComposeResultTest {
 
     private static ComposedQuestion question(int ord, int points) {
         return new ComposedQuestion(4000L + ord, "1100" + ord, ord, points, "שאלה " + ord,
-                "רקורסיה", Difficulty.MEDIUM, false, 1, 1);
+                "רקורסיה", Difficulty.MEDIUM, false, 1, 1, 4000L + ord);
     }
 
     /** Section 7.4's even distribution: three questions become 34, 33, 33. */

@@ -28,6 +28,12 @@ prevent.
 >
 > One amendment is knowingly **ahead of the code** and says so where it sits: §5.4-A1, one open
 > draft per exam, ruled 2026-08-25 with its service change landing in PR23.
+>
+> **Additive amendments, in place rather than in a list at the end:** §4-A1 `latestVersionId` on
+> `ComposedQuestion` (2026-08-26, E7.14's update action), and §5.4-A1 above. Both are additive and
+> neither renames, retypes or removes anything the freeze covered. The lead ruled §4-A1 and
+> delegated the whole vertical to Member A in PR24, which is why a Member A commit appears in
+> `common/dto/authoring` for the first and only time.
 
 *Types landed 2026-08-23; §12 records the five rulings applied while landing them, and the in-place
 corrections they required are marked where they sit. Written for the lead to land the verbs and
@@ -248,9 +254,14 @@ ExamComposition(long examId, String displayId6, String courseCode, String course
 
 ComposedQuestion(long questionVersionId, String questionDisplayId5, int ord, int points,
                  String text, String topic, Difficulty difficulty, boolean hasImage,
-                 int pinnedVersionNo, int latestVersionNo)
+                 int pinnedVersionNo, int latestVersionNo, long latestVersionId)
       ord is 1-based, matching ck_evq_ord. text is the stem, truncated server-side
       exactly as BankQuestionRow.text is.
+
+      latestVersionId is amendment A1 below (2026-08-26). It is the id of the row
+      holding latestVersionNo, and it carries NO content of that version: the stem,
+      topic, difficulty and image marker on this record all describe the PINNED
+      version. E7.14 re-pins and then re-reads through the save's own answer.
 
       NO ANSWERS AND NO KEY. The builder shows which questions are on the paper and
       what they are worth; it is not a preview of the paper. A teacher who wants to
@@ -314,6 +325,38 @@ Shortfall(String topic, Difficulty difficulty, int requested, int available)
   meaning, and E8 already bridges it to the store with an exhaustive switch that makes a new member
   a compile error. Declaring `ExamState` beside it would be a second bridge with no such property,
   and the two would agree only for as long as nobody added a state.
+
+### ⚑ AMENDMENT A1, 2026-08-26 — `latestVersionId` on `ComposedQuestion` (E7.14's update action)
+
+`ComposedQuestion` gains `long latestVersionId` beside `latestVersionNo`: the id of the version
+holding that number. **Additive; nothing is renamed, retyped or removed.**
+
+Ruled on Member A's finding that E7.7 and E7.14 need different fields. The two version *numbers*
+are exactly enough to **draw** the badge and not enough to **press** it: `QuestionPin` keys on
+`questionVersionId` (§4), so a client holding only numbers can say the bank has moved on and
+cannot say what to move to. This is BANK A1's shape one epic over, and it gets BANK A1's answer.
+
+**Alternatives rejected, for that amendment's reasons.** A resolve verb is a round trip for a fact
+the row nearly holds; retyping `QuestionPin` to `displayId5`+`versionNo` loses the exact-version
+pin the composition model keys on.
+
+**No new disclosure class and no guard licence.** Version PKs already travel on this wire as
+`questionVersionId`. A version id is an address, not an answer, and §9's claim that E7 adds no
+type to the correctness boundary is unchanged: `AuthoringDtoTest.composedQuestionHasNoKey` pins the
+exact component list and had to be updated deliberately for this, which is the guard working.
+
+**What it does NOT carry.** No content of the newer version: not its stem, topic, difficulty or
+image marker. Those fields describe the pinned version and continue to. A builder that has
+re-pinned therefore shows the old wording until the save's own re-read replaces it, and the client
+says so on screen rather than letting her assume otherwise.
+
+**Read in the same query as the number, never resolved afterwards**
+(`ExamBuildRepository.findComposition`). Two reads taken at different moments can describe
+different banks, and here the disagreement would not badge a wrong row, it would **re-pin** one.
+Note for implementers: this is a **second** correlated subquery, selecting the id *at*
+`max(versionNo)`. `max(id)` is a different question that agrees only while ids and version numbers
+are allocated in the same order, and `ExamBuildRepositoryContract.latestIdIsTheIdAtTheLatestNumber`
+is the case that tells them apart on both engines.
 
 ---
 

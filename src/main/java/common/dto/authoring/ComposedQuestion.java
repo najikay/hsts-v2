@@ -52,6 +52,15 @@ import java.util.Objects;
  * @param pinnedVersionNo    the bank version number this paper is pinned to
  * @param latestVersionNo    the newest version number the bank now holds; equal to
  *                           {@code pinnedVersionNo} when nothing has moved
+ * @param latestVersionId    the <b>id</b> of that newest version, which is what E7.14's update
+ *                           action re-pins to. Added 2026-08-26 by the lead's ruling on the
+ *                           E7.14 ask, as EXAM_BUILDER §4 amendment A1 records. The two numbers
+ *                           above are enough to <em>draw</em> the badge and not enough to
+ *                           <em>press</em> it: {@link QuestionPin} keys on an id, so a client
+ *                           holding only version numbers can say the bank has moved on and
+ *                           cannot say what to move to. Equal to {@code questionVersionId} when
+ *                           nothing has moved, which is why re-pinning an up-to-date question is
+ *                           a no-op rather than a special case
  */
 public record ComposedQuestion(long questionVersionId,
                                String questionDisplayId5,
@@ -62,9 +71,18 @@ public record ComposedQuestion(long questionVersionId,
                                Difficulty difficulty,
                                boolean hasImage,
                                int pinnedVersionNo,
-                               int latestVersionNo) implements Serializable {
+                               int latestVersionNo,
+                               long latestVersionId) implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    /**
+     * Bumped for {@code latestVersionId} (2026-08-26).
+     *
+     * <p>Client and server ship as one artifact, so a mismatched pair cannot arise in this
+     * project. The bump is still correct rather than ceremonial: this record travels
+     * {@link Serializable} over the wire, and a component added under an unchanged UID is the
+     * one shape where two builds deserialise each other into silent nonsense.
+     */
+    private static final long serialVersionUID = 2L;
 
     /**
      * Null-checks what the server cannot build a meaningful row without.
@@ -77,6 +95,18 @@ public record ComposedQuestion(long questionVersionId,
         Objects.requireNonNull(text, "text");
         Objects.requireNonNull(topic, "topic");
         Objects.requireNonNull(difficulty, "difficulty");
+        // The two halves of E7.7 must describe one row. uq_question_versions_no makes
+        // (questionId, versionNo) unique, so "the latest number is the pinned number" and "the
+        // latest id is the pinned id" are the same statement, and a build where they disagree
+        // has resolved the id by a different rule than the number. That is precisely the defect
+        // available here: selecting max(id) instead of the id AT max(versionNo) agrees with the
+        // number right up until it does not, and the symptom would be an update action that
+        // re-pins a question to the wrong version of itself.
+        if (latestVersionNo == pinnedVersionNo && latestVersionId != questionVersionId) {
+            throw new IllegalArgumentException("latestVersionId " + latestVersionId
+                    + " disagrees with latestVersionNo " + latestVersionNo
+                    + ", which equals pinnedVersionNo: the same version cannot have two ids");
+        }
     }
 
     /**

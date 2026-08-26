@@ -5,6 +5,8 @@ import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.logic.AsyncViewState;
 import client.ui.screen.AbstractScreen;
+import common.dto.authoring.Shortfall;
+import common.dto.bank.BankQuestionRow;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -12,10 +14,10 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -42,13 +44,24 @@ import java.util.List;
  * arithmetic in this file: a screen that computed its own total would eventually disagree with
  * the rule that refuses the save, and the teacher would be told a green form is invalid.
  *
- * <h2>The Add button is disabled and says why ⚑</h2>
+ * <h2>Tabs are the segmented control, not {@code TabPane} ⚑</h2>
  *
- * <p>The picker's add path needs a {@code questionVersionId} and the frozen bank wire carries
- * none, which is a contract gap raised with the lead rather than something a teacher did wrong.
- * A control that is simply inert reads as broken, so it carries
- * {@link ExamBuildCopy#ADD_UNAVAILABLE}. Editing a paper that already has questions is
- * unaffected and fully live.
+ * <p>Both tab strips on this screen - the student/teacher texts and the manual/auto composer -
+ * are a {@code ToggleGroup} of {@code ToggleButton}s under {@code .hsts-segmented}, which is the
+ * idiom {@code DataView} and the results screens use and the only one the stylesheet dresses.
+ *
+ * <p><b>The texts were a {@code TabPane} until 2026-08-26</b>, the only one in the client. It
+ * went unnoticed while this screen had one tab strip; E7.13 puts a second one directly above it,
+ * and two tab idioms stacked on one screen is the kind of thing T-21 is a scenario about. Cost of
+ * reversing: this method and the two fields it builds.
+ *
+ * <h2>The picker lives here rather than in a screen of its own</h2>
+ *
+ * <p>Deliberate, and the reason is measurement rather than taste. A separate {@code *View} would
+ * be a new thin FX class needing its own JaCoCo exclusion, and the pom's plugin config is not
+ * Member A's to edit. Every decision it makes is in {@link ExamBuilderSession} regardless - which
+ * rows are offered, which are already on the paper, what the filter matches - so the split would
+ * have bought a file and a coverage argument, and nothing else.
  */
 public final class ExamBuilderView extends AbstractScreen {
 
@@ -69,9 +82,38 @@ public final class ExamBuilderView extends AbstractScreen {
     private final VBox paper = new VBox(10);
     private final Label pointsIndicator = new Label();
     private final Label pointsProblem = new Label();
-    private final Button addQuestion = Buttons.secondary("Add from the bank");
+    private final Button addQuestion = Buttons.secondary(ExamBuildCopy.ADD_BUTTON);
     private final Button saveButton = Buttons.primary(ExamBuildCopy.SAVE_BUTTON);
     private final Button retryLoad = Buttons.outline(ExamBuildCopy.RETRY);
+
+    // --- the texts, one segment each --------------------------------------
+    private final VBox studentPane = new VBox();
+    private final VBox teacherPane = new VBox(6);
+
+    // --- the bank picker (E7.12) ------------------------------------------
+    private final VBox pickerBox = new VBox(12);
+    private final Label pickerTitle = new Label();
+    private final TextField pickerSearch = new TextField();
+    private final VBox pickerRows = new VBox(6);
+    private final Label pickerMessage = new Label();
+    private final Button pickerRetry = Buttons.outline(ExamBuildCopy.RETRY);
+    private final Button pickerClose = Buttons.secondary(ExamBuildCopy.PICKER_CLOSE);
+
+    /** Shown while a row has been re-pinned and not yet saved (E7.14). */
+    private final Label repinnedNotice = new Label(ExamBuildCopy.REPINNED_NOTICE);
+
+    // --- the two composer tabs (E7.13) ------------------------------------
+    private final VBox manualPane = new VBox(12);
+    private final VBox autoPane = new VBox(12);
+    private final HBox composerSegments = new HBox();
+    private ToggleButton manualSegment;
+    private ToggleButton autoSegment;
+    private final VBox criteriaRows = new VBox(8);
+    private final Label criteriaProblem = new Label();
+    private final Button generate = Buttons.primary(ExamBuildCopy.GENERATE);
+    private final Label composeStatus = new Label();
+    private final VBox report = new VBox(4);
+    private String criteriaShape;
 
     private ExamBuilderSession session;
 
@@ -80,9 +122,6 @@ public final class ExamBuilderView extends AbstractScreen {
 
     /** The paper shape currently on screen, so a repoint does not rebuild the boxes. */
     private String paperShape;
-
-    /** The "not available yet" line, hidden on a version nothing can be added to anyway. */
-    private Label addUnavailable;
 
     @Override
     protected Parent build() {
@@ -150,7 +189,14 @@ public final class ExamBuilderView extends AbstractScreen {
                 session.teacherText(now);
             }
         });
-        addQuestion.setOnAction(e -> session.addFromBank());
+        addQuestion.setOnAction(e -> session.openPicker());
+        pickerClose.setOnAction(e -> session.closePicker());
+        pickerRetry.setOnAction(e -> session.retryPicker());
+        pickerSearch.textProperty().addListener((obs, old, typed) -> {
+            if (!rendering) {
+                session.pickerSearch(typed);
+            }
+        });
         retryLoad.setOnAction(e -> session.reopen());
         saveButton.setOnAction(e -> session.save());
     }
@@ -177,6 +223,8 @@ public final class ExamBuilderView extends AbstractScreen {
             renderHeader();
             renderMetadata();
             renderPaper();
+            renderPicker();
+            renderAuto();
             renderPoints();
             renderFooter();
         } finally {
@@ -264,6 +312,11 @@ public final class ExamBuilderView extends AbstractScreen {
      * stronger form.
      */
     private void renderPaper() {
+        // Outside the shape check on purpose: re-pinning changes the shape and rebuilds the
+        // cards, but the notice outlives that rebuild and has to be re-decided every render,
+        // because what clears it is the save's re-read rather than anything about the list.
+        show(repinnedNotice, session.hasRepinned());
+
         var lines = session.lines();
         String shape = shapeOf(lines);
         if (!shape.equals(paperShape)) {
@@ -318,7 +371,21 @@ public final class ExamBuilderView extends AbstractScreen {
         if (line.hasNewerVersion()) {
             Label badge = new Label(ExamBuildCopy.NEWER_VERSION_BADGE);
             badge.getStyleClass().addAll("small", "warn-text");
-            text.getChildren().add(badge);
+            // The action goes beside the badge, not in the row's button group with move and
+            // remove: it is only ever offered on the rows carrying that badge, and a control
+            // that appears and disappears from a fixed group reads as a layout glitch. On a
+            // read-only version the badge still shows, because "the bank has moved on" is a
+            // fact about the paper, and only the button is withheld.
+            if (session.isEditable()) {
+                Button useNewer = Buttons.styled(ExamBuildCopy.USE_NEWER_VERSION,
+                        Buttons.GHOST, Buttons.SMALL);
+                useNewer.setOnAction(e -> session.updateToLatest(index));
+                HBox badgeRow = new HBox(8, badge, useNewer);
+                badgeRow.setAlignment(Pos.CENTER_LEFT);
+                text.getChildren().add(badgeRow);
+            } else {
+                text.getChildren().add(badge);
+            }
         }
 
         TextField points = new TextField(String.valueOf(line.points()));
@@ -371,15 +438,21 @@ public final class ExamBuilderView extends AbstractScreen {
                 || !session.pointsAreRight());
         show(saveButton, session.isEditable());
 
-        addQuestion.setDisable(!session.canAddFromBank() || !session.isEditable());
-        show(addQuestion, session.isEditable());
-        // The apology goes with the button. On a read-only version the screen already says
-        // nothing can be changed, and adding a second sentence apologising for not being able
-        // to add questions says one thing twice and contradicts neither.
-        show(addUnavailable, session.isEditable());
+        // Hidden rather than disabled while the picker is open: the picker IS the add path, and
+        // a second control offering to open what is already open is a click that does nothing.
+        show(addQuestion, session.isEditable() && !session.isPickerOpen());
+        addQuestion.setDisable(!session.canAddFromBank());
     }
 
     private void renderNotices() {
+        // A compose that landed moved her to another tab and replaced her paper, which is the
+        // largest thing this screen does without asking twice. A toast is how every other
+        // completed action here announces itself, and silence would leave her looking at a
+        // different paper wondering whether she pressed the right thing.
+        session.composeNotice().ifPresent(notice -> {
+            toasts().success(notice);
+            session.dismissComposeNotice();
+        });
         session.saveNotice().ifPresent(notice -> {
             toasts().success(notice);
             session.dismissNotice();
@@ -425,35 +498,339 @@ public final class ExamBuilderView extends AbstractScreen {
         teacherHint.getStyleClass().addAll("small", "muted");
         teacherHint.setWrapText(true);
 
-        TabPane texts = new TabPane(
-                new Tab(ExamBuildCopy.STUDENT_TEXT_TAB, studentText),
-                new Tab(ExamBuildCopy.TEACHER_TEXT_TAB, new VBox(6, teacherHint, teacherText)));
-        texts.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        texts.setPrefHeight(190);
+        studentPane.getChildren().add(studentText);
+        teacherPane.getChildren().addAll(teacherHint, teacherText);
 
-        VBox details = new VBox(12, detailsTitle, nameField, durationField, texts);
+        VBox details = new VBox(12, detailsTitle, nameField, durationField,
+                buildTextSegments(), studentPane, teacherPane);
         details.getStyleClass().add("hsts-card");
 
         Label paperTitle = new Label(ExamBuildCopy.PAPER_TITLE);
         paperTitle.getStyleClass().add("h3");
 
-        Label unavailable = new Label(ExamBuildCopy.ADD_UNAVAILABLE);
-        unavailable.getStyleClass().addAll("small", "muted");
-        unavailable.setWrapText(true);
-
         HBox paperHeader = new HBox(10, paperTitle, Buttons.spacer(), addQuestion);
         paperHeader.setAlignment(Pos.CENTER_LEFT);
 
-        addUnavailable = unavailable;
-        VBox paperBox = new VBox(12, paperHeader, unavailable, paper);
+        repinnedNotice.getStyleClass().addAll("small", "muted");
+        repinnedNotice.setWrapText(true);
+        show(repinnedNotice, false);
 
-        VBox all = new VBox(20, details, paperBox);
+        manualPane.getChildren().addAll(paperHeader, buildPicker(), repinnedNotice, paper);
+
+        VBox all = new VBox(20, details, buildComposerSegments(), manualPane, buildAutoPane());
         all.setPadding(new Insets(0, 28, 24, 28));
 
         ScrollPane scroll = new ScrollPane(all);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("edge-to-edge");
         return scroll;
+    }
+
+    /**
+     * The student/teacher text switch, as a segmented control.
+     *
+     * <p>Which of the two is showing is view state and stays here rather than going into the
+     * session: both texts are already loaded and both are already bound, so switching shows a
+     * panel rather than deciding anything. {@code DataView} puts its tab in its session because
+     * each of its tabs fetches different rows, which is the case this one is not.
+     */
+    private Node buildTextSegments() {
+        ToggleGroup group = new ToggleGroup();
+        ToggleButton student = new ToggleButton(ExamBuildCopy.STUDENT_TEXT_TAB);
+        ToggleButton teacher = new ToggleButton(ExamBuildCopy.TEACHER_TEXT_TAB);
+        for (ToggleButton segment : List.of(student, teacher)) {
+            segment.setToggleGroup(group);
+        }
+        student.setSelected(true);
+        student.setOnAction(e -> showTextPane(false));
+        teacher.setOnAction(e -> showTextPane(true));
+
+        HBox segmented = new HBox(student, teacher);
+        segmented.getStyleClass().addAll("hsts-segmented", "exam-text-toggle");
+        showTextPane(false);
+        return segmented;
+    }
+
+    private void showTextPane(boolean teacherShowing) {
+        show(studentPane, !teacherShowing);
+        show(teacherPane, teacherShowing);
+    }
+
+    /** The bank picker, built once and shown only while the session says it is open. */
+    private Node buildPicker() {
+        pickerTitle.getStyleClass().add("h3");
+
+        pickerSearch.setPromptText(ExamBuildCopy.PICKER_SEARCH_PROMPT);
+        pickerSearch.getStyleClass().add("exam-picker-search");
+
+        pickerMessage.getStyleClass().addAll("small", "muted");
+        pickerMessage.setWrapText(true);
+
+        HBox header = new HBox(10, pickerTitle, Buttons.spacer(), pickerClose);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        ScrollPane rows = new ScrollPane(pickerRows);
+        rows.setFitToWidth(true);
+        rows.setPrefHeight(240);
+        rows.getStyleClass().add("edge-to-edge");
+
+        pickerBox.getChildren().addAll(header, pickerSearch, pickerMessage, pickerRetry, rows);
+        pickerBox.getStyleClass().addAll("hsts-card", "exam-picker");
+        show(pickerBox, false);
+        // Hidden in its own right, not only by its hidden parent. A Node inside an invisible
+        // container still answers isVisible() with true, so a lookup over the scene finds it: the
+        // builder's own "there is exactly one Try again on a failed load" assertion caught this
+        // picker's retry standing beside the load's while the picker was shut.
+        show(pickerRetry, false);
+        return pickerBox;
+    }
+
+    /**
+     * Paints the picker from the session, including which of its four empty states applies.
+     *
+     * <p>The four are distinct on purpose: a bank that is empty, a filter that matches nothing, a
+     * load that failed and a course with more pages than the picker fetches are four different
+     * things to be told, and one shared "nothing here" would be wrong in three of them.
+     */
+    private void renderPicker() {
+        boolean open = session.isPickerOpen();
+        show(pickerBox, open);
+        if (!open) {
+            pickerRows.getChildren().clear();
+            show(pickerRetry, false);
+            show(pickerMessage, false);
+            return;
+        }
+        pickerTitle.setText(ExamBuildCopy.pickerTitle(session.courseName()));
+        setIfChanged(pickerSearch, session.pickerSearch());
+
+        AsyncViewState state = session.pickerState();
+        show(pickerRetry, state == AsyncViewState.ERROR);
+
+        List<BankQuestionRow> rows = session.pickerRows();
+        pickerRows.getChildren().clear();
+        for (BankQuestionRow row : rows) {
+            pickerRows.getChildren().add(pickerCard(row));
+        }
+
+        String message = pickerMessageFor(state, rows.isEmpty());
+        pickerMessage.setText(message == null ? "" : message);
+        show(pickerMessage, message != null);
+    }
+
+    private String pickerMessageFor(AsyncViewState state, boolean noRows) {
+        if (state == AsyncViewState.ERROR) {
+            return session.pickerError().orElse(ExamBuildCopy.PICKER_LOAD_FAILED);
+        }
+        if (state == AsyncViewState.LOADING) {
+            return ExamBuildCopy.PICKER_LOADING;
+        }
+        if (noRows) {
+            return session.pickerSearch().isBlank()
+                    ? ExamBuildCopy.PICKER_EMPTY : ExamBuildCopy.PICKER_NO_MATCH;
+        }
+        // A full page count reached the bound: rows ARE showing, so this rides above them
+        // rather than replacing them.
+        return session.pickerError().orElse(null);
+    }
+
+    private Node pickerCard(BankQuestionRow row) {
+        Label id = new Label(row.displayId5());
+        id.getStyleClass().addAll("small", "mono", "muted");
+
+        Label stem = new Label(row.text());
+        stem.setWrapText(true);
+        stem.setMaxWidth(460);
+
+        Label meta = new Label(row.topic() + " · " + row.difficulty());
+        meta.getStyleClass().addAll("small", "muted");
+
+        VBox text = new VBox(2, id, stem, meta);
+
+        boolean already = session.isOnPaper(row);
+        Button add = Buttons.secondary(already ? ExamBuildCopy.PICKER_ALREADY_ADDED
+                : ExamBuildCopy.PICKER_ADD);
+        add.setDisable(already);
+        add.setOnAction(e -> session.addFromBank(row));
+
+        HBox card = new HBox(12, text, Buttons.spacer(), add);
+        card.setAlignment(Pos.CENTER_LEFT);
+        card.getStyleClass().add("exam-picker-row");
+        return card;
+    }
+
+    /** The manual/auto switch, on the same idiom as the texts above it. */
+    private Node buildComposerSegments() {
+        ToggleGroup group = new ToggleGroup();
+        manualSegment = new ToggleButton(ExamBuildCopy.MANUAL_TAB);
+        autoSegment = new ToggleButton(ExamBuildCopy.AUTO_TAB);
+        manualSegment.setToggleGroup(group);
+        autoSegment.setToggleGroup(group);
+        manualSegment.setSelected(true);
+        manualSegment.setOnAction(e -> session.tab(ExamBuilderSession.Tab.MANUAL));
+        autoSegment.setOnAction(e -> session.tab(ExamBuilderSession.Tab.AUTO));
+
+        composerSegments.getChildren().addAll(manualSegment, autoSegment);
+        composerSegments.getStyleClass().addAll("hsts-segmented", "exam-composer-toggle");
+        return composerSegments;
+    }
+
+    /**
+     * The criteria form and its report (E7.13, F3.3).
+     *
+     * <p>Built once and shown by tab. The grid itself is rebuilt only when its shape changes,
+     * the way the paper is, and for the same reason: a rebuild on every keystroke destroys the
+     * box being typed into, which is the defect T-3.2 caught on the points fields.
+     */
+    private Node buildAutoPane() {
+        Label title = new Label(ExamBuildCopy.CRITERIA_TITLE);
+        title.getStyleClass().add("h3");
+
+        Button addTopic = Buttons.secondary(ExamBuildCopy.ADD_TOPIC);
+        addTopic.setOnAction(e -> session.addCriterion());
+
+        criteriaProblem.getStyleClass().addAll("small", "danger-text");
+        criteriaProblem.setWrapText(true);
+        show(criteriaProblem, false);
+
+        Label replaces = new Label(ExamBuildCopy.GENERATE_REPLACES);
+        replaces.getStyleClass().addAll("small", "muted");
+        replaces.setWrapText(true);
+
+        generate.setOnAction(e -> session.generate());
+
+        composeStatus.getStyleClass().addAll("small", "muted");
+        composeStatus.setWrapText(true);
+        show(composeStatus, false);
+
+        HBox actions = new HBox(12, generate, Buttons.spacer(), addTopic);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        autoPane.getChildren().addAll(title, criteriaRows, criteriaProblem, actions, replaces,
+                composeStatus, report);
+        autoPane.getStyleClass().add("hsts-card");
+        show(autoPane, false);
+        return autoPane;
+    }
+
+    /** Paints the criteria grid, the live rule and whatever the last compose answered. */
+    private void renderAuto() {
+        boolean auto = session.tab() == ExamBuilderSession.Tab.AUTO;
+        show(autoPane, auto);
+        show(manualPane, !auto);
+        show(composerSegments, session.isEditable());
+        if (manualSegment != null) {
+            manualSegment.setSelected(!auto);
+            autoSegment.setSelected(auto);
+        }
+        if (!auto) {
+            return;
+        }
+
+        List<ExamBuilderSession.Criterion> rows = session.criteria();
+        String shape = String.valueOf(rows.size());
+        if (!shape.equals(criteriaShape)) {
+            criteriaShape = shape;
+            criteriaRows.getChildren().clear();
+            for (int index = 0; index < rows.size(); index++) {
+                criteriaRows.getChildren().add(criterionRow(index, rows.get(index)));
+            }
+        }
+
+        // The server's own sentence, live. Never composed here: §7.3a's refusal has to name both
+        // legal shapes and ExamBuildMessages owns that wording (ruling 4).
+        String problem = session.criteriaProblem().orElse(null);
+        criteriaProblem.setText(problem == null ? "" : problem);
+        show(criteriaProblem, problem != null);
+        generate.setDisable(!session.canGenerate());
+
+        String status = session.isComposing()
+                ? ExamBuildCopy.COMPOSING
+                : session.composeError().orElse(null);
+        composeStatus.setText(status == null ? "" : status);
+        show(composeStatus, status != null);
+
+        renderReport();
+    }
+
+    /** The infeasibility report: a heading, one sentence per shortfall, and what to do (§7.1). */
+    private void renderReport() {
+        List<Shortfall> shortfalls = session.shortfalls();
+        report.getChildren().clear();
+        show(report, !shortfalls.isEmpty());
+        if (shortfalls.isEmpty()) {
+            return;
+        }
+        Label heading = new Label(ExamBuildCopy.INFEASIBLE_TITLE);
+        heading.getStyleClass().addAll("body", "danger-text");
+        heading.setWrapText(true);
+        report.getChildren().add(heading);
+
+        for (Shortfall shortfall : shortfalls) {
+            Label line = new Label(ExamBuildCopy.shortfallLine(shortfall));
+            line.getStyleClass().add("small");
+            line.setWrapText(true);
+            report.getChildren().add(line);
+        }
+
+        Label hint = new Label(ExamBuildCopy.INFEASIBLE_HINT);
+        hint.getStyleClass().addAll("small", "muted");
+        hint.setWrapText(true);
+        report.getChildren().add(hint);
+    }
+
+    private Node criterionRow(int index, ExamBuilderSession.Criterion criterion) {
+        Node identity;
+        if (index == 0) {
+            Label courseWide = new Label(ExamBuildCopy.COURSE_WIDE_ROW);
+            courseWide.getStyleClass().add("body");
+            identity = courseWide;
+        } else {
+            TextField topic = new TextField(criterion.topic() == null ? "" : criterion.topic());
+            topic.setPromptText(ExamBuildCopy.TOPIC_PROMPT);
+            topic.setPrefWidth(180);
+            topic.textProperty().addListener((obs, was, now) -> {
+                if (!rendering) {
+                    session.criterionTopic(index, now);
+                }
+            });
+            identity = topic;
+        }
+
+        HBox row = new HBox(8, identity);
+        row.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(identity, Priority.ALWAYS);
+
+        row.getChildren().addAll(
+                countBox(index, ExamBuildCopy.EASY_LABEL, ExamBuilderSession.Bucket.EASY,
+                        criterion.easy()),
+                countBox(index, ExamBuildCopy.MEDIUM_LABEL, ExamBuilderSession.Bucket.MEDIUM,
+                        criterion.medium()),
+                countBox(index, ExamBuildCopy.HARD_LABEL, ExamBuilderSession.Bucket.HARD,
+                        criterion.hard()),
+                countBox(index, ExamBuildCopy.ANY_LABEL, ExamBuilderSession.Bucket.ANY,
+                        criterion.any()));
+
+        if (index > 0) {
+            Button remove = Buttons.styled(ExamBuildCopy.REMOVE_TOPIC, Buttons.GHOST, Buttons.SMALL);
+            remove.setOnAction(e -> session.removeCriterion(index));
+            row.getChildren().add(remove);
+        }
+        return row;
+    }
+
+    private Node countBox(int index, String label, ExamBuilderSession.Bucket bucket, int value) {
+        TextField field = new TextField(String.valueOf(value));
+        field.setPrefWidth(56);
+        field.textProperty().addListener((obs, was, now) -> {
+            if (!rendering) {
+                session.criterionCount(index, bucket, parseMinutes(now));
+            }
+        });
+
+        Label caption = new Label(label);
+        caption.getStyleClass().addAll("small", "muted");
+        return new VBox(2, caption, field);
     }
 
     private Node buildFooter() {

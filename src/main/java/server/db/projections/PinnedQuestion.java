@@ -36,6 +36,12 @@ import server.db.entities.Difficulty;
  *                            fetching the bytes
  * @param pinnedVersionNo     the version number actually on the paper
  * @param latestVersionNo     the highest version number the bank now holds for this question
+ * @param latestVersionId     the id of the row holding {@code latestVersionNo}, which is what
+ *                            E7.14's update action re-pins to (2026-08-26, EXAM_BUILDER §4 A1).
+ *                            Read in the same query as the number rather than resolved
+ *                            afterwards, for the reason the number itself is: two reads taken at
+ *                            different moments can describe different banks, and here the
+ *                            disagreement would not badge a wrong row, it would <b>re-pin</b> one
  */
 public record PinnedQuestion(long questionId,
                              long questionVersionId,
@@ -47,5 +53,6 @@ public record PinnedQuestion(long questionId,
                              Difficulty difficulty,
                              boolean hasImage,
                              int pinnedVersionNo,
-                             int latestVersionNo) {
+                             int latestVersionNo,
+                             long latestVersionId) {
 }

@@ -2,6 +2,7 @@ package client.features.exambuild;
 
 import common.dto.authoring.ExamCreateRequest;
 import common.dto.authoring.QuestionPin;
+import common.dto.authoring.Shortfall;
 import common.dto.bank.Difficulty;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -28,10 +29,89 @@ class ExamBuildCopyTest {
     private static ExamBuilderSession.Line line(String displayId, String topic,
                                                 Difficulty difficulty, int points) {
         return new ExamBuilderSession.Line(9001L, displayId, "What is recursion?", topic,
-                difficulty, false, 1, 1, points);
+                difficulty, false, 1, 1, 9001L, points);
     }
 
     // ===================== The house rule =================================
+
+    // ===================== The infeasibility report =======================
+
+    /**
+     * F3.3's acceptance artefact, asserted rather than typed correctly by luck on the day ⚑.
+     *
+     * <p>Ruling 4 kept this sentence on the client and {@code Shortfall} structural, and named the
+     * copy test as Member A's to write with the screen. §7.1 gives four shapes and the PRD gives
+     * the exact wording of one of them; both are pinned here, because a report whose sentences
+     * are almost right is a report the teacher cannot act on.
+     */
+    @Nested
+    @DisplayName("the infeasibility report's sentences (§7.1, F3.3, ruling 4)")
+    class Infeasibility {
+
+        /**
+         * The PRD's own example, character for character.
+         *
+         * <p>PRD F3.3 writes {@code Topic 'Algebra': requested 5 Hard, bank has 2}. §7.1's table
+         * renders the same shape with double quotes and a trailing full stop. Where a contract
+         * table and the PRD disagree about an acceptance artefact the PRD wins, and
+         * {@code AutoComposeResultTest} and {@code AutoComposerTest} already quote this form.
+         */
+        @Test
+        @DisplayName("⚑ the PRD's own sentence, exactly")
+        void thePrdSentence() {
+            assertThat(ExamBuildCopy.shortfallLine(
+                    new Shortfall("Algebra", Difficulty.HARD, 5, 2)))
+                    .isEqualTo("Topic 'Algebra': requested 5 Hard, bank has 2");
+        }
+
+        @Test
+        @DisplayName("a topic short of one difficulty names both the topic and the grade")
+        void topicAndGrade() {
+            assertThat(ExamBuildCopy.shortfallLine(
+                    new Shortfall("Recursion", Difficulty.HARD, 1, 0)))
+                    .isEqualTo("Topic 'Recursion': requested 1 Hard, bank has 0");
+        }
+
+        @Test
+        @DisplayName("a topic short overall says questions, because no grade was asked for")
+        void topicWithoutGrade() {
+            assertThat(ExamBuildCopy.shortfallLine(
+                    new Shortfall("Recursion", null, 3, 2)))
+                    .isEqualTo("Topic 'Recursion': requested 3 questions, bank has 2");
+        }
+
+        @Test
+        @DisplayName("a course-wide shortfall names no topic, and still starts as a sentence does")
+        void courseWideWithGrade() {
+            assertThat(ExamBuildCopy.shortfallLine(new Shortfall(null, Difficulty.HARD, 10, 4)))
+                    .isEqualTo("Requested 10 Hard, bank has 4");
+        }
+
+        @Test
+        @DisplayName("the course-wide any bucket is the fourth shape")
+        void courseWideWithoutGrade() {
+            assertThat(ExamBuildCopy.shortfallLine(new Shortfall(null, null, 40, 31)))
+                    .isEqualTo("Requested 40 questions, bank has 31");
+        }
+
+        /**
+         * Every grade renders as the PRD writes it, not as the enum spells it.
+         *
+         * <p>{@code Difficulty.HARD.toString()} is {@code "HARD"}, and a sentence reading
+         * "requested 5 HARD" is the shape of defect that ships because nobody read the string
+         * out loud. Parameterised over the enum so a fourth difficulty cannot arrive untested.
+         */
+        @ParameterizedTest
+        @EnumSource(Difficulty.class)
+        @DisplayName("⚑ every grade is title case in the sentence, never the enum's own spelling")
+        void gradesAreTitleCase(Difficulty difficulty) {
+            String line = ExamBuildCopy.shortfallLine(new Shortfall("Algebra", difficulty, 5, 2));
+
+            assertThat(line).doesNotContain(difficulty.name());
+            assertThat(line).contains(difficulty.name().charAt(0)
+                    + difficulty.name().substring(1).toLowerCase(java.util.Locale.ROOT));
+        }
+    }
 
     @Nested
     @DisplayName("PRD §4.1: no em dashes in user-visible text")

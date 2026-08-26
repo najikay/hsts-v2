@@ -5,16 +5,23 @@ import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.approval.ApprovalState;
+import common.dto.authoring.AutoComposeRequest;
+import common.dto.authoring.AutoComposeResult;
 import common.dto.authoring.ComposedQuestion;
 import common.dto.authoring.ExamComposition;
 import common.dto.authoring.ExamCreateRequest;
 import common.dto.authoring.ExamVersionRequest;
 import common.dto.authoring.ExamVersionSave;
 import common.dto.authoring.QuestionPin;
+import common.dto.authoring.Shortfall;
+import common.dto.bank.BankListRequest;
+import common.dto.bank.BankPage;
+import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
+import server.features.exambuild.ExamBuildMessages;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,6 +33,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 /**
  * {@link ExamBuilderSession} — E7.11 and E7.12's behaviour, without a JavaFX toolkit.
@@ -42,6 +50,9 @@ class ExamBuilderSessionTest {
     private static final long VERSION_ID = 7001L;
     private static final long EXAM_ID = 700L;
 
+    /** Added to a pinned version id to name the newer bank row that supersedes it. */
+    private static final long NEWER_ID_BASE = 500_000L;
+
     private FakeClientConnection connection;
     private ExamBuilderSession session;
 
@@ -55,10 +66,16 @@ class ExamBuilderSessionTest {
 
     // ===================== Fixture ========================================
 
+    /**
+     * A composed row. When {@code latest} is ahead of {@code pinned} the newest version is a
+     * <em>different row</em> and so carries a different id, which is the whole point of
+     * {@code latestVersionId}: the badge needs the number, the update action needs the id.
+     */
     private static ComposedQuestion question(long versionId, String displayId, int ord,
                                              int points, int pinned, int latest) {
+        long latestId = latest == pinned ? versionId : NEWER_ID_BASE + versionId;
         return new ComposedQuestion(versionId, displayId, ord, points, "What is recursion?",
-                "Recursion", Difficulty.MEDIUM, false, pinned, latest);
+                "Recursion", Difficulty.MEDIUM, false, pinned, latest, latestId);
     }
 
     /** A three-question draft summing to 100, which is what a stored version always does. */
@@ -93,6 +110,31 @@ class ExamBuilderSessionTest {
                 .filter(message -> message.getVerb() == verb)
                 .reduce((first, second) -> second)
                 .orElseThrow(() -> new AssertionError("no " + verb + " was sent"));
+    }
+
+    /** A picker row. Topic is "Recursion" throughout, so the filter has something to match on. */
+    private static BankQuestionRow bankRow(String displayId5, long versionId, int versionNo) {
+        return new BankQuestionRow(displayId5, "11", "אלגברה", "What is recursion?", "Recursion",
+                Difficulty.MEDIUM, versionId, versionNo, false, WHEN);
+    }
+
+    private static BankPage bankPage(List<BankQuestionRow> rows, int page, int totalPages) {
+        return new BankPage(rows, page, BankListRequest.DEFAULT_PAGE_SIZE, rows.size(), totalPages);
+    }
+
+    private void bankHas(BankPage page) {
+        connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, page));
+    }
+
+    /** One question as the auto-composer proposes it: pinned at its own latest, by construction. */
+    private static ComposedQuestion composed(long versionId, String displayId, int ord, int points) {
+        return new ComposedQuestion(versionId, displayId, ord, points, "What is recursion?",
+                "Recursion", Difficulty.MEDIUM, false, 1, 1, versionId);
+    }
+
+    /** §7.4's even split over two questions. */
+    private static List<ComposedQuestion> proposal() {
+        return List.of(composed(9201L, "11201", 1, 50), composed(9202L, "11202", 2, 50));
     }
 
     private long countSent(Verb verb) {
@@ -457,17 +499,543 @@ class ExamBuilderSessionTest {
             assertThat(session.lines().get(1).hasNewerVersion()).isTrue();   // pinned 2, latest 4
         }
 
+    }
+
+    // ===================== The auto tab (E7.13, F3.3) =====================
+
+    @Nested
+    @DisplayName("composing automatically (E7.13, F3.3)")
+    class Auto {
+
+        private void criteria(int index, ExamBuilderSession.Bucket bucket, int value) {
+            session.criterionCount(index, bucket, value);
+        }
+
         @Test
-        @DisplayName("⚑ the picker's add path refuses rather than guessing at a version id")
-        void addIsNotAvailableYet() {
+        @DisplayName("the grid starts as one course-wide row, which is the only shape with no topic")
+        void startsCourseWide() {
             openDraft();
 
-            assertThat(session.canAddFromBank())
-                    .as("BankQuestionRow carries no questionVersionId, so a pin cannot be built "
-                            + "from a picker row; raised with the lead as a contract gap")
+            assertThat(session.criteria()).singleElement()
+                    .extracting(ExamBuilderSession.Criterion::topic).isNull();
+        }
+
+        /**
+         * The live rule is the server's own, exactly as the points indicator is ⚑.
+         *
+         * <p>{@code ExamValidator.quotaProblem} is the method the handler refuses with. Asking it
+         * here means the sentence on her screen and the sentence that would come back over the
+         * wire are one string, and the Generate button cannot offer a request the server will
+         * reject.
+         */
+        @Test
+        @DisplayName("⚑ an empty grid is refused by the server's own rule, not a copy of it")
+        void anEmptyGridIsRefused() {
+            openDraft();
+            session.tab(ExamBuilderSession.Tab.AUTO);
+
+            assertThat(session.criteriaProblem())
+                    .contains(ExamBuildMessages.QUOTA_EMPTY);
+            assertThat(session.canGenerate()).isFalse();
+        }
+
+        /**
+         * §7.3a's shape rule, live on the form ⚑.
+         *
+         * <p>A graded course-wide quota beside a topic quota describes crossing pools, which is
+         * the one shape §7 cannot report a shortfall for. The refusal must name both legal
+         * shapes, and it does, because the wording is {@code ExamBuildMessages}' and this client
+         * composes none of it (ruling 4).
+         */
+        @Test
+        @DisplayName("⚑ a graded course-wide row beside a topic row is refused, naming both shapes")
+        void theShapeRuleIsLive() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.HARD, 3);
+            session.addCriterion();
+            session.criterionTopic(1, "Recursion");
+            criteria(1, ExamBuilderSession.Bucket.ANY, 2);
+
+            assertThat(session.criteriaProblem())
+                    .as("§7.3a, and the sentence has to tell her which half to delete")
+                    .isPresent();
+            assertThat(session.canGenerate()).isFalse();
+
+            // The legal version of what she was reaching for: topic rows plus a course-wide TOTAL.
+            criteria(0, ExamBuilderSession.Bucket.HARD, 0);
+            criteria(0, ExamBuilderSession.Bucket.ANY, 4);
+
+            assertThat(session.criteriaProblem()).isEmpty();
+            assertThat(session.canGenerate()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Generate sends the criteria for this exam's course, and no seed")
+        void generateSendsTheCriteria() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 4);
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(true, proposal(), List.of())));
+
+            session.generate();
+
+            AutoComposeRequest sent = (AutoComposeRequest) lastSent(Verb.EXAM_AUTO_COMPOSE)
+                    .getPayload();
+            assertThat(sent.courseCode()).isEqualTo("11");
+            assertThat(sent.seed())
+                    .as("§7.5 keeps the seed for tests; a client asking the server to be "
+                            + "predictable in front of a class has it backwards")
+                    .isNull();
+        }
+
+        /**
+         * F3.3's "auto-result is editable before save", and what makes it true ⚑.
+         *
+         * <p>The proposal goes into the same {@code lines} list the manual tab edits, and the
+         * screen lands on that tab. There is no second composition anywhere in the session, so
+         * "editable" is a property of where the questions went rather than a promise.
+         */
+        @Test
+        @DisplayName("⚑ a feasible answer replaces the paper and drops her where she can edit it")
+        void aFeasibleAnswerFillsThePaper() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(true, proposal(), List.of())));
+
+            session.tab(ExamBuilderSession.Tab.AUTO);
+            session.generate();
+
+            assertThat(session.lines()).hasSize(2);
+            assertThat(session.tab()).isEqualTo(ExamBuilderSession.Tab.MANUAL);
+            assertThat(session.pointsTotal()).isEqualTo(100);
+            assertThat(session.composeNotice()).isPresent();
+            assertThat(session.shortfalls()).isEmpty();
+        }
+
+        /**
+         * §7.2: the report is the useful outcome, so nothing else may move ⚑.
+         *
+         * <p>An infeasible request creates no exam (F3.3) and must not quietly empty the paper
+         * she already had. That is the difference between a refusal and a loss.
+         */
+        @Test
+        @DisplayName("⚑ an infeasible answer reports, and leaves the paper exactly as it was")
+        void anInfeasibleAnswerChangesNothing() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 40);
+            List<ExamBuilderSession.Line> before = session.lines();
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(false, List.of(),
+                            List.of(new Shortfall("Recursion", Difficulty.HARD, 1, 0)))));
+
+            session.tab(ExamBuilderSession.Tab.AUTO);
+            session.generate();
+
+            assertThat(session.shortfalls()).singleElement()
+                    .extracting(Shortfall::topic).isEqualTo("Recursion");
+            assertThat(session.lines()).isEqualTo(before);
+            assertThat(session.tab())
+                    .as("she stays on the form that produced the report, beside her own numbers")
+                    .isEqualTo(ExamBuilderSession.Tab.AUTO);
+            assertThat(session.composeNotice()).isEmpty();
+        }
+
+        /**
+         * The 4.1 shape again, on the compose ⚑.
+         *
+         * <p>Two composes in flight and the earlier one answering last would otherwise replace
+         * the paper with a proposal for criteria she has already changed.
+         */
+        @Test
+        @DisplayName("⚑ a stale compose answer cannot land under a newer one")
+        void staleComposeIsDropped() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+
+            session.generate();
+            Message first = lastSent(Verb.EXAM_AUTO_COMPOSE);
+            criteria(0, ExamBuilderSession.Bucket.ANY, 1);
+            session.generate();
+            Message second = lastSent(Verb.EXAM_AUTO_COMPOSE);
+
+            connection.deliver(Message.ok(second, new AutoComposeResult(true,
+                    List.of(composed(9301L, "11301", 1, 100)), List.of())));
+            connection.deliver(Message.ok(first, new AutoComposeResult(true, proposal(), List.of())));
+
+            assertThat(session.lines())
+                    .as("the answer to the criteria she last sent, whatever order they arrive in")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("⚑ a read-only version has no criteria form to reach")
+        void readOnlyHasNoAutoTab() {
+            serverHas(ApprovalState.APPROVED, 3);
+            session.open(VERSION_ID);
+
+            session.tab(ExamBuilderSession.Tab.AUTO);
+
+            assertThat(session.tab()).isEqualTo(ExamBuilderSession.Tab.MANUAL);
+            assertThat(session.canGenerate()).isFalse();
+        }
+
+        @Test
+        @DisplayName("a topic row can be added and removed; the course-wide row cannot be removed")
+        void theCourseWideRowIsFixed() {
+            openDraft();
+            session.addCriterion();
+            assertThat(session.criteria()).hasSize(2);
+
+            session.removeCriterion(1);
+            assertThat(session.criteria()).hasSize(1);
+
+            session.removeCriterion(0);
+            assertThat(session.criteria())
+                    .as("§7.3a is a rule about that row, so there is always exactly one of it")
+                    .hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a compose that fails outright says so rather than reporting an empty bank")
+        void composeFailureIsNamed() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.error(request, ErrorCode.INTERNAL, ""));
+
+            session.generate();
+
+            assertThat(session.composeError()).contains(ExamBuildCopy.COMPOSE_FAILED);
+            assertThat(session.shortfalls())
+                    .as("no shortfalls means the bank was fine, which is not what happened")
+                    .isEmpty();
+        }
+    }
+
+    // ===================== The update action (E7.14) ======================
+
+    @Nested
+    @DisplayName("re-pinning a question to the bank's newest version (E7.14)")
+    class UpdateToLatest {
+
+        /**
+         * The other half of E7.7 ⚑.
+         *
+         * <p>The fixture's second question is pinned at v2 while the bank holds v4, which is the
+         * badge's own state. What the action must move is the <b>id</b>: a version number says
+         * something newer exists and never says what to pin, which is why this could not be
+         * written until {@code ComposedQuestion.latestVersionId} landed.
+         */
+        @Test
+        @DisplayName("⚑ the pin moves to the newer version's id, and the badge goes with it")
+        void thePinMoves() {
+            openDraft();
+            ExamBuilderSession.Line before = session.lines().get(1);
+            assertThat(before.hasNewerVersion()).isTrue();
+
+            assertThat(session.updateToLatest(1)).isTrue();
+
+            ExamBuilderSession.Line after = session.lines().get(1);
+            assertThat(after.questionVersionId())
+                    .as("the id, not the number: QuestionPin keys on this and nothing else")
+                    .isEqualTo(before.latestVersionId());
+            assertThat(after.pinnedVersionNo()).isEqualTo(before.latestVersionNo());
+            assertThat(after.hasNewerVersion())
+                    .as("nothing is newer than the newest, so the badge has nothing to say")
                     .isFalse();
-            assertThat(session.addFromBank()).isFalse();
+        }
+
+        @Test
+        @DisplayName("points and position survive, because only the pin was asked to move")
+        void everythingElseSurvives() {
+            openDraft();
+            ExamBuilderSession.Line before = session.lines().get(1);
+
+            session.updateToLatest(1);
+
+            ExamBuilderSession.Line after = session.lines().get(1);
+            assertThat(after.points()).isEqualTo(before.points());
+            assertThat(after.displayId5()).isEqualTo(before.displayId5());
             assertThat(session.lines()).hasSize(3);
+            assertThat(session.pointsTotal())
+                    .as("a re-pin is not a repoint; the live total cannot move under her")
+                    .isEqualTo(100);
+        }
+
+        @Test
+        @DisplayName("a question the bank has not moved past is left exactly alone")
+        void anUpToDateQuestionIsUntouched() {
+            openDraft();
+
+            assertThat(session.updateToLatest(0))
+                    .as("writing the pin it already holds would dirty the paper for nothing")
+                    .isFalse();
+            assertThat(session.hasRepinned()).isFalse();
+        }
+
+        @Test
+        @DisplayName("⚑ a read-only version refuses, like every other edit on it")
+        void readOnlyRefuses() {
+            serverHas(ApprovalState.APPROVED, 3);
+            session.open(VERSION_ID);
+            long pinnedBefore = session.lines().get(1).questionVersionId();
+
+            assertThat(session.updateToLatest(1)).isFalse();
+            assertThat(session.lines().get(1).questionVersionId()).isEqualTo(pinnedBefore);
+        }
+
+        @Test
+        @DisplayName("an index off the end is refused rather than thrown")
+        void outOfRangeIsRefused() {
+            openDraft();
+
+            assertThat(session.updateToLatest(99)).isFalse();
+            assertThat(session.updateToLatest(-1)).isFalse();
+        }
+
+        /**
+         * The re-pinned row keeps the old wording, and the notice is what makes that honest ⚑.
+         *
+         * <p>This screen has never been sent the new version's text: the wire carries the newer
+         * version's id and number and none of its content. So the row is <em>behind</em> rather
+         * than wrong, and the difference between behind and lying is that somebody said so.
+         */
+        @Test
+        @DisplayName("⚑ the notice stands from the re-pin until the server's re-read replaces it")
+        void theNoticeLastsExactlyUntilTheSave() {
+            openDraft();
+            assertThat(session.hasRepinned()).isFalse();
+
+            session.updateToLatest(1);
+            assertThat(session.hasRepinned()).isTrue();
+            assertThat(session.lines().get(1).text())
+                    .as("still the old version's stem, which is why the notice exists")
+                    .isEqualTo("What is recursion?");
+
+            connection.respondTo(Verb.EXAM_VERSION_SAVE, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT, 4)));
+            session.save();
+
+            assertThat(session.hasRepinned())
+                    .as("the save's answer is the server's own re-read, so the promise is kept")
+                    .isFalse();
+        }
+    }
+
+    // ===================== The bank picker (E7.12) ========================
+
+    @Nested
+    @DisplayName("the bank picker (E7.12, §3)")
+    class Picker {
+
+        @Test
+        @DisplayName("opening it asks for THIS exam's course and nothing wider")
+        void asksForTheExamsCourse() {
+            openDraft();
+            bankHas(bankPage(List.of(bankRow("11007", 9107L, 1)), 0, 1));
+
+            session.openPicker();
+
+            assertThat(session.isPickerOpen()).isTrue();
+            assertThat(lastSent(Verb.BANK_LIST).getPayload())
+                    .asInstanceOf(type(BankListRequest.class))
+                    .extracting(BankListRequest::courseCode)
+                    .as("§5.2 refuses a question from another course on save, so offering one "
+                            + "here would be offering a click that cannot work")
+                    .isEqualTo("11");
+            assertThat(session.pickerState()).isEqualTo(AsyncViewState.READY);
+            assertThat(session.pickerRows()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a picked row lands on the paper pinned at the version she was shown")
+        void addPinsTheVersionShown() {
+            openDraft();
+            bankHas(bankPage(List.of(bankRow("11007", 9107L, 3)), 0, 1));
+            session.openPicker();
+
+            assertThat(session.addFromBank(session.pickerRows().get(0))).isTrue();
+
+            ExamBuilderSession.Line added = session.lines().get(3);
+            assertThat(added.questionVersionId())
+                    .as("latestVersionId is the pin, which is what makes E7.7's badge a drift "
+                            + "detector rather than a coincidence afterwards")
+                    .isEqualTo(9107L);
+            assertThat(added.points()).isEqualTo(QuestionPin.MIN_POINTS);
+            assertThat(added.hasNewerVersion())
+                    .as("pinned and latest are equal on the way in, so a question she just "
+                            + "added never arrives already carrying a badge")
+                    .isFalse();
+        }
+
+        /**
+         * T-3.9 and §5.2, on the click rather than on the save ⚑.
+         *
+         * <p>The comparison is {@code displayId5} and never {@code questionVersionId}. A bank row
+         * offering 11001 at version 4 while the paper pins 11001 at version 1 is the same
+         * question twice, and version ids would call them different.
+         */
+        @Test
+        @DisplayName("⚑ the same question through a NEWER version is still the same question")
+        void aDifferentVersionIsStillADuplicate() {
+            openDraft();   // pins 11001 at version 1
+            bankHas(bankPage(List.of(bankRow("11001", 9999L, 4)), 0, 1));
+            session.openPicker();
+
+            BankQuestionRow row = session.pickerRows().get(0);
+            assertThat(session.isOnPaper(row)).isTrue();
+            assertThat(session.addFromBank(row))
+                    .as("uq_exam_version_questions_question would refuse this on save, ten "
+                            + "minutes after the click that caused it")
+                    .isFalse();
+            assertThat(session.lines()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("the filter matches the id, the stem and the topic, and nothing else")
+        void filterMatchesTheThreeVisibleThings() {
+            openDraft();
+            bankHas(bankPage(List.of(
+                    bankRow("11007", 9107L, 1),
+                    bankRow("11008", 9108L, 1)), 0, 1));
+            session.openPicker();
+
+            session.pickerSearch("11008");
+            assertThat(session.pickerRows()).singleElement()
+                    .extracting(BankQuestionRow::displayId5).isEqualTo("11008");
+
+            session.pickerSearch("RECURSION");
+            assertThat(session.pickerRows())
+                    .as("the topic matches case-insensitively, like everything else she types")
+                    .hasSize(2);
+
+            session.pickerSearch("nothing like this");
+            assertThat(session.pickerRows()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a bank that spans pages is gathered into one list")
+        void pagesAreGathered() {
+            openDraft();
+            connection.respondTo(Verb.BANK_LIST, request -> {
+                BankListRequest asked = (BankListRequest) request.getPayload();
+                return Message.ok(request, bankPage(
+                        List.of(bankRow("1100" + asked.page(), 9200L + asked.page(), 1)),
+                        asked.page(), 3));
+            });
+
+            session.openPicker();
+
+            assertThat(session.pickerRows()).hasSize(3);
+            assertThat(countSent(Verb.BANK_LIST)).isEqualTo(3);
+        }
+
+        /**
+         * A page that is not the page that was asked for is a failed load ⚑.
+         *
+         * <p>Found while writing {@link #filterMatchesTheThreeVisibleThings}: a stub answering
+         * every request with page 0 while claiming two pages exist made the picker show page 0
+         * twice and page 1 never, with a full-looking list, no error and nothing failing. The
+         * loop asked for page 1 and appended whatever came back.
+         */
+        @Test
+        @DisplayName("⚑ a page the server did not send is refused, not appended")
+        void aPageThatIsNotTheOneAskedForIsRefused() {
+            openDraft();
+            // Claims two pages and answers page 0 to everything, which is the shape.
+            bankHas(bankPage(List.of(bankRow("11007", 9107L, 1)), 0, 2));
+
+            session.openPicker();
+
+            assertThat(session.pickerState()).isEqualTo(AsyncViewState.ERROR);
+            assertThat(session.pickerRows())
+                    .as("half a bank shown as if it were all of it is worse than a named failure")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a bank that cannot be read says so instead of showing an empty list")
+        void loadFailureIsNamed() {
+            openDraft();
+            connection.respondTo(Verb.BANK_LIST, request ->
+                    Message.error(request, ErrorCode.INTERNAL, "boom"));
+
+            session.openPicker();
+
+            assertThat(session.pickerState()).isEqualTo(AsyncViewState.ERROR);
+            assertThat(session.pickerError()).contains(ExamBuildCopy.PICKER_LOAD_FAILED);
+            assertThat(session.pickerRows())
+                    .as("an empty list would read as an empty bank, which is a different fact")
+                    .isEmpty();
+        }
+
+        /**
+         * The 4.1 shape, on the picker's own load ⚑.
+         *
+         * <p>The same defect class the exam load carries a generation counter for. Closing the
+         * picker and opening it again while a page is in flight must not append that page to the
+         * new load: the list would then hold rows fetched for a paper she has moved on from, and
+         * {@code isOnPaper} would be answering about the wrong one.
+         */
+        @Test
+        @DisplayName("⚑ a page in flight cannot land in a picker that was closed and reopened")
+        void staleBankPageIsDropped() {
+            openDraft();
+            session.openPicker();
+            Message first = lastSent(Verb.BANK_LIST);
+
+            session.closePicker();
+            session.openPicker();
+            Message second = lastSent(Verb.BANK_LIST);
+
+            connection.deliver(Message.ok(second, bankPage(
+                    List.of(bankRow("11009", 9109L, 1)), 0, 1)));
+            connection.deliver(Message.ok(first, bankPage(
+                    List.of(bankRow("11007", 9107L, 1)), 0, 1)));
+
+            assertThat(session.pickerRows())
+                    .singleElement()
+                    .extracting(BankQuestionRow::displayId5)
+                    .as("only the load she is actually waiting on may fill the list")
+                    .isEqualTo("11009");
+        }
+
+        @Test
+        @DisplayName("⚑ a version nothing can be changed on offers no picker at all")
+        void readOnlyCannotPick() {
+            serverHas(ApprovalState.APPROVED, 3);
+            session.open(VERSION_ID);
+
+            session.openPicker();
+
+            assertThat(session.isPickerOpen()).isFalse();
+            assertThat(session.canAddFromBank()).isFalse();
+            assertThat(countSent(Verb.BANK_LIST))
+                    .as("a read-only screen has no reason to read the bank")
+                    .isZero();
+        }
+
+        /**
+         * The picker belongs to the version that was open ⚑.
+         *
+         * <p>Its rows are that exam's course and {@code isOnPaper} reads that exam's paper. Left
+         * standing across an open(), it would offer one course's bank against another's paper.
+         */
+        @Test
+        @DisplayName("⚑ opening another version takes the picker down with the old paper")
+        void openingAnotherVersionClosesThePicker() {
+            openDraft();
+            bankHas(bankPage(List.of(bankRow("11007", 9107L, 1)), 0, 1));
+            session.openPicker();
+            assertThat(session.isPickerOpen()).isTrue();
+
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, other(7002L, "Calculus final")));
+            session.open(7002L);
+
+            assertThat(session.isPickerOpen()).isFalse();
+            assertThat(session.pickerRows()).isEmpty();
         }
     }
 

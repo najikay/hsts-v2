@@ -382,10 +382,15 @@ public final class AutoComposer {
         for (int index = 0; index < count; index++) {
             AutoCandidate candidate = chosen.get(index);
             int points = base + (index < remainder ? 1 : 0);
+            // Pinned and latest are the same row, and that is a property of the query rather
+            // than an assumption: findAutoCandidates selects only versions whose versionNo IS
+            // the correlated maximum, so a proposal can never carry a superseded version. Both
+            // the number and the id therefore repeat the candidate's own, and a proposal never
+            // arrives already wearing E7.7's badge.
             composed.add(new ComposedQuestion(candidate.questionVersionId(),
                     candidate.displayId5(), index + 1, points, candidate.text(),
                     candidate.topic(), wire(candidate.difficulty()), candidate.hasImage(),
-                    candidate.versionNo(), candidate.versionNo()));
+                    candidate.versionNo(), candidate.versionNo(), candidate.questionVersionId()));
         }
         return composed;
     }
