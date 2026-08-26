@@ -72,11 +72,16 @@ public record TakeExamQuestion(long questionVersionId,
      *
      * <p>A record's generated {@code equals} compares a {@code byte[]} component by
      * <em>reference</em>, and the compact constructor above clones — so two projections built
-     * from identical inputs would hold two different arrays and never be equal. That is
-     * invisible while illustrations are {@code null}, which is every question in the seed
-     * today, and would start failing the day real assets land under {@code docs/seed/img/} —
-     * in list assertions, {@code distinct()} and any hash-based collection, far from anything
-     * that looks like the cause.
+     * from identical inputs would hold two different arrays and never be equal - in list
+     * assertions, {@code distinct()} and any hash-based collection, far from anything that looks
+     * like the cause.
+     *
+     * <p><b>That day has arrived.</b> This paragraph said the risk was "invisible while
+     * illustrations are {@code null}, which is every question in the seed today, and would start
+     * failing the day real assets land under {@code docs/seed/img/}". B-8 landed the assets on
+     * 2026-08-26, at {@code /seed/img/} on the classpath rather than under {@code docs/} - eleven
+     * seeded version rows now carry bytes. So this override is no longer insurance against a
+     * future fixture; it is load-bearing for the one in the database.
      *
      * <p>Content-based hashing is safe here precisely because the array cannot be reached
      * from outside: it is cloned on the way in and on the way out, so its contents cannot

@@ -344,17 +344,41 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
     }
 
     @Test
-    @DisplayName("all ten illustrated questions load with a null image")
-    void illustrationsAreNullForNow() {
-        // The bytes arrive later under docs/seed/img/. Until then NULL is correct, and the
-        // loader has to stay idempotent when they land.
+    @DisplayName("every illustrated question loads its bytes, on every version it has")
+    void illustrationsLoadTheirBytes() {
+        // Was "all ten illustrated questions load with a null image" until 2026-08-26, when B-8
+        // supplied the assets. The inversion is the point of the ticket: this test held the known
+        // gap open and is what proves it closed.
         long withImage = inTx(session -> session.createQuery(
                 "select count(qv) from QuestionVersion qv where qv.image is not null",
                 Long.class).getSingleResult());
 
         assertThat(QuestionBankSection.illustratedCount()).isEqualTo(10);
         assertThat(count("question_versions")).isEqualTo(43);
-        assertThat(withImage).isZero();
+
+        // ELEVEN rows, not ten. 11005 is illustrated and has a second version, and the bytes go
+        // on both: case 6.1's demo paper pins v1 while case 2.6's bank list shows the latest, so
+        // an image on only one row leaves one of the two acceptance cases still unwalkable. If
+        // this number ever reads 10 again, that is the regression, not an off-by-one.
+        assertThat(withImage)
+                .as("ten first versions plus 11005 v2")
+                .isEqualTo(11);
+    }
+
+    @Test
+    @DisplayName("11005 carries its illustration on both of its versions")
+    void theRewordedQuestionKeepsItsPicture() {
+        List<byte[]> images = inTx(session -> session.createQuery(
+                "select qv.image from QuestionVersion qv join Question q on q.id = qv.questionId "
+                        + "where q.displayId = '11005' order by qv.versionNo",
+                byte[].class).getResultList());
+
+        assertThat(images).hasSize(2);
+        assertThat(images.get(0)).isNotNull().isNotEmpty();
+        assertThat(images.get(1))
+                .as("the reword changed the stem, not the subject, so v2 keeps the drawing")
+                .isNotNull()
+                .isEqualTo(images.get(0));
     }
 
     @Test

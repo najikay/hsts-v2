@@ -149,15 +149,28 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     @Test
     @DisplayName("the illustrated questions are exactly the ones the document marks")
     void illustratedQuestionsMatch() {
-        // The flag is informational until real assets land, so this is the only thing keeping
-        // the document's img column and the loader's boolean from drifting apart unnoticed.
+        // Its name and its comment both promised this compared the document's img column against
+        // the loader, and until 2026-08-26 the body did not: it built `expected` from the
+        // document and then asserted only that it had ten entries. Ten of the WRONG ten passed.
+        // The flag stopped being informational when B-8 made it load bytes, so the comparison is
+        // now written rather than described.
         List<String> expected = DOCUMENT.questions().stream()
                 .filter(SeedDocument.QuestionRow::illustrated)
                 .map(SeedDocument.QuestionRow::displayId)
                 .sorted()
                 .toList();
 
+        List<String> loaded = inTx(session -> session.createQuery(
+                "select q.displayId from QuestionVersion qv "
+                        + "join Question q on q.id = qv.questionId "
+                        + "where qv.image is not null and qv.versionNo = 1 "
+                        + "order by q.displayId",
+                String.class).getResultList());
+
         assertThat(expected).hasSize(10);
+        assertThat(loaded)
+                .as("the questions carrying bytes in the database are the ones the document marks")
+                .containsExactlyElementsOf(expected);
     }
 
     @Test
