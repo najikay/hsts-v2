@@ -891,7 +891,8 @@ public class ExamService {
             composed.add(new ComposedQuestion(question.questionVersionId(),
                     question.questionDisplayId5(), question.ord(), question.points(),
                     question.text(), question.topic(), difficultyOf(question.difficulty()),
-                    question.hasImage(), question.pinnedVersionNo(), question.latestVersionNo()));
+                    question.hasImage(), question.pinnedVersionNo(), question.latestVersionNo(),
+                    question.latestVersionId()));
         }
         return new ExamComposition(header.examId(), header.displayId6(), header.courseCode(),
                 header.courseName(), header.examVersionId(), header.versionNo(),

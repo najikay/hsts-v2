@@ -12,6 +12,7 @@ import server.db.TestDatabase;
 import server.db.Transactions;
 import server.db.entities.Difficulty;
 import server.db.entities.QuestionVersion;
+import server.features.bank.QuestionValidator;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -30,7 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * inserted the right number of wrong things, which is the single most likely failure mode when
  * 40 questions are transcribed by hand from a markdown table. So the counts are here, but so
  * are the properties the document leans on: the version pin, the points totals, the
- * pairwise-distinct answers, the deliberately thin topic, and the password path.
+ * pairwise-distinct answers <em>as the application's own comparison defines them</em> (P-12),
+ * the deliberately thin topic, and the password path.
  *
  * <h2>Why this does not extend RepositoryTestBase</h2>
  *
@@ -188,10 +190,30 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
     }
 
     @Test
-    @DisplayName("every question has exactly one correct answer in 1..4, and four distinct options")
+    @DisplayName("⚑ every question has one correct answer in 1..4, and four options the validator "
+            + "itself calls distinct")
     void everyQuestionObeysTheAnswerRules() {
         // C-8 / ADR-016 as a property of the loaded rows. The DDL enforces both on MySQL and
         // neither on H2, so asserting it here is what makes the H2 leaf worth running.
+        //
+        // Distinctness is asserted with QuestionValidator.sameAnswer and deliberately NOT with
+        // equals (P-12, 2026-08-26). This line read doesNotHaveDuplicates() until then, which
+        // compares with Object.equals while the running application compares with a collator
+        // fold. Two rules for one invariant, either side of one seam: the seed passed here and
+        // was refused by the validator, so five questions the loader had itself written could
+        // not be written back through QUESTION_UPDATE, and 6365 green tests said nothing. It
+        // took an acceptance walk to find, which is P-8's shape in this file's own assertion.
+        //
+        // Pointing it at the real rule makes the dataset a tripwire for the validator: a fold
+        // that grows stricter now fails here, on the very rows the system stored itself.
+        //
+        // Its reach is exactly the distinctions THESE rows exercise, and not one character more.
+        // A fold that started ignoring niqqud, or a punctuation class no seeded question happens
+        // to contain, would be stricter than the collation and leave this green. Said plainly
+        // because an earlier draft of this comment claimed the general property, which is P-6's
+        // shape aimed at a comment: the next reader trusts the sentence and stops looking. The
+        // general guarantee is BankRoundTripIntegrationTest's bidirectional assertion against
+        // real MySQL; this is the cheap standing check that the shipped dataset stays saveable.
         List<QuestionVersion> all = inTx(session -> session.createQuery(
                 "select qv from QuestionVersion qv", QuestionVersion.class).getResultList());
 
@@ -200,10 +222,21 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
             assertThat(version.getCorrectAnswer())
                     .as("question version %s", version.getId())
                     .isBetween((byte) 1, (byte) 4);
-            assertThat(List.of(version.getA1(), version.getA2(),
-                    version.getA3(), version.getA4()))
-                    .as("answers of question version %s must be pairwise distinct", version.getId())
-                    .doesNotHaveDuplicates();
+
+            List<String> answers = List.of(version.getA1(), version.getA2(),
+                    version.getA3(), version.getA4());
+            for (int first = 0; first < answers.size(); first++) {
+                for (int second = first + 1; second < answers.size(); second++) {
+                    assertThat(QuestionValidator.sameAnswer(answers.get(first), answers.get(second)))
+                            .as("question version %s: answers %d and %d are one answer to "
+                                    + "QuestionValidator.sameAnswer, which is the rule "
+                                    + "QUESTION_UPDATE enforces, so this row cannot be saved "
+                                    + "from the editor: '%s' and '%s'",
+                                    version.getId(), first + 1, second + 1,
+                                    answers.get(first), answers.get(second))
+                            .isFalse();
+                }
+            }
         });
     }
 

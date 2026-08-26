@@ -346,6 +346,17 @@ public final class ExamValidator {
                 return violation(FIELD_QUOTAS, ExamBuildMessages.QUOTA_NEGATIVE);
             }
             if (quota.isCourseWide()) {
+                // The SAME "a row asking for nothing is not a bucket" rule the else branch below
+                // applies to named rows, and it belongs here just as much. A blank topic folds to
+                // null and a null topic IS the course-wide bucket, so on the builder's criteria
+                // grid every freshly added row was momentarily a second course-wide quota: the
+                // instant she pressed "Add a topic", before typing a character, the live rule
+                // told her to combine two whole-course rows she could not see. Found by a cold
+                // read of PR24; the comment below already said this was fixed, and it was fixed
+                // on one branch of two.
+                if (quota.isEmpty()) {
+                    continue;
+                }
                 if (anyNullTopic) {
                     return violation(FIELD_QUOTAS, ExamBuildMessages.topicRequestedTwice(null));
                 }

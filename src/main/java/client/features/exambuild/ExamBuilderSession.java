@@ -4,12 +4,19 @@ import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.approval.ApprovalState;
+import common.dto.authoring.AutoComposeRequest;
+import common.dto.authoring.AutoComposeResult;
 import common.dto.authoring.ComposedQuestion;
 import common.dto.authoring.ExamComposition;
 import common.dto.authoring.ExamCreateRequest;
 import common.dto.authoring.ExamVersionRequest;
 import common.dto.authoring.ExamVersionSave;
 import common.dto.authoring.QuestionPin;
+import common.dto.authoring.Shortfall;
+import common.dto.authoring.TopicQuota;
+import common.dto.bank.BankListRequest;
+import common.dto.bank.BankPage;
+import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
@@ -18,11 +25,12 @@ import server.features.exambuild.ExamValidator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The logic behind the exam builder (Presentation tier, E7.11 / E7.12 — F3.1, F3.5, S-11).
+ * The logic behind the exam builder (Presentation tier, E7.11 to E7.14 — F3.1, F3.3, F3.5, S-11).
  *
  * <p>Everything the builder decides lives here: which of three things it is doing, what the
  * metadata currently says, what is on the paper and in what order, what the points add up to, and
@@ -52,19 +60,30 @@ import java.util.Optional;
  * the server's. {@code QuestionEditorSession} set the precedent of a screen importing a server
  * validator, and for the same reason.
  *
- * <h2>What is NOT here yet, and why it is one method ⚑</h2>
+ * <h2>The picker, and the one field it waited on</h2>
  *
- * <p>{@link #addFromBank} is the picker's half of E7.12 and it cannot be written yet.
- * {@code QuestionPin} needs a {@code questionVersionId}; the contract's §3 names {@code BANK_LIST}
- * as the picker; and nothing on the frozen bank wire carries that id - not
- * {@code BankQuestionRow}, not {@code QuestionDetail}, not {@code QuestionVersionDetail}. Found by
- * reading the two contracts against each other before building on them, and raised with the lead,
- * whose tree {@code common/dto/bank} is.
+ * <p>{@link #addFromBank} was <b>unbuildable until 2026-08-26</b> and this javadoc said so: it
+ * needs a {@code questionVersionId} to pin, the contract's §3 names {@code BANK_LIST} as the
+ * picker, and nothing on the frozen bank wire carried that id. Found by reading the two contracts
+ * against each other before building on either, and raised with the lead, whose tree
+ * {@code common/dto/bank} is. BANK amendment A1 added {@code BankQuestionRow.latestVersionId} and
+ * the whole path binds to it.
  *
- * <p>It is <b>one method</b> on purpose (method rule 3): the pending decision binds at a single
- * line, so adopting the field when it lands is one edit rather than a sweep through everything
- * that wanted to add a question. Editing an existing composition needs none of it, because
- * {@link ComposedQuestion} carries the id already.
+ * <p>It was <b>one method</b> on purpose (method rule 3), and adopting the field cost exactly the
+ * one edit that was predicted rather than a sweep through everything that wanted to add a
+ * question.
+ *
+ * <h2>The picker refuses a duplicate before the server has to ⚑</h2>
+ *
+ * <p>§5.2 and T-3.9: a question cannot appear twice in one exam version, <em>even through two
+ * different versions of it</em>. So the comparison is on {@code displayId5}, the question's own
+ * identity, and never on {@code questionVersionId}, which is the identity of one version of it.
+ * Comparing version ids would let 11005 v1 and 11005 v2 both onto the paper and hand her a
+ * refusal from the server on save, about a click she made ten minutes earlier.
+ *
+ * <p>The server still checks, and is still the guarantee: {@code ExamValidator.compositionProblem}
+ * and {@code uq_exam_version_questions_question} both stand behind this. What this adds is that
+ * the refusal arrives on the click that caused it.
  */
 public final class ExamBuilderSession {
 
@@ -98,16 +117,60 @@ public final class ExamBuilderSession {
      * @param hasImage          whether it carries an illustration
      * @param pinnedVersionNo   the bank version this paper is pinned to
      * @param latestVersionNo   the newest the bank now holds; greater means E7.7's badge
+     * @param latestVersionId   the id of that newest version, which is what E7.14 re-pins to.
+     *                          The number draws the badge; only the id can press it
      * @param points            what it is worth, 1..100
      */
     public record Line(long questionVersionId, String displayId5, String text, String topic,
                        Difficulty difficulty, boolean hasImage, int pinnedVersionNo,
-                       int latestVersionNo, int points) {
+                       int latestVersionNo, long latestVersionId, int points,
+                       boolean showsSupersededDetails) {
+
+        /**
+         * A line as it arrives from the server, which by definition shows what it pins.
+         *
+         * <p>Every construction site except {@link #updatedToLatest()} goes through here, so the
+         * stale marker is false unless something deliberately made it true.
+         */
+        @SuppressWarnings("checkstyle:ParameterNumber")
+        public static Line fromServer(long questionVersionId, String displayId5, String text,
+                                      String topic, Difficulty difficulty, boolean hasImage,
+                                      int pinnedVersionNo, int latestVersionNo,
+                                      long latestVersionId, int points) {
+            return new Line(questionVersionId, displayId5, text, topic, difficulty, hasImage,
+                    pinnedVersionNo, latestVersionNo, latestVersionId, points, false);
+        }
 
         /** @return the same line worth a different number of points. */
         public Line withPoints(int newPoints) {
             return new Line(questionVersionId, displayId5, text, topic, difficulty, hasImage,
-                    pinnedVersionNo, latestVersionNo, newPoints);
+                    pinnedVersionNo, latestVersionNo, latestVersionId, newPoints,
+                    showsSupersededDetails);
+        }
+
+        /**
+         * The same question, re-pinned to the bank's newest version of it (E7.14).
+         *
+         * <p><b>The stem, topic, difficulty and image marker are deliberately carried over
+         * unchanged</b>, and they belong to the version being left behind. This screen has never
+         * read the new version's content: {@code ComposedQuestion} carries the newer version's id
+         * and number and none of its text, which is the whole shape of E7.7. Re-reading it here
+         * would cost a round trip and would still not be authoritative, because the save is a
+         * full replace whose answer is the server's own re-read.
+         *
+         * <p>So the row tells the truth about <em>which</em> version it now pins, and shows the
+         * old wording until {@code settleSave} adopts the server's answer. The window is between
+         * her click and her save, on her own screen, and {@code ExamBuildCopy.REPINNED_NOTICE}
+         * says so rather than leaving her to notice.
+         *
+         * @return the re-pinned line, or {@code this} when the bank has not moved on
+         */
+        public Line updatedToLatest() {
+            if (!hasNewerVersion()) {
+                return this;
+            }
+            return new Line(latestVersionId, displayId5, text, topic, difficulty, hasImage,
+                    latestVersionNo, latestVersionNo, latestVersionId, points, true);
         }
 
         /** @return {@code true} when the bank has moved on from what this paper pins (E7.7). */
@@ -115,6 +178,16 @@ public final class ExamBuilderSession {
             return latestVersionNo > pinnedVersionNo;
         }
     }
+
+    /**
+     * The course-wide row, which is always index 0 and is never removed.
+     *
+     * <p>A blank topic is what makes a quota course-wide on the wire
+     * ({@code TopicQuota.isCourseWide}), so the grid's first row is that quota and every other
+     * row is a topic. Keeping it at a fixed index means "which row is the course-wide one" has
+     * one answer rather than a search, and §7.3a's rule is about exactly that row.
+     */
+    private static final Criterion COURSE_WIDE_ROW = new Criterion(null, 0, 0, 0, 0);
 
     private final RequestDispatcher dispatcher;
     private final FxThreadPoster poster;
@@ -142,7 +215,24 @@ public final class ExamBuilderSession {
     private String teacherText = "";
     private final List<Line> lines = new ArrayList<>();
 
+    // --- the bank picker (E7.12) ------------------------------------------
+    private boolean pickerOpen;
+    private AsyncViewState pickerState = AsyncViewState.IDLE;
+    private int pickerGeneration;
+    private String pickerError;
+    private String pickerSearch = "";
+    private final List<BankQuestionRow> bank = new ArrayList<>();
+
     // --- the save --------------------------------------------------------
+    // --- the auto tab (E7.13) ---------------------------------------------
+    private Tab tab = Tab.MANUAL;
+    private final List<Criterion> criteria = new ArrayList<>(List.of(COURSE_WIDE_ROW));
+    private boolean composing;
+    private int composeGeneration;
+    private String composeError;
+    private String composeNotice;
+    private List<Shortfall> shortfalls = List.of();
+
     private boolean saving;
     private String saveError;
     private String saveNotice;
@@ -198,9 +288,39 @@ public final class ExamBuilderSession {
      * <p>{@link ExamListSession} in this same package has carried a generation counter from the
      * day it was written and this class shipped without one, which is the more useful half of
      * that finding.
+     *
+     * <h2>ALL THREE counters, and every field an earlier exam touched ⚑</h2>
+     *
+     * <p><b>The paragraph above was true of the load and false of everything added after it</b>,
+     * which a second cold read found. This class now has three in-flight answers - the version
+     * load, the picker's bank pages and the compose - and a reset that bumps two of three is a
+     * reset that reads as complete. The compose was the dangerous one: {@link #settleCompose}
+     * guards on its counter and nothing else, so a proposal for the exam she left arrived, called
+     * {@code lines.clear()}, filled the paper of the exam she had just opened, and announced it
+     * with a success toast. The screen is cached and reused across navigations, so it was two
+     * clicks away.
+     *
+     * <p>Whatever is added next: if it can be in flight, its counter belongs here, and if it is a
+     * field the previous exam wrote, it belongs in the clearing half. {@link #tab} and
+     * {@link #criteria} are here for the second reason - the auto tab survived into a read-only
+     * version and hid the paper she had opened to read, with the tab switch withheld because the
+     * version is not editable, and criteria built for one course named a topic in a report about
+     * another.
      */
     private void resetLoaded() {
         loadGeneration++;
+        composeGeneration++;
+        // The picker belongs to the version that was open: its rows are that exam's course, and
+        // isOnPaper() reads a paper that is about to be replaced. Leaving it up across an open()
+        // would offer her another exam's bank against this exam's duplicate rule.
+        closePicker();
+        tab = Tab.MANUAL;
+        criteria.clear();
+        criteria.add(COURSE_WIDE_ROW);
+        composing = false;
+        composeError = null;
+        composeNotice = null;
+        shortfalls = List.of();
         examVersionId = 0;
         lockVersion = 0;
         loadedState = null;
@@ -276,11 +396,15 @@ public final class ExamBuilderSession {
         durationMinutes = version.durationMinutes();
         studentText = version.studentText() == null ? "" : version.studentText();
         teacherText = version.teacherText() == null ? "" : version.teacherText();
+        // The server's re-read IS the refresh the notice promised: every row now carries the
+        // wording of the version it actually pins, so the promise has been kept and the notice
+        // has nothing left to say.
         lines.clear();
         for (ComposedQuestion question : version.questions()) {
-            lines.add(new Line(question.questionVersionId(), question.questionDisplayId5(),
+            lines.add(Line.fromServer(question.questionVersionId(), question.questionDisplayId5(),
                     question.text(), question.topic(), question.difficulty(), question.hasImage(),
-                    question.pinnedVersionNo(), question.latestVersionNo(), question.points()));
+                    question.pinnedVersionNo(), question.latestVersionNo(),
+                    question.latestVersionId(), question.points()));
         }
     }
 
@@ -444,26 +568,594 @@ public final class ExamBuilderSession {
         onChange.run();
     }
 
+    // ===================== The bank picker (E7.12) ========================
+
     /**
-     * Puts a bank question on the paper (E7.12) — <b>not yet buildable, see the class javadoc</b>.
+     * How many bank pages the picker asks for before it gives up.
      *
-     * <p>The single line the picker's whole "add" path binds at. It needs a
-     * {@code questionVersionId} and the frozen bank wire carries none, so it refuses rather than
-     * guessing: pinning "the latest version of question 11005" resolved at save time would break
-     * the exact-version pin that E7.7's newer-version badge is a comparison against.
-     *
-     * <p>When {@code BankQuestionRow} grows the field, this method takes a row and appends a
-     * {@link Line}, and nothing else in this class changes.
-     *
-     * @return {@code false}, always, until the bank wire can identify a version
+     * <p>{@code BANK_LIST} is paginated because a teacher's own browse is (E6.5); the picker is
+     * not, so it asks page after page and shows one list. {@code DataSession} set that precedent
+     * and set this bound with it: a loop that asks a server for pages until the server says stop
+     * is a loop, and an unbounded one is a client that hangs on a server answering nonsense. Far
+     * above any real course bank, and the picker says so rather than silently truncating if it is
+     * ever reached.
      */
-    public boolean addFromBank() {
+    private static final int MAX_BANK_PAGES = 50;
+
+    /**
+     * Opens the picker and loads this exam's course bank (E7.12, §3).
+     *
+     * <p>Scoped to {@link #courseCode} and never to the whole bank: §5.2 refuses a question from
+     * another course on save, so offering one here would be offering a click that cannot work.
+     * Re-opening reloads, because the bank is another screen away and may have moved.
+     */
+    public void openPicker() {
+        if (!isEditable()) {
+            return;
+        }
+        pickerOpen = true;
+        pickerSearch = "";
+        loadBank();
+    }
+
+    /** Retries a failed bank load without closing the picker. */
+    public void retryPicker() {
+        if (pickerOpen) {
+            loadBank();
+        }
+    }
+
+    private void loadBank() {
+        bank.clear();
+        pickerError = null;
+        pickerState = AsyncViewState.LOADING;
+        pickerGeneration++;
+        onChange.run();
+        requestBankPage(pickerGeneration, 0);
+    }
+
+    /** Closes the picker and forgets what it loaded. */
+    public void closePicker() {
+        pickerOpen = false;
+        pickerState = AsyncViewState.IDLE;
+        pickerError = null;
+        pickerSearch = "";
+        bank.clear();
+        // Bumped so a page still in flight cannot land in a picker she has closed and reopened.
+        pickerGeneration++;
+        onChange.run();
+    }
+
+    private void requestBankPage(int generation, int page) {
+        dispatcher.send(Verb.BANK_LIST, new BankListRequest(courseCode, null, null, null,
+                        page, BankListRequest.DEFAULT_PAGE_SIZE))
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settleBankPage(generation, page, response, failure)));
+    }
+
+    /**
+     * Takes a page only if it is still a page of the load being run.
+     *
+     * <p>The same generation guard {@link #settleLoad} carries and for the same reason: closing
+     * the picker and opening it again while a page is in flight would otherwise append that page
+     * to the new load's rows, so the list would hold a course she is no longer looking at.
+     */
+    private void settleBankPage(int generation, int page, Message response, Throwable failure) {
+        if (generation != pickerGeneration || !pickerOpen) {
+            return;
+        }
+        if (failure != null || response == null || response.isError()
+                || !(response.getPayload() instanceof BankPage bankPage)
+                || bankPage.page() != page) {
+            // The page number is checked, not assumed. Appending a page the server did not
+            // send is how the same rows arrive twice and a whole page goes missing, with a
+            // full-looking list and nothing failing. Found by a fixture that answered every
+            // request with page 0 while claiming two pages existed.
+            bank.clear();
+            pickerError = ExamBuildCopy.PICKER_LOAD_FAILED;
+            pickerState = AsyncViewState.ERROR;
+            onChange.run();
+            return;
+        }
+        bank.addAll(bankPage.rows());
+
+        boolean more = page + 1 < bankPage.totalPages();
+        if (more && page + 1 < MAX_BANK_PAGES) {
+            requestBankPage(generation, page + 1);
+            return;
+        }
+        pickerError = more ? ExamBuildCopy.PICKER_TOO_MANY : null;
+        pickerState = AsyncViewState.READY;
+        onChange.run();
+    }
+
+    /** @return whether the picker is showing. */
+    public boolean isPickerOpen() {
+        return pickerOpen;
+    }
+
+    /** @return where the picker's load has got to. */
+    public AsyncViewState pickerState() {
+        return pickerState;
+    }
+
+    /** @return what went wrong loading the bank, when something did. */
+    public Optional<String> pickerError() {
+        return Optional.ofNullable(pickerError);
+    }
+
+    /** @param typed the free text the picker is filtered by. */
+    public void pickerSearch(String typed) {
+        pickerSearch = typed == null ? "" : typed;
+        onChange.run();
+    }
+
+    /** @return the current picker filter. */
+    public String pickerSearch() {
+        return pickerSearch;
+    }
+
+    /**
+     * The rows the picker is offering, filtered.
+     *
+     * <p>Filtered here rather than by {@code BankListRequest.search} because the whole course bank
+     * is already in hand: a round trip per keystroke would buy nothing and would make the list
+     * flicker between answers. The match is over the three things visible on the row.
+     *
+     * @return the matching rows, in the order the bank gave them
+     */
+    public List<BankQuestionRow> pickerRows() {
+        String needle = pickerSearch.trim().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) {
+            return List.copyOf(bank);
+        }
+        List<BankQuestionRow> matching = new ArrayList<>();
+        for (BankQuestionRow row : bank) {
+            if (matches(row, needle)) {
+                matching.add(row);
+            }
+        }
+        return List.copyOf(matching);
+    }
+
+    private static boolean matches(BankQuestionRow row, String needle) {
+        return contains(row.displayId5(), needle)
+                || contains(row.text(), needle)
+                || contains(row.topic(), needle);
+    }
+
+    private static boolean contains(String value, String needle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    /**
+     * Whether this question is already on the paper (§5.2, T-3.9).
+     *
+     * <p>On {@code displayId5}, the question's identity, and never on a version id. See the class
+     * javadoc: two versions of one question are one question as far as this rule is concerned.
+     *
+     * @param row a row the picker is offering
+     * @return {@code true} when adding it would be adding it twice
+     */
+    public boolean isOnPaper(BankQuestionRow row) {
+        if (row == null) {
+            return false;
+        }
+        for (Line line : lines) {
+            if (Objects.equals(line.displayId5(), row.displayId5())) {
+                return true;
+            }
+        }
         return false;
     }
 
-    /** @return {@code true} when the picker's add path can work, which it cannot yet. */
+    /**
+     * Puts a bank question on the paper (E7.12).
+     *
+     * <p>The row is pinned at {@link BankQuestionRow#latestVersionId()}, so the paper carries the
+     * exact version she was looking at when she clicked. That is what makes E7.7's badge a drift
+     * detector afterwards: the pin does not move, the bank does, and the two version numbers are
+     * then a comparison rather than a coincidence. Pinned and latest are equal on the way in,
+     * which is why a freshly added question never carries a badge.
+     *
+     * <p>Points start at {@link QuestionPin#MIN_POINTS} rather than a share of 100. An even split
+     * would silently rewrite numbers she had already set on the other questions, and §5.1's
+     * indicator plus its sentence are what tell her how far off the total is. Cheap to reverse: a
+     * constant on this line.
+     *
+     * @param row the row she clicked, or {@code null}
+     * @return {@code true} when the paper grew, {@code false} when the click was refused
+     */
+    public boolean addFromBank(BankQuestionRow row) {
+        if (row == null || !isEditable() || isOnPaper(row)) {
+            return false;
+        }
+        lines.add(Line.fromServer(row.latestVersionId(), row.displayId5(), row.text(), row.topic(),
+                row.difficulty(), row.hasImage(), row.latestVersionNo(), row.latestVersionNo(),
+                row.latestVersionId(), QuestionPin.MIN_POINTS));
+        onChange.run();
+        return true;
+    }
+
+    // ===================== The auto tab (E7.13, F3.3) =====================
+
+    /**
+     * Which half of the builder is showing.
+     *
+     * <p>In the session rather than the view because the auto tab is not a panel, it is a way of
+     * filling the same paper: {@link #generate()} writes into {@link #lines}, which is the list
+     * the manual tab edits. F3.3's "auto-result is editable before save" is that sharing and
+     * nothing else - there is no second composition anywhere in this class to keep in step.
+     */
+    public enum Tab {
+
+        /** The bank picker and the paper (E7.12). */
+        MANUAL,
+
+        /** The criteria form (E7.13). */
+        AUTO
+    }
+
+    /** One row of the criteria grid, as she is typing it. */
+    public record Criterion(String topic, int easy, int medium, int hard, int any) {
+
+        /**
+         * This row as the wire's quota, told by its position which kind of row it is.
+         *
+         * <p><b>An unnamed row cannot be expressed on this wire, and that is the whole reason
+         * {@link #isUnnamed()} exists.</b> {@code TopicQuota}'s own compact constructor folds a
+         * blank topic to {@code null}, and a null topic <em>is</em> the course-wide bucket, so a
+         * half-typed topic row becomes a second course-wide quota no matter what this method
+         * passes. That record is the lead's and is not Member A's to change.
+         *
+         * <p>So the defence is upstream: {@link #criteriaProblem()} refuses while any row asks for
+         * questions without naming a topic, and such a row is never sent. The parameter here does
+         * not add a guarantee - it makes the call site say which row it thinks it is holding,
+         * which is worth one boolean and is not a substitute for the refusal.
+         *
+         * <p><b>An earlier version of this javadoc claimed the parameter made the bad state
+         * unreachable. It does not, and a test written against that claim failed the moment it
+         * was run</b>, which is the only reason the claim is not still standing here.
+         *
+         * @param courseWide whether this is the grid's first row
+         * @return the quota; a blank topic still arrives course-wide, hence the guard upstream
+         */
+        public TopicQuota toQuota(boolean courseWide) {
+            if (courseWide) {
+                return new TopicQuota(null, easy, medium, hard, any);
+            }
+            return new TopicQuota(topic == null ? "" : topic, easy, medium, hard, any);
+        }
+
+        /** @return {@code true} when this row asks for nothing at all. */
+        public boolean isEmpty() {
+            return easy == 0 && medium == 0 && hard == 0 && any == 0;
+        }
+
+        /** @return {@code true} when she has asked for questions without naming the topic. */
+        public boolean isUnnamed() {
+            return (topic == null || topic.isBlank()) && !isEmpty();
+        }
+
+        /** @return the same row with one bucket changed, named by {@link Bucket}. */
+        public Criterion with(Bucket bucket, int value) {
+            return switch (bucket) {
+                case EASY -> new Criterion(topic, value, medium, hard, any);
+                case MEDIUM -> new Criterion(topic, easy, value, hard, any);
+                case HARD -> new Criterion(topic, easy, medium, value, any);
+                case ANY -> new Criterion(topic, easy, medium, hard, value);
+            };
+        }
+
+        /** @return the same row under a different topic. */
+        public Criterion withTopic(String newTopic) {
+            return new Criterion(newTopic, easy, medium, hard, any);
+        }
+    }
+
+    /** The four numbers on a criteria row, so the view names a bucket rather than a position. */
+    public enum Bucket { EASY, MEDIUM, HARD, ANY }
+
+    /**
+     * Moves between the two tabs.
+     *
+     * <p>Refused on a read-only version, which has no criteria form: §8's read path renders a
+     * finished paper and offers no way to compose one.
+     *
+     * @param wanted the tab she clicked
+     */
+    public void tab(Tab wanted) {
+        if (wanted == null || (wanted == Tab.AUTO && !isEditable())) {
+            return;
+        }
+        tab = wanted;
+        onChange.run();
+    }
+
+    /** @return which tab is showing. */
+    public Tab tab() {
+        return tab;
+    }
+
+    /** @return the criteria grid as she has it, course-wide row first. */
+    public List<Criterion> criteria() {
+        return List.copyOf(criteria);
+    }
+
+    /**
+     * Retires the last answer, because it was about criteria that no longer exist ⚑.
+     *
+     * <p>Called by every criteria mutator. {@code INFEASIBLE_TITLE} reads "the bank cannot satisfy
+     * <em>these</em> criteria" and points at the grid directly above it, so a report left standing
+     * while she edits the grid is a sentence about numbers that are no longer on screen. The demo
+     * path is exactly that: T-3.5 asks for three, is refused, and T-3.6 edits it down - and the
+     * red block went on naming three.
+     *
+     * <p>Same shape as {@code hasRepinned}, fixed one round earlier in this same PR: a stored
+     * artefact outliving the state it describes. That one became derived; this one cannot, since
+     * only the server can say what is short, so it is retired at the moment its question changes.
+     */
+    private void retireLastAnswer() {
+        shortfalls = List.of();
+        composeError = null;
+    }
+
+    /** @param index the row; @param topic what she typed into its topic box. */
+    public void criterionTopic(int index, String topic) {
+        if (index <= 0 || index >= criteria.size()) {
+            // Index 0 is the course-wide row and has no topic to set. Guarding here rather than
+            // hiding the box is what keeps "the first row is the course-wide one" a single fact.
+            return;
+        }
+        criteria.set(index, criteria.get(index).withTopic(topic));
+        retireLastAnswer();
+        onChange.run();
+    }
+
+    /**
+     * @param index  the row
+     * @param bucket which of its four numbers
+     * @param value  what she typed; stored as typed and judged by {@link #criteriaProblem()},
+     *               so a negative reaches the same rule the server would refuse it with
+     */
+    public void criterionCount(int index, Bucket bucket, int value) {
+        if (index < 0 || index >= criteria.size() || bucket == null) {
+            return;
+        }
+        criteria.set(index, criteria.get(index).with(bucket, value));
+        retireLastAnswer();
+        onChange.run();
+    }
+
+    /** Adds a blank topic row. */
+    public void addCriterion() {
+        if (!isEditable()) {
+            return;
+        }
+        criteria.add(new Criterion("", 0, 0, 0, 0));
+        retireLastAnswer();
+        onChange.run();
+    }
+
+    /** Removes a topic row. The course-wide row at index 0 cannot be removed. */
+    public void removeCriterion(int index) {
+        if (index <= 0 || index >= criteria.size()) {
+            return;
+        }
+        criteria.remove(index);
+        retireLastAnswer();
+        onChange.run();
+    }
+
+    /**
+     * The criteria as the wire wants them, which is also what the live rule is asked about.
+     *
+     * @return the request {@code EXAM_AUTO_COMPOSE} would carry right now
+     */
+    private AutoComposeRequest request() {
+        List<TopicQuota> quotas = new ArrayList<>(criteria.size());
+        for (int index = 0; index < criteria.size(); index++) {
+            Criterion each = criteria.get(index);
+            // A topic row asking for nothing is not sent at all. The grid always carries blank
+            // rows and the server has a rule for ignoring them, but not sending one is simpler
+            // than relying on that rule, and it keeps the request equal to what she asked for.
+            if (index > 0 && each.isEmpty()) {
+                continue;
+            }
+            quotas.add(each.toQuota(index == 0));
+        }
+        // No seed. §7.5 keeps it for tests; a client that sent one would be asking the server to
+        // be predictable in front of a class, which is the opposite of what it is for.
+        return new AutoComposeRequest(courseCode, quotas, null);
+    }
+
+    /**
+     * The server's own sentence about the criteria, live (§7.3a).
+     *
+     * <p>{@code ExamValidator.quotaProblem} is the very method the handler refuses with, called
+     * here for the reason {@link #pointsProblem()} calls {@code pointsProblem}: one rule, one
+     * sentence, and no client-side second opinion that can drift from it. §7.3a's refusal has to
+     * name both legal shapes, and it does - the wording is {@code ExamBuildMessages}' and this
+     * class composes none of it (ruling 4).
+     *
+     * @return what is wrong with the grid, or empty when it is a request the server would take
+     */
+    public Optional<String> criteriaProblem() {
+        // One rule this client owns, and it owns it because the server cannot see the state:
+        // a row with counts and no topic is never SENT, so no server sentence exists for it, and
+        // ruling 4's "the client composes nothing" is about rules ExamBuildMessages states. This
+        // is a half-filled form rather than a §7 rule, and saying so beats sending her a request
+        // that would be answered about a course she did not mean to ask about.
+        for (int index = 1; index < criteria.size(); index++) {
+            if (criteria.get(index).isUnnamed()) {
+                return Optional.of(ExamBuildCopy.TOPIC_REQUIRED);
+            }
+        }
+        return ExamValidator.quotaProblem(request()).map(ExamValidator.Violation::message);
+    }
+
+    /** @return {@code true} when Generate is worth offering. */
+    public boolean canGenerate() {
+        return isEditable() && !composing && criteriaProblem().isEmpty();
+    }
+
+    /**
+     * Asks the server to compose a paper from the criteria (E7.13, F3.3).
+     *
+     * <p>A feasible answer <b>replaces the paper</b> and drops her on the manual tab, because
+     * F3.3's "editable before save" is only a claim if she can see the thing she may edit. It is
+     * destructive of an unsaved composition and {@code ExamBuildCopy.GENERATE_REPLACES} says so
+     * beside the button rather than after the fact; the draft on the server is untouched until
+     * she saves, so reopening is the way back.
+     *
+     * <p>An infeasible answer changes nothing at all. §7.2's whole point is that the report is
+     * the useful outcome, so it is rendered and the paper she had is still there.
+     */
+    public void generate() {
+        if (!canGenerate()) {
+            return;
+        }
+        composing = true;
+        composeError = null;
+        shortfalls = List.of();
+        composeGeneration++;
+        int generation = composeGeneration;
+        onChange.run();
+
+        dispatcher.send(Verb.EXAM_AUTO_COMPOSE, request())
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settleCompose(generation, response, failure)));
+    }
+
+    /** Takes an answer only if it is still the answer to the criteria she last sent. */
+    private void settleCompose(int generation, Message response, Throwable failure) {
+        if (generation != composeGeneration) {
+            return;
+        }
+        composing = false;
+        if (failure != null || response == null) {
+            composeError = ExamBuildCopy.COMPOSE_FAILED;
+            onChange.run();
+            return;
+        }
+        if (response.isError()) {
+            String sentence = response.errorMessage();
+            composeError = sentence == null || sentence.isBlank()
+                    ? ExamBuildCopy.COMPOSE_FAILED : sentence;
+            onChange.run();
+            return;
+        }
+        if (!(response.getPayload() instanceof AutoComposeResult result)) {
+            composeError = ExamBuildCopy.COMPOSE_FAILED;
+            onChange.run();
+            return;
+        }
+        if (!result.feasible()) {
+            shortfalls = List.copyOf(result.shortfalls());
+            onChange.run();
+            return;
+        }
+        adoptProposal(result.questions());
+        onChange.run();
+    }
+
+    private void adoptProposal(List<ComposedQuestion> proposed) {
+        shortfalls = List.of();
+        composeNotice = ExamBuildCopy.composedNotice(proposed.size());
+        lines.clear();
+        for (ComposedQuestion question : proposed) {
+            lines.add(Line.fromServer(question.questionVersionId(), question.questionDisplayId5(),
+                    question.text(), question.topic(), question.difficulty(), question.hasImage(),
+                    question.pinnedVersionNo(), question.latestVersionNo(),
+                    question.latestVersionId(), question.points()));
+        }
+        tab = Tab.MANUAL;
+    }
+
+    /** @return {@code true} while the server is composing. */
+    public boolean isComposing() {
+        return composing;
+    }
+
+    /** @return why a compose failed outright, as opposed to being infeasible. */
+    public Optional<String> composeError() {
+        return Optional.ofNullable(composeError);
+    }
+
+    /**
+     * @return the shortfalls from the last infeasible answer, empty otherwise. Rendered into
+     *         sentences by {@code ExamBuildCopy.shortfallLine}, which is where §7.1's four shapes
+     *         and ruling 4's "the sentence stays on the client" both live
+     */
+    public List<Shortfall> shortfalls() {
+        return shortfalls;
+    }
+
+    /** @return what a successful compose did, once, until dismissed. */
+    public Optional<String> composeNotice() {
+        return Optional.ofNullable(composeNotice);
+    }
+
+    /** Clears the composed notice, the way {@link #dismissNotice()} clears the saved one. */
+    public void dismissComposeNotice() {
+        composeNotice = null;
+        onChange.run();
+    }
+
+    // ===================== The update action (E7.14) ======================
+
+    /**
+     * Re-pins one question to the bank's newest version of it (E7.14, F3.5).
+     *
+     * <p>The other half of E7.7. The badge says the bank has moved on; this is the button beside
+     * it, and it was unbuildable until {@code ComposedQuestion.latestVersionId} landed on
+     * 2026-08-26: a version <em>number</em> says that something newer exists and not what to pin.
+     *
+     * <p>No verb of its own. The composition is saved by full replace (§5.2), so re-pinning is a
+     * change to this list like a reorder or a repoint, and it reaches the database through the
+     * same {@code EXAM_VERSION_SAVE} she was going to press anyway. A dedicated verb would be a
+     * second write path into one composition, and §5.6's one-transaction-per-write rule exists to
+     * stop exactly that.
+     *
+     * <p>Refuses silently on a question the bank has not moved past, rather than writing the pin
+     * it already holds: see {@link Line#updatedToLatest()} for what the row does and does not
+     * know about the version it moves to.
+     *
+     * @param index the row's position on the paper
+     * @return {@code true} when a pin actually moved
+     */
+    public boolean updateToLatest(int index) {
+        if (!isEditable() || index < 0 || index >= lines.size()) {
+            return false;
+        }
+        Line line = lines.get(index);
+        if (!line.hasNewerVersion()) {
+            return false;
+        }
+        lines.set(index, line.updatedToLatest());
+        onChange.run();
+        return true;
+    }
+
+    /**
+     * Whether any row on this paper is showing a superseded version's details ⚑.
+     *
+     * <p><b>Derived from the rows, never a flag anybody sets.</b> It was a flag until a cold read
+     * showed a flag cannot be right: composing replaces every line with server-proposed rows and
+     * removing the re-pinned row removes the only thing the notice was about, and in both cases a
+     * stored boolean went on claiming the paper held stale wording. Same argument as {@link Mode},
+     * one field over: a fact derived from the rows cannot disagree with the rows.
+     *
+     * @return {@code true} while at least one line was re-pinned and not yet replaced by a
+     *         server re-read, which is what licenses the notice
+     */
+    public boolean hasRepinned() {
+        return lines.stream().anyMatch(Line::showsSupersededDetails);
+    }
+
+    /** @return {@code true} when this version can have questions added to it at all. */
     public boolean canAddFromBank() {
-        return false;
+        return isEditable();
     }
 
     // ===================== The live points rule (E7.3, S-11) ==============

@@ -2,11 +2,13 @@ package client.features.exambuild;
 
 import common.dto.authoring.ExamCreateRequest;
 import common.dto.authoring.QuestionPin;
+import common.dto.authoring.Shortfall;
+import common.dto.bank.Difficulty;
 
 import java.util.Locale;
 
 /**
- * Every sentence the exam builder shows (Presentation tier, E7.11 / E7.12 — F3.1, F3.5).
+ * Every sentence the exam builder shows (Presentation tier, E7.11 to E7.14 — F3.1, F3.3, F3.5).
  *
  * <p>Separate from the view for the reason {@link ExamListCopy} is: the wording is checkable
  * without a JavaFX toolkit, so a pluralisation or a limit that has drifted from the contract
@@ -96,18 +98,207 @@ public final class ExamBuildCopy {
     /** The badge on a question the bank has since edited (E7.7). */
     public static final String NEWER_VERSION_BADGE = "The bank has a newer version";
 
-    // ===================== The picker, which is not built yet =============
+    /** The action beside that badge (E7.14): take the newer version onto this paper. */
+    public static final String USE_NEWER_VERSION = "Use the newer version";
 
     /**
-     * Why the Add button is disabled.
+     * Shown once on a paper where something has been re-pinned and not yet saved (E7.14).
      *
-     * <p>Named rather than left inert. The picker's add path needs a {@code questionVersionId}
-     * and the frozen bank wire carries none, which is a contract gap raised with the lead rather
-     * than something a teacher did wrong. A disabled control with no explanation is the mystery
-     * state PRD §4.1 forbids; this is the honest version of it until the field lands.
+     * <p>The row moves its pin immediately and keeps the old wording, because this screen has
+     * never been sent the new version's text: the wire carries the newer version's id and number
+     * and none of its content. Saying so is the difference between a screen that is behind and a
+     * screen that is lying. The wording refreshes when the save comes back, because the save is a
+     * full replace whose answer is the server's own re-read.
      */
-    public static final String ADD_UNAVAILABLE =
-            "Adding questions is not available in this build yet.";
+    public static final String REPINNED_NOTICE =
+            "Updated questions still show the old version's wording, topic and difficulty "
+                    + "until you save.";
+
+    // ===================== The auto tab (E7.13, F3.3) =====================
+
+    /** The two segments across the top of the builder. */
+    public static final String MANUAL_TAB = "Choose questions";
+
+    /** The auto segment. */
+    public static final String AUTO_TAB = "Compose automatically";
+
+    /** The criteria grid's heading. */
+    public static final String CRITERIA_TITLE = "What the exam should contain";
+
+    /** The label on the course-wide row, which has no topic of its own. */
+    public static final String COURSE_WIDE_ROW = "Anywhere in this course";
+
+    /** The control that adds a topic row. */
+    public static final String ADD_TOPIC = "Add a topic";
+
+    /** The control that removes one. */
+    public static final String REMOVE_TOPIC = "Remove";
+
+    /** The topic box's prompt. */
+    public static final String TOPIC_PROMPT = "Topic";
+
+    /**
+     * Said when she has asked for questions on a row whose topic box is still empty.
+     *
+     * <p>The one criteria rule this client owns, and only because the server never sees the state:
+     * an unnamed row is not sent, so {@code ExamBuildMessages} has no sentence for it. Without
+     * this she got either a refusal about two whole-course rows she could not see, or - quieter
+     * and worse - a paper composed from the entire course while she believed she had named a
+     * topic.
+     */
+    public static final String TOPIC_REQUIRED =
+            "Name the topic on every row that asks for questions, or set its counts back to zero.";
+
+    /** Column headings on the criteria grid, in bucket order. */
+    public static final String EASY_LABEL = "Easy";
+
+    /** @see #EASY_LABEL */
+    public static final String MEDIUM_LABEL = "Medium";
+
+    /** @see #EASY_LABEL */
+    public static final String HARD_LABEL = "Hard";
+
+    /** The any-difficulty column, which is a count rather than a grade. */
+    public static final String ANY_LABEL = "Any";
+
+    /** The button that asks the server to compose. */
+    public static final String GENERATE = "Compose the exam";
+
+    /**
+     * Said beside the button, before it is pressed.
+     *
+     * <p>A successful compose replaces whatever is on the paper, and a teacher who has spent ten
+     * minutes picking questions must not discover that afterwards. The unsaved draft on the
+     * server is untouched, so reopening is the way back, and this says which way is which.
+     */
+    public static final String GENERATE_REPLACES =
+            "Composing replaces the questions currently on this paper. Nothing is saved until "
+                    + "you press save.";
+
+    /** Shown while the server composes. */
+    public static final String COMPOSING = "Composing...";
+
+    /** Shown when the compose could not be run at all, as opposed to being refused. */
+    public static final String COMPOSE_FAILED =
+            "The exam could not be composed. Try again.";
+
+    /** The heading over the shortfall report (§7.1, F3.3). */
+    public static final String INFEASIBLE_TITLE =
+            "No exam was created. The bank cannot satisfy these criteria:";
+
+    /**
+     * What the teacher is invited to do about it (§7.3).
+     *
+     * <p>Every sentence in the report is a claim she can disprove by filtering her own bank to
+     * the topic named in it, and the contract leans on her being able to. Saying so turns a
+     * refusal into an instruction.
+     */
+    public static final String INFEASIBLE_HINT =
+            "Lower a count, widen a difficulty, or add questions to the bank.";
+
+    /**
+     * One shortfall as a sentence (§7.1's four shapes, ruling 4).
+     *
+     * <p><b>Composed here and nowhere else.</b> Ruling 4 kept the sentence on the client and
+     * {@code Shortfall} structural, precisely so there is one expression of it: a {@code summary}
+     * string on the wire would be a second copy of what the four fields already say, and the two
+     * would eventually disagree.
+     *
+     * <p><b>The wording is the PRD's own, not the contract table's.</b> PRD F3.3 writes
+     * {@code Topic 'Algebra': requested 5 Hard, bank has 2} with single quotes and no full stop,
+     * and that string is F3.3's acceptance artefact. §7.1's table renders the same shapes with
+     * double quotes and a trailing stop; where they differ the PRD wins, and
+     * {@code AutoComposeResultTest} and {@code AutoComposerTest} both already quote the PRD form.
+     *
+     * @param shortfall one row of the report; null topic is course-wide, null difficulty is the
+     *                  any bucket
+     * @return the sentence for it
+     */
+    public static String shortfallLine(Shortfall shortfall) {
+        String what = shortfall.difficulty() == null
+                ? shortfall.requested() + " questions"
+                : shortfall.requested() + " " + gradeOf(shortfall.difficulty());
+        String tail = "requested " + what + ", bank has " + shortfall.available();
+        return shortfall.topic() == null
+                ? capitalise(tail)
+                : "Topic '" + shortfall.topic() + "': " + tail;
+    }
+
+    /** Title case for the grade, because the PRD's sentence writes "5 Hard" and not "5 HARD". */
+    private static String gradeOf(Difficulty difficulty) {
+        String name = difficulty.name();
+        return name.charAt(0) + name.substring(1).toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String capitalise(String sentence) {
+        return Character.toUpperCase(sentence.charAt(0)) + sentence.substring(1);
+    }
+
+    /**
+     * What a successful compose did.
+     *
+     * @param questions how many it put on the paper
+     * @return the notice
+     */
+    public static String composedNotice(int questions) {
+        return questions == 1
+                ? "One question was composed onto the paper. Edit it, then save."
+                : questions + " questions were composed onto the paper. Edit them, then save.";
+    }
+
+    // ===================== The bank picker (E7.12) ========================
+
+    /**
+     * The control that opens the picker.
+     *
+     * <p>{@code ADD_UNAVAILABLE} stood here until 2026-08-26 and said "adding questions is not
+     * available in this build yet", because the add path needed a version id the frozen bank wire
+     * did not carry. BANK amendment A1 landed it; the apology and its label went with it.
+     */
+    public static final String ADD_BUTTON = "Add from the bank";
+
+    /** The picker's own heading, which names the course it is scoped to. */
+    public static String pickerTitle(String courseName) {
+        return "Add a question from " + courseName;
+    }
+
+    /** The picker's filter box. */
+    public static final String PICKER_SEARCH_PROMPT = "Search by id, text or topic";
+
+    /** The picker's close control. */
+    public static final String PICKER_CLOSE = "Done";
+
+    /** The per-row control. */
+    public static final String PICKER_ADD = "Add";
+
+    /**
+     * The per-row control when the question is already on the paper (§5.2, T-3.9).
+     *
+     * <p>Says which rule refused it rather than greying out silently: a teacher looking at a
+     * question she knows is in her bank and cannot add needs to be told it is already on her own
+     * paper, possibly as a different version of itself.
+     */
+    public static final String PICKER_ALREADY_ADDED = "Already on this exam";
+
+    /** Shown while the course bank is being fetched. */
+    public static final String PICKER_LOADING = "Loading the question bank...";
+
+    /** Shown when the bank could not be read. */
+    public static final String PICKER_LOAD_FAILED =
+            "The question bank could not be loaded. Try again.";
+
+    /** Shown when the course bank has more pages than the picker will fetch. */
+    public static final String PICKER_TOO_MANY =
+            "This course has more questions than the picker can show. Use the search box to "
+                    + "narrow it down.";
+
+    /** Shown when the course has no questions at all. */
+    public static final String PICKER_EMPTY =
+            "This course has no questions in the bank yet.";
+
+    /** Shown when the filter matches nothing, which is not the same as an empty bank. */
+    public static final String PICKER_NO_MATCH =
+            "No question in this course matches that search.";
 
     // ===================== Saving =========================================
 

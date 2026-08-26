@@ -10,6 +10,7 @@ import common.dto.authoring.TopicQuota;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import server.features.bank.QuestionValidator;
 import server.db.entities.Difficulty;
 import server.db.projections.AutoCandidate;
 
@@ -42,6 +43,39 @@ class AutoComposerTest {
 
     private static final String COURSE = "21";
 
+    /**
+     * The topics the property tests generate over (R2, ruled 2026-08-25) ⚑.
+     *
+     * <p>Four ASCII strings until 2026-08-26, which is the limit this file's own author reported:
+     * the composer buckets topics with {@code QuestionValidator.sameTopic}, whose whole subject is
+     * agreeing with {@code utf8mb4_unicode_ci} in <b>both</b> directions, and a generator that
+     * only ever produces {@code "Recursion"} exercises none of it. The lead's R2 ruling upgraded
+     * that from a flag to a documented invariant and asked for this pool to grow in whichever PR
+     * touched the composer next.
+     *
+     * <p>What each addition is for:
+     * <ul>
+     *   <li><b>Hebrew.</b> The dataset is Hebrew-capable and the school is; a fold that mishandled
+     *       it would be invisible in every ASCII test in this repository.</li>
+     *   <li><b>Accents.</b> {@code "Récursivité"} against {@code "Recursivite"} is precisely the
+     *       pair the collation folds and a naive {@code equals} does not, which is the direction
+     *       P-9 was about.</li>
+     *   <li><b>Case and spacing variants of one topic.</b> {@code "OOP Basics"} beside
+     *       {@code "oop  basics"} makes the generator produce pairs the fold must call the same,
+     *       so a tightening that broke that agreement fails here rather than in a walk.</li>
+     * </ul>
+     *
+     * <p>The generator is deliberately still not the authority on legality: {@code quotaProblem}
+     * runs on every request it makes, so a pair these strings fold together arrives as a
+     * duplicate-topic refusal rather than as a silently crossed pool.
+     */
+    private static final String[] TOPIC_POOL = {
+        "OOP Basics", "Collections", "Exceptions", "Recursion",
+        "רקורסיה", "אלגברה לינארית",
+        "Récursivité", "Recursivite",
+        "oop  basics",
+    };
+
     // ===================== Fixture ========================================
 
     private static AutoCandidate q(long id, String topic, Difficulty difficulty) {
@@ -73,9 +107,28 @@ class AutoComposerTest {
         return new AutoComposeRequest(COURSE, Arrays.asList(quotas), 42L);
     }
 
+    /**
+     * What she would count filtering her own bank to that topic (§7.2 property 2) ⚑.
+     *
+     * <p><b>This read {@code equalsIgnoreCase} until 2026-08-26</b>, and the difference was
+     * invisible for as long as every generated topic was unaccented ASCII. Widening the pool for
+     * R2 exposed it on the first run: {@code "Récursivité"} and {@code "Recursivite"} are one
+     * topic to {@code utf8mb4_unicode_ci} and to {@code sameTopic}, and two to
+     * {@code equalsIgnoreCase}. So the oracle called an available of 2 wrong when the composer,
+     * the collation and the teacher's own filter all say 2. P-6's shape, in this file: one rule
+     * written twice, never exercised where the two spellings disagree.
+     *
+     * <p><b>Why calling {@code sameTopic} here is not circular.</b> It does weaken this property
+     * in one specific way, and that is deliberate: this test now checks that {@code available}
+     * <em>counts the right rows under the project's topic equality</em>, and no longer checks
+     * what that equality is. That second question is a database question and has its own guard -
+     * the bidirectional agreement test #48 landed against real MySQL, which R2's ruling named as
+     * the tripwire any future tightening must keep green. One seam each, rather than one test
+     * pretending to cover both and covering the second by coincidence.
+     */
     private static long rawCount(List<AutoCandidate> pool, String topic, Difficulty difficulty) {
         return pool.stream()
-                .filter(c -> topic == null || c.topic().equalsIgnoreCase(topic))
+                .filter(c -> topic == null || QuestionValidator.sameTopic(c.topic(), topic))
                 .filter(c -> difficulty == null || c.difficulty() == difficulty)
                 .count();
     }
@@ -307,7 +360,7 @@ class AutoComposerTest {
         }
 
         private static List<AutoCandidate> randomPool(Random random) {
-            String[] topics = {"OOP Basics", "Collections", "Exceptions", "Recursion"};
+            String[] topics = TOPIC_POOL;
             Difficulty[] levels = Difficulty.values();
             int size = random.nextInt(14);
             List<AutoCandidate> pool = new ArrayList<>();
@@ -327,7 +380,7 @@ class AutoComposerTest {
          * authority on what is legal.
          */
         private static AutoComposeRequest randomLegalCriteria(Random random) {
-            String[] topics = {"OOP Basics", "Collections", "Exceptions", "Recursion"};
+            String[] topics = TOPIC_POOL;
             List<TopicQuota> quotas = new ArrayList<>();
 
             if (random.nextBoolean()) {

@@ -307,6 +307,27 @@ public final class ExamBuildRepository {
      * cannot be assembled from two reads taken at different moments, which would badge a question
      * that was updated between them and miss one updated just before.
      *
+     * <h2>{@code latestVersionId} is a second subquery, and deliberately not {@code max(id)} ⚑</h2>
+     *
+     * <p>Added 2026-08-26 for E7.14's update action, which re-pins and therefore needs the id
+     * rather than the number. <b>The ruling that granted it said the id "rides the same
+     * subquery". It cannot:</b> {@code max(later.versionNo)} yields a number, and the id of the
+     * row holding that number is a different question. So this is a nested correlated subquery
+     * selecting the id <em>at</em> the maximum version number.
+     *
+     * <p>{@code max(later.id)} is the shortcut and it is wrong in the expensive direction. It
+     * asks "the highest id among this question's versions", which is the same answer as "the id
+     * of its highest version" only while ids and version numbers are handed out in the same
+     * order. Nothing states that, and the symptom of it ever being false is an update action that
+     * silently re-pins a question to the wrong version of itself, which no points rule, duplicate
+     * rule or constraint would catch. {@code ComposedQuestion}'s constructor now refuses the
+     * disagreement outright, and {@code latestIdIsTheIdAtTheLatestNumber} is the case that
+     * reproduces it on both engines.
+     *
+     * <p>Single-valued because {@code uq_question_versions_no UNIQUE (question_id, version_no)}
+     * makes it so; without that constraint this subquery would be a runtime error waiting for a
+     * question with two rows at one version number.
+     *
      * <p><b>The projection has nowhere to put {@code correct_answer} and this query never names
      * it.</b> A teacher composing a paper has no need of the key, and the type she gets back is
      * the reason rather than the query being careful.
@@ -334,7 +355,12 @@ public final class ExamBuildRepository {
                             case when qv.image is null then false else true end,
                             qv.versionNo,
                             (select max(later.versionNo) from QuestionVersion later
-                             where later.questionId = q.id))
+                             where later.questionId = q.id),
+                            (select newest.id from QuestionVersion newest
+                             where newest.questionId = q.id
+                               and newest.versionNo = (select max(l2.versionNo)
+                                                       from QuestionVersion l2
+                                                       where l2.questionId = q.id)))
                         from ExamVersionQuestion evq, QuestionVersion qv, Question q
                         where evq.id.examVersionId = :examVersionId
                           and qv.id = evq.id.questionVersionId

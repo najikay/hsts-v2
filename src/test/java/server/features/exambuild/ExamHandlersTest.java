@@ -112,7 +112,7 @@ class ExamHandlersTest {
         return new ExamComposition(70, "110001", COURSE, "Java", VERSION_ID, 1,
                 ApprovalState.DRAFT, "Midterm", 90, "", "", "Dana Levi", Instant.EPOCH, "",
                 List.of(new ComposedQuestion(11, "11007", 1, 100, "What is encapsulation?",
-                        "OOP", common.dto.bank.Difficulty.EASY, false, 1, 1)),
+                        "OOP", common.dto.bank.Difficulty.EASY, false, 1, 1, 11)),
                 LOCK_VERSION);
     }
 

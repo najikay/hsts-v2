@@ -122,4 +122,49 @@ Strong candidates to watch for (from v1's failures — if we hit them again, doc
 
 **The generalisation worth carrying.** P-9's lesson was "execute the claim against the system it is about". This one is narrower and sharper: **a one-directional promise deserves a two-directional test, and an argument for why one direction is harmless is a hypothesis, not a licence.** The bidirectional assertion existed and was green throughout — the gap was in the *data*, not the assertion, and it was the data an author chooses by enumerating cases he can think of. The rows that catch this class are the ones a fix is not expected to change.
 
+---
+
+## P-13 — A cache or a reset keyed on a subset of what can change    (2026-08-26, found by two cold reads of Member A's PR24)
+
+**Problem.** Four defects in one PR, three of them user-visible, all the same shape: something
+decides whether to redo work by comparing a **key**, and the key omits a term the work depends on.
+Nothing throws. The model is correct throughout. The screen, or the next screen, is not.
+
+- **A redraw key.** The exam builder rebuilds its question cards only when the paper's *shape*
+  changes, and the shape was the list of pinned version ids. Pressing "Use the newer version" then
+  saving returned rows with those same ids, so the key matched, nothing rebuilt, and the corrected
+  wording never reached the screen — while the notice that had promised it would was hidden,
+  because the save had "kept the promise". **The saved pin was correct**, which is what makes it
+  expensive: screen and database disagree with no marker, and the only conclusion available to the
+  teacher is that the update silently failed. The same key was still missing `latestVersionNo` after
+  the first fix, so a version published by a colleague mid-edit left the badge unpainted.
+- **A reset.** `resetLoaded` bumped the load counter and the picker counter and not the compose
+  counter, because it was written when there were two. A slow compose then landed on whichever exam
+  she opened next: paper cleared, filled with another exam's questions, announced with a success
+  toast. Two clicks away, because the screen is cached and reused across navigations.
+- **The same reset's field half.** The auto tab and the criteria grid survived `open()`. Landing on
+  a read-only version from the auto tab hid the paper she had navigated in to read, and withheld
+  the tab switch because a finished version is not editable — unrecoverable for the rest of the app
+  session.
+- **A stored answer.** The infeasibility report outlived the criteria it answered, under a heading
+  reading "the bank cannot satisfy **these** criteria" pointing at a grid she had since edited.
+
+**Why the tests could not see it.** Every one of these is a property of a *transition* — click then
+save, open then open again, answer then edit. The suite was rich in tests of each state and had
+almost none that crossed two. `reviseKeepsThePredecessor` is the sharpest instance: a plant that
+wrote the carried composition onto the predecessor left version 1 looking untouched, because it
+already held those rows, and version 2 empty — and every assertion passed, because the test asserted
+what must *not* change and never what must.
+
+**The rule.** A key that decides whether to redo work must hold **every term the work reads**, and a
+reset must cover **every asynchronous answer that can still be in flight**. Both are lists that grow
+when the feature grows, and both are invisible when short: the omission looks exactly like a
+deliberate optimisation. Write the rule beside the key — *"holds every term a server re-read can
+change, and nothing she can be halfway through typing"* — so the next person adding a term knows
+there is a list to add to.
+
+**The tell.** A comment near one of these that quantifies. `resetLoaded`'s paragraph said bumping
+the generation retires an answer in flight, and it was true when written and false for two of the
+three counters by the time it mattered. See method rule 5's note on comments that decay.
+
 *(more entries follow)*

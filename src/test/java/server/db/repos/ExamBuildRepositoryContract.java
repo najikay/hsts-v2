@@ -250,6 +250,80 @@ abstract class ExamBuildRepositoryContract extends RepositoryTestBase {
         assertThat(paper.get(1).latestVersionNo()).isEqualTo(1);
     }
 
+    /**
+     * The id E7.14 re-pins to, and why {@code max(id)} is not it ⚑.
+     *
+     * <p>The ruling that granted {@code latestVersionId} (2026-08-26) said it "rides the same
+     * subquery" as {@code latestVersionNo}. It does not: that one yields a <em>number</em>, and
+     * the id of the row holding it is a second question. The shortcut is {@code max(later.id)},
+     * which asks "the highest id among this question's versions" and gives the same answer as
+     * "the id of its highest version" only while ids and version numbers are handed out in the
+     * same order.
+     *
+     * <p><b>So this fixture writes them out of order</b>, versions 3, 1, 2. On a question whose
+     * versions were written in sequence every implementation agrees, which is why the obvious
+     * fixture proves nothing. Here the newest version holds neither the newest id nor the oldest,
+     * and only the correct query finds it.
+     *
+     * <p>What the shortcut would cost if it shipped: the builder's update action would re-pin a
+     * question to the wrong version of itself. No points rule, no duplicate rule and no
+     * constraint stands in the way of that, because a wrong version is still a valid pin.
+     */
+    @Test
+    @DisplayName("⚑ latestVersionId is the id AT the highest version number, never the highest id")
+    void latestIdIsTheIdAtTheLatestNumber() {
+        long versionId = draftVersion();
+        long shuffled = questionWithVersionsInOrder("שאלה שנכתבה שלא לפי הסדר", 3, 1, 2);
+
+        inTx(session -> {
+            repository.replaceComposition(session, versionId, List.of(
+                    new ExamBuildRepository.Pin(versionIdOf(session, shuffled, 1),
+                            shuffled, 100, 1)));
+            return null;
+        });
+
+        List<PinnedQuestion> paper = inTx(session -> repository.findComposition(session, versionId));
+        PinnedQuestion row = paper.get(0);
+
+        long idAtVersionThree = inTx(session -> versionIdOf(session, shuffled, 3));
+        long idAtVersionTwo = inTx(session -> versionIdOf(session, shuffled, 2));
+
+        assertThat(row.latestVersionNo()).isEqualTo(3);
+        assertThat(row.latestVersionId())
+                .as("the row holding version 3, which is what the update action must re-pin to")
+                .isEqualTo(idAtVersionThree);
+        assertThat(row.latestVersionId())
+                .as("and version 2 holds the highest id here, so max(id) would have answered it")
+                .isNotEqualTo(idAtVersionTwo);
+        assertThat(idAtVersionTwo)
+                .as("the fixture only discriminates while this holds, so it is asserted rather "
+                        + "than assumed: a future change to id allocation must fail here loudly")
+                .isGreaterThan(idAtVersionThree);
+    }
+
+    @Test
+    @DisplayName("an up-to-date pin is its own latest, so the two ids agree")
+    void anUpToDatePinIsItsOwnLatest() {
+        long versionId = draftVersion();
+        long stable = questionWithVersions("שאלה יציבה", 1);
+
+        inTx(session -> {
+            repository.replaceComposition(session, versionId, List.of(
+                    new ExamBuildRepository.Pin(latestVersionIdOf(session, stable),
+                            stable, 100, 1)));
+            return null;
+        });
+
+        PinnedQuestion row = inTx(session ->
+                repository.findComposition(session, versionId)).get(0);
+
+        assertThat(row.latestVersionNo()).isEqualTo(row.pinnedVersionNo());
+        assertThat(row.latestVersionId())
+                .as("ComposedQuestion's constructor refuses a row where these disagree while "
+                        + "the numbers are equal, so this is the shape that must hold")
+                .isEqualTo(row.questionVersionId());
+    }
+
     @Test
     @DisplayName("the paper reports whether a question has an illustration, without its bytes")
     void hasImageIsReportedWithoutFetchingIt() {
@@ -836,6 +910,24 @@ abstract class ExamBuildRepositoryContract extends RepositoryTestBase {
     private long questionWithVersions(String text, int versions) {
         long questionId = persistQuestion();
         for (int versionNo = 1; versionNo <= versions; versionNo++) {
+            int number = versionNo;
+            runInTx(session -> session.persist(new QuestionVersion(questionId, number, text,
+                    "1", "2", "3", "4", (byte) 1, "פונקציות", Difficulty.EASY,
+                    null, danaId, WHEN)));
+        }
+        return questionId;
+    }
+
+    /**
+     * Versions written in the order given rather than in numeric order.
+     *
+     * <p>{@link #questionWithVersions} writes 1, 2, 3 and so hands the newest version the newest
+     * id, which makes "the id at the highest version number" and "the highest id" the same
+     * answer. This one exists so a query can be asked a question those two disagree about.
+     */
+    private long questionWithVersionsInOrder(String text, int... versionNos) {
+        long questionId = persistQuestion();
+        for (int versionNo : versionNos) {
             int number = versionNo;
             runInTx(session -> session.persist(new QuestionVersion(questionId, number, text,
                     "1", "2", "3", "4", (byte) 1, "פונקציות", Difficulty.EASY,
