@@ -175,9 +175,14 @@ class UiSmokeTest extends ApplicationTest {
         assertThat(manager.signedInUser()).isEqualTo(dana);
         assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.HOME_TEACHER.id());
         assertThat(lookupOne(scene, ".hsts-rail")).isNotNull();
-        // The dashboard rendered, and the not-yet-built rail items are visibly muted.
+        // The dashboard rendered, and every item on the rail is one she can press.
         assertThat(lookupOne(scene, ".hsts-stat-card")).isNotNull();
-        assertThat(scene.getRoot().lookupAll(".nav-item.disabled")).isNotEmpty();
+        assertThat(scene.getRoot().lookupAll(".nav-item")).isNotEmpty();
+        // ⚑ U-1. This asserted the opposite until batch C: "the not-yet-built rail items are
+        // visibly muted", which was true of Take Exam and Live Monitor long after their screens
+        // shipped. Nothing on any rail is disabled now, and the assertion is inverted rather
+        // than deleted so that the next placeholder has to come here and say so.
+        assertThat(scene.getRoot().lookupAll(".nav-item.disabled")).isEmpty();
 
         interact(() -> ShellBoot.logout(manager));
         WaitForAsyncUtils.waitForFxEvents();

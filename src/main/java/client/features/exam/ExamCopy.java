@@ -140,6 +140,27 @@ public final class ExamCopy {
     /** Toast raised once the connection is back and the paper has been resynced. */
     public static final String RECONNECTED = "Back online, your answers are up to date";
 
+    // ===================== Monitor (E11.2, U-1) ==========================
+
+    /**
+     * The monitor's title when it is opened without a sitting (U-1).
+     *
+     * <p>The rail item that arrived in U-1 has nothing to hand this screen: a rail is a list of
+     * places, not a list of sittings, and the sitting is chosen on Releases. So the paramless
+     * entry is a designed state rather than a request for execution zero, which would have put
+     * the server's "no such execution" refusal on screen as the first thing a teacher saw after
+     * clicking her own menu.
+     */
+    public static final String MONITOR_NO_SITTING_TITLE = "Pick a sitting to watch";
+
+    /** Its hint, which names the place the choice is actually made. */
+    public static final String MONITOR_NO_SITTING_HINT =
+            "Releases lists every exam you have scheduled. Open one that is running and its "
+                    + "Monitor button brings you back here with it.";
+
+    /** The action on that state; the one thing to do about it. */
+    public static final String MONITOR_NO_SITTING_ACTION = "Open Releases";
+
     // ===================== Composed sentences ============================
 
     /**

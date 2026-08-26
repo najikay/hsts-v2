@@ -69,6 +69,26 @@ public final class BotCopy {
     /** The banner title when the bot cannot be used at all right now. */
     public static final String UNAVAILABLE_TITLE = "This bot is not available";
 
+    /**
+     * The label beside the chat's course picker ⚑ (U-2).
+     *
+     * <p>The picker is only there for a student in more than one course, and it needs a word
+     * beside it: a bare dropdown reading "Databases 22" under a heading reading "Databases 22
+     * study bot" looks like a statement rather than a choice. One noun does the whole job.
+     */
+    public static final String COURSE_PICKER_LABEL = "Course";
+
+    /**
+     * Its tooltip, which says what switching actually does.
+     *
+     * <p>Each course's bot is a separate bot with a separate history, so switching is not a
+     * filter over one conversation. Saying so is what stops a student thinking she has lost
+     * the thread she was on.
+     */
+    public static final String COURSE_PICKER_TOOLTIP =
+            "Each course has its own study bot and its own saved conversations. "
+                    + "Switching opens that course's bot.";
+
     /** The button that opens the history screen from the chat. */
     public static final String OPEN_HISTORY = "Past conversations";
 

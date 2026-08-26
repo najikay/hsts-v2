@@ -150,6 +150,18 @@ class BotCopyTest {
     }
 
     @Test
+    @DisplayName("⚑ U-2: the course picker says what switching does, not just which course")
+    void coursePickerCopy() {
+        assertThat(BotCopy.COURSE_PICKER_LABEL)
+                .as("one noun beside the control; the control shows the course itself")
+                .isEqualTo("Course");
+        assertThat(BotCopy.COURSE_PICKER_TOOLTIP)
+                .as("the two facts that stop a student thinking she has lost her thread")
+                .containsIgnoringCase("its own")
+                .containsIgnoringCase("conversations");
+    }
+
+    @Test
     @DisplayName("⚑ the edit dialog says what makes an edit different from a re-upload (B-21)")
     void editCopy() {
         assertThat(BotCopy.EDIT).isEqualTo("Edit");

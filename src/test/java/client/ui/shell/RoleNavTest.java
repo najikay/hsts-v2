@@ -101,21 +101,55 @@ class RoleNavTest {
         void questionBankIsLiveForTeachers() {
             // Exams went live with E8.6 carrying its approval-status half only, and
             // Approvals with E8.3; the exam builder behind the same route id is E7's.
+            // ⚑ U-1: Live Monitor joins them. E11 shipped the screen and registered the
+            // route, and every path into it carried an execution, so the rail item that
+            // could not was left saying "Arrives with E11" for four epics after it had.
             assertThat(enabledLabels(Role.TEACHER))
                     .containsExactly("Dashboard", "Question Bank", "Exams", "Releases",
-                            "Grading", "Results", "Study Bot", "Settings");
+                            "Live Monitor", "Grading", "Results", "Study Bot", "Settings");
             assertThat(enabledLabels(Role.COORDINATOR))
                     .containsExactly("Dashboard", "Question Bank", "Exams", "Approvals",
-                            "Releases", "Grading", "Results", "Study Bot", "Settings");
+                            "Releases", "Live Monitor", "Grading", "Results", "Study Bot",
+                            "Settings");
             // My Grades went live with E13.3; the rail item had reserved the slot as a
             // disabled "Arrives with E13" since E5.4.
+            // ⚑ U-1: and Take Exam, whose screen has been the student's exam flow since
+            // E10. Her only door into it was the dashboard's code card.
             assertThat(enabledLabels(Role.STUDENT))
-                    .containsExactly("Dashboard", "My Grades", "Study Bot", "Settings");
+                    .containsExactly("Dashboard", "Take Exam", "My Grades", "Study Bot",
+                            "Settings");
             // Reports went live with E15.4 and Data with E15.2; both rail items had reserved
             // their slots as disabled "Arrives with E15" entries since E5.4. Her rail now has
             // nothing disabled on it, and nothing on it that writes (S-7).
             assertThat(enabledLabels(Role.PRINCIPAL))
                     .containsExactly("Dashboard", "Data", "Reports", "Settings");
+        }
+
+        @ParameterizedTest
+        @EnumSource(Role.class)
+        @DisplayName("⚑ U-1: no rail carries a placeholder any more")
+        void nothingIsDisabledAnywhere(Role role) {
+            // The state of the app, asserted rather than assumed. Take Exam and Live Monitor
+            // were the last two, and both had been routable for weeks: a rail item is the
+            // one part of a screen a user is told to look for, so a live feature behind a
+            // dead label is a feature nobody can find. Adding the next placeholder means
+            // coming here and saying so, which is the point of asserting it.
+            assertThat(RoleNav.itemsFor(role))
+                    .as("%s", role)
+                    .allSatisfy(item -> assertThat(item.enabled()).isTrue());
+        }
+
+        @Test
+        @DisplayName("⚑ U-1: the two enabled items point at the live routes, not the placeholder ids")
+        void theSwappedItemsPointAtTheRealRoutes() {
+            // The take-exam placeholder read "exam.take" and the live route has read
+            // "attempt" since E10, because that is what an "extra time added" notification
+            // navigates to. Promoting the string beside the label instead of swapping onto
+            // the route constant would have registered nothing and thrown on the click.
+            assertThat(routeOf(Role.STUDENT, "Take Exam")).isEqualTo(Routes.TAKE_EXAM.id());
+            assertThat(routeOf(Role.STUDENT, "Take Exam")).isEqualTo("attempt");
+            assertThat(routeOf(Role.TEACHER, "Live Monitor")).isEqualTo(Routes.MONITOR.id());
+            assertThat(routeOf(Role.COORDINATOR, "Live Monitor")).isEqualTo(Routes.MONITOR.id());
         }
 
         @Test

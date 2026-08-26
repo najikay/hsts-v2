@@ -292,6 +292,15 @@ class TakeExamInteractionTest extends ApplicationTest {
         return manager;
     }
 
+    /**
+     * Opens the screen the way the rail does: navigate, carrying nothing.
+     *
+     * <p>⚑ U-1 enabled that rail item, and this is the entry it produces. Nothing here
+     * changed to make it work — {@code TakeExamView.onShow} has always treated the dashboard's
+     * pre-validated code as an {@code ifPresent} pre-fill on top of a code screen it builds
+     * either way — which is what makes the rail item a one-line swap and this method the proof
+     * of it rather than a new test.
+     */
     private void openTakeExam(ScreenManager manager) {
         interact(() -> manager.navigator().navigate(Routes.TAKE_EXAM.id()));
         WaitForAsyncUtils.waitForFxEvents();

@@ -41,7 +41,12 @@ public final class Icons {
     public static final String EXAMS = "mdoal-assignment";
     public static final String APPROVALS = "mdoal-fact_check";
     public static final String RELEASE = "mdomz-schedule";
-    public static final String MONITOR = "mdomz-monitor";
+    // Not "mdomz-monitor" ⚑ (U-1): the material2 pack has no MONITOR, so Icons.of caught the
+    // resolver's exception and rendered a blank spacer. It went unseen because the only thing
+    // wearing it was a disabled rail item and an empty state nobody reached; enabling Live
+    // Monitor put a rail item with no glyph in front of every teacher. Same class of bug as
+    // the smart_toy note below, found the same way.
+    public static final String MONITOR = "mdoal-desktop_windows";
     public static final String GRADING = "mdoal-grading";
     public static final String RESULTS = "mdoal-bar_chart";
     public static final String REPORTS = "mdoal-insert_chart_outlined";

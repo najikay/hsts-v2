@@ -76,6 +76,19 @@ class BotInteractionTest extends ApplicationTest {
     private static final LoginResult MAYA = new LoginResult(3001, "maya.levi", "Maya Levi",
             Role.STUDENT, List.of(new CourseRef("22", "Databases 22")), 0);
 
+    /**
+     * Maya as the seed actually has her: three courses (SEED_CONTENT, student 11).
+     *
+     * <p>⚑ U-2. Every fixture in this file used to give her one course, which is exactly why
+     * nothing here caught the chat opening {@code courses().get(0)} unconditionally: with one
+     * course that behaviour is correct, and with three it is a screen that can reach one bot
+     * out of three.
+     */
+    private static final LoginResult MAYA_ENROLLED = new LoginResult(3001, "maya.levi",
+            "Maya Levi", Role.STUDENT, List.of(new CourseRef("11", "Algebra 11"),
+                    new CourseRef("21", "Java Programming"),
+                    new CourseRef("22", "Databases 22")), 0);
+
     private static final LoginResult DANA = new LoginResult(1001, "dana.cohen", "Dana Cohen",
             Role.TEACHER, List.of(new CourseRef("22", "Databases 22")), 0);
 
@@ -157,6 +170,93 @@ class BotInteractionTest extends ApplicationTest {
         assertThat(labelTexts(manager.scene()))
                 .as("her question is already on screen, optimistically")
                 .contains("what is a foreign key");
+    }
+
+    // ===================== The course picker (U-2) =======================
+
+    @Test
+    @DisplayName("⚑ U-2: a student in one course gets no picker, exactly as before")
+    void oneCourseKeepsTheHeaderItHad() {
+        ScreenManager manager = signIn(MAYA, connection -> { });
+        BotChatView chat = openChat(manager);
+
+        assertThat(chat.coursePickerRow().isVisible())
+                .as("a dropdown with one entry is a control that cannot be operated")
+                .isFalse();
+        assertThat(chat.coursePickerRow().isManaged())
+                .as("and unmanaged, so the header keeps the layout E16 gave it")
+                .isFalse();
+        assertThat(labelTexts(manager.scene()))
+                .as("what she does see is the bot she has")
+                .contains("Databases 22 study bot");
+    }
+
+    @Test
+    @DisplayName("⚑ U-2: a student in three courses can reach the other two bots")
+    void theCoursePickerSwitchesBots() {
+        ScreenManager manager = signIn(MAYA_ENROLLED, connection ->
+                connection.replyOk(Verb.BOT_ASK, new BotAnswer(9L, "what is a discriminant",
+                        "The expression b squared minus 4ac.", NOW)));
+        BotChatView chat = openChat(manager);
+
+        assertThat(chat.coursePickerRow().isVisible()).isTrue();
+        assertThat(chat.coursePicker().getItems())
+                .as("her enrolment, all of it")
+                .hasSize(3);
+        assertThat(labelTexts(manager.scene()))
+                .as("and she starts on the course the navigation named")
+                .contains("Databases 22 study bot");
+
+        // The real affordance, with the real robot: open the dropdown and pick a course.
+        clickOn(chat.coursePicker());
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn("Algebra 11");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(manager.scene()))
+                .as("the heading follows the bot she is now talking to")
+                .contains("Algebra 11 study bot");
+
+        clickOn(chat.input()).write("what is a discriminant");
+        clickOn(chat.sendButton());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        common.dto.bot.BotAskRequest asked =
+                (common.dto.bot.BotAskRequest) lastSent(manager).getPayload();
+        assertThat(asked.courseCode())
+                .as("the ask names the bot she switched to, which is the course "
+                        + "the server decides C-4 against")
+                .isEqualTo("11");
+        assertThat(asked.sessionId())
+                .as("a fresh conversation, not the Databases one carried across")
+                .isNull();
+        assertThat(labelTexts(manager.scene()))
+                .contains("The expression b squared minus 4ac.");
+    }
+
+    @Test
+    @DisplayName("⚑ U-2: switching courses empties the conversation rather than mixing two")
+    void switchingClearsTheConversation() {
+        ScreenManager manager = signIn(MAYA_ENROLLED, connection ->
+                connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "what is a foreign key",
+                        "A foreign key points at another table's primary key.", NOW)));
+        BotChatView chat = openChat(manager);
+
+        clickOn(chat.input()).write("what is a foreign key");
+        clickOn(chat.sendButton());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(labelTexts(manager.scene())).contains("what is a foreign key");
+
+        interact(() -> chat.coursePicker().getSelectionModel().select(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(manager.scene()))
+                .as("her Databases thread is not in the Algebra bot's window; it is still "
+                        + "hers, under Past conversations")
+                .doesNotContain("what is a foreign key");
+        assertThat(labelTexts(manager.scene()))
+                .as("and the fresh conversation says what to do with it")
+                .contains(BotCopy.CHAT_EMPTY_TITLE);
     }
 
     // ===================== Manager (E16.12) ==============================
@@ -300,6 +400,11 @@ class BotInteractionTest extends ApplicationTest {
                 NavParams.of("courseCode", "22")));
         WaitForAsyncUtils.waitForFxEvents();
         return (BotChatView) manager.screens().get(Routes.BOT_CHAT.id());
+    }
+
+    /** @return the last request the client actually put on the wire. */
+    private static Message lastSent(ScreenManager manager) {
+        return ((FakeClientConnection) manager.getClient()).lastSent();
     }
 
     private static Set<String> labelTexts(Scene scene) {

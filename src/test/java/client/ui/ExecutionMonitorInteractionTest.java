@@ -6,6 +6,7 @@ import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.PushEventBridge;
+import client.features.exam.ExamCopy;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -197,6 +198,52 @@ class ExecutionMonitorInteractionTest extends ApplicationTest {
 
         assertThat(manager.scene().getRoot().lookup(".hsts-empty-state")).isNotNull();
         assertThat(labelTexts(manager.scene())).contains("Nobody has started yet");
+    }
+
+    @Test
+    @DisplayName("⚑ U-1: opened from the rail with no sitting, it offers the choice")
+    void railEntryOffersTheChooser() {
+        ScreenManager manager = signIn(snapshot(true, 3, 1, 0));
+        FakeClientConnection connection = (FakeClientConnection) manager.getClient();
+        int before = connection.sentMessages().size();
+
+        // Exactly what the U-1 rail item does: navigate, carrying nothing. Every other way
+        // in carries an execution, and asking for zero would have put the server's "no such
+        // execution" refusal under an empty title as the first thing she saw.
+        interact(() -> manager.navigator().navigate(Routes.MONITOR.id()));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(connection.sentMessages().subList(before, connection.sentMessages().size()))
+                .as("nothing is asked about a sitting nobody chose")
+                .noneMatch(message -> message.getVerb() == Verb.EXECUTION_MONITOR_GET);
+        assertThat(labelTexts(manager.scene()))
+                .contains(ExamCopy.MONITOR_NO_SITTING_TITLE, ExamCopy.MONITOR_NO_SITTING_HINT);
+        assertThat(manager.scene().getRoot().lookupAll(".monitor-row")).isEmpty();
+
+        clickOn(buttonNamed(manager.scene(), ExamCopy.MONITOR_NO_SITTING_ACTION));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.navigator().currentRouteId())
+                .as("the state names the place the choice is made, and takes her there")
+                .isEqualTo(Routes.RELEASES.id());
+    }
+
+    @Test
+    @DisplayName("⚑ U-1: coming back from the rail does not leave the last sitting on screen")
+    void railEntryClearsThePreviousSitting() {
+        ScreenManager manager = signIn(snapshot(true, 3, 1, 0));
+        openMonitor(manager);
+        assertThat(manager.scene().getRoot().lookupAll(".monitor-row")).hasSize(3);
+
+        // The screen is built once and navigated to many times. Her class still on screen
+        // under a title inviting her to pick a sitting would be a mystery state.
+        interact(() -> manager.navigator().navigate(Routes.MONITOR.id()));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.scene().getRoot().lookupAll(".monitor-row")).isEmpty();
+        assertThat(labelTexts(manager.scene()))
+                .as("and the header full of controls for a sitting that is not there is gone")
+                .doesNotContain("Java Midterm", "Started");
     }
 
     @Test

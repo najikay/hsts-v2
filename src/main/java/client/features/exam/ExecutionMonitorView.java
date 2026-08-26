@@ -47,8 +47,20 @@ import javafx.util.Duration;
  * <p>The integrity flag (C-4) is a chip on the row, worded as something to look at rather
  * than an accusation: the server cannot know intent, and the teacher is the one who decides
  * what it means.
+ *
+ * <h2>Arriving with no sitting ⚑ (U-1)</h2>
+ *
+ * <p>Every other way in carries one: a Releases row's Monitor button, a C-4 alert, an
+ * "opens soon" deep link. The rail item U-1 enabled cannot, because a rail is a list of
+ * places and the sitting is chosen on Releases. Asking for execution zero would have put the
+ * server's refusal sentence under an empty title, so {@link #onShow} does not ask at all: it
+ * renders {@link ExamCopy#MONITOR_NO_SITTING_TITLE} with a button to the screen where the
+ * choice is made, and the header full of controls for a sitting that is not there stays off.
  */
 public final class ExecutionMonitorView extends AbstractScreen {
+
+    /** The nav parameter naming the sitting to watch; spelled by every caller that has one. */
+    public static final String PARAM_EXECUTION = "executionId";
 
     /** How often the remaining-time column is re-rendered between pushes. */
     private static final Duration TICK = Duration.seconds(1);
@@ -68,6 +80,9 @@ public final class ExecutionMonitorView extends AbstractScreen {
 
     private ExecutionMonitorSession session;
     private Timeline ticker;
+    private VBox header;
+    private ScrollPane body;
+    private EmptyState chooser;
 
     @Override
     protected Parent build() {
@@ -78,9 +93,16 @@ public final class ExecutionMonitorView extends AbstractScreen {
         minutes.setEditable(true);
         minutes.setPrefWidth(90);
 
+        header = buildHeader();
+        body = buildBody();
+        chooser = new EmptyState(Icons.RELEASE, ExamCopy.MONITOR_NO_SITTING_TITLE,
+                ExamCopy.MONITOR_NO_SITTING_HINT)
+                .action(ExamCopy.MONITOR_NO_SITTING_ACTION,
+                        () -> navigator().navigate(Routes.RELEASES.id()));
+
         root.getStyleClass().add("execution-monitor");
-        root.setTop(buildHeader());
-        root.setCenter(buildBody());
+        root.setTop(header);
+        root.setCenter(body);
 
         ticker = new Timeline(new KeyFrame(TICK, e -> renderRows()));
         ticker.setCycleCount(Animation.INDEFINITE);
@@ -89,9 +111,31 @@ public final class ExecutionMonitorView extends AbstractScreen {
 
     @Override
     public void onShow(NavParams params) {
-        long executionId = params.getLong("executionId", 0);
+        long executionId = params.getLong(PARAM_EXECUTION, 0);
+        if (executionId <= 0) {
+            showChooser();
+            return;
+        }
+        root.setTop(header);
+        root.setCenter(body);
         session.start(executionId);
         ticker.playFromStart();
+    }
+
+    /**
+     * The paramless entry (U-1): offer the choice instead of making one up.
+     *
+     * <p>{@code session.stop()} rather than "do nothing", because the screen is built once and
+     * navigated to many times: a teacher who watched a sitting, left, and came back from the
+     * rail must not find the old sitting's rows still on screen under a title inviting her to
+     * pick one.
+     */
+    private void showChooser() {
+        ticker.stop();
+        session.stop();
+        rows.getChildren().clear();
+        root.setTop(null);
+        root.setCenter(chooser);
     }
 
     @Override

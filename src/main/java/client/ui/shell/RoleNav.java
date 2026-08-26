@@ -23,6 +23,14 @@ import java.util.Objects;
  * swapping one {@code disabled(...)} for one {@code of(...)} plus its route
  * registration in {@code SessionRoutes}.
  *
+ * <p><b>As of U-1 there is nothing left to swap.</b> Take Exam and Live Monitor
+ * were the last two placeholders, and both of their screens had been registered and
+ * routable for weeks: a student's only way into an exam was the dashboard's code
+ * card, and a teacher's only way into a live sitting was a Releases row or a C-4
+ * alert, while the rail item beside each of them still read "Arrives with E10" /
+ * "Arrives with E11". Every item on every rail is now live. The mechanism stays
+ * where it is for the next feature that needs it.
+ *
  * <p>The rail is not a permission boundary and never pretends to be — the server
  * re-authorises every request from the session (ARCHITECTURE §3). Hiding
  * Approvals from a teacher is a courtesy to the teacher, not a defence.
@@ -30,16 +38,24 @@ import java.util.Objects;
 public final class RoleNav {
 
     /**
-     * Route ids of screens that arrive in later epics; declared once, here.
+     * The ids this rail reserved for screens that had not been built yet.
      *
-     * <p>{@code exams} and {@code approvals} left this list in E8, and {@code releases}
-     * in E9: each now has a {@link Routes} constant of its own, which is what an enabled
-     * item points at.
+     * <p>Kept because {@link Routes} names them: each of these constants is the reason
+     * the screen behind it could go live as a swap here rather than as a rename
+     * everywhere, and the {@code Routes} javadoc that says so should point at something
+     * real. {@code exams} and {@code approvals} left the list in E8 and {@code releases}
+     * in E9, each taking a {@link Routes} constant of its own.
+     *
+     * <p>{@code monitor} and {@code exam.take} left in U-1, and only one of them left
+     * quietly: {@code ROUTE_MONITOR} had always been spelled the way {@link Routes#MONITOR}
+     * spells it, while the take-exam placeholder read {@code "exam.take"} and the live route
+     * has read {@code "attempt"} since E10, because that is what an "extra time added"
+     * notification navigates to. Enabling that item was therefore a swap onto the route
+     * constant and not a promotion of the string beside it, which is exactly why the
+     * placeholder id is gone instead of being kept for the record.
      */
-    static final String ROUTE_MONITOR = "monitor";
     static final String ROUTE_GRADING = "grading";
     static final String ROUTE_RESULTS = "results";
-    static final String ROUTE_TAKE_EXAM = "exam.take";
     static final String ROUTE_MY_GRADES = "grades";
     static final String ROUTE_DATA = "data";
     static final String ROUTE_REPORTS = "reports";
@@ -91,7 +107,13 @@ public final class RoleNav {
         // E9" since E5.4; enabling it moved it onto Routes.RELEASES, whose id is "release"
         // because that is what the "opens soon" notification navigates to.
         items.add(NavItem.of(Routes.RELEASES.id(), "Releases", Icons.RELEASE));
-        items.add(soon(ROUTE_MONITOR, "Live Monitor", Icons.MONITOR, 11));
+        // Live since E11, on the rail since U-1. The screen has been registered and routable
+        // the whole time — a C-4 alert and a Releases row both open it — but the rail item
+        // beside them still read "Arrives with E11", so the one destination a teacher would
+        // look for during a sitting was the one place she could not click. Entering from here
+        // carries no execution, which the screen answers with its own chooser state rather
+        // than with a request for sitting zero.
+        items.add(NavItem.of(Routes.MONITOR.id(), "Live Monitor", Icons.MONITOR));
         // Live since E12. The rail item has reserved this slot since E5.4 and its id is still
         // ROUTE_GRADING: Routes.GRADING was declared with the same string, so enabling the
         // feature was a swap here rather than a rename anywhere.
@@ -111,7 +133,13 @@ public final class RoleNav {
     private static List<NavItem> student() {
         return List.of(
                 dashboard(Role.STUDENT),
-                soon(ROUTE_TAKE_EXAM, "Take Exam", Icons.EXAMS, 10),
+                // Live since E10, on the rail since U-1. Until then the only door into an exam
+                // was the dashboard's code card, so a student whose dashboard had scrolled or
+                // whose sitting was not yet listed had a rail item named exactly what she wanted
+                // and could not press it. The route id is Routes.TAKE_EXAM's ("attempt") and not
+                // the placeholder's ("exam.take"): the flow starts at the code screen, which is
+                // what TakeExamView.onShow builds whether or not a code was handed to it.
+                NavItem.of(Routes.TAKE_EXAM.id(), "Take Exam", Icons.EXAMS),
                 // Live since E13. The rail item has reserved this slot since E5.4 and its id
                 // is still ROUTE_MY_GRADES: Routes.MY_GRADES was declared with the same
                 // string, so enabling the feature was a swap here rather than a rename.
@@ -143,10 +171,5 @@ public final class RoleNav {
 
     private static NavItem settings() {
         return NavItem.of(Routes.SETTINGS.id(), "Settings", Icons.SETTINGS);
-    }
-
-    /** @return a disabled item whose tooltip names the epic that will enable it. */
-    private static NavItem soon(String routeId, String label, String icon, int epic) {
-        return NavItem.disabled(routeId, label, icon, "Arrives with E" + epic);
     }
 }

@@ -188,7 +188,8 @@ public final class ReleaseManagerView extends AbstractScreen {
             Button monitor = Buttons.secondary(ReleaseCopy.MONITOR_ACTION);
             monitor.getStyleClass().add("release-monitor");
             monitor.setOnAction(e -> navigator().navigate(Routes.MONITOR.id(),
-                    NavParams.of("executionId", row.executionId())));
+                    NavParams.of(client.features.exam.ExecutionMonitorView.PARAM_EXECUTION,
+                            row.executionId())));
             actions.getChildren().add(monitor);
         }
         if (row.canCancel()) {

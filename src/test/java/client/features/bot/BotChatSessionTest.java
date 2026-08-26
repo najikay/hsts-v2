@@ -34,6 +34,7 @@ class BotChatSessionTest {
     private static final Instant NOW = Instant.parse("2026-08-20T10:00:00Z");
 
     private FakeClientConnection connection;
+    private RequestDispatcher dispatcher;
     private BotChatModel model;
     private BotChatSession session;
 
@@ -41,7 +42,7 @@ class BotChatSessionTest {
     void setUp() throws IOException {
         connection = new FakeClientConnection();
         connection.connect();
-        RequestDispatcher dispatcher = new RequestDispatcher(connection);
+        dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
         model = new BotChatModel("22", "Databases 22");
         session = new BotChatSession(dispatcher, model, Clock.fixed(NOW, ZoneOffset.UTC));
@@ -253,6 +254,72 @@ class BotChatSessionTest {
 
         assertThat(model.state()).isEqualTo(ChatState.UNAVAILABLE);
         assertThat(model.hasAcknowledged()).isFalse();
+    }
+
+    /**
+     * ⚑ <b>U-2.</b> The C-4 notice fires when a student opens <i>another</i> course's bot while
+     * she is sitting an exam, and until the course picker landed there was no way to open one:
+     * {@code BotChatView} resolved the course to {@code courses().get(0)} on every entry, so a
+     * student in three courses could reach exactly one bot and the cross-course path was
+     * UI-unreachable. Every test above it asks about one course, which is the same reason it
+     * could not have caught this.
+     *
+     * <p>The picker's whole mechanism is "rebuild the session for the chosen course", so the
+     * switch is testable here, without a toolkit: build the second session the way
+     * {@code startSessionFor} does and assert that the ask names the course she moved to.
+     */
+    @Test
+    @DisplayName("⚑ U-2: switching course asks about that course, which is what reaches the C-4 notice")
+    void switchingCourseReachesTheIntegrityNotice() {
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "first", "an answer", NOW));
+        session.ask("first").join();
+
+        // She picks Algebra 11 out of the picker while sitting the Databases 22 exam. The
+        // view rebuilds model and session for the chosen course; this is that rebuild.
+        BotChatModel switched = new BotChatModel("11", "Algebra 11");
+        BotChatSession other =
+                new BotChatSession(dispatcher, switched, Clock.fixed(NOW, ZoneOffset.UTC));
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Algebra 11",
+                "You are sitting a Databases 22 exam right now."));
+
+        other.ask("what is a discriminant").join();
+
+        assertThat(((BotAskRequest) connection.lastSent().getPayload()).courseCode())
+                .as("the ask names the bot she opened, which is what the server decides C-4 on")
+                .isEqualTo("11");
+        assertThat(switched.state()).isEqualTo(ChatState.NEEDS_ACKNOWLEDGEMENT);
+        assertThat(switched.heldQuestion()).isEqualTo("what is a discriminant");
+        assertThat(switched.banner()).contains("Databases 22");
+
+        // And the conversation she switched away from is untouched: separate model, separate
+        // consent. A notice carried across would belong to a sitting and a bot it was not
+        // given for.
+        assertThat(model.state()).isEqualTo(ChatState.IDLE);
+        assertThat(model.hasAcknowledged()).isFalse();
+    }
+
+    @Test
+    @DisplayName("⚑ U-2: confirming the switched-to bot's notice re-sends against that course")
+    void acknowledgingAfterASwitchStaysOnTheNewCourse() {
+        BotChatModel switched = new BotChatModel("11", "Algebra 11");
+        BotChatSession other =
+                new BotChatSession(dispatcher, switched, Clock.fixed(NOW, ZoneOffset.UTC));
+        connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Algebra 11", "notice"));
+        other.ask("what is a discriminant").join();
+        connection.replyOk(Verb.BOT_ASK,
+                new BotAnswer(9L, "what is a discriminant", "b squared minus 4ac.", NOW));
+
+        other.acknowledgeAndAsk().join();
+
+        BotAskRequest resent = (BotAskRequest) connection.lastSent().getPayload();
+        assertThat(resent.courseCode()).isEqualTo("11");
+        assertThat(resent.integrityAcknowledged())
+                .as("she agreed, and the teacher whose exam she is sitting is told once")
+                .isTrue();
+        assertThat(switched.state()).isEqualTo(ChatState.IDLE);
+        assertThat(switched.sessionId())
+                .as("her Algebra 11 conversation is her Algebra 11 conversation")
+                .isEqualTo(9L);
     }
 
     @Test
