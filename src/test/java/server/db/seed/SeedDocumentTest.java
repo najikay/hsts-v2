@@ -211,7 +211,7 @@ class SeedDocumentTest {
     @DisplayName("selections are pinned by value, not only by how many there are")
     void selectionValuesArePinned() {
         // Size-and-flags assertions leave every selected option unchecked, and these two
-        // accessors are what SeedArithmeticTest will recompute scores from, so an unguarded
+        // accessors are what SeedDatasetContract recomputes scores from, so an unguarded
         // value here becomes an unguarded input there. lior.gabay answered all seven
         // correctly for 100; omer.katz reached only the first three.
         assertThat(selectionsOf("lior.gabay"))

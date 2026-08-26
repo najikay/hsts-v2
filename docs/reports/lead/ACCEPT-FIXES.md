@@ -42,7 +42,7 @@ bug nobody had noticed; it is a decision made on incomplete evidence.
 **The fix stands, and the reason it stands is the evidence the ruling did not have**: the ruling
 priced the cost as "a teacher told two similar answers are too similar", and the walk priced it as
 *five seeded questions no teacher can re-save and case 2.4 blocked on its own first step*.
-`BANK_WIRE_CONTRACT.md` §5 now carries a dated **amendment A1** stating the reversal, leaving the
+`BANK_WIRE_CONTRACT.md` §5 now carries a dated **amendment A2** stating the reversal, leaving the
 original ruling above it in full, and saying exactly which half is reversed. **The spacing half of
 that ruling is deliberately left standing** — `sameAnswer("1 2 3", "123")` is still `true`, still
 stricter than the collation, but ADR-016 *names* trimming and whitespace collapse as the rule, so
@@ -127,7 +127,7 @@ the sweep found it: MySQL answers `0` — different — to `'1 2 3'`/`'123'`, `'
 `'a  b'`/`'a b'` and `'  Two'`/`'Two'`, and `1` only to `'Two  '`/`'Two'`, because the collation is
 PAD SPACE and folds **trailing** spaces alone. The validator folds all of them, so it is stricter
 there too — the same class of defect as B-7, with a different provenance and no observed cost. See
-deviation 2 and contract amendment A1.
+deviation 2 and contract amendment A2.
 
 **③ Do the eight differ from each other?** All 28 pairs, put to MySQL as `'a?b' = 'a?b'`:
 
@@ -533,7 +533,7 @@ written.
 **Docs**
 
 `docs/ACCEPTANCE_TESTS.md`, `docs/PROBLEMS.md`, `docs/seed/SEED_CONTENT.md`,
-`docs/contracts/BANK_WIRE_CONTRACT.md` (**amendment A1** — see deviation 2),
+`docs/contracts/BANK_WIRE_CONTRACT.md` (**amendment A2** — see deviation 2; it landed labelled A1 and was renumbered in batch A, 2026-08-26, because A1 was already the `latestVersionId` amendment),
 `docs/reports/lead/ACCEPT-S2-S3.md`, `docs/reports/lead/ACCEPT-S4-S5.md`, this file.
 
 **Not committed** — the tree is left staged for the lead's review, per the batch brief.

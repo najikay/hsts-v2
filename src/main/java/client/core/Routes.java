@@ -156,6 +156,28 @@ public final class Routes {
      */
     public static final Route EXAMS = Route.shell("exams", "My exams", "Exams");
 
+    /**
+     * The exam builder — one exam version open for authoring (E7.11–E7.13, F3.1/F3.2).
+     *
+     * <p>Not on any rail, for the same reason {@link #EXAM_PREVIEW} and {@link #QUESTION_EDIT}
+     * are not: it is a view of one exam, and a rail item that needed an exam chosen first would
+     * be a dead end. It is what the exam list's Edit, View and New buttons open, and each of
+     * them carries what the screen opens on through nav parameters.
+     *
+     * <p>The id is spelled by {@code ExamBuildRoutes.BUILDER}, the feature's own copy of the
+     * string, which has read {@code "exams.build"} since #51 declared it ahead of the screen —
+     * the convention the app already uses for a view of one thing reached from a list
+     * ({@code questions.edit}, {@code approvals.preview}, {@code grades.checked}).
+     * {@code ExamBuilderWiringGuardTest} pins the two spellings together, so a drift between
+     * the declaration here and the buttons over there fails the build rather than throwing in
+     * front of a teacher — {@code Navigator.navigate} throws on an unregistered id.
+     *
+     * <p>Teaching roles only, and the server is the gate that matters: {@code EXAM_CREATE} and
+     * {@code EXAM_VERSION_SAVE} are both writes, scoped to the exams the caller wrote, so this
+     * declaration decides what is offered and never what is permitted.
+     */
+    public static final Route EXAM_BUILD = Route.shell("exams.build", "Exam builder");
+
     /** The teacher's anonymised bot usage view (E16, F12.11, S-34). */
     public static final Route BOT_ANALYTICS =
             Route.shell("bot.analytics", "Bot activity", "Bot activity");
@@ -250,7 +272,7 @@ public final class Routes {
     public static List<Route> all() {
         return List.of(CONNECT, LOGIN, HOME_TEACHER, HOME_COORDINATOR, HOME_STUDENT,
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
-                APPROVALS, EXAM_PREVIEW, EXAMS,
+                APPROVALS, EXAM_PREVIEW, EXAMS, EXAM_BUILD,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
                 CHECKED_FORM, GRADING, REPORTS, DATA, QUESTION_EDIT);
     }

@@ -96,7 +96,7 @@ class SessionRoutesTest {
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
-                            Routes.EXAMS);
+                            Routes.EXAMS, Routes.EXAM_BUILD);
         }
 
         @Test
@@ -106,7 +106,7 @@ class SessionRoutesTest {
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
-                            Routes.EXAMS, Routes.APPROVALS, Routes.EXAM_PREVIEW);
+                            Routes.EXAMS, Routes.EXAM_BUILD, Routes.APPROVALS, Routes.EXAM_PREVIEW);
         }
 
         @Test

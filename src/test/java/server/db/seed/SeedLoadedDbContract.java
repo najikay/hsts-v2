@@ -33,9 +33,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * <p>It proves the loader <b>matches the document</b>. It cannot prove the document is
  * <b>internally consistent</b>: if a notification title quotes a mean that contradicts the
  * statistics table four sections above it, both the document and the loader carry the same
- * wrong number and everything here passes. Catching that is {@code SeedArithmeticTest}'s job,
+ * wrong number and everything here passes. Catching that is {@code SeedDatasetContract}'s job,
  * which recomputes rather than compares. Two checks, two failure classes, and neither
  * substitutes for the other.
+ *
+ * <p><b>Name corrected 2026-08-26.</b> This said {@code SeedArithmeticTest}, a class that has
+ * never existed in the tree — the acceptance-fixes batch found it while looking for the test its
+ * brief named. The job described is real and is done by {@code SeedDatasetContract}.
  */
 abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
 

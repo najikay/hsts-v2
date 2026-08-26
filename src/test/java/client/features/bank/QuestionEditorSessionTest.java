@@ -174,7 +174,7 @@ class QuestionEditorSessionTest {
          * <p><b>Two of these rows are spacing rather than collation</b> — {@code '1 2 3'}/{@code 123}
          * and {@code '  Two  '}/{@code Two}. MySQL calls those two <em>different</em>; the service
          * folds them anyway because ADR-016 names trimming and whitespace collapse as the rule, and
-         * contract §5 amendment A1 keeps that half deliberately. They belong in this list because
+         * contract §5 amendment A2 keeps that half deliberately. They belong in this list because
          * the editor must reach the same verdict as the server, which is what this class is about
          * — but the docstring's "pairs MySQL calls one answer" is not true of them, and saying so
          * here is cheaper than the next reader re-deriving it.

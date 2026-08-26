@@ -199,7 +199,7 @@ enforces a **90% instruction-coverage gate** (thin view classes excluded one-by-
 wildcard), and packages both JARs. Data-layer suites run on H2 and real MySQL both
 (`HSTS_REQUIRE_MYSQL=true` makes MySQL mandatory, as CI does); TestFX + Monocle drive real
 clicks through the screens headlessly; wiring guards fail the build if a screen or handler
-ships unreachable; and `SeedArithmeticTest` re-derives the demo dataset\'s statistics so a
+ships unreachable; and `SeedDatasetContract` re-derives the demo dataset's statistics so a
 hand-edited number cannot drift from its source document.
 
 ---

@@ -342,7 +342,13 @@ she just hit, that answers must differ by more than spacing or hyphens. Without 
 she retypes one of them with a different space and gets the same refusal, which is a wall rather
 than a rule.
 
-### ⚑ AMENDMENT A1, 2026-08-26 — the hyphen half of that ruling is reversed (B-7)
+### ⚑ AMENDMENT A2, 2026-08-26 — the hyphen half of that ruling is reversed (B-7)
+
+> **Numbering fix, 2026-08-26 (batch A).** This landed labelled `A1`, which was already taken by
+> the `latestVersionId` amendment of 2026-08-25 (see *Additive amendments* below). Two amendments
+> under one letter is how a contract stops being citable, so this one is renumbered to **A2**;
+> `latestVersionId` keeps **A1**. No content changed with the letter.
+
 
 **The 2026-08-22 ruling is overturned for hyphens and dashes, and stands for spacing.** It is left
 above in full rather than edited, because the ruling was correct on the evidence it had and the

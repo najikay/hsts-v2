@@ -177,14 +177,15 @@ class AppArgsAndRoutesTest {
             // teacher's grading queue. E6 added the question editor, and the retirement PR
             // removed the interim id "bank": the versioned bank moved onto "questions", which
             // is the id that was already here and which the rail has spelled since E5.4, so
-            // the table lost a row rather than gaining one. Per-role registration and the
+            // the table lost a row rather than gaining one. E7.11 added the exam builder
+            // behind the list's Edit, View and New buttons. Per-role registration and the
             // role→home mapping are covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
                             "home.student", "home.principal", "settings", "questions",
                             "attempt", "release", "monitor",
-                            "approvals", "approvals.preview", "exams",
+                            "approvals", "approvals.preview", "exams", "exams.build",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
                             "grades", "grades.checked", "grading", "reports", "data",
                             "questions.edit");

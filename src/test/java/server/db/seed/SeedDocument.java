@@ -18,9 +18,15 @@ import java.util.regex.Pattern;
  *
  * <p>This class parses and nothing else. It compares nothing, expects nothing and knows nothing
  * about the database. Two consumers do the comparing: {@code SeedLoadedDbTest} checks that the
- * loaded database matches what this returns, and {@code SeedArithmeticTest} recomputes every
+ * loaded database matches what this returns, and {@code SeedDatasetContract} recomputes every
  * score from it. Two readings of one document is the drift risk one level up from two copies of
  * the data, which is why there is exactly one of these.
+ *
+ * <p><b>Name corrected 2026-08-26.</b> The recomputing half was cited here as
+ * {@code SeedArithmeticTest} for as long as this javadoc has existed, and no such class was ever
+ * written; the arithmetic assertions live in {@code SeedDatasetContract}. A citation to a class
+ * that does not exist reads as coverage on a cold review, which is the only reason it is worth a
+ * line.
  *
  * <h2>Silence is an error, never a pass</h2>
  *

@@ -11,6 +11,7 @@ import client.features.bot.BotManagerView;
 import client.features.data.DataView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exam.TakeExamView;
+import client.features.exambuild.ExamBuilderView;
 import client.features.exambuild.ExamListView;
 import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
@@ -108,6 +109,16 @@ public final class SessionRoutes {
             // ruling 1, so a teacher reads her rejection reasons on the same screen that
             // shows her the draft she has not submitted yet.
             routes.add(Routes.EXAMS);
+            // E7.11's exam builder, registered with the list rather than on its own rail item:
+            // it is a view of one exam, reached from the list's Edit, View and New buttons, and
+            // a rail item that needed an exam chosen first would be a dead end. Both teaching
+            // roles get it, because both may author (EXAM_BUILDER_WIRE_CONTRACT §2) and the
+            // list offers Edit to both — offering it to one and not the other is how a
+            // coordinator finds a button that throws, since Navigator.navigate throws on an
+            // unregistered id rather than doing nothing. The server scopes every verb the
+            // builder sends to the exams the caller wrote, so this list decides what is
+            // offered and never what is permitted.
+            routes.add(Routes.EXAM_BUILD);
         }
         if (role == Role.COORDINATOR) {
             // Approvals is the one item that separates a coordinator's rail from a
@@ -199,6 +210,9 @@ public final class SessionRoutes {
         }
         if (Routes.EXAMS.id().equals(route.id())) {
             return ExamListView::new;
+        }
+        if (Routes.EXAM_BUILD.id().equals(route.id())) {
+            return ExamBuilderView::new;
         }
         if (Routes.TAKE_EXAM.id().equals(route.id())) {
             return TakeExamView::new;

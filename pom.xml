@@ -371,6 +371,11 @@
                         <exclude>client/features/approval/RejectDialog*</exclude>
                         <!-- E7.10's thin view; ExamListSession and ExamListCopy beside it are measured. -->
                         <exclude>client/features/exambuild/ExamListView*</exclude>
+                        <!-- E7.11's thin view, excluded on E7.10's reasoning exactly: every
+                             decision it renders is made in ExamBuilderSession (the tab state,
+                             the dirty tracking, the save and submit gating) or in
+                             ExamBuildCopy (every sentence), and both are measured. -->
+                        <exclude>client/features/exambuild/ExamBuilderView*</exclude>
 <!-- E14 teacher results: the one thin FX view. Every decision it renders is
                              made in TeacherResultsSession (selection, the T-10 toggle, the
                              print layout, the StatChartData mapping) or in ResultsCopy (the

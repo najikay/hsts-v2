@@ -52,9 +52,25 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 verbatim, per that file's own rule: the E5 fixture directory is replaced by the seeded DB in
 E2 PR3, "the usernames stay (the seed mirrors them)". The other 13 are mine.
 
-`full_name` is Hebrew throughout — the school is Israeli and RTL must round-trip in every
-screen that shows a name. `DEMO_ACCOUNTS.md` writes the five in Latin transliteration; same
-people, same usernames.
+`full_name` is **English throughout** — "Dana Cohen", "Avi Mizrahi", "Maya Levi". Same people,
+same usernames as `DEMO_ACCOUNTS.md`, and now the same spelling as well.
+
+> **Corrected 2026-08-26 (batch A · B-19).** This paragraph read *"`full_name` is Hebrew
+> throughout — the school is Israeli and RTL must round-trip in every screen that shows a
+> name"* and had been false since **UI wave 1** translated the dataset (F-13, the ruling in
+> `docs/reports/lead/MANUAL-PASS-1.md`; `WAVE1.md` §33 states it plainly — "nothing anywhere in
+> the demo shows Hebrew"). `UsersSection` seeds no Hebrew codepoint at all. The document was not
+> updated in lockstep with the loader, so a frozen record asserted a property of the loaded
+> database that had stopped being true; the scenario-10/11 pre-walk found it by writing two
+> assertions against names from this file and failing to compile.
+>
+> **X-I18N is unaffected, and where the evidence moved to matters more than the correction.**
+> RTL is still proven — `WAVE1.md` §W1.8 records that `SeedDatasetMySqlTest.hebrewSurvivesTheRoundTrip`
+> was rewritten to **write its own Hebrew sample** rather than read the seed's, precisely because
+> the seed no longer has one. So the round-trip guarantee is tested by a test that owns its
+> fixture instead of by demo data that could be translated out from under it, which is the
+> stronger arrangement. Case 21.6's Hebrew-and-English-side-by-side check is walked with a
+> question typed on the day.
 
 Seed password is one uniform demo value, BCrypted by the loader. **`DEMO_ACCOUNTS.md` uses
 `demo123` for the E5 fixture** — the seed keeps that value so the demo script does not change
@@ -145,9 +161,22 @@ Algebra's 8 is deliberate: it is the fully-graded execution, and 8 grades spread
 correct, all four pairwise distinct (C-8 / ADR-016). **Correct** column is the answer
 index 1-4. **Img** = has an illustration (10 total, PRD §5).
 
-Language is mixed on purpose: Algebra and Calculus are Hebrew (RTL must be proven),
-Java and Databases are English (code and SQL read badly reversed). Both appear in every
-demoed screen.
+**Language is English throughout** — all four courses. Topic names are English too
+(`Linear equations`, `Quadratic functions`, `Inequalities`, `Recursion`), which is what case 3.4
+was rewritten against (B-9).
+
+> **Corrected 2026-08-26 (batch A · B-19).** This paragraph read *"Language is mixed on purpose:
+> Algebra and Calculus are Hebrew (RTL must be proven), Java and Databases are English… Both
+> appear in every demoed screen"*, and none of it has been true since **UI wave 1** (F-13).
+> `QuestionBankSection` and `SubjectsSection` contain **zero Hebrew codepoints**; §8's exam names
+> and §10.1's four mathematics bot sources were translated in the same pass (see the note at the
+> end of §10). The mixed-language claim survived here because nothing asserts a document's prose
+> against the loader — the seed tests compare rows, and the rows were translated correctly.
+>
+> **What replaced the RTL evidence:** see the corrected §3. The one place a Hebrew round trip is
+> still guaranteed is `SeedDatasetMySqlTest.hebrewSurvivesTheRoundTrip`, which writes its own
+> sample; `utf8mb4` is unchanged and Hebrew typed on the day stores and renders exactly as it
+> always did — the demo simply no longer ships any.
 
 **Authorship (`question_versions.created_by`) is a rule, not a column** — D9, stated here rather
 than repeated across 43 version rows:

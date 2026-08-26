@@ -347,7 +347,9 @@ Run in this order. Anything that fails here is a demo-blocking bug, not a curios
 - [ ] **Both connected.** The server console's connected-clients table shows **two** rows, with
       B's real IP and the two usernames
 - [ ] **Exam join.** On B, open the exam that is live now (the seed always has one) and start it.
-      The timer runs and questions render in Hebrew
+      The timer runs and the questions render. *(They render in **English** — the seed was
+      translated in UI wave 1 and this line said Hebrew until 2026-08-26; see B-19. Hebrew still
+      round-trips, and case 21.6 proves it with a question typed on the day.)*
 - [ ] **Answer and submit** one question, and confirm the teacher side sees the attempt
 - [ ] **Log stream.** On A's terminal, the coloured log shows the login, the join and the submit
       as they happen. This is the stream the defence watches (§5.3)
@@ -419,6 +421,39 @@ what is being handed in, and zipping before the rehearsal means the zip holds an
 - [ ] Phone hotspot charged and tested (§4.6)
 - [ ] Demo accounts sheet to hand: `docs/DEMO_ACCOUNTS.md`, password `demo123`
 - [ ] Reseeded this morning, so the live exam window is live now
+
+---
+
+### 5.6 Scenario order — grade before you report (B-18)
+
+**Walk scenario 8 (grading approval) BEFORE scenario 12 (reports). This is not a preference; the
+reports screen demonstrates badly in the other order, and the fix costs nothing.**
+
+The report engine's corpus is `REPORTABLE` = *CLOSED and statistics frozen*. On a fresh seed
+exactly **one** execution qualifies — `4821`, the Algebra midterm. `7390` is closed but every
+grade on it is still `AUTO`, **deliberately**, because it is the fixture case 8.2 uses to prove
+that auto-checking publishes nothing; `5164` is scheduled and `2075` is live. So on a fresh seed
+every report dimension returns a **one-row table**, and the screen that exists to *compare* gets
+demonstrated comparing one thing. Side-by-side deciles, the participant-weighted mean and the
+pooled σ are all unobservable — the summary of one row is that row.
+
+Approving `7390`'s eight grades in case **8.5** freezes its statistics on the spot. Run in that
+order:
+
+- [ ] **8.5 first.** As `avi.mizrahi`, approve execution `7390`'s grades (single, then bulk)
+- [ ] **Then 12.1–12.4.** The reports now carry **two** rows, and the second one appeared
+      *during the demo* rather than having been there all along
+
+The second row is worth showing on its own merits: SEED_CONTENT §9.2 built `7390`'s spread to be
+**deliberately unlike** `4821`'s — 30, 40, 55, 60, 70, 75, 85, 100 against 45, 55, 60, 70, 75, 85,
+90, 100, with **two** students below the pass mark instead of one. So the two rows cannot be
+mistaken for copies, and the pooled mean genuinely differs from the mean of the means, which is
+the arithmetic an examiner is most likely to poke at.
+
+**If the order slips**, say so rather than working around it: the honest sentence is *"the reports
+compare closed and marked sittings, and the seed ships one — let me approve the second sitting's
+grades and it will appear."* That answer is better than a second seeded execution would have been,
+which is why the seed was **not** changed.
 
 ---
 
