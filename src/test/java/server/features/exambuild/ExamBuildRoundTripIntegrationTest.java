@@ -243,10 +243,18 @@ class ExamBuildRoundTripIntegrationTest extends RepositoryTestBase {
 
             assertThat(answer.isError()).isTrue();
             assertThat(answer.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+            // §5.2 requires the sentence to NAME the question. Asserting only that it is
+            // non-blank and not a MySQL string left the naming untested: deleting the display id
+            // from that message kept this green, which a cold read pointed out.
+            String displayId = inTx(session -> session.createQuery(
+                            "select q.displayId from Question q, QuestionVersion qv "
+                                    + "where qv.id = :id and q.id = qv.questionId", String.class)
+                    .setParameter("id", versionOne).uniqueResult());
+
             assertThat(answer.errorMessage())
                     .as("uq_exam_version_questions_question would refuse it too, but its message "
-                            + "is not a sentence a teacher can act on")
-                    .isNotBlank()
+                            + "names a constraint rather than the question she has to go and find")
+                    .contains(displayId)
                     .doesNotContain("Duplicate entry");
         }
     }

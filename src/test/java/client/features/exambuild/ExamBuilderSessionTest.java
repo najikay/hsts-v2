@@ -14,6 +14,7 @@ import common.dto.authoring.ExamVersionRequest;
 import common.dto.authoring.ExamVersionSave;
 import common.dto.authoring.QuestionPin;
 import common.dto.authoring.Shortfall;
+import common.dto.authoring.TopicQuota;
 import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
@@ -678,6 +679,297 @@ class ExamBuilderSessionTest {
 
             assertThat(session.tab()).isEqualTo(ExamBuilderSession.Tab.MANUAL);
             assertThat(session.canGenerate()).isFalse();
+        }
+
+        /**
+         * Adding a topic row must not refuse the criteria before she has typed in it ⚑.
+         *
+         * <p>Found by a cold read. A fresh row carries a blank topic, {@code TopicQuota} folds
+         * blank to null, and a null topic <em>is</em> the course-wide bucket, so the request
+         * briefly carried two course-wide quotas and {@code quotaProblem} refused it. She saw a
+         * sentence telling her to combine two whole-course rows while looking at one labelled
+         * row and one empty box, in the middle of T-3.4's own demo path.
+         *
+         * <p>{@code ExamValidator} already states the rule this broke - "only a row that ASKS for
+         * something counts" - and implements it for named rows. The blank row went down the other
+         * branch.
+         */
+        @Test
+        @DisplayName("⚑ adding a topic row does not refuse the criteria before she types in it")
+        void aBlankTopicRowIsNotASecondCourseWideQuota() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 10);
+            assertThat(session.criteriaProblem()).isEmpty();
+
+            session.addCriterion();
+
+            assertThat(session.criteriaProblem())
+                    .as("a row asking for nothing draws on nothing and crosses nothing")
+                    .isEmpty();
+            assertThat(session.canGenerate())
+                    .as("and Compose stays live, because the request is still legal")
+                    .isTrue();
+        }
+
+        /**
+         * The re-pin notice must not outlive the rows it describes ⚑.
+         *
+         * <p>Found by a cold read. A compose replaces every line on the paper with server-proposed
+         * rows, none of them re-pinned, and the notice explaining that updated questions show
+         * stale wording stayed above them.
+         */
+        @Test
+        @DisplayName("⚑ composing clears the re-pin notice, because none of those rows are re-pinned")
+        void composingClearsTheRepinNotice() {
+            openDraft();
+            session.updateToLatest(1);
+            assertThat(session.hasRepinned()).isTrue();
+
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(true, proposal(), List.of())));
+            session.generate();
+
+            assertThat(session.hasRepinned())
+                    .as("every row on the paper is the server's, and none of them is stale")
+                    .isFalse();
+        }
+
+        /**
+         * The third in-flight answer, and the one a two-of-three reset missed ⚑.
+         *
+         * <p>Found by a second cold read. {@code resetLoaded} bumped the load and picker counters
+         * and not the compose one, and {@code settleCompose} guards on that counter alone. The
+         * screen is cached and reused across navigations, so a slow compose on one exam landed on
+         * the next exam she opened: paper cleared, filled with the other exam's questions, and a
+         * success toast over the top of it.
+         */
+        @Test
+        @DisplayName("⚑ a compose in flight cannot land on the exam she opened next")
+        void aStaleComposeCannotLandOnAnotherExam() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+            session.generate();
+            Message inFlight = lastSent(Verb.EXAM_AUTO_COMPOSE);
+
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, other(7002L, "Calculus final")));
+            session.open(7002L);
+            List<ExamBuilderSession.Line> calculusPaper = session.lines();
+
+            connection.deliver(Message.ok(inFlight,
+                    new AutoComposeResult(true, proposal(), List.of())));
+
+            assertThat(session.lines())
+                    .as("the Calculus paper is untouched by a proposal for the Algebra exam")
+                    .isEqualTo(calculusPaper);
+            assertThat(session.composeNotice())
+                    .as("and nothing congratulates her on composing an exam she did not compose")
+                    .isEmpty();
+        }
+
+        /**
+         * The auto tab must not survive into a version that cannot show it ⚑.
+         *
+         * <p>Found by a second cold read, and it strands her: the manual pane is hidden because
+         * the tab is AUTO, and the tab switch is hidden because a read-only version is not
+         * editable. She opened the version to read the paper and the paper is not on screen, with
+         * no control that brings it back. The existing read-only case opens the finished version
+         * first, so it structurally cannot see this ordering.
+         */
+        @Test
+        @DisplayName("⚑ opening a read-only version from the auto tab still shows its paper")
+        void theAutoTabDoesNotStrandAReadOnlyVersion() {
+            openDraft();
+            session.tab(ExamBuilderSession.Tab.AUTO);
+            assertThat(session.tab()).isEqualTo(ExamBuilderSession.Tab.AUTO);
+
+            serverHas(ApprovalState.APPROVED, 3);
+            session.open(VERSION_ID);
+
+            assertThat(session.tab())
+                    .as("the manual pane is the only one a read-only version can show")
+                    .isEqualTo(ExamBuilderSession.Tab.MANUAL);
+        }
+
+        @Test
+        @DisplayName("⚑ criteria built for one exam do not follow her into another")
+        void criteriaDoNotFollowHerToAnotherExam() {
+            openDraft();
+            session.addCriterion();
+            session.criterionTopic(1, "Recursion");
+            criteria(1, ExamBuilderSession.Bucket.ANY, 3);
+
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, other(7002L, "Calculus final")));
+            session.open(7002L);
+
+            assertThat(session.criteria())
+                    .as("§7.2 promises a number she can reproduce in HER bank; a topic from the "
+                            + "exam she left is not in it")
+                    .singleElement()
+                    .extracting(ExamBuilderSession.Criterion::topic).isNull();
+        }
+
+        /**
+         * The report must not outlive the criteria it answered ⚑.
+         *
+         * <p>Its heading says "the bank cannot satisfy these criteria" and points at the grid
+         * above it. T-3.5 and T-3.6 are two shots with a criteria edit between them, so a stale
+         * report is a red block naming three while the box beside it reads two.
+         */
+        @Test
+        @DisplayName("⚑ editing the criteria retires the report that answered the old ones")
+        void editingTheCriteriaRetiresTheReport() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 40);
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(false, List.of(),
+                            List.of(new Shortfall("Recursion", Difficulty.HARD, 3, 2)))));
+            session.generate();
+            assertThat(session.shortfalls()).hasSize(1);
+
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+
+            assertThat(session.shortfalls())
+                    .as("she has changed the question, so the old answer is not an answer")
+                    .isEmpty();
+        }
+
+        /**
+         * A row with counts and no topic is refused, and never sent ⚑.
+         *
+         * <p>The first fix for the blank-row defect skipped rows asking for nothing, which covers
+         * typing the topic first and not typing a count first. This is the ordering it missed,
+         * and the quiet variant is the dangerous one: with the course-wide row still at zero, an
+         * unnamed row used to pass every rule as a GRADED COURSE-WIDE quota and compose from the
+         * whole course while she believed she had named a topic.
+         */
+        @Test
+        @DisplayName("⚑ a counted row with no topic is refused, not silently made course-wide")
+        void aCountedRowWithNoTopicIsRefused() {
+            openDraft();
+            session.addCriterion();
+            criteria(1, ExamBuilderSession.Bucket.HARD, 3);
+
+            assertThat(session.criteriaProblem()).contains(ExamBuildCopy.TOPIC_REQUIRED);
+            assertThat(session.canGenerate()).isFalse();
+
+            session.criterionTopic(1, "Recursion");
+
+            assertThat(session.criteriaProblem())
+                    .as("naming it is all that was missing")
+                    .isEmpty();
+            assertThat(session.canGenerate()).isTrue();
+        }
+
+        /**
+         * Why the refusal upstream is the only defence, recorded as a test ⚑.
+         *
+         * <p>A plant found this: reverting {@code toQuota} to "blank topic means course-wide"
+         * changed nothing, because {@code TopicQuota}'s own constructor folds blank to null
+         * anyway. An unnamed topic row is <b>not expressible</b> on this wire, and that record is
+         * the lead's, not Member A's.
+         *
+         * <p>So this pins the constraint rather than a guarantee nobody can give here: whatever
+         * the client passes, a blank topic arrives course-wide. That is exactly why
+         * {@code criteriaProblem} refuses before such a row can be sent, and it is what a future
+         * reader needs to know before deciding the guard is redundant.
+         */
+        @Test
+        @DisplayName("⚑ a blank topic is course-wide on the wire whatever the client intends")
+        void aBlankTopicIsUnavoidablyCourseWide() {
+            ExamBuilderSession.Criterion blank = new ExamBuilderSession.Criterion("", 0, 0, 3, 0);
+
+            assertThat(blank.toQuota(false).isCourseWide())
+                    .as("TopicQuota folds blank to null; the client cannot say otherwise")
+                    .isTrue();
+            assertThat(blank.isUnnamed())
+                    .as("which is why the row is refused before it is ever built into a request")
+                    .isTrue();
+            assertThat(new ExamBuilderSession.Criterion("Recursion", 0, 0, 3, 0).toQuota(false)
+                    .isCourseWide())
+                    .as("a named row is a topic row, which is the case that does work")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("a topic row asking for nothing is not sent at all")
+        void anEmptyTopicRowIsNotSent() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 4);
+            session.addCriterion();
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(true, proposal(), List.of())));
+
+            session.generate();
+
+            AutoComposeRequest sent = (AutoComposeRequest) lastSent(Verb.EXAM_AUTO_COMPOSE)
+                    .getPayload();
+            assertThat(sent.quotas())
+                    .as("the request equals what she asked for, with no row asking for nothing")
+                    .singleElement()
+                    .extracting(TopicQuota::topic).isNull();
+        }
+
+        @Test
+        @DisplayName("the picker's own retry really asks the bank again")
+        void pickerRetryAsksAgain() {
+            openDraft();
+            bankHas(bankPage(List.of(bankRow("11007", 9107L, 1)), 0, 1));
+            session.openPicker();
+
+            session.retryPicker();
+
+            assertThat(countSent(Verb.BANK_LIST))
+                    .as("the control the copy offers beside a failed load actually reloads")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a compose that never answers is named, not left spinning")
+        void composeTransportFailureIsNamed() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+            session.generate();
+
+            connection.deliver(Message.ok(lastSent(Verb.EXAM_AUTO_COMPOSE), "not a result"));
+
+            assertThat(session.composeError()).contains(ExamBuildCopy.COMPOSE_FAILED);
+            assertThat(session.isComposing()).isFalse();
+        }
+
+        @Test
+        @DisplayName("the composed notice is dismissed once, which is what the screen does with it")
+        void theComposeNoticeIsDismissed() {
+            openDraft();
+            criteria(0, ExamBuilderSession.Bucket.ANY, 2);
+            connection.respondTo(Verb.EXAM_AUTO_COMPOSE, request ->
+                    Message.ok(request, new AutoComposeResult(true, proposal(), List.of())));
+            session.generate();
+            assertThat(session.composeNotice()).isPresent();
+
+            session.dismissComposeNotice();
+
+            assertThat(session.composeNotice()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("every bucket on a row can be set, not just the two the other cases use")
+        void everyBucketIsSettable() {
+            openDraft();
+            session.addCriterion();
+            session.criterionTopic(1, "Recursion");
+            criteria(1, ExamBuilderSession.Bucket.EASY, 1);
+            criteria(1, ExamBuilderSession.Bucket.MEDIUM, 2);
+            criteria(1, ExamBuilderSession.Bucket.HARD, 3);
+            criteria(1, ExamBuilderSession.Bucket.ANY, 4);
+
+            ExamBuilderSession.Criterion row = session.criteria().get(1);
+            assertThat(row.easy()).isEqualTo(1);
+            assertThat(row.medium()).isEqualTo(2);
+            assertThat(row.hard()).isEqualTo(3);
+            assertThat(row.any()).isEqualTo(4);
         }
 
         @Test

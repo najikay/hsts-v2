@@ -24,9 +24,11 @@ import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
 import common.protocol.Message;
 import common.protocol.Verb;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
@@ -48,7 +50,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Real-input interaction test for the exam builder (E7.11 / E7.12 — F3.1, T-3.2).
+ * Real-input interaction test for the exam builder (E7.11 to E7.14 — F3.1, F3.3, T-3.2).
  *
  * <p>What only a booted toolkit can show: that {@link ExamBuilderView} builds at all, that a
  * loaded draft's metadata and questions really reach controls, that the live points indicator
@@ -57,13 +59,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link ExamBuilderSessionTest} cannot make.
  *
  * <p>Without this file nothing in the build ever constructs {@link ExamBuilderView}, and a null
- * dereference in {@code build()} would ship green. Like {@code ExamListView} it is not yet on the
- * JaCoCo exclusion list, which is the pom's plugin config and outside Member A's scope.
+ * dereference in {@code build()} would ship green. It is on the JaCoCo exclusion list as of the
+ * lead's assembly commit, so this file is the only thing that executes it at all.
  *
- * <p><b>It drives the view directly rather than navigating to it</b>, for the reason
- * {@link ExamBuilderWiringGuardTest} exists: the route does not exist yet, so navigating would
- * fail here for a reason that file already owns, and would hide a real rendering defect behind an
- * expected failure.
+ * <p><b>It drives the view directly rather than navigating to it.</b> That was originally forced -
+ * {@code exams.build} did not exist and navigating would have failed for a reason
+ * {@link ExamBuilderWiringGuardTest} already owns. <b>The route exists since assembly 3
+ * (2026-08-26) and this paragraph said otherwise until PR24 corrected it.</b> Driving it directly
+ * is now a choice rather than a constraint, and it is the right one: navigation is that guard's
+ * subject, and routing every render case through it would make a wiring failure and a rendering
+ * failure indistinguishable here.
+ *
+ * <h2>Every click goes through {@link #clickOnNode} ⚑</h2>
+ *
+ * <p>The robot presses screen coordinates. A control the headless screen cannot show either throws
+ * or, worse, takes no click while everything downstream reads a screen the test never touched.
+ * Both happened in this file during PR24, and the silent one cost the longer debugging.
  */
 @DisabledIfSystemProperty(named = "hsts.uitests", matches = "false")
 class ExamBuilderInteractionTest extends ApplicationTest {
@@ -203,7 +214,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     void addFromTheBankReachesThePaper() {
         Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
 
-        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
+        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         // The act, verified before anything is asserted about what it produced: a click that
@@ -218,7 +229,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
 
         // Reachable only because the harness sizes the window past the whole form: the robot
         // presses coordinates rather than controls, and E7.13 added a pane above this one.
-        clickOn(add.get(0));
+        clickOnNode(add.get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleButtonsNamed(scene, ExamBuildCopy.PICKER_ALREADY_ADDED))
@@ -234,7 +245,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     void aDuplicateIsRefusedOnTheClick() {
         Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
 
-        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
+        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleButtonsNamed(scene, ExamBuildCopy.PICKER_ALREADY_ADDED))
@@ -259,8 +270,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     void pointsCanBeTyped() {
         Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
         TextField points = pointsFieldShowing(scene, "50");
-
-        clickOn(points);
+        clickOnNode(points);
         eraseText(2);
         write("35");
         WaitForAsyncUtils.waitForFxEvents();
@@ -297,7 +307,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                             List.of())));
         }, VERSION_ID);
 
-        clickOn(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
+        clickOnNode(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         // The act, verified before anything is asserted about what it produced.
@@ -306,7 +316,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                 .contains(ExamBuildCopy.CRITERIA_TITLE);
 
         TextField anyBox = countFieldFor(scene, ExamBuildCopy.ANY_LABEL);
-        clickOn(anyBox);
+        clickOnNode(anyBox);
         eraseText(1);
         write("1");
         WaitForAsyncUtils.waitForFxEvents();
@@ -348,16 +358,16 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                             List.of(new Shortfall("Recursion", Difficulty.HARD, 1, 0)))));
         }, VERSION_ID);
 
-        clickOn(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
+        clickOnNode(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         TextField anyBox = countFieldFor(scene, ExamBuildCopy.ANY_LABEL);
-        clickOn(anyBox);
+        clickOnNode(anyBox);
         eraseText(1);
         write("9");
         WaitForAsyncUtils.waitForFxEvents();
 
-        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.GENERATE).get(0));
+        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.GENERATE).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -365,7 +375,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                 .contains("Topic 'Recursion': requested 1 Hard, bank has 0")
                 .contains(ExamBuildCopy.INFEASIBLE_TITLE, ExamBuildCopy.INFEASIBLE_HINT);
 
-        clickOn(visibleTogglesNamed(scene, ExamBuildCopy.MANUAL_TAB).get(0));
+        clickOnNode(visibleTogglesNamed(scene, ExamBuildCopy.MANUAL_TAB).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -401,8 +411,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
 
         List<Button> useNewer = visibleButtonsNamed(scene, ExamBuildCopy.USE_NEWER_VERSION);
         assertThat(useNewer).as("offered on the badged row, and only there").hasSize(1);
-
-        clickOn(useNewer.get(0));
+        clickOnNode(useNewer.get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -414,6 +423,57 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         assertThat(visibleLabelTexts(scene))
                 .as("a re-pin is not a repoint, so the live total has not moved")
                 .contains(ExamBuildCopy.pointsIndicator(100));
+    }
+
+    /**
+     * The whole point of pressing "Use the newer version": seeing the newer version ⚑.
+     *
+     * <p>Found by a cold read. The paper is rebuilt only when its <em>shape</em> changes, and the
+     * shape was the list of pinned version ids. A re-pin changes an id, so the card rebuilt at the
+     * click, carrying the old stem by design. The save's re-read then returned rows with those
+     * same ids, so the shape was identical and nothing rebuilt: the corrected wording never
+     * reached the screen, while the notice that had promised it would was hidden because the save
+     * had "kept the promise".
+     *
+     * <p>The saved pin was correct throughout, which makes it worse rather than better. She sees
+     * an unchanged question, no badge, no notice and no control left to press, and the only
+     * available conclusion is that the update silently failed.
+     */
+    @Test
+    @DisplayName("⚑ after saving a re-pin, the corrected wording is actually on the paper")
+    void savingARepinShowsTheNewWording() {
+        Scene scene = openBuilderWith(connection -> {
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+            // The server's re-read after the save: 11002 now pinned at the version it was moved
+            // to, and carrying THAT version's wording, which is the whole reason she pressed it.
+            connection.respondTo(Verb.EXAM_VERSION_SAVE, request -> Message.ok(request,
+                    new ExamComposition(700L, "110101", "11", "Algebra", VERSION_ID, 2,
+                            ApprovalState.DRAFT, "Algebra midterm", 90, "Good luck",
+                            "Marking notes", "Dana Cohen", WHEN, "",
+                            List.of(question(9001L, "11001", 1, 50, 1, 1),
+                                    new ComposedQuestion(509002L, "11002", 2, 50,
+                                            "What is a base case, corrected?", "Recursion",
+                                            Difficulty.MEDIUM, false, 4, 4, 509002L)),
+                            4)));
+        }, VERSION_ID);
+
+        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.USE_NEWER_VERSION).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(visibleLabelTexts(scene))
+                .as("the act landed: the row is re-pinned and says it is showing stale details")
+                .contains(ExamBuildCopy.REPINNED_NOTICE);
+
+        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.SAVE_BUTTON).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(visibleLabelTexts(scene))
+                .as("the corrected stem the server sent back is the one on her paper")
+                .contains("What is a base case, corrected?");
+        assertThat(visibleLabelTexts(scene))
+                .as("and the notice has gone because it is true that nothing is stale any more")
+                .doesNotContain(ExamBuildCopy.REPINNED_NOTICE);
     }
 
     @Test
@@ -532,13 +592,15 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         Scene[] holder = new Scene[1];
         interact(() -> {
             ExamBuilderView view = new ExamBuilderView();
-            // Tall enough that the builder does not scroll. The robot presses coordinates, so a
-            // control below the fold is a control the click misses, and the assertions afterwards
-            // then read a screen the test never touched. E7.13 added a whole pane and pushed the
-            // picker off 820px, which is how this was found: not by a crash, by a total that had
-            // not moved. Sizing the window is the honest fix; the alternative is scrolling the
-            // pane in every test that reaches past the fold.
-            Scene scene = new Scene(view.view(), 1280, 1600);
+            // Deliberately a plausible window rather than a tall one. The robot presses
+            // coordinates, so a control the headless screen cannot show is a control the click
+            // misses - silently, leaving the assertions afterwards reading a screen the test
+            // never touched. Growing the scene to 1600 fixed that for the picker and broke it for
+            // the footer, whose Save then sat below the screen: the BorderPane's bottom is
+            // pinned to the SCENE, and only the body scrolls. So the scene stays a size a screen
+            // can show, and anything inside the scrolling body is brought into view by
+            // body is brought into view by bringIntoView before it is clicked.
+            Scene scene = new Scene(view.view(), 1280, 700);
             Stage stage = new Stage();
             stage.setScene(scene);
             stage.show();
@@ -572,6 +634,56 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                                 "no count field beside the '" + caption + "' caption")))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no visible '" + caption + "' caption"));
+    }
+
+    /**
+     * Scrolls the body so a node is actually on the screen before the robot aims at it ⚑.
+     *
+     * <p>TestFX's robot presses screen coordinates. A node that is in the scene but below what the
+     * headless screen shows takes no click, and nothing fails: the assertions afterwards read a
+     * screen the test never touched. That failure has now appeared twice in this file, once for
+     * the picker and once for the footer, and both times the symptom was a value that had simply
+     * not moved.
+     *
+     * <p>Does nothing for a node outside any {@code ScrollPane} - the footer is pinned to the
+     * scene rather than scrolled - which is why the scene itself is a size a screen can show.
+     */
+    /**
+     * Scroll it into view, then click it. Every click in this file goes through here.
+     *
+     * <p>Two steps that must not be separable: a click on a node the screen cannot show either
+     * throws or, worse, lands somewhere else, and both failures have appeared in this file.
+     */
+    private void clickOnNode(Node node) {
+        bringIntoView(node);
+        clickOn(node);
+    }
+
+    private void bringIntoView(Node node) {
+        // EVERY ScrollPane ancestor, outermost first, re-measuring between each. The picker's rows
+        // sit in a ScrollPane inside the body's ScrollPane, and scrolling only the innermost left
+        // the whole picker off the screen with the row neatly centred inside it. Outermost first
+        // because scrolling an outer pane moves the inner one's coordinates and not the reverse.
+        List<ScrollPane> scrollers = new java.util.ArrayList<>();
+        for (Node at = node.getParent(); at != null; at = at.getParent()) {
+            if (at instanceof ScrollPane scroller) {
+                scrollers.add(0, scroller);
+            }
+        }
+        for (ScrollPane scroller : scrollers) {
+            interact(() -> {
+                Node content = scroller.getContent();
+                double contentHeight = content.getBoundsInLocal().getHeight();
+                double viewport = scroller.getViewportBounds().getHeight();
+                if (contentHeight <= viewport) {
+                    return;
+                }
+                double nodeTop = node.localToScene(node.getBoundsInLocal()).getMinY()
+                        - content.localToScene(content.getBoundsInLocal()).getMinY();
+                scroller.setVvalue(Math.clamp(nodeTop / (contentHeight - viewport), 0.0, 1.0));
+            });
+            WaitForAsyncUtils.waitForFxEvents();
+        }
     }
 
     private static List<Button> visibleButtonsNamed(Scene scene, String label) {

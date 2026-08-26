@@ -204,10 +204,16 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         // not be written back through QUESTION_UPDATE, and 6365 green tests said nothing. It
         // took an acceptance walk to find, which is P-8's shape in this file's own assertion.
         //
-        // Pointing it at the real rule makes the dataset a permanent tripwire for the validator:
-        // a fold that grows stricter than the collation now fails here, on the very rows the
-        // system stored itself. The loosening direction is BankRoundTripIntegrationTest's; each
-        // guards one direction and neither substitutes for the other.
+        // Pointing it at the real rule makes the dataset a tripwire for the validator: a fold
+        // that grows stricter now fails here, on the very rows the system stored itself.
+        //
+        // Its reach is exactly the distinctions THESE rows exercise, and not one character more.
+        // A fold that started ignoring niqqud, or a punctuation class no seeded question happens
+        // to contain, would be stricter than the collation and leave this green. Said plainly
+        // because an earlier draft of this comment claimed the general property, which is P-6's
+        // shape aimed at a comment: the next reader trusts the sentence and stops looking. The
+        // general guarantee is BankRoundTripIntegrationTest's bidirectional assertion against
+        // real MySQL; this is the cheap standing check that the shipped dataset stays saveable.
         List<QuestionVersion> all = inTx(session -> session.createQuery(
                 "select qv from QuestionVersion qv", QuestionVersion.class).getResultList());
 

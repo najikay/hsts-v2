@@ -30,7 +30,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The logic behind the exam builder (Presentation tier, E7.11 / E7.12 — F3.1, F3.5, S-11).
+ * The logic behind the exam builder (Presentation tier, E7.11 to E7.14 — F3.1, F3.3, F3.5, S-11).
  *
  * <p>Everything the builder decides lives here: which of three things it is doing, what the
  * metadata currently says, what is on the paper and in what order, what the points add up to, and
@@ -123,12 +123,29 @@ public final class ExamBuilderSession {
      */
     public record Line(long questionVersionId, String displayId5, String text, String topic,
                        Difficulty difficulty, boolean hasImage, int pinnedVersionNo,
-                       int latestVersionNo, long latestVersionId, int points) {
+                       int latestVersionNo, long latestVersionId, int points,
+                       boolean showsSupersededDetails) {
+
+        /**
+         * A line as it arrives from the server, which by definition shows what it pins.
+         *
+         * <p>Every construction site except {@link #updatedToLatest()} goes through here, so the
+         * stale marker is false unless something deliberately made it true.
+         */
+        @SuppressWarnings("checkstyle:ParameterNumber")
+        public static Line fromServer(long questionVersionId, String displayId5, String text,
+                                      String topic, Difficulty difficulty, boolean hasImage,
+                                      int pinnedVersionNo, int latestVersionNo,
+                                      long latestVersionId, int points) {
+            return new Line(questionVersionId, displayId5, text, topic, difficulty, hasImage,
+                    pinnedVersionNo, latestVersionNo, latestVersionId, points, false);
+        }
 
         /** @return the same line worth a different number of points. */
         public Line withPoints(int newPoints) {
             return new Line(questionVersionId, displayId5, text, topic, difficulty, hasImage,
-                    pinnedVersionNo, latestVersionNo, latestVersionId, newPoints);
+                    pinnedVersionNo, latestVersionNo, latestVersionId, newPoints,
+                    showsSupersededDetails);
         }
 
         /**
@@ -153,7 +170,7 @@ public final class ExamBuilderSession {
                 return this;
             }
             return new Line(latestVersionId, displayId5, text, topic, difficulty, hasImage,
-                    latestVersionNo, latestVersionNo, latestVersionId, points);
+                    latestVersionNo, latestVersionNo, latestVersionId, points, true);
         }
 
         /** @return {@code true} when the bank has moved on from what this paper pins (E7.7). */
@@ -207,9 +224,6 @@ public final class ExamBuilderSession {
     private final List<BankQuestionRow> bank = new ArrayList<>();
 
     // --- the save --------------------------------------------------------
-    /** Set by {@link #updateToLatest}, cleared by {@link #adopt} when the server answers. */
-    private boolean repinned;
-
     // --- the auto tab (E7.13) ---------------------------------------------
     private Tab tab = Tab.MANUAL;
     private final List<Criterion> criteria = new ArrayList<>(List.of(COURSE_WIDE_ROW));
@@ -274,13 +288,39 @@ public final class ExamBuilderSession {
      * <p>{@link ExamListSession} in this same package has carried a generation counter from the
      * day it was written and this class shipped without one, which is the more useful half of
      * that finding.
+     *
+     * <h2>ALL THREE counters, and every field an earlier exam touched ⚑</h2>
+     *
+     * <p><b>The paragraph above was true of the load and false of everything added after it</b>,
+     * which a second cold read found. This class now has three in-flight answers - the version
+     * load, the picker's bank pages and the compose - and a reset that bumps two of three is a
+     * reset that reads as complete. The compose was the dangerous one: {@link #settleCompose}
+     * guards on its counter and nothing else, so a proposal for the exam she left arrived, called
+     * {@code lines.clear()}, filled the paper of the exam she had just opened, and announced it
+     * with a success toast. The screen is cached and reused across navigations, so it was two
+     * clicks away.
+     *
+     * <p>Whatever is added next: if it can be in flight, its counter belongs here, and if it is a
+     * field the previous exam wrote, it belongs in the clearing half. {@link #tab} and
+     * {@link #criteria} are here for the second reason - the auto tab survived into a read-only
+     * version and hid the paper she had opened to read, with the tab switch withheld because the
+     * version is not editable, and criteria built for one course named a topic in a report about
+     * another.
      */
     private void resetLoaded() {
         loadGeneration++;
+        composeGeneration++;
         // The picker belongs to the version that was open: its rows are that exam's course, and
         // isOnPaper() reads a paper that is about to be replaced. Leaving it up across an open()
         // would offer her another exam's bank against this exam's duplicate rule.
         closePicker();
+        tab = Tab.MANUAL;
+        criteria.clear();
+        criteria.add(COURSE_WIDE_ROW);
+        composing = false;
+        composeError = null;
+        composeNotice = null;
+        shortfalls = List.of();
         examVersionId = 0;
         lockVersion = 0;
         loadedState = null;
@@ -359,10 +399,9 @@ public final class ExamBuilderSession {
         // The server's re-read IS the refresh the notice promised: every row now carries the
         // wording of the version it actually pins, so the promise has been kept and the notice
         // has nothing left to say.
-        repinned = false;
         lines.clear();
         for (ComposedQuestion question : version.questions()) {
-            lines.add(new Line(question.questionVersionId(), question.questionDisplayId5(),
+            lines.add(Line.fromServer(question.questionVersionId(), question.questionDisplayId5(),
                     question.text(), question.topic(), question.difficulty(), question.hasImage(),
                     question.pinnedVersionNo(), question.latestVersionNo(),
                     question.latestVersionId(), question.points()));
@@ -731,7 +770,7 @@ public final class ExamBuilderSession {
         if (row == null || !isEditable() || isOnPaper(row)) {
             return false;
         }
-        lines.add(new Line(row.latestVersionId(), row.displayId5(), row.text(), row.topic(),
+        lines.add(Line.fromServer(row.latestVersionId(), row.displayId5(), row.text(), row.topic(),
                 row.difficulty(), row.hasImage(), row.latestVersionNo(), row.latestVersionNo(),
                 row.latestVersionId(), QuestionPin.MIN_POINTS));
         onChange.run();
@@ -760,10 +799,42 @@ public final class ExamBuilderSession {
     /** One row of the criteria grid, as she is typing it. */
     public record Criterion(String topic, int easy, int medium, int hard, int any) {
 
-        /** @return this row as the wire's quota; a blank topic is the course-wide one. */
-        public TopicQuota toQuota() {
-            String named = topic == null || topic.isBlank() ? null : topic;
-            return new TopicQuota(named, easy, medium, hard, any);
+        /**
+         * This row as the wire's quota, told by its position which kind of row it is.
+         *
+         * <p><b>An unnamed row cannot be expressed on this wire, and that is the whole reason
+         * {@link #isUnnamed()} exists.</b> {@code TopicQuota}'s own compact constructor folds a
+         * blank topic to {@code null}, and a null topic <em>is</em> the course-wide bucket, so a
+         * half-typed topic row becomes a second course-wide quota no matter what this method
+         * passes. That record is the lead's and is not Member A's to change.
+         *
+         * <p>So the defence is upstream: {@link #criteriaProblem()} refuses while any row asks for
+         * questions without naming a topic, and such a row is never sent. The parameter here does
+         * not add a guarantee - it makes the call site say which row it thinks it is holding,
+         * which is worth one boolean and is not a substitute for the refusal.
+         *
+         * <p><b>An earlier version of this javadoc claimed the parameter made the bad state
+         * unreachable. It does not, and a test written against that claim failed the moment it
+         * was run</b>, which is the only reason the claim is not still standing here.
+         *
+         * @param courseWide whether this is the grid's first row
+         * @return the quota; a blank topic still arrives course-wide, hence the guard upstream
+         */
+        public TopicQuota toQuota(boolean courseWide) {
+            if (courseWide) {
+                return new TopicQuota(null, easy, medium, hard, any);
+            }
+            return new TopicQuota(topic == null ? "" : topic, easy, medium, hard, any);
+        }
+
+        /** @return {@code true} when this row asks for nothing at all. */
+        public boolean isEmpty() {
+            return easy == 0 && medium == 0 && hard == 0 && any == 0;
+        }
+
+        /** @return {@code true} when she has asked for questions without naming the topic. */
+        public boolean isUnnamed() {
+            return (topic == null || topic.isBlank()) && !isEmpty();
         }
 
         /** @return the same row with one bucket changed, named by {@link Bucket}. */
@@ -811,6 +882,24 @@ public final class ExamBuilderSession {
         return List.copyOf(criteria);
     }
 
+    /**
+     * Retires the last answer, because it was about criteria that no longer exist ⚑.
+     *
+     * <p>Called by every criteria mutator. {@code INFEASIBLE_TITLE} reads "the bank cannot satisfy
+     * <em>these</em> criteria" and points at the grid directly above it, so a report left standing
+     * while she edits the grid is a sentence about numbers that are no longer on screen. The demo
+     * path is exactly that: T-3.5 asks for three, is refused, and T-3.6 edits it down - and the
+     * red block went on naming three.
+     *
+     * <p>Same shape as {@code hasRepinned}, fixed one round earlier in this same PR: a stored
+     * artefact outliving the state it describes. That one became derived; this one cannot, since
+     * only the server can say what is short, so it is retired at the moment its question changes.
+     */
+    private void retireLastAnswer() {
+        shortfalls = List.of();
+        composeError = null;
+    }
+
     /** @param index the row; @param topic what she typed into its topic box. */
     public void criterionTopic(int index, String topic) {
         if (index <= 0 || index >= criteria.size()) {
@@ -819,6 +908,7 @@ public final class ExamBuilderSession {
             return;
         }
         criteria.set(index, criteria.get(index).withTopic(topic));
+        retireLastAnswer();
         onChange.run();
     }
 
@@ -833,6 +923,7 @@ public final class ExamBuilderSession {
             return;
         }
         criteria.set(index, criteria.get(index).with(bucket, value));
+        retireLastAnswer();
         onChange.run();
     }
 
@@ -842,6 +933,7 @@ public final class ExamBuilderSession {
             return;
         }
         criteria.add(new Criterion("", 0, 0, 0, 0));
+        retireLastAnswer();
         onChange.run();
     }
 
@@ -851,6 +943,7 @@ public final class ExamBuilderSession {
             return;
         }
         criteria.remove(index);
+        retireLastAnswer();
         onChange.run();
     }
 
@@ -861,8 +954,15 @@ public final class ExamBuilderSession {
      */
     private AutoComposeRequest request() {
         List<TopicQuota> quotas = new ArrayList<>(criteria.size());
-        for (Criterion each : criteria) {
-            quotas.add(each.toQuota());
+        for (int index = 0; index < criteria.size(); index++) {
+            Criterion each = criteria.get(index);
+            // A topic row asking for nothing is not sent at all. The grid always carries blank
+            // rows and the server has a rule for ignoring them, but not sending one is simpler
+            // than relying on that rule, and it keeps the request equal to what she asked for.
+            if (index > 0 && each.isEmpty()) {
+                continue;
+            }
+            quotas.add(each.toQuota(index == 0));
         }
         // No seed. §7.5 keeps it for tests; a client that sent one would be asking the server to
         // be predictable in front of a class, which is the opposite of what it is for.
@@ -881,6 +981,16 @@ public final class ExamBuilderSession {
      * @return what is wrong with the grid, or empty when it is a request the server would take
      */
     public Optional<String> criteriaProblem() {
+        // One rule this client owns, and it owns it because the server cannot see the state:
+        // a row with counts and no topic is never SENT, so no server sentence exists for it, and
+        // ruling 4's "the client composes nothing" is about rules ExamBuildMessages states. This
+        // is a half-filled form rather than a §7 rule, and saying so beats sending her a request
+        // that would be answered about a course she did not mean to ask about.
+        for (int index = 1; index < criteria.size(); index++) {
+            if (criteria.get(index).isUnnamed()) {
+                return Optional.of(ExamBuildCopy.TOPIC_REQUIRED);
+            }
+        }
         return ExamValidator.quotaProblem(request()).map(ExamValidator.Violation::message);
     }
 
@@ -954,7 +1064,7 @@ public final class ExamBuilderSession {
         composeNotice = ExamBuildCopy.composedNotice(proposed.size());
         lines.clear();
         for (ComposedQuestion question : proposed) {
-            lines.add(new Line(question.questionVersionId(), question.questionDisplayId5(),
+            lines.add(Line.fromServer(question.questionVersionId(), question.questionDisplayId5(),
                     question.text(), question.topic(), question.difficulty(), question.hasImage(),
                     question.pinnedVersionNo(), question.latestVersionNo(),
                     question.latestVersionId(), question.points()));
@@ -1023,17 +1133,24 @@ public final class ExamBuilderSession {
             return false;
         }
         lines.set(index, line.updatedToLatest());
-        repinned = true;
         onChange.run();
         return true;
     }
 
     /**
-     * @return {@code true} once any row on this paper has been re-pinned and not yet saved, which
-     *         is what licenses the notice explaining that the wording refreshes on save
+     * Whether any row on this paper is showing a superseded version's details ⚑.
+     *
+     * <p><b>Derived from the rows, never a flag anybody sets.</b> It was a flag until a cold read
+     * showed a flag cannot be right: composing replaces every line with server-proposed rows and
+     * removing the re-pinned row removes the only thing the notice was about, and in both cases a
+     * stored boolean went on claiming the paper held stale wording. Same argument as {@link Mode},
+     * one field over: a fact derived from the rows cannot disagree with the rows.
+     *
+     * @return {@code true} while at least one line was re-pinned and not yet replaced by a
+     *         server re-read, which is what licenses the notice
      */
     public boolean hasRepinned() {
-        return repinned;
+        return lines.stream().anyMatch(Line::showsSupersededDetails);
     }
 
     /** @return {@code true} when this version can have questions added to it at all. */

@@ -8,7 +8,7 @@ import common.dto.bank.Difficulty;
 import java.util.Locale;
 
 /**
- * Every sentence the exam builder shows (Presentation tier, E7.11 / E7.12 — F3.1, F3.5).
+ * Every sentence the exam builder shows (Presentation tier, E7.11 to E7.14 — F3.1, F3.3, F3.5).
  *
  * <p>Separate from the view for the reason {@link ExamListCopy} is: the wording is checkable
  * without a JavaFX toolkit, so a pluralisation or a limit that has drifted from the contract
@@ -111,7 +111,8 @@ public final class ExamBuildCopy {
      * full replace whose answer is the server's own re-read.
      */
     public static final String REPINNED_NOTICE =
-            "Updated questions keep their old wording on screen until you save.";
+            "Updated questions still show the old version's wording, topic and difficulty "
+                    + "until you save.";
 
     // ===================== The auto tab (E7.13, F3.3) =====================
 
@@ -135,6 +136,18 @@ public final class ExamBuildCopy {
 
     /** The topic box's prompt. */
     public static final String TOPIC_PROMPT = "Topic";
+
+    /**
+     * Said when she has asked for questions on a row whose topic box is still empty.
+     *
+     * <p>The one criteria rule this client owns, and only because the server never sees the state:
+     * an unnamed row is not sent, so {@code ExamBuildMessages} has no sentence for it. Without
+     * this she got either a refusal about two whole-course rows she could not see, or - quieter
+     * and worse - a paper composed from the entire course while she believed she had named a
+     * topic.
+     */
+    public static final String TOPIC_REQUIRED =
+            "Name the topic on every row that asks for questions, or set its counts back to zero.";
 
     /** Column headings on the criteria grid, in bucket order. */
     public static final String EASY_LABEL = "Easy";

@@ -26,7 +26,7 @@ import javafx.scene.layout.VBox;
 import java.util.List;
 
 /**
- * The exam builder (Presentation tier, E7.11 / E7.12 — F3.1, F3.5, S-11, T-3.2).
+ * The exam builder (Presentation tier, E7.11 to E7.14 — F3.1, F3.3, F3.5, S-11, T-3.2).
  *
  * <p>A renderer over {@link ExamBuilderSession}, which owns every decision it makes: which of
  * three things this screen is doing, what the paper says, and whether the points are right.
@@ -215,6 +215,32 @@ public final class ExamBuilderView extends AbstractScreen {
         }
     }
 
+    /**
+     * What she typed into a criteria bucket, or a refusal she can see ⚑.
+     *
+     * <p><b>Deliberately not {@link #parseMinutes}, and this method exists because it was.</b>
+     * That one falls back to zero and justifies it with "zero is out of range" - true of a
+     * duration, false of a bucket count, where zero is the legal default every row starts at. So
+     * a mistyped count became a silent, legal zero: the box went on showing what she typed, the
+     * live rule found nothing wrong, and she composed an exam missing the bucket she was looking
+     * at a number in.
+     *
+     * <p>The fallback here is {@code -1}, which {@code quotaProblem} refuses by its own
+     * negative-bucket rule ({@code ExamBuildMessages.QUOTA_NEGATIVE}). Same trick the duration
+     * box uses, aimed at a value that is actually out of range for this field: no second rule
+     * about parsing, and no way for unreadable input to pass as a number she did not type.
+     *
+     * @param typed what is in one count box
+     * @return the number, or {@code -1} for anything that is not one
+     */
+    private static int parseCount(String typed) {
+        try {
+            return Integer.parseInt(typed == null ? "" : typed.trim());
+        } catch (NumberFormatException notANumber) {
+            return -1;
+        }
+    }
+
     // ===================== Rendering ======================================
 
     private void render() {
@@ -340,10 +366,41 @@ public final class ExamBuilderView extends AbstractScreen {
      * @return what has to change for the cards to be rebuilt: which questions, in what order.
      *         Points are deliberately absent, because a repoint must leave the boxes standing
      */
+    /**
+     * The key that decides whether the paper is rebuilt, and what it must and must not include.
+     *
+     * <p><b>Not the points.</b> The cards hold the {@code TextField}s she types points into, and
+     * rebuilding on a value change destroys the box mid-keystroke, which is PR23 §4.2's defect
+     * and the reason this key exists at all.
+     *
+     * <p><b>The stem, and this was missing until a cold read found it.</b> The key was the pinned
+     * version ids alone. A re-pin changes an id, so the card rebuilt at the click carrying the old
+     * wording by design; the save's re-read then answered with those same ids, the key matched,
+     * nothing rebuilt, and the corrected wording never arrived. The stem cannot change while she
+     * is typing, so including it costs no rebuild she is in the middle of.
+     *
+     * <p>{@code showsSupersededDetails} is in the key for the same reason one step later: it is
+     * what the row's own staleness marker is drawn from, and the save clears it.
+     *
+     * <p><b>And {@code latestVersionNo}</b>, added after a second cold read pointed out the key
+     * was still one term short. The badge and its action are drawn from
+     * {@code pinnedVersionNo < latestVersionNo}, and neither number was here: if a colleague
+     * publishes a new version of a pinned question while she has the builder open, her next
+     * save's re-read carries a higher {@code latestVersionNo} on a row whose id, marker and stem
+     * are all unchanged, so nothing rebuilt and the badge never appeared.
+     *
+     * <p><b>The rule this key follows:</b> it holds every term a server re-read can change and
+     * the cards draw from, and nothing she can be halfway through typing. Points are the
+     * exception that proves it and are deliberately absent.
+     */
     private static String shapeOf(List<ExamBuilderSession.Line> lines) {
         StringBuilder shape = new StringBuilder();
         for (ExamBuilderSession.Line line : lines) {
-            shape.append(line.questionVersionId()).append(',');
+            shape.append(line.questionVersionId()).append('@')
+                    .append(line.pinnedVersionNo()).append('@')
+                    .append(line.latestVersionNo()).append('@')
+                    .append(line.showsSupersededDetails() ? '1' : '0').append('@')
+                    .append(line.text()).append('');
         }
         return shape.toString();
     }
@@ -824,7 +881,7 @@ public final class ExamBuilderView extends AbstractScreen {
         field.setPrefWidth(56);
         field.textProperty().addListener((obs, was, now) -> {
             if (!rendering) {
-                session.criterionCount(index, bucket, parseMinutes(now));
+                session.criterionCount(index, bucket, parseCount(now));
             }
         });
 

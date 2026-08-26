@@ -28,7 +28,7 @@ class ExamBuildCopyTest {
 
     private static ExamBuilderSession.Line line(String displayId, String topic,
                                                 Difficulty difficulty, int points) {
-        return new ExamBuilderSession.Line(9001L, displayId, "What is recursion?", topic,
+        return ExamBuilderSession.Line.fromServer(9001L, displayId, "What is recursion?", topic,
                 difficulty, false, 1, 1, 9001L, points);
     }
 
