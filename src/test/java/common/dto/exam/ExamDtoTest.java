@@ -183,8 +183,8 @@ class ExamDtoTest {
         void valueEqualityIncludesImages() {
             // A record's generated equals compares byte[] by reference, and the compact
             // constructor clones, so without the custom equals these would never be equal.
-            // Invisible while every seeded question has a null image; a mystery the day one
-            // does not.
+            // Load-bearing since B-8 (2026-08-27): ten seeded questions carry real bytes,
+            // so this is the fixture's own equality, not insurance against a future one.
             ExamQuestion first = question(new byte[]{9, 9});
             ExamQuestion second = question(new byte[]{9, 9});
 

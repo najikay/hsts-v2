@@ -85,8 +85,10 @@ public record ExamQuestion(long questionVersionId,
      *
      * <p>A record's generated {@code equals} compares a {@code byte[]} by reference, and
      * the compact constructor clones — so two questions built from identical inputs would
-     * never be equal. Invisible while every seeded question has a null image, and a
-     * mystery in list assertions the day real assets land. Content hashing is safe because
+     * never be equal. That was invisible while every seeded question had a null image;
+     * since B-8 (2026-08-27) ten seeded questions carry real bytes and this override is
+     * load-bearing for the fixture in the database, not insurance against a future one.
+     * Content hashing is safe because
      * the array is cloned on the way in and on the way out and so cannot change underneath
      * a hash-based collection.
      */

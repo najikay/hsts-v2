@@ -158,10 +158,12 @@ public enum Verb {
      * {@link #QUESTION_UPDATE} so the two cannot diverge, and each failure answers
      * {@code VALIDATION} with a message naming the offending field: a teacher
      * fixing three bad saves in a row needs three different sentences. The rules
-     * are at least as strict as the database CHECK in every dimension, accent
-     * folding included, because {@code utf8mb4_unicode_ci} is accent-insensitive
-     * and a validator that folds only case would hand its own backstop a case to
-     * reject rudely.
+     * AGREE WITH the database CHECK's collation in both directions - never looser
+     * (P-9) and never stricter (P-12) - accent folding included, because
+     * {@code utf8mb4_unicode_ci} is accent-insensitive and a validator that folds
+     * only case would hand its own backstop a case to reject rudely. (This
+     * sentence read "at least as strict in every dimension" until 2026-08-27,
+     * the last surviving copy of the doctrine P-12 retracted.)
      */
     QUESTION_CREATE,
 
