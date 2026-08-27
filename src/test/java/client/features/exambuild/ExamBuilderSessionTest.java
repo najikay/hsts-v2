@@ -1581,4 +1581,99 @@ class ExamBuilderSessionTest {
             assertThat(session.saveError()).isEmpty();
         }
     }
+
+    /**
+     * Another teacher's edit lock, below the screen (E18.5).
+     *
+     * <p>The view owns the banner and the {@code EntityRef}; this owns what the refusal does to
+     * the form. Routed through {@link ExamBuilderSession#isEditable()} on purpose, so the proof
+     * that a locked builder is inert is the same proof that a READ_ONLY one is.
+     */
+    @Nested
+    class Locks {
+
+        @Test
+        @DisplayName("a held lock makes an editable draft uneditable")
+        void lockedOutIsNotEditable() {
+            openDraft();
+            assertThat(session.isEditable()).isTrue();
+
+            session.setLockedOut(true);
+
+            assertThat(session.isEditable()).isFalse();
+            assertThat(session.isLockedOut()).isTrue();
+            // Still an EDIT-mode draft. The lock is a hold on a thing she may otherwise change,
+            // and collapsing it into READ_ONLY would tell her the version had been submitted.
+            assertThat(session.mode()).isEqualTo(ExamBuilderSession.Mode.EDIT);
+        }
+
+        @Test
+        @DisplayName("every edit is refused while somebody else holds it")
+        void editsAreRefusedWhileHeld() {
+            openDraft();
+            session.name("Before the lock");
+            session.setLockedOut(true);
+
+            int durationBefore = session.durationMinutes();
+            session.name("After the lock");
+            session.durationMinutes(durationBefore + 30);
+
+            // The point of routing through isEditable rather than disabling Save: the mutators
+            // already consult it, so the form stops accepting input instead of accepting it and
+            // refusing at the end. That last shape is the defect E18.5 closes.
+            assertThat(session.name()).isEqualTo("Before the lock");
+            assertThat(session.durationMinutes()).isEqualTo(durationBefore);
+        }
+
+        @Test
+        @DisplayName("releasing the lock gives the draft back")
+        void releasingRestoresEditing() {
+            openDraft();
+            session.setLockedOut(true);
+
+            session.setLockedOut(false);
+            session.name("Written after the release");
+
+            assertThat(session.isEditable()).isTrue();
+            assertThat(session.name()).isEqualTo("Written after the release");
+        }
+
+        @Test
+        @DisplayName("opening another version does not carry the previous lock across")
+        void openingClearsTheFlag() {
+            openDraft();
+            session.setLockedOut(true);
+
+            // A different version, which is what the name promises: opening the same id again
+            // would clear the flag for a reason this test is not about.
+            serverHas(ApprovalState.DRAFT, 3);
+            session.open(VERSION_ID + 1);
+
+            // resetLoaded clears it with examVersionId. Carrying it would render the next exam
+            // inert under a banner naming a teacher who holds a different row, and the view's
+            // syncLock only opens the new lock after this has run.
+            assertThat(session.isLockedOut()).isFalse();
+            assertThat(session.isEditable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("setting the flag to what it already is does not re-render")
+        void unchangedDoesNotNotify() {
+            openDraft();
+            int[] renders = {0};
+            session.onChange(() -> renders[0]++);
+
+            session.setLockedOut(false);
+            assertThat(renders[0]).as("false to false must be silent").isZero();
+
+            session.setLockedOut(true);
+            assertThat(renders[0]).as("a real change must notify once").isEqualTo(1);
+
+            // The heartbeat republishes the snapshot on every renew, and the view feeds each one
+            // straight to this setter. Without the guard every renew would repaint the paper, and
+            // renderLockState would re-enter a render that can itself call back into the lock.
+            session.setLockedOut(true);
+            assertThat(renders[0]).as("true to true must be silent").isEqualTo(1);
+        }
+    }
 }

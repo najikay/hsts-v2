@@ -238,6 +238,9 @@ public final class ExamBuilderSession {
     private String saveNotice;
     private boolean saved;
 
+    /** Set while another teacher holds this version's edit lock (E18.5). */
+    private boolean lockedOut;
+
     /**
      * @param dispatcher the request correlator
      * @param poster     the single FX-thread hop; {@code DirectFxThreadPoster} in tests
@@ -323,6 +326,10 @@ public final class ExamBuilderSession {
         shortfalls = List.of();
         examVersionId = 0;
         lockVersion = 0;
+        // Belongs to the version being left, exactly like examVersionId. Carrying it across an
+        // open() would render the next exam read-only under a banner naming a teacher who holds
+        // a different row, and the view's syncLock only opens the new lock after this returns.
+        lockedOut = false;
         loadedState = null;
         displayId6 = "";
         courseName = "";
@@ -446,7 +453,38 @@ public final class ExamBuilderSession {
 
     /** @return {@code true} when the form accepts changes at all. */
     public boolean isEditable() {
-        return mode() != Mode.READ_ONLY;
+        return mode() != Mode.READ_ONLY && !lockedOut;
+    }
+
+    /**
+     * Records that another teacher holds this version's edit lock (E18.5).
+     *
+     * <p>Routed through {@link #isEditable()} rather than through the Save button alone, because
+     * this is the gate every mutator already asks: {@code name}, {@code duration}, the points
+     * and the paper edits all refuse when it answers false. Disabling Save on its own would
+     * leave the form writable underneath a banner saying it is not, and the refusal would arrive
+     * only at the end, which is the whole defect E18.5 exists to close.
+     *
+     * <p>The server refuses a locked write regardless ({@code CONFLICT}, contract §624), so this
+     * is the courtesy and that is the rule. It is not the guard.
+     *
+     * <p>Guards on an unchanged value before notifying: {@code onChange} re-renders, the render
+     * re-reads the lock, and a setter that fired unconditionally would turn every lock heartbeat
+     * into a repaint.
+     *
+     * @param locked whether somebody else is holding it
+     */
+    public void setLockedOut(boolean locked) {
+        if (lockedOut == locked) {
+            return;
+        }
+        lockedOut = locked;
+        onChange.run();
+    }
+
+    /** @return whether another teacher's lock is holding this builder read-only */
+    public boolean isLockedOut() {
+        return lockedOut;
     }
 
     // ===================== The metadata form (E7.11) ======================

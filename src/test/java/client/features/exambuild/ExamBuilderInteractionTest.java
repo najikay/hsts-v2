@@ -22,6 +22,11 @@ import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
+import common.dto.lock.EntityRef;
+import common.dto.lock.LockChange;
+import common.dto.lock.LockHolder;
+import common.dto.lock.LockRequest;
+import common.dto.lock.LockResponse;
 import common.protocol.Message;
 import common.protocol.Verb;
 import javafx.scene.Node;
@@ -89,6 +94,9 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     private static final Instant WHEN = Instant.parse("2026-08-24T09:00:00Z");
     private static final long VERSION_ID = 7001L;
 
+    /** The builder the last {@code openBuilderWith} put on screen. */
+    private ExamBuilderView lastBuilder;
+
     private static final LoginResult DANA = new LoginResult(2, "dana.cohen", "Dana Cohen",
             Role.TEACHER, List.of(new CourseRef("11", "Algebra")), 0);
 
@@ -150,6 +158,130 @@ class ExamBuilderInteractionTest extends ApplicationTest {
      * <p>The acceptance case watches it go from wrong to right, so what matters on screen is that
      * the number and the server's sentence are both really painted, not merely computed.
      */
+    @Test
+    @DisplayName("⚑ opening a draft asks for its lock, keyed exactly as the server keys it (E18.5)")
+    void openingAcquiresTheLockOnTheRightEntity() {
+        FakeClientConnection[] held = new FakeClientConnection[1];
+        openBuilderWith(connection -> {
+            held[0] = connection;
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+        }, VERSION_ID);
+
+        Message acquire = held[0].sentMessages().stream()
+                .filter(message -> message.getVerb() == Verb.LOCK_ACQUIRE)
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new AssertionError("the builder never asked for the lock"));
+
+        // The whole feature is this one value agreeing with the server. ExamService's
+        // lockHolderOtherThan builds new EntityRef(EXAM_VERSION, version.getId()) when it decides
+        // whether to refuse a write; a client keyed on anything else - the exam id instead of the
+        // version id, or the QUESTION type - would ask about a row nobody holds, be told it is
+        // free for ever, and paint no banner. Nothing else in the suite would notice, because
+        // both sides would be internally consistent and talking about different rows.
+        //
+        // So the expected value is written out as literals rather than rebuilt from the constant
+        // the production code used. EntityRef.EXAM_VERSION here would agree with itself if the
+        // constant were ever changed, which is the tautology this file has been bitten by before.
+        assertThat(((LockRequest) acquire.getPayload()).entity())
+                .isEqualTo(new EntityRef("exam-version", VERSION_ID));
+    }
+
+    @Test
+    @DisplayName("⚑ a new exam asks for no lock, because there is no row to hold (E18.5)")
+    void createModeAcquiresNothing() {
+        FakeClientConnection[] held = new FakeClientConnection[1];
+        openBuilderWith(connection -> {
+            held[0] = connection;
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+        }, 0);
+
+        // Mode.CREATE runs with examVersionId == 0 until EXAM_CREATE answers. An EntityRef on 0
+        // names a row that cannot exist, and asking for it would put every unsaved builder in the
+        // school on one shared lock.
+        assertThat(held[0].sentMessages())
+                .noneSatisfy(message ->
+                        assertThat(message.getVerb()).isEqualTo(Verb.LOCK_ACQUIRE));
+    }
+
+    @Test
+    @DisplayName("⚑ another teacher's hold paints the banner and freezes the form (E18.5)")
+    void anotherHolderFreezesTheBuilder() {
+        FakeClientConnection[] held = new FakeClientConnection[1];
+        Scene scene = openBuilderWith(connection -> {
+            held[0] = connection;
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+        }, VERSION_ID);
+
+        interact(() -> held[0].pushToClient(Verb.PUSH_LOCK_CHANGED,
+                new LockChange(new EntityRef("exam-version", VERSION_ID),
+                        LockChange.Kind.ACQUIRED, new LockHolder(4, "Avi Mizrahi"))));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(scene))
+                .as("she is told who holds it before she types, not after she saves")
+                .anySatisfy(text -> assertThat(text).contains("Avi Mizrahi"));
+        assertThat(visibleButtonsNamed(scene, ExamBuildCopy.saveButton(ExamBuilderSession.Mode.EDIT)))
+                .as("the form is inert rather than merely warned about: isEditable gates the "
+                        + "whole footer, so Save leaves the screen entirely")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚑ leaving the builder gives the lock back at once (E18.5)")
+    void hidingReleasesTheLock() {
+        FakeClientConnection[] held = new FakeClientConnection[1];
+        openBuilderWith(connection -> {
+            held[0] = connection;
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+        }, VERSION_ID);
+
+        assertThat(verbsSentOn(held[0]))
+                .as("it holds the lock to begin with, or the release proves nothing")
+                .contains(Verb.LOCK_ACQUIRE);
+
+        // The instance the scene is showing, driven through the hook ScreenLifecycle calls.
+        interact(() -> lastBuilder.onHide());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // Without this the server keeps telling the next teacher that Dana is editing for the
+        // whole TTL after she has navigated away. The sweep is the safety net, not the mechanism.
+        List<Verb> after = verbsSentOn(held[0]);
+        assertThat(after).contains(Verb.LOCK_RELEASE);
+
+        // And nothing takes it back. This assertion is the finding: the first version of this
+        // test asserted only that a release was SENT, and that stayed true while close()'s own
+        // IDLE snapshot drove the session locked-out, fired onChange, and had syncLock re-acquire
+        // on the same pulse. The release was real and the lock was never given up - a test naming
+        // the behaviour while surviving its inversion, which is P-6's shape exactly.
+        assertThat(after.subList(after.lastIndexOf(Verb.LOCK_RELEASE), after.size()))
+                .as("the release must be the last word on this lock, not the middle of a cycle")
+                .doesNotContain(Verb.LOCK_ACQUIRE);
+    }
+
+    @Test
+    @DisplayName("⚑ a finished version is read, not locked (E18.5)")
+    void readOnlyVersionTakesNoLock() {
+        FakeClientConnection[] held = new FakeClientConnection[1];
+        openBuilderWith(connection -> {
+            held[0] = connection;
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.APPROVED)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+        }, VERSION_ID);
+
+        // An edit lock is exclusive and heartbeated. Taking one to READ a finished version would
+        // hold a row nobody can edit, on a screen that refuses every edit anyway, and would leave
+        // every past version a teacher ever opened sitting under her name for as long as the
+        // screen stayed up. Contract section 8's read path is a read.
+        assertThat(verbsSentOn(held[0])).doesNotContain(Verb.LOCK_ACQUIRE);
+    }
+
     @Test
     @DisplayName("⚑ the points indicator paints the total, and it is green at 100")
     void pointsIndicatorPaints() {
@@ -588,6 +720,24 @@ class ExamBuilderInteractionTest extends ApplicationTest {
             }
             connection.replyOk(Verb.LOGIN, DANA);
             connection.replyOk(Verb.LOGOUT, null);
+
+            // The builder takes an edit lock on open (E18.5), and an unanswered acquire is
+            // fail-closed: LockAwareEditor.applyAnswer treats "cannot prove the lock is ours" as
+            // not-editable, isEditable goes false, and the footer and Add leave the screen. So a
+            // test that scripted no lock would be asserting about a builder nobody can type in -
+            // which is exactly what happened when this was added: five tests that had nothing to
+            // do with locking started failing on empty lookups. Granting is the ordinary case;
+            // anotherHolderFreezesTheBuilder pushes the refusal on top instead.
+            //
+            // The grant echoes the entity it was asked about rather than naming one, so this
+            // harness cannot disguise a client that keys the lock wrongly. That is
+            // openingAcquiresTheLockOnTheRightEntity's job, and it holds a literal for it.
+            connection.respondTo(Verb.LOCK_ACQUIRE, request -> Message.ok(request,
+                    LockResponse.granted(((LockRequest) request.getPayload()).entity(),
+                            new LockHolder(DANA.userId(), DANA.displayName()),
+                            Instant.now().plusSeconds(120))));
+            connection.replyOk(Verb.LOCK_RELEASE, null);
+            connection.replyOk(Verb.LOCK_RENEW, null);
             script.accept(connection);
 
             RequestDispatcher dispatcher = new RequestDispatcher(connection);
@@ -602,6 +752,10 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         Scene[] holder = new Scene[1];
         interact(() -> {
             ExamBuilderView view = new ExamBuilderView();
+            // Kept so a test can drive the lifecycle hooks on the instance the scene is actually
+            // showing. hidingReleasesTheLock needs onHide on that one; a fresh view holds nothing
+            // and would pass the assertion by never having taken a lock at all.
+            lastBuilder = view;
             // Deliberately a plausible window rather than a tall one. The robot presses
             // coordinates, so a control the headless screen cannot show is a control the click
             // misses - silently, leaving the assertions afterwards reading a screen the test
@@ -726,6 +880,11 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                 .filter(button -> label.equals(button.getText()))
                 .filter(ExamBuilderInteractionTest::reallyVisible)
                 .toList();
+    }
+
+    /** @return every verb sent so far, so a test can assert one was or was not among them */
+    private static List<Verb> verbsSentOn(FakeClientConnection connection) {
+        return connection.sentMessages().stream().map(Message::getVerb).toList();
     }
 
     private static Set<String> labelTexts(Scene scene) {

@@ -198,26 +198,21 @@ public final class QuestionEditorView extends AbstractScreen {
      * the save is refused rather than merely greyed.
      */
     private void renderLockState(EditLockState.Snapshot state) {
-        // The hop, and it is not optional. LockAwareEditor publishes from applyAnswer, which
-        // runs inside dispatcher.send(...).whenComplete(...) — and RequestDispatcher's own
-        // javadoc says futures complete on whichever thread delivered the outcome, with the
-        // FX crossing belonging to FxThreadPoster (ARCHITECTURE section 6: exactly one crossing
-        // point). Without this, a LOCK_ACQUIRE answer mutates the scene graph from the network
-        // reader thread and writes session.readOnly with no happens-before edge to the FX thread
-        // that reads it in canSave().
+        // No hop here, and the paragraph that used to argue for one is retracted rather than
+        // deleted (E18.5, 2026-08-27). It read "the hop, and it is not optional", on the grounds
+        // that LockAwareEditor publishes from applyAnswer inside whenComplete and so arrives on
+        // the network reader thread. That was true when it was written, and the fix it asked for
+        // was made where it belonged: publish now goes through eventBus.poster(), so every
+        // snapshot reaches every listener on the FX thread. ClientEventBus states the rule for
+        // the tier - "screens therefore never call Platform.runLater themselves" - and this
+        // screen was the last one still doing it.
         //
-        // No test here can catch it: FakeClientConnection delivers inline on the calling thread,
-        // which in these tests is the FX thread. It was found by a cold read, and it presents in
-        // production as "the banner sometimes does not update" rather than as a crash.
-        //
-        // The recipe in LockAwareEditor's javadoc shows this method without a hop, and both
-        // consumers copied it. Raised with the lead: one hop inside publish would cover every
-        // future editor instead of one per screen.
-        onFxThread().run(() -> {
-            lockBanner.show(state, QuestionEditorCopy.LOCK_NOUN);
-            session.setReadOnly(!state.isEditable());
-            render();
-        });
+        // The second hop was not merely redundant. It deferred the banner an extra pulse, and
+        // BotManagerView records that in tests it can land past the harness teardown that nulls
+        // the bus. ExamBuilderView, written against this pattern, has none.
+        lockBanner.show(state, QuestionEditorCopy.LOCK_NOUN);
+        session.setReadOnly(!state.isEditable());
+        render();
     }
 
     // ===================== Building =======================================

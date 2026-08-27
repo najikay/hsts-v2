@@ -49,6 +49,15 @@ public final class ExamBuildCopy {
             "This version has been sent for approval, so it can no longer be changed. Revise it "
                     + "from your exam list to start a new draft.";
 
+    /**
+     * What the lock banner calls the thing being held (E18.5).
+     *
+     * <p>{@code LockBanner} builds the sentence around it: "Dana Cohen is editing this exam".
+     * "exam" rather than "exam version", because the teacher opened an exam and the version is
+     * bookkeeping she has no reason to meet in a warning.
+     */
+    public static final String LOCK_NOUN = "exam";
+
     // ===================== Metadata (E7.11) ===============================
 
     /** The metadata step's heading. */
