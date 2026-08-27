@@ -9,6 +9,7 @@ import common.dto.grading.ApproveResult;
 import common.dto.grading.GradeOverrideRequest;
 import common.dto.grading.GradeReview;
 import common.dto.grading.GradeReviewRequest;
+import common.dto.grading.StudentGradeRow;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -20,7 +21,10 @@ import server.core.Authorization;
 import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.db.Transactions;
+import server.realtime.PushGateway;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -72,6 +76,16 @@ import java.util.function.Function;
  *
  * <p>Unknown grade and somebody else's grade are both {@code NOT_FOUND} with one sentence, so
  * the answers cannot be used to enumerate grades.
+ *
+ * <h2>The one thing that happens after the commit ⚑ (B-32)</h2>
+ *
+ * <p>{@code GRADES_APPROVE} is the only verb here with an obligation outside its transaction:
+ * every grade it makes visible has to reach the student's open <b>My Grades</b> screen through
+ * {@code PUSH_GRADE_PUBLISHED}. That push lives here rather than in
+ * {@link GradeApprovalService} for a reason with teeth — the client answers it by re-asking
+ * {@code MY_GRADES_GET} on its own connection, so a push written from inside the transaction
+ * could be answered from a database that does not yet hold the row being announced. See
+ * {@link #approve}.
  */
 public class GradingHandlers {
 
@@ -88,17 +102,23 @@ public class GradingHandlers {
     private final OverrideService overrides;
     private final GradeReviewService reviews;
     private final GradingQueueService queues;
+    private final PushGateway pushGateway;
 
+    /**
+     * @param pushGateway the push channel, for {@code PUSH_GRADE_PUBLISHED} (B-32)
+     */
     public GradingHandlers(SessionFactory sessionFactory,
                            GradeApprovalService approvals,
                            OverrideService overrides,
                            GradeReviewService reviews,
-                           GradingQueueService queues) {
+                           GradingQueueService queues,
+                           PushGateway pushGateway) {
         this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
         this.approvals = Objects.requireNonNull(approvals, "approvals");
         this.overrides = Objects.requireNonNull(overrides, "overrides");
         this.reviews = Objects.requireNonNull(reviews, "reviews");
         this.queues = Objects.requireNonNull(queues, "queues");
+        this.pushGateway = Objects.requireNonNull(pushGateway, "pushGateway");
     }
 
     /**
@@ -224,18 +244,71 @@ public class GradingHandlers {
      * normal outcome of a bulk approve and {@link ApproveResult} is built to describe it;
      * answering {@code ERROR} because eight of ten worked would throw away the eight.
      *
+     * <p><b>And then it publishes ⚑ (B-32).</b> The rows the service just made visible are
+     * pushed to their students as {@code PUSH_GRADE_PUBLISHED}, after
+     * {@link Transactions#inTx} has committed. Three properties, all of them deliberate:
+     *
+     * <ul>
+     *   <li><b>After the commit</b>, because {@code MyGradesSession} answers this push by
+     *       re-querying, and a re-query that overtakes the commit would be answered from a
+     *       database without the row in it. The transaction ends when {@code asTeacher}
+     *       returns — pushing on the line after it is what "after the commit" means here,
+     *       and it is {@code AttemptService.afterFinalized}'s shape.</li>
+     *   <li><b>Only on success</b>, and only for grades that actually changed state. A
+     *       re-approve counts in {@code alreadyApproved} and publishes nothing, so a teacher
+     *       who double-clicks does not make a student's screen flicker twice.</li>
+     *   <li><b>Never fails the verb.</b> The approval is committed by the time this runs; a
+     *       dead socket is the gateway's business (it logs and returns false) and an
+     *       unexpected failure is caught here, because a student who missed a push has a
+     *       durable notification and a screen that loads on open, and a teacher who is told
+     *       her approval failed has a lie.</li>
+     * </ul>
+     *
      * @param caller  the authenticated teacher
      * @param request the request, carrying an {@link ApproveRequest}
      * @return {@code OK} with an {@link ApproveResult}
      */
     Message approve(CallerContext caller, Message request) {
-        return asTeacher(request, caller, ApproveRequest.class, GradingHandlers::noExtraChecks,
+        List<StudentGradeRow> published = new ArrayList<>();
+        Message response = asTeacher(request, caller, ApproveRequest.class,
+                GradingHandlers::noExtraChecks,
                 (session, teacherId, ask) -> {
-                    ApproveResult result = approvals.approve(session, teacherId, ask);
+                    GradeApprovalService.Approval approval =
+                            approvals.approveAndCollect(session, teacherId, ask);
+                    published.addAll(approval.published());
                     log.debug("Teacher {} approved {} of {} grade(s)",
-                            teacherId, result.approved(), ask.gradeIds().size());
-                    return Message.ok(request, result);
+                            teacherId, approval.result().approved(), ask.gradeIds().size());
+                    return Message.ok(request, approval.result());
                 });
+        if (!response.isError()) {
+            publish(published);
+        }
+        return response;
+    }
+
+    /**
+     * Pushes each published grade to the student it belongs to (B-32 — E13.6, H13.5).
+     *
+     * @param published the rows {@link GradeApprovalService.Approval} handed back; may be empty
+     */
+    private void publish(List<StudentGradeRow> published) {
+        if (published.isEmpty()) {
+            return;
+        }
+        int delivered = 0;
+        for (StudentGradeRow row : published) {
+            try {
+                if (pushGateway.toUser(row.studentId(), Verb.PUSH_GRADE_PUBLISHED, row)) {
+                    delivered++;
+                }
+            } catch (RuntimeException e) {
+                // The grade is approved and the notification is written. Nothing about a
+                // failed push is worth turning a committed approval into an error.
+                log.warn("Publishing grade {} to student {} failed",
+                        row.gradeId(), row.studentId(), e);
+            }
+        }
+        log.info("Published {} grade(s), {} delivered live", published.size(), delivered);
     }
 
     // ===================== GRADE_OVERRIDE ================================

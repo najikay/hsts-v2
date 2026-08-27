@@ -72,6 +72,38 @@ class SeedSummaryTest {
         }
     }
 
+    // ===== B-24: the drift warning rides on the status line ================
+
+    @Test
+    @DisplayName("a warning is carried on the summary and printed last ⚑ (B-24)")
+    void theWarningIsPartOfTheStatusLine() {
+        SeedSummary summary = new SeedSummary(SeedOutcome.UNCHANGED, ordered(),
+                "WARNING: this database does not look like this build's dataset.");
+
+        assertThat(summary.hasWarning()).isTrue();
+        assertThat(summary.toText())
+                .contains("already present")
+                .endsWith("WARNING: this database does not look like this build's dataset.");
+    }
+
+    @Test
+    @DisplayName("no warning means no warning: nothing is added to the text")
+    void noWarningAddsNothing() {
+        SeedSummary summary = new SeedSummary(SeedOutcome.LOADED, ordered());
+
+        assertThat(summary.hasWarning()).isFalse();
+        assertThat(summary.warning()).isEmpty();
+        assertThat(summary.toText()).doesNotContain("WARNING");
+    }
+
+    @Test
+    @DisplayName("a null warning is an absent one, not a printed 'null'")
+    void nullWarningCollapses() {
+        assertThat(new SeedSummary(SeedOutcome.LOADED, ordered(), null).warning()).isEmpty();
+        assertThat(new SeedSummary(SeedOutcome.LOADED, ordered(), null).toText())
+                .doesNotContain("null");
+    }
+
     @Test
     @DisplayName("the counts cannot be edited through the summary")
     void rowsAreUnmodifiable() {

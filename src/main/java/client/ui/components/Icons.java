@@ -23,6 +23,19 @@ import org.slf4j.LoggerFactory;
  *       middle of building the shell.</li>
  * </ul>
  *
+ * <h2>That second reason is also why this class needed a test ⚑ (B-38)</h2>
+ *
+ * <p>Swallowing the resolver's exception is right for a data-driven literal and was quietly
+ * wrong for the constants below, because a constant is not data — it is a claim that a glyph
+ * exists, and the swallow turned three false claims into a {@code WARN} line and a hole in the
+ * layout that nobody noticed for four epics ({@code MONITOR}, {@code LOGOUT},
+ * {@code WARNING}; {@code BOT} was a fourth, caught by hand at the time).
+ *
+ * <p>{@code IconsTest.everyConstantResolvesInThePack} now scans every public {@code String}
+ * constant here and resolves it the whole way — the handler <b>and</b> the glyph — because
+ * {@code IkonResolver.resolve} answers on the {@code mdoal-}/{@code mdomz-} prefix alone and
+ * says yes to a name the pack does not have. A new constant is checked by adding it.
+ *
  * @see client.ui.shell.NavItem
  */
 public final class Icons {
@@ -59,7 +72,9 @@ public final class Icons {
     public static final String CLOCK = "mdoal-access_time";
     public static final String CHECK = "mdoal-check_circle_outline";
     public static final String ERROR = "mdoal-error_outline";
-    public static final String WARNING = "mdomz-warning_amber";
+    // Not "mdomz-warning_amber" ⚑ (B-38): the pack has WARNING but no WARNING_AMBER, so every
+    // warning chip and toast in the app drew a blank spacer where its glyph should be.
+    public static final String WARNING = "mdomz-warning";
     public static final String INFO = "mdoal-info";
     public static final String INBOX = "mdoal-inbox";
     public static final String SEARCH = "mdomz-search";
@@ -68,7 +83,9 @@ public final class Icons {
     public static final String CHEVRON_RIGHT = "mdoal-chevron_right";
     public static final String CLOUD_OFF = "mdoal-cloud_off";
     public static final String REFRESH = "mdomz-refresh";
-    public static final String LOGOUT = "mdoal-logout";
+    // Not "mdoal-logout" ⚑ (B-38): the pack has LOGIN and EXIT_TO_APP but no LOGOUT, so the
+    // profile menu's sign-out item has been drawing an invisible spacer since E5.
+    public static final String LOGOUT = "mdoal-exit_to_app";
     /** A question's illustration (E6.6): the ImagePicker's empty state and its Choose button. */
     public static final String IMAGE = "mdoal-image";
     /** The same picture, struck through: the ImagePicker's removed state. */

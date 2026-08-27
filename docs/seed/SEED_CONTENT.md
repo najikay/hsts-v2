@@ -707,7 +707,7 @@ Enough that the notification centre is populated at login rather than empty (NFR
 
 **`seed_id` is a naming handle, not a database column** (D8, corrected). `notifications` has no
 such column: the loader keys idempotency on **recipient + type + title**, which is unique across
-the eight rows below and is what a re-load actually matches on.
+the nine rows below and is what a re-load actually matches on.
 
 The `seed_id` column stays because that composite key is useless in a sentence — an acceptance
 case, a demo script or a failing assertion needs to say *which* notification, and
@@ -732,6 +732,7 @@ The `#` column is presentation order only and carries no meaning.
 | `N-GRADE-YAEL` | 6 | 13 yael.azulay | GRADE_PUBLISHED | Your grade is available, including a teacher's comment | unread |
 | `N-GRADING-DUE-JAVA` | 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
 | `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | Sitting finished — 8 students, average 72.5 | unread |
+| `N-GRADE-MAYA` | 9 | 11 maya.levi | GRADE_PUBLISHED | Your grade is ready | unread |
 
 `N-EXEC-CLOSED-ALG` exists so the principal's first screen is not empty at login: S-7 makes
 her read-only, so she can never generate her own activity. **Its title quotes the mean, so it is
@@ -742,10 +743,35 @@ exactly the sort of copy nobody thinks to re-check.
 `N-GRADING-DUE-JAVA` says eight attempts, which is §9.2's eight AUTO grades — the same coupling,
 and it stays true as long as the Java roster stays at eight.
 
+**`N-GRADE-MAYA` ⚑ (added 2026-08-26, B-25).** Acceptance case 17.3 found that the eight rows
+above reach seven recipients and **`maya.levi` is not one of them** — 0 items, 0 unread — while
+she is the student this document, `DEMO_ACCOUNTS.md` and the acceptance table use throughout,
+and the account `DEMO_DAY.md` §2.3 signs in as on the clean-machine pass. The one bell a grader
+is most likely to open was the empty one.
+
+Row 9 is the notification the seed's own story already justifies: her Algebra midterm grade is
+approved and visible (§9.1 gives her **60**), so a `GRADE_PUBLISHED` for it is a row the product
+itself would have written on approval. Three things about it are deliberate:
+
+- **It is the catalog's words, not seed-only copy.** Title `Your grade is ready`, body
+  `Your grade for Midterm: Algebra has been published.` — exactly what
+  `NotificationCatalog.gradePublished` composes, so the bell on the day shows what a live
+  approval produces.
+- **It deep-links, and it is the first seeded row that does.** The other eight carry no
+  `ref_type`/`ref_id` at all, so clicking one goes nowhere. Hers stores
+  `grades` + her own attempt id on sitting `4821`, resolved at load time because the id is
+  whatever `AUTO_INCREMENT` gave it.
+- **Its title differs from `N-GRADE-NOA`'s and `N-GRADE-YAEL`'s on purpose**, because the
+  idempotency key is recipient + type + title and a third "Your grade for … is available" to a
+  third student would be fine, but a repeat of either sentence to the same person would collapse
+  the composite. This is the constraint the section warns about above, met rather than tripped.
+
+**Row count: 375 → 376.** One row in `notifications` (8 → 9) and nothing else moves.
+
 Every recipient is the person the event actually concerns: rejections and pending-approval
 notices go to the **author** (`dana.cohen`, `tamar.shani`), the approval request goes to the
 **subject coordinator** (`rina.barak`), and grade publications go to the **students who sat
-the exam**. A notification addressed to someone with no stake in the event is the kind of
+the exam** (`noa.friedman`, `yael.azulay`, `maya.levi` — all three sat §9.1's Algebra midterm). A notification addressed to someone with no stake in the event is the kind of
 thing that only shows up when a reviewer opens the screen at the defense.
 
 ---

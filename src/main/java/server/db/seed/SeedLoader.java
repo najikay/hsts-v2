@@ -18,6 +18,16 @@ import java.util.Map;
  * stable natural key, so it is safe to run repeatedly and safe to run against a database
  * somebody is using. It is the right default and the right thing for first boot.
  *
+ * <p><b>What it cannot see on its own, and now says so ⚑ (B-24).</b> Because idempotency is
+ * decided per row by natural key, that mode has no notion of <i>which version</i> of the
+ * dataset is already in there: run against a database seeded by an older build it tops the
+ * missing rows up, reports success, and leaves a stable hybrid that the next run calls
+ * {@code UNCHANGED}. Acceptance case 17.2 caught exactly that on {@code hsts_db}. Every
+ * {@code LOAD_IF_MISSING} run therefore ends with a {@link SeedFingerprint} spot-check, and a
+ * database that does not look like this build's dataset produces a loud warning on the summary
+ * and in the log. <b>It deletes nothing and refuses nothing</b> — the answer is still
+ * {@code RESEED}, and this is the sentence that tells an operator to reach for it.
+ *
  * <p><b>{@link SeedMode#RESEED} is the standard step before a demo</b>, and it is worth
  * knowing why rather than discovering it during one. The seed's execution windows are
  * relative to load time: execution 3 opens "today at 14:00" and execution 4 is live from an
@@ -94,18 +104,54 @@ public final class SeedLoader {
             return SeedSummary.nothing(SeedOutcome.CANCELLED);
         }
 
-        Map<String, Integer> inserted = Transactions.inTx(factory, session -> {
+        Loaded loaded = Transactions.inTx(factory, session -> {
             if (mode == SeedMode.RESEED) {
                 WipeOrder.wipe(session);
             }
             SeedContext context = new SeedContext(session, new SeedTimes(clock));
             sections.forEach(section -> section.load(context));
-            return context.inserted();
+            // Inside the same transaction, and after the sections, so the check sees the
+            // database the operator is about to be told about (B-24).
+            return new Loaded(context.inserted(), driftFor(mode, session));
         });
 
-        SeedSummary summary = new SeedSummary(outcomeOf(mode, inserted), inserted);
+        SeedSummary summary = new SeedSummary(outcomeOf(mode, loaded.inserted()),
+                loaded.inserted(), loaded.warning());
         log.info("Seed finished: {}, {} rows inserted.", summary.outcome(), summary.totalRows());
+        if (summary.hasWarning()) {
+            log.warn("{}", summary.warning());
+        }
         return summary;
+    }
+
+    /** What the transaction produced: the counts, and anything worth warning about. */
+    private record Loaded(Map<String, Integer> inserted, String warning) { }
+
+    /**
+     * The dataset-drift check ⚑ (B-24).
+     *
+     * <p><b>{@code LOAD_IF_MISSING} only.</b> A reseed has just emptied the database and
+     * written this dataset into it, so the answer is known and running the probes would only
+     * be a way of getting it wrong. Drift is a question exclusively about a database somebody
+     * else filled.
+     *
+     * <p>It warns and does nothing else. See {@link SeedFingerprint} for what a spot-check can
+     * and cannot see, and for why the fingerprint is a comparison rather than a stored marker
+     * (there is no metadata table and this batch adds no migration).
+     *
+     * @return the sentence to carry on the summary, or {@code ""}
+     */
+    private static String driftFor(SeedMode mode, org.hibernate.Session session) {
+        if (mode != SeedMode.LOAD_IF_MISSING) {
+            return "";
+        }
+        try {
+            return SeedFingerprint.compare(session).warning();
+        } catch (RuntimeException e) {
+            // Advisory means advisory: a broken probe must not fail a load that worked.
+            log.debug("The dataset fingerprint could not be computed", e);
+            return "";
+        }
     }
 
     private static SeedOutcome outcomeOf(SeedMode mode, Map<String, Integer> inserted) {

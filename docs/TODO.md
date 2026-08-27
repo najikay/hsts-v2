@@ -181,7 +181,7 @@ Client:
 - [x] E8.5 Approve flow (confirm) / Reject flow (reason dialog, required, min length)
 - [x] E8.6 Teacher-side: rejection reason visible on exam + notification deep-links to it
 - [x] E8.7 Session + integration tests (approve, reject w/o reason blocked, stale version)
-- [ ] E8.8 Acceptance pass vs T-4 ⚑
+- [ ] E8.8 Acceptance pass vs T-4 ⚑ — *below-screen half discharged by the campaign, see ACCEPT-S4-S5 (scenario 4: five of six passed below the screen, 4.2 partial because the render **is** the case; 4.4's bell failed at the walk and is fixed, B-11). The on-screen half rides the manual round. Same ruling shape as E6.17 / E7.17 / E13.7. The row stays open because the round has not happened*
 
 > **E8 notes (2026-08-21).** Wire contract: `docs/contracts/APPROVAL_WIRE_CONTRACT.md` (DRAFT, for
 > the lead to freeze). Report: `docs/reports/lead/E8.md`.
@@ -206,7 +206,7 @@ Client:
 - [x] E9.5 Release screen: create dialog (approved-version picker, datetime pickers), validation, code reveal
 - [x] E9.6 Releases list: live status chips, participant counters (pushed), actions (cancel/close/monitor)
 - [x] E9.7 Session + integration tests (window enforcement, unapproved blocked, cancel, close-early)
-- [ ] E9.8 Acceptance pass vs T-5 ⚑
+- [ ] E9.8 Acceptance pass vs T-5 ⚑ — *below-screen half discharged by the campaign, see ACCEPT-S4-S5 (scenario 5: five of six passed below the screen, 5.4 UI-only with the server gate verified; 5.6's fixture defect is fixed, B-10). The on-screen half rides the manual round. E6.17 / E7.17 / E13.7 shape; open until the round happens*
 
 > **E9 notes (2026-08-22).** Contract: amendments **A3-A7** of
 > `docs/contracts/EXAM_WIRE_CONTRACT.md`. Report: `docs/reports/lead/E9.md`.
@@ -245,7 +245,7 @@ Client:
 - [x] E10.14 Time-up takeover (F6.4 / *Time Up* mockup) on FORCE_SUBMITTED push or on resume: full-screen, animated clock, NO confirmation, answers locked (server already enforces), submitted-summary grid, single Back-to-dashboard navigation, exam unreachable afterwards ⚑
 - [x] E10.15 Disconnect mid-exam UX: reconnect banner, resume seamlessly, no lost answers
 - [x] E10.16 Session tests: full state machine incl. expiry/resume/push paths
-- [ ] E10.17 Acceptance pass vs T-6 ⚑
+- [ ] E10.17 Acceptance pass vs T-6 ⚑ — *below-screen half discharged by the campaign, see ACCEPT-S6-S7 (scenario 6: all ten cases passed below the screen; the demo paper has no illustrations to show, B-8, which is seed content and not this epic). The on-screen half rides the manual round. E6.17 / E7.17 / E13.7 shape; open until the round happens*
 
 ## E11 — Extension & monitoring [L]
 
@@ -255,7 +255,7 @@ Client:
 - [x] E11.4 Edge tests: extend at T-10s, extend after close blocked, extension while student offline (applies on resume)
 - [x] E11.7 **[L, done 2026-08-21]** Attention events (F7.1b): FX-free `AttentionTracker` (500 ms flicker debounce, reported on refocus, silent after finalisation); new `ATTEMPT_ATTENTION` verb resolving the caller's own live attempt; `AttentionSummary` accumulated in `AttemptRegistry` beside the C-4 flags (survives resume, outlives the attempt); pushed as a whole monitor snapshot; neutral secondary chip on the teacher's row; no student-facing UI anywhere. Contract amendments A1/A2 in EXAM_WIRE_CONTRACT.md
 - [x] E11.5 Execution documentation record complete (S-21): derived counts frozen into stats JSON at close + shown in execution history
-- [ ] E11.6 Acceptance pass vs T-7 ⚑
+- [ ] E11.6 Acceptance pass vs T-7 ⚑ — *below-screen half discharged by the campaign, see ACCEPT-S6-S7 (scenario 7: all four cases passed as written, and **B-14 was found inside 7.1's own path** — granted minutes were not reconciled with the execution window — fixed by batch B). Scenario 18.3 walked the same extension a second time from the NFR-18 side and it passed, which is a second independent sighting of the same path working. The on-screen half — the animated Time Extended moment — rides the manual round. E6.17 / E7.17 / E13.7 shape; open until the round happens*
 
 ## E12 — Grading [B]
 
@@ -276,7 +276,7 @@ Client:
 - [x] E13.3 My Grades screen: exam list with scores, status, date; empty-state — *`MyGradesView` over the existing session, on the router and on the student's rail (the E5.4 placeholder swapped for a live item, same path E14 took for Results). Every string and formatted value is in `MyGradesCopy`, tested, because the view is coverage-excluded. `StudentGradeRow` v1.1 labels each row with its own exam. **Also closes a gap:** `onGradePublished()` existed and nothing called it — `subscribeTo(ClientEventBus)` wires `PUSH_GRADE_PUBLISHED` in the session where it can be tested, so the list refreshes with no user action (NFR-18)*
 - [x] E13.4 Checked form viewer: green/red marking, teacher comments, score breakdown — *`CheckedFormService` owns the three conditions — hers (as the query, not a check), approved, execution closed — and all four refusals are one indistinguishable NOT_FOUND. Mutation-tested: removing the closed-execution gate fails four tests including the no-oracle one. `CheckedFormView` renders three outcomes per question, not two: unanswered is not wrong*
 - [x] E13.5 Export/print view of the checked form (S-36) — printable layout — *toggle in and now actually doing something: `.results-print` was a style class with no CSS rules, so the toggle was a silent no-op on this screen and on E14.4's. Rules written in E15's idiom, covering both. Walked as acceptance case 9.3.*
-- [ ] E13.6 GRADE_PUBLISHED push → notification + dashboard card refresh — *the My Grades half is done: the session subscribes to `PUSH_GRADE_PUBLISHED` and re-queries rather than appending the pushed row, so the screen cannot drift from the server. The durable notification already goes through `Notifier`/`NotificationCatalog` on approval. Not ticked: the student dashboard card*
+- [ ] E13.6 GRADE_PUBLISHED push → notification + dashboard card refresh — *the My Grades half is done: the session subscribes to `PUSH_GRADE_PUBLISHED` and re-queries rather than appending the pushed row, so the screen cannot drift from the server. The durable notification already goes through `Notifier`/`NotificationCatalog` on approval. Not ticked: the student dashboard card* ⚑ **Amended 2026-08-26 (batch D): the sentence above was half true and the wrong half was the one that mattered.** "The session subscribes to `PUSH_GRADE_PUBLISHED`" was correct; what nobody had checked was whether anything *sent* it, and acceptance case 18.4 found that **no server class did** — the verb had zero producers against one each for the other six (B-32). So the My Grades half was not done, it was half-built from the listening end. Batch D built the producer in `GradingHandlers`, after the commit. **Still not ticked, and now for the originally stated reason alone: the student dashboard card.** H13.5 is the on-screen claim and rides the manual round*
 - [ ] E13.7 Session tests + acceptance pass vs T-9 ⚑ — *T-9's five cases all pass as of 2026-08-23; 9.5 is recorded as proven below the screen (the assembler and copy against real data) rather than on it. Not ticked: the lead's screen-render review.*
 
 ## E14 — Teacher results & statistics [L, taken from B 2026-08-21 for the compressed endgame; B keeps E12/E13/E15]
@@ -319,7 +319,7 @@ Client:
 - [x] E16.15 Bot analytics screen (teacher): totals, activity chart, frequent questions list — anonymized
 - [x] E16.16 Session tests for all four screens
 - [ ] E16.17 Live E2E vs real DeepSeek + real Anthropic keys (manual checklist, run before every demo) ⚑
-- [ ] E16.18 Acceptance pass vs T-13, T-14 ⚑
+- [ ] E16.18 Acceptance pass vs T-13, T-14 ⚑ — *below-screen half discharged by the campaign, see ACCEPT-S13-S14 (scenario 13: four of six below the screen, **13.4 failed** — a bot source could not be edited at all, B-21, built in batch B as `BOT_SOURCE_UPDATE`; scenario 14: **14.7 failed** on the C-4 notice's cadence, B-20, fixed in batch B, and its cross-course half was UI-unreachable until batch C's picker, U-2). The provider half stays E16.17's live session by ruling and is not this row's. The on-screen half rides the manual round. E6.17 / E7.17 / E13.7 shape; open until the round happens*
 
 ## E17 — Notifications & realtime [L]
 
@@ -376,7 +376,7 @@ Client:
 - [ ] E21.3 "Break it" adversarial session: each member attacks the others' features; findings → issues → fixed
 - [ ] E21.4 Coverage push to ≥90% (JaCoCo report reviewed; gaps assigned by owner)
 - [ ] E21.5 Performance sanity: 100-question exam form, 500-question bank list, 30 concurrent scripted clients
-- [ ] E21.6 Full acceptance-test dry run of scenarios 1–21 in order, results recorded in the submission table ⚑
+- [ ] E21.6 Full acceptance-test dry run of scenarios 1–21 in order, results recorded in the submission table ⚑ — *annotated 2026-08-26 (batch D). **The below-screen half is complete: 21 scenarios of 21, 115 cases, walked and folded into `docs/ACCEPTANCE_TESTS.md` with every Actual cell filled.** What this row still asks for is the thing none of that can supply — **one ordered dry run, on screen, in scenario order, by a person**, with the results recorded in the submission table. The campaign gives that run a script rather than a discovery exercise: every case now says what it should show, and `ACCEPT-S15-S17` §10 and `ACCEPT-S18-S21` §8 list the specific UI-only items the run has to close (the double-click, the console window, two physical machines, the connect screen's three states, light/dark across all five palettes, three window sizes, a Hebrew question beside an English one). Open, and open for the right reason*
 - [ ] E21.7 UX polish sweep: every screen against the design checklist (spacing, empty states, loading, errors, animations)
 - [ ] E21.8 Hebrew/RTL data pass on all screens
 
@@ -387,8 +387,8 @@ Client:
 - [ ] E22.2 Submission doc: cover page (group, names, IDs), per-member responsibilities, test table, design/coding-problem answer (from PROBLEMS.md — pick the best story, e.g. exam-vs-execution modeling or timer race)
 - [ ] E22.3 Export to required format, assemble `G<Num>_Assignment3.zip` (doc + 2 JARs), verify zip contents against spec ⚑
 - [ ] E22.4 Cross-walkthrough sessions (spec §11): each member walks the other two through her components until all three can answer defense questions on ANY component; verified with a mock Q&A round ⚑ *Member B's half is written: `docs/briefs/member-b-e12-e13-walkthrough.md` covers E12 and E13 — the five-step pipeline, the four decisions most likely to be pushed on, seven anticipated questions with answers, the demo order, and the one gap (E12.6's paper review) stated rather than hidden. Not ticked: the session itself and the mock Q&A round.*
-- [ ] E22.4b Demo script (renumbered from a duplicate E22.4, maintenance 2026-08-25): ordered walkthrough matching scenarios 1–21 + wow-moments (theme switch, live extension, edit locks, bot fallback) + break-it invitation
-- [ ] E22.5 Defense Q&A prep sheet: patterns, decisions, "what would you change for phase 2 (internet)", concurrency story
+- [x] E22.4b Demo script (renumbered from a duplicate E22.4, maintenance 2026-08-25): ordered walkthrough matching scenarios 1–21 + wow-moments (theme switch, live extension, edit locks, bot fallback) + break-it invitation *(**2026-08-26, batch D: `docs/DEMO_SCRIPT.md` is on `main`.** Written on the `hsts-e15-wt` worktree under its own rule 1 — "no step routes through an open gap" — which is what made it find the two defects batch C fixed, and **ported here as a reconciliation rather than a copy** because three batches landed beside it while it was being written. Six passages changed on the port and every one is traceable to a register entry: act 2.1's stale rail warning deleted (U-1), act 2.7's "the auto tab is not built" deleted and the tab clicked (#53), act 5.1's greyed-Take-Exam note rewritten as three doors into one screen, **act 5.5a added** to stage the C-4 cross-course flag live (U-2 made it reachable; it is the most demonstrable requirement in C-4 and had never been shown on a screen), acts 6.1/6.4 rewritten around My Grades now arriving without anybody touching machine B (B-32), and three rows retired from the not-done table because the things they described were done. Nine acts, 24 min 30 s, with a cut list to 15. **The dry runs are E22.6/E22.7 and are not this row.**)*
+- [x] E22.5 Defense Q&A prep sheet: patterns, decisions, "what would you change for phase 2 (internet)", concurrency story *(**2026-08-26, batch D: `docs/DEFENSE_QA.md` is on `main`**, ported from `hsts-e15-wt` beside the demo script. Q4's honest caveat is discharged rather than carried: it said two claimed patterns were unnamed in javadoc, acceptance case 20.2 found it was **four** (Observer, Command, Facade, DAO — zero occurrences under `src/main/java`), and all four are now named at their boundary, so the NFR-20 row in the weak-spots table moved from PARTIAL to a positive claim. The Command line deliberately records what the pattern is **not** here — no undo, receiver bound at registration — so the answer to "that is not textbook Command" is a concession plus a reason rather than a defence of the label. B-36's `server/` → `client/` import is written in as a prepared answer for the same question. **Rehearsing it is E22.6/E22.7.**)*
 - [ ] E22.6 Dry-run defense #1 (full, timed, two machines) → fix list
 - [ ] E22.7 Dry-run defense #2 (clean run) ⚑
 - [ ] E22.8 Day-of checklist: keys tested, DB seeded fresh, firewall, chargers, backup laptop with everything installed

@@ -67,7 +67,9 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
             "enrollments", 29L,
             "questions", 40L,
             "question_versions", 43L,
-            "notifications", 8L);
+            // 9 since 2026-08-26: B-25 added N-GRADE-MAYA, so DEMO_DAY's sign-in account
+            // has a bell at all.
+            "notifications", 9L);
 
     private SeedLoader loader() {
         return new SeedLoader(factory(), java.time.Clock.fixed(ANCHOR, java.time.ZoneOffset.UTC),
@@ -120,7 +122,97 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         assertThat(count("users")).isEqualTo(18);
         assertThat(count("question_versions")).isEqualTo(43);
         assertThat(count("exam_version_questions")).isEqualTo(39);
-        assertThat(count("notifications")).isEqualTo(8);
+        assertThat(count("notifications")).isEqualTo(9);
+    }
+
+    // ===== B-24: the loader can see dataset drift ==========================
+
+    @Test
+    @DisplayName("a freshly seeded database shows no dataset drift ⚑ (B-24)")
+    void theFingerprintMatchesAFreshlySeededDatabase() {
+        // The tripwire under SeedFingerprint's hardcoded expectations. They restate numbers
+        // that live in SEED_CONTENT.md, which is a second place for them to drift; this is
+        // what turns that drift into a build failure instead of a warning every operator sees
+        // forever and learns to ignore.
+        SeedFingerprint.Drift drift = inTx(SeedFingerprint::compare);
+
+        assertThat(drift.differences())
+                .as("the fingerprint's expectations have gone stale against the real dataset")
+                .isEmpty();
+        assertThat(drift.isClean()).isTrue();
+        assertThat(drift.expectedDigest()).isEqualTo(drift.actualDigest());
+        assertThat(drift.warning()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a second LOAD_IF_MISSING on this database warns about nothing")
+    void aCleanDatabaseIsNotWarnedAbout() {
+        SeedSummary second = loader().load(SeedMode.LOAD_IF_MISSING, Confirmation.refused());
+
+        assertThat(second.hasWarning()).isFalse();
+        assertThat(second.toText()).doesNotContain("WARNING");
+    }
+
+    @Test
+    @DisplayName("content that drifted under an unchanged natural key is caught ⚑ (B-24)")
+    void driftedContentIsCaughtAndNothingIsDeleted() {
+        // 17.2's exact situation, reproduced: the username is untouched, so every row-level
+        // idempotency check still matches and the loader still reports UNCHANGED. What moved
+        // is the content, which is what the pre-translation hsts_db looked like (B-19).
+        long usersBefore = count("users");
+        Transactions.runInTx(factory(), session -> session
+                .createMutationQuery(
+                        "update User u set u.fullName = 'דנה כהן' where u.username = 'dana.cohen'")
+                .executeUpdate());
+        try {
+            SeedSummary summary = loader().load(SeedMode.LOAD_IF_MISSING, Confirmation.refused());
+
+            assertThat(summary.outcome())
+                    .as("the row-level check still matches on the username, which is the gap")
+                    .isEqualTo(SeedOutcome.UNCHANGED);
+            assertThat(summary.hasWarning()).isTrue();
+            assertThat(summary.warning())
+                    .contains("does not look like it was seeded by this build's dataset")
+                    .contains("Nothing has been deleted")
+                    .contains("Reload demo data")
+                    .contains("dana.cohen's display name");
+            assertThat(summary.toText())
+                    .as("the console result panel is where an operator actually reads this")
+                    .contains(summary.warning());
+            assertThat(count("users"))
+                    .as("a warning deletes nothing and inserts nothing")
+                    .isEqualTo(usersBefore);
+        } finally {
+            Transactions.runInTx(factory(), session -> session
+                    .createMutationQuery(
+                            "update User u set u.fullName = 'Dana Cohen' "
+                                    + "where u.username = 'dana.cohen'")
+                    .executeUpdate());
+        }
+    }
+
+    @Test
+    @DisplayName("a row added beside the seed moves the count and is reported")
+    void extraRowsAreCaught() {
+        // Resolved rather than hardcoded: users.id is AUTO_INCREMENT, so the seed's "user 1" is
+        // only user 1 on a schema that has been loaded once. This class's schema is reused.
+        long recipient = inTx(session -> session
+                .createQuery("select u.id from User u where u.username = 'maya.levi'", Long.class)
+                .getSingleResult());
+        Transactions.runInTx(factory(), session -> session.persist(
+                new server.db.entities.Notification(recipient, "GRADE_PUBLISHED",
+                        "Something a person did", null, null, null, ANCHOR)));
+        try {
+            SeedSummary summary = loader().load(SeedMode.LOAD_IF_MISSING, Confirmation.refused());
+
+            assertThat(summary.warning())
+                    .contains("notifications: this dataset says 9, the database says 10");
+        } finally {
+            Transactions.runInTx(factory(), session -> session
+                    .createMutationQuery(
+                            "delete from Notification n where n.title = 'Something a person did'")
+                    .executeUpdate());
+        }
     }
 
     @Test

@@ -144,6 +144,21 @@ therefore the layout with the fewest ways to go wrong, and it is the layout to h
 If double-clicking does nothing at all, the association is wrong, not the JAR. Confirm with
 `java -jar C:\HSTS\G12-1_Server.jar` from a terminal before changing anything else.
 
+### 2.4 Two lines on the terminal that are expected, and are not faults
+
+Neither appears on a double-click; both appear if either jar is run from a terminal, which is
+what §2.3's fallback above tells you to do and what a curious grader may do unprompted. They are
+recorded here so nobody spends the day chasing them.
+
+| Where | The line | What it is |
+|---|---|---|
+| the **server** jar, about a second after the Flyway block | `ERROR Log4j2 could not find a logging implementation. Please add log4j-core to the classpath. Using SimpleLogger to log to the console...` | **B-2**, open. Something on the classpath — most likely a transitive dependency of the bot SDK — uses the log4j2 API with no binding present, so log4j2 falls back to its own SimpleLogger. The server's own logging is logback and every subsequent line is normal. It is red, which is the whole problem with it. Reproduced in the packaged jar by acceptance case 15.1 |
+| the **client** jar, before anything else | `WARNING: Unsupported JavaFX configuration: classes were loaded from 'unnamed module @...'` | **B-26**, closed by this note. Inherent to a shaded JavaFX application: the classes are on the classpath rather than the module path, which is exactly what makes the jar double-clickable (F14.1). There is no fix that keeps the deliverable, so there is no fix. The toolkit starts, the connect screen builds, and discovery runs — case 15.2 watched it log *"Discovery found 0 server(s) on the local network"* and go on to the manual entry card |
+
+If asked about either: the first is a dependency's logging API with no binding, the second is
+what a single-jar JavaFX application prints on every JVM. Neither touches a rule, a screen or a
+row.
+
 ---
 
 ## 3. Fresh machine: MySQL to a seeded database (E20.6)
@@ -207,8 +222,11 @@ cause before the stack trace. Read the sentence:
 ### 3.4 Seed
 
 - [ ] In the server console, click **Load demo data if missing** (safe, inserts only what is missing)
-- [ ] The result panel reports the rows loaded (18 users among them)
-- [ ] Sign in from a client as `maya.levi` / `demo123` to prove the seed took
+- [ ] The result panel reports the rows loaded (**376** in all, 18 users among them)
+- [ ] Sign in from a client as `maya.levi` / `demo123` to prove the seed took — **her bell
+      should read 1 unread**, and clicking it should land on My Grades (seed §11
+      `N-GRADE-MAYA`, added under B-25; before it she was the one demoed account with an
+      empty bell)
 
 **Before every demo, reload rather than load.** The seed's exam windows are relative to load
 time: one execution is "live right now", and a database seeded yesterday has no live exam today.

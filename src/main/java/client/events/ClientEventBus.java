@@ -6,7 +6,21 @@ import java.lang.reflect.Modifier;
 import java.util.Objects;
 
 /**
- * The client-side publish/subscribe hub (Presentation tier, ADR-007).
+ * The client-side publish/subscribe hub (Presentation tier, ADR-007 — <b>Observer / Pub-Sub
+ * Pattern</b> ⚑ B-34).
+ *
+ * <p><b>This is the client half of the Observer boundary {@code PLAN.md} §2 claims</b>; the
+ * server half is {@code server.realtime.PushGateway}, and the two are one mechanism seen from
+ * either end of a socket. Pub-Sub rather than plain Observer, and the distinction is the reason
+ * the shape was chosen: a publisher here names an <em>event type</em> and never a subscriber,
+ * so {@code NotificationService} can raise a notification without knowing that a bell, a toast
+ * and an approval queue will each react to it — which is precisely what NFR-18 needs, since a
+ * screen that has to be registered with by name is a screen somebody forgets to register.
+ *
+ * <p>Subscribers declare themselves with {@code @Subscribe} and are resolved reflectively, so
+ * a screen is a subscriber by writing one method rather than by being wired to a publisher.
+ * {@code PushEventBridge} is the one adapter between the two halves: it turns an arriving
+ * {@code Status.PUSH} message into a {@code ServerPushEvent} on this bus.
  *
  * <p>Wraps greenrobot {@link EventBus} and pairs it with an
  * {@link FxThreadPoster}: <b>every</b> event is delivered through the poster, so

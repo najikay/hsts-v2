@@ -237,24 +237,120 @@ class ConnectFlowTest {
         @Test
         @DisplayName("a failed connect falls back to the editor, naming the address")
         void failedConnect() {
-            ConnectFlow.Decision decision =
-                    ConnectFlow.afterFailedConnect(ROOM_12, "Connection refused");
+            ConnectFlow.Decision decision = ConnectFlow.afterFailedConnect(
+                    ROOM_12, new java.net.ConnectException("Connection refused"));
 
             assertThat(decision.step()).isEqualTo(ConnectFlow.Step.MANUAL_ENTRY);
             assertThat(decision.message())
                     .contains("Could not reach 192.168.1.42:5555")
-                    .contains("Connection refused")
+                    .contains(ConnectFlow.UNREACHABLE_REFUSED)
                     .contains("shown on its console");
         }
 
         @Test
-        @DisplayName("a failed connect with no detail still says what to do")
+        @DisplayName("a failed connect with no recognised cause still says what to do")
         void failedConnectWithoutDetail() {
             assertThat(ConnectFlow.afterFailedConnect(null, null).message())
                     .contains("the remembered server")
+                    .contains("shown on its console")
                     .doesNotContain("()");
-            assertThat(ConnectFlow.afterFailedConnect(ROOM_12, "  ").message())
+            assertThat(ConnectFlow.afterFailedConnect(ROOM_12, new IllegalStateException()).message())
                     .doesNotContain("()");
+        }
+
+        // ===== B-37: no Java class name reaches the first screen anyone sees =====
+
+        @Test
+        @DisplayName("a throwable with no message never renders its class name ⚑ (B-37)")
+        void aMessagelessThrowableIsNotRenderedAsItsClassName() {
+            // The ordinary one on a school network: a socket that never answers. Before B-37
+            // this produced "Could not reach 192.168.1.42:5555 (SocketTimeoutException)."
+            String message = ConnectFlow.afterFailedConnect(
+                    ROOM_12, new java.net.SocketTimeoutException()).message();
+
+            assertThat(message)
+                    .contains("Could not reach 192.168.1.42:5555")
+                    .contains(ConnectFlow.UNREACHABLE_TIMEOUT)
+                    .doesNotContain("SocketTimeoutException")
+                    .doesNotContain("Exception")
+                    .doesNotContain("(")
+                    .doesNotContain("java.");
+        }
+
+        @Test
+        @DisplayName("no cause the product does not know produces a bracket or a leak")
+        void unknownCausesLeakNothing() {
+            List<Throwable> causes = new java.util.ArrayList<>();
+            causes.add(null);
+            causes.add(new IllegalStateException("some internal detail"));
+            causes.add(new java.io.IOException());
+            causes.add(new RuntimeException(new IllegalArgumentException("nested detail")));
+
+            for (Throwable cause : causes) {
+                assertThat(ConnectFlow.afterFailedConnect(ROOM_12, cause).message())
+                        .as("cause %s", cause)
+                        .doesNotContain("(")
+                        .doesNotContain("Exception")
+                        .doesNotContain("java.")
+                        .doesNotContain("some internal detail")
+                        .doesNotContain("nested detail")
+                        .contains("Check the server is running");
+            }
+        }
+
+        @Test
+        @DisplayName("the four causes the product has words for, each mapped once")
+        void everyKnownCauseHasProductCopy() {
+            assertThat(ConnectFlow.reasonFor(new java.net.ConnectException("Connection refused")))
+                    .isEqualTo(ConnectFlow.UNREACHABLE_REFUSED);
+            assertThat(ConnectFlow.reasonFor(new java.net.SocketTimeoutException()))
+                    .isEqualTo(ConnectFlow.UNREACHABLE_TIMEOUT);
+            assertThat(ConnectFlow.reasonFor(new java.net.UnknownHostException("room12")))
+                    .isEqualTo(ConnectFlow.UNREACHABLE_UNKNOWN_HOST);
+            assertThat(ConnectFlow.reasonFor(new java.net.NoRouteToHostException()))
+                    .isEqualTo(ConnectFlow.UNREACHABLE_NO_ROUTE);
+            assertThat(ConnectFlow.reasonFor(null)).isEmpty();
+            assertThat(ConnectFlow.reasonFor(new IllegalStateException())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the cause is found through the wrappers it arrives in")
+        void walksTheCauseChain() {
+            // The connect worker hands ConnectView whatever the adapter threw, and the
+            // interesting exception is two or three wrappers down.
+            Throwable wrapped = new java.util.concurrent.CompletionException(
+                    new java.io.IOException("connect failed",
+                            new java.net.ConnectException("Connection refused")));
+
+            assertThat(ConnectFlow.reasonFor(wrapped)).isEqualTo(ConnectFlow.UNREACHABLE_REFUSED);
+        }
+
+        @Test
+        @DisplayName("a self-referential cause chain terminates rather than hanging")
+        void selfReferentialCauseTerminates() {
+            Throwable loop = new IllegalStateException("round and round") {
+                @Override
+                public synchronized Throwable getCause() {
+                    return this;
+                }
+            };
+
+            assertThat(ConnectFlow.reasonFor(loop)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("every unreachable sentence is product copy: capitalised, ended, no code")
+        void unreachableCopyFollowsTheHouseRules() {
+            assertThat(List.of(ConnectFlow.UNREACHABLE_REFUSED, ConnectFlow.UNREACHABLE_TIMEOUT,
+                            ConnectFlow.UNREACHABLE_UNKNOWN_HOST, ConnectFlow.UNREACHABLE_NO_ROUTE))
+                    .allSatisfy(sentence -> {
+                        assertThat(sentence).isNotBlank();
+                        assertThat(Character.isUpperCase(sentence.charAt(0))).isTrue();
+                        assertThat(sentence).endsWith(".");
+                        assertThat(sentence).doesNotContain("—")
+                                .doesNotContain("Exception").doesNotContain("java.")
+                                .doesNotContain("[").doesNotContain("]");
+                    });
         }
 
         @Test
@@ -313,7 +409,8 @@ class ConnectFlowTest {
             assertThat(List.of(ConnectFlow.NOTHING_FOUND, ConnectFlow.PINNED_MISSING,
                             ConnectFlow.SEVERAL_FOUND, ConnectFlow.CHANGED_SERVER_TITLE,
                             ConnectFlow.changeServerRequested().message(),
-                            ConnectFlow.afterFailedConnect(ROOM_12, "x").message(),
+                            ConnectFlow.afterFailedConnect(ROOM_12, new java.net.ConnectException())
+                                    .message(),
                             ConnectFlow.decide(pinnedToRoom12(), List.of(ROOM_12_REPLACED)).message()))
                     .allSatisfy(message -> assertThat(message).doesNotContain("—"));
         }

@@ -731,6 +731,61 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                 .doesNotThrowAnyException());
     }
 
+    /**
+     * ⚑ <b>B-25's tripwire.</b>
+     *
+     * <p>Case 17.3 asked whether every demoed screen has real content and found one that did
+     * not: {@code maya.levi}'s bell answered 0 items, 0 unread, and she is the account
+     * {@code DEMO_DAY.md} §2.3 signs in as on the clean-machine pass. Nothing could have
+     * failed for it, because {@link #notificationsMatch} compares the loaded rows against the
+     * document and the document did not have her either.
+     *
+     * <p>So this asks the question the demo asks: does the account we sign in as have a bell?
+     * And it asks the two things that make the row worth having — that it is unread, so there
+     * is a badge, and that it deep-links, so clicking it goes somewhere.
+     */
+    @Test
+    @DisplayName("⚑ the demo student has an unread notification that deep-links (B-25)")
+    void theDemoStudentsBellIsNotEmpty() {
+        List<List<Object>> hers = rows("""
+                select n.type, n.title, n.body, n.refType, n.refId, n.readAt
+                from Notification n, User u
+                where u.id = n.userId and u.username = 'maya.levi'
+                """);
+
+        assertThat(hers)
+                .as("maya.levi is DEMO_DAY 2.3's sign-in account; an empty bell is what B-25 was")
+                .hasSize(1);
+        List<Object> row = hers.get(0);
+        assertThat(row.get(0)).isEqualTo(NotificationType.GRADE_PUBLISHED.name());
+        assertThat(row.get(1)).isEqualTo("Your grade is ready");
+        assertThat((String) row.get(2))
+                .as("the catalog's own body, so the bell shows what a live approval produces")
+                .isEqualTo("Your grade for Midterm: Algebra has been published.");
+        assertThat(row.get(3))
+                .as("the first seeded notification that deep-links at all")
+                .isEqualTo("grades");
+        assertThat(row.get(4))
+                .as("her own attempt on sitting 4821, resolved at load time")
+                .isNotNull();
+        assertThat(row.get(5)).as("unread, so there is a badge to see").isNull();
+    }
+
+    /**
+     * The title chosen for B-25's row cannot collide with the other two grade publications,
+     * because §11's idempotency key is recipient + type + title and a collision would make one
+     * of them vanish on the second load.
+     */
+    @Test
+    @DisplayName("⚑ no two seeded notifications share a recipient, a type and a title (B-25)")
+    void theIdempotencyKeyIsStillUnique() {
+        List<List<Object>> keys = rows("""
+                select n.userId, n.type, n.title from Notification n
+                """);
+
+        assertThat(keys).doesNotHaveDuplicates();
+    }
+
     /** @return each result row as a list, with numbers normalised so comparison is by value */
     private List<List<Object>> rows(String query) {
         return inTx(session -> session.createQuery(query, Object[].class).getResultList()).stream()

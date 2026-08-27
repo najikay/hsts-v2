@@ -15,7 +15,20 @@ import java.util.Set;
 import server.core.SessionManager;
 
 /**
- * The server → client push channel (Logic tier, E1.7).
+ * The server → client push channel (Logic tier, E1.7 — the server half of the
+ * <b>Observer / Pub-Sub Pattern</b> ⚑ B-34).
+ *
+ * <p><b>{@code PLAN.md} §2's "Observer/Pub-Sub (EventBus + server push)" names two classes and
+ * this is the second one</b>; {@code client.events.ClientEventBus} is the first. A service here
+ * publishes by naming recipients and a verb and nothing else — it does not know whether anyone
+ * is watching, which screen is open, or whether the message will be delivered at all. That is
+ * what makes the subject/observer coupling one-directional across a network rather than merely
+ * across a package.
+ *
+ * <p>The subscription itself lives in two places for two kinds of recipient: a session is an
+ * implicit subscriber to everything addressed to its user, and
+ * {@code EXECUTION_MONITOR_GET}-style verbs register explicit per-entity watchers whose
+ * lifetime is the connection's ({@code MonitorService}, {@code EditLockService}).
  *
  * <p>Services never touch a socket: they name recipients by user id and this
  * gateway looks each one up in {@link SessionManager} and writes a

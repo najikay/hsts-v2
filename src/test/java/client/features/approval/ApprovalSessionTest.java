@@ -1,6 +1,8 @@
 package client.features.approval;
 
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
@@ -15,6 +17,9 @@ import common.dto.approval.ExamRejectRequest;
 import common.dto.approval.PreviewAnswerRow;
 import common.dto.approval.TeacherOnlyBlock;
 import common.dto.exam.ExamQuestion;
+import common.dto.notify.NavRef;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -92,8 +97,25 @@ class ApprovalSessionTest {
 
         @BeforeEach
         void openTheQueue() {
+            // A real bus, so the B-30 tests exercise the registration and not a method call.
+            ClientEventBus eventBus =
+                    new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+            dispatcher.setPushListener(new PushEventBridge(eventBus));
             session = new ApprovalQueueSession(dispatcher, new DirectFxThreadPoster())
-                    .onChange(() -> renders++);
+                    .onChange(() -> renders++)
+                    .subscribeTo(eventBus);
+        }
+
+        /** One notification of the given type, as the server sends it to a coordinator. */
+        private NotificationDto notification(NotificationType type) {
+            return new NotificationDto(1L, type, "An exam is waiting for your approval", "",
+                    NavRef.to("approvals", CALCULUS_V1), SUBMITTED, null);
+        }
+
+        private long queueReads() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.APPROVALS_QUEUE_GET)
+                    .count();
         }
 
         @Test
@@ -179,6 +201,63 @@ class ApprovalSessionTest {
 
             assertThat(session.rows()).isEmpty();
             assertThat(connection.sentCount()).isEqualTo(2);
+        }
+
+        /**
+         * B-30's proof, and it is driven through the REAL bus rather than by calling the
+         * method. Before this batch {@code ApprovalQueueSession} had no {@code @Subscribe} at
+         * all: acceptance case 18.2 watched the coordinator's bell badge increment while the
+         * list beneath it stayed exactly as it was. Nothing could have failed for that, which
+         * is why the test has to push a real {@code NotificationDto} onto a real bus.
+         */
+        @Test
+        @DisplayName("an APPROVAL_REQUESTED push re-asks the queue with no user action ⚑ (B-30)")
+        void anArrivingExamRefreshesTheQueue() {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET, ApprovalQueue.empty());
+            session.load();
+            assertThat(session.rows()).isEmpty();
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET,
+                    new ApprovalQueue(List.of(PENDING), true));
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_REQUESTED));
+
+            assertThat(queueReads())
+                    .as("she pressed nothing: NFR-18 on the one screen that is an inbox")
+                    .isEqualTo(2);
+            assertThat(session.rows()).containsExactly(PENDING);
+        }
+
+        @Test
+        @DisplayName("a supersede re-asks too: it takes a row away rather than adding one")
+        void aSupersedeRefreshesTheQueue() {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET,
+                    new ApprovalQueue(List.of(PENDING), true));
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_SUPERSEDED));
+
+            assertThat(queueReads()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a push about something else does not re-query the queue ⚑")
+        void unrelatedPushesAreIgnored() {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET,
+                    new ApprovalQueue(List.of(PENDING), true));
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADE_PUBLISHED));
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_APPROVED));
+            connection.pushToClient(Verb.PUSH_GRADE_PUBLISHED, "not a notification");
+
+            assertThat(queueReads())
+                    .as("PUSH_NOTIFICATION carries every kind this app has, and a decision on "
+                            + "her own exam is the author's news rather than the queue's")
+                    .isEqualTo(1);
         }
 
         @Test

@@ -2,6 +2,8 @@ package server.features.grading;
 
 import common.dto.grading.ApproveRequest;
 import common.dto.grading.ApproveResult;
+import common.dto.grading.GradeState;
+import common.dto.grading.StudentGradeRow;
 import org.hibernate.Session;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +20,7 @@ import server.db.entities.Grade;
 import server.db.entities.GradeStatus;
 import server.db.projections.AttemptRecord;
 import server.db.projections.ExecutionContext;
+import server.db.projections.StudentResultRow;
 import server.db.repos.AttemptRepository;
 import server.db.repos.ExecutionRepository;
 import server.db.repos.GradeRepository;
@@ -356,6 +359,115 @@ class ApprovalServiceTest {
         }
     }
 
+    // ===== the rows handed back for PUSH_GRADE_PUBLISHED (B-32) ===========
+
+    @Nested
+    @DisplayName("the rows handed back to publish — B-32")
+    class Collecting {
+
+        @Test
+        @DisplayName("one student row per newly approved grade, labelled with its exam")
+        void collectsARowPerApproval() {
+            List<Grade> all = autos(2);
+            wire(all, context(DANA, DANA));
+
+            GradeApprovalService.Approval approval =
+                    service.approveAndCollect(session, DANA, request(2));
+
+            assertThat(approval.result().approved()).isEqualTo(2);
+            assertThat(approval.published()).hasSize(2);
+            StudentGradeRow first = approval.published().get(0);
+            assertThat(first.gradeId()).isEqualTo(1);
+            assertThat(first.state()).isEqualTo(GradeState.APPROVED);
+            assertThat(first.effectiveScore()).isEqualTo(SEEDED_SCORES.get(0));
+            assertThat(first.approvedAt()).isEqualTo(NOW);
+            // v1.1's labels, taken from the execution the grade belongs to: on this screen
+            // every row is a different exam.
+            assertThat(first.examName()).isEqualTo("מבחן אמצע — אלגברה");
+            assertThat(first.courseCode()).isEqualTo("11");
+        }
+
+        @Test
+        @DisplayName("the pushed row never carries the override justification")
+        void stripsTheJustification() {
+            Grade g = auto(1, 71);
+            g.override(80, "Q4 marked wrong by the key");
+            g.setTeacherComment("Well argued.");
+            wire(List.of(g), context(DANA, DANA));
+
+            GradeApprovalService.Approval approval =
+                    service.approveAndCollect(session, DANA, ApproveRequest.one(1));
+
+            StudentGradeRow row = approval.published().get(0);
+            // The justification is teacher and audit material; the comment is hers to read.
+            assertThat(row.overrideReason()).isNull();
+            assertThat(row.teacherComment()).isEqualTo("Well argued.");
+            assertThat(row.finalScore()).isEqualTo(80);
+            assertThat(row.effectiveScore()).isEqualTo(80);
+        }
+
+        @Test
+        @DisplayName("an already-approved grade publishes nothing — a second click is silent")
+        void reApprovingPublishesNothing() {
+            Grade already = approved(1, 71);
+            wire(List.of(already), context(DANA, DANA));
+
+            GradeApprovalService.Approval approval =
+                    service.approveAndCollect(session, DANA, ApproveRequest.one(1));
+
+            assertThat(approval.result().alreadyApproved()).isEqualTo(1);
+            assertThat(approval.published()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a refused grade publishes nothing")
+        void refusedPublishesNothing() {
+            Grade g = auto(1, 71);
+            wire(List.of(g), context(AVI, AVI));
+
+            assertThat(service.approveAndCollect(session, DANA, ApproveRequest.one(1))
+                    .published()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an empty request publishes nothing and reads nothing back")
+        void emptyRequestPublishesNothing() {
+            GradeApprovalService.Approval approval =
+                    service.approveAndCollect(session, DANA, new ApproveRequest(List.of()));
+
+            assertThat(approval.result().approved()).isZero();
+            assertThat(approval.published()).isEmpty();
+            verify(grades, never()).findResultRows(any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("one read per execution, not one per grade — a bulk approve is the norm")
+        void readsOncePerExecution() {
+            wire(autos(8), context(DANA, DANA));
+
+            service.approveAndCollect(session, DANA, request(8));
+
+            verify(grades, org.mockito.Mockito.times(1)).findResultRows(any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("a grade that cannot be read back is dropped rather than pushed blank")
+        void unreadableGradeIsDropped() {
+            Grade g = auto(1, 71);
+            wire(List.of(g), context(DANA, DANA));
+            org.mockito.Mockito.when(grades.findResultRows(any(), anyLong()))
+                    .thenReturn(List.of());
+
+            GradeApprovalService.Approval approval =
+                    service.approveAndCollect(session, DANA, ApproveRequest.one(1));
+
+            // The approval still stands — only the announcement is lost, and it is lost
+            // loudly (a WARN) rather than delivered as a row full of blanks.
+            assertThat(approval.result().approved()).isEqualTo(1);
+            assertThat(approval.published()).isEmpty();
+        }
+    }
+
     // ===== fixtures =======================================================
 
     private static Grade auto(long id, int autoScore) {
@@ -406,6 +518,18 @@ class ApprovalServiceTest {
                     NOW.minusSeconds(7200), NOW.minusSeconds(5400), 30, AttemptStatus.SUBMITTED));
         });
         lenient().when(executions.findContext(any(), anyLong())).thenReturn(Optional.of(ctx));
+        // B-32's read-back. The rows are derived from the same Grade objects, so they carry
+        // whatever state approve() has just written to them by the time it asks.
+        lenient().when(grades.findResultRows(any(), anyLong())).thenAnswer(inv -> {
+            List<StudentResultRow> rows = new ArrayList<>(found.size());
+            for (Grade g : found) {
+                rows.add(new StudentResultRow(g.getId(), 100 + g.getAttemptId(),
+                        "Student " + g.getId(), g.getAutoScore(), g.getFinalScore(),
+                        g.getStatus(), g.getOverrideReason(), g.getTeacherComment(),
+                        g.getApprovedAt(), 30, AttemptStatus.SUBMITTED));
+            }
+            return rows;
+        });
     }
 
     private static void setField(Object target, String name, Object value) {

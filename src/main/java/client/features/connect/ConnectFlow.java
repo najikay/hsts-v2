@@ -131,6 +131,22 @@ public final class ConnectFlow {
     public static final String SEVERAL_FOUND =
             "More than one server answered. Choose the one your teacher named.";
 
+    // --- why a connect failed, in the user's language (B-37) --------------
+
+    /** The connect was refused: something is at that address, nothing is listening on the port. */
+    public static final String UNREACHABLE_REFUSED = "Nothing is listening on that address.";
+
+    /** The connect timed out: nothing answered in time. */
+    public static final String UNREACHABLE_TIMEOUT = "That address did not answer.";
+
+    /** The host name could not be resolved. */
+    public static final String UNREACHABLE_UNKNOWN_HOST =
+            "That name could not be found on this network.";
+
+    /** There is no route to that address from here — usually a different subnet. */
+    public static final String UNREACHABLE_NO_ROUTE =
+            "That address cannot be reached from this network.";
+
     private ConnectFlow() {
     }
 
@@ -226,17 +242,79 @@ public final class ConnectFlow {
     /**
      * What to do when a connect attempt failed (E19.11's "unreachable" case).
      *
+     * <h2>It takes the throwable, and that is the fix ⚑ (B-37)</h2>
+     *
+     * <p>This used to take a {@code String reason} and fold it into the sentence in brackets,
+     * and {@code ConnectView} computed that string as {@code cause.getMessage() == null ?
+     * cause.getClass().getSimpleName() : cause.getMessage()}. A throwable with no message —
+     * {@code SocketTimeoutException} is the ordinary one here — therefore produced <i>"Could
+     * not reach 192.168.1.5:5555 (SocketTimeoutException). Check the server is running…"</i>
+     * on the first screen anyone sees at the defence. PRD §4.1 says a user never meets an
+     * error code or a stack trace, and a Java class name is one.
+     *
+     * <p><b>Taking the {@link Throwable} rather than a string is what makes that
+     * unrepresentable</b> instead of merely fixed: there is no longer a parameter a caller
+     * could pass a JDK string to. {@link #reasonFor(Throwable)} maps the small closed set of
+     * causes to product copy and answers {@code ""} for everything else, and the throwable
+     * itself goes to the log where it belongs.
+     *
+     * <p><b>And there are no brackets any more.</b> A cause the product has a sentence for
+     * gets a sentence of its own between the address and the instruction; a cause it does not
+     * recognise leaves the message two sentences long rather than a bracket with a class name
+     * in it. That is the reconnect banner's own discipline — {@code showDisconnected(String
+     * serverLabel)} takes no detail parameter at all, and {@code ConnectionLostEvent}'s
+     * javadoc says the technical reason is "never shown as the primary message".
+     *
      * @param attempted where the client tried to go
-     * @param reason    the failure's own message, already made readable
+     * @param cause     what the connect attempt threw, unwrapped or not; may be {@code null}
      * @return manual entry, with a sentence that names the address and the next step
      */
-    public static Decision afterFailedConnect(ServerEndpoint attempted, String reason) {
+    public static Decision afterFailedConnect(ServerEndpoint attempted, Throwable cause) {
         String where = attempted == null ? "the remembered server" : attempted.display();
-        String detail = reason == null || reason.isBlank() ? "" : " (" + reason + ")";
+        String reason = reasonFor(cause);
         return new Decision(Step.MANUAL_ENTRY, null, "", null, List.of(),
-                "Could not reach " + where + detail
-                        + ". Check the server is running, then enter the address "
+                "Could not reach " + where + "."
+                        + (reason.isEmpty() ? "" : " " + reason)
+                        + " Check the server is running, then enter the address "
                         + "shown on its console.");
+    }
+
+    /**
+     * The product's sentence for why a connect failed (B-37).
+     *
+     * <p>Walks the cause chain, because the interesting exception arrives wrapped — a
+     * {@code CompletionException} around an {@code IOException} around the real one — and
+     * matching only the outermost type works until it does not. That is
+     * {@code ExtendService.isStaleWrite}'s reasoning, applied to a screen.
+     *
+     * <p><b>Anything unrecognised answers {@code ""}, deliberately.</b> The alternative is a
+     * default that leaks: "an unexpected error" is noise, and the throwable's own text is how
+     * B-37 happened. A user who is told the address could not be reached and what to do about
+     * it has everything the screen can honestly give her; the rest is in the log.
+     *
+     * @param cause the failure, or {@code null}
+     * @return a whole sentence, or {@code ""} when the product has nothing true to say
+     */
+    public static String reasonFor(Throwable cause) {
+        for (Throwable current = cause; current != null; current = current.getCause()) {
+            if (current instanceof java.net.UnknownHostException) {
+                return UNREACHABLE_UNKNOWN_HOST;
+            }
+            if (current instanceof java.net.SocketTimeoutException) {
+                return UNREACHABLE_TIMEOUT;
+            }
+            if (current instanceof java.net.NoRouteToHostException) {
+                return UNREACHABLE_NO_ROUTE;
+            }
+            if (current instanceof java.net.ConnectException) {
+                return UNREACHABLE_REFUSED;
+            }
+            if (current.getCause() == current) {
+                // A self-referential cause chain would loop forever. Rare, and cheap to refuse.
+                break;
+            }
+        }
+        return "";
     }
 
     /**

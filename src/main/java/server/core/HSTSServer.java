@@ -222,7 +222,7 @@ public class HSTSServer extends AbstractServer {
         // Grading first, because take-exam is assembled with the grader rather than the other
         // way round: the seam points from submission to marking and never back.
         AttemptFinalizedListener grader =
-                registerGradingFeature(router, notifications, sessionFactory, clock);
+                registerGradingFeature(router, notifications, pushGateway, sessionFactory, clock);
         ExamFeature exam = registerExamFeature(router, sessions, pushGateway, notifications,
                 sessionFactory, clock, examTimers, grader);
         // The release manager (E9), assembled straight after take-exam and never before it:
@@ -417,6 +417,7 @@ public class HSTSServer extends AbstractServer {
      */
     private static AttemptFinalizedListener registerGradingFeature(MessageRouter router,
                                                                    NotificationService notifications,
+                                                                   PushGateway pushGateway,
                                                                    SessionFactory sessionFactory,
                                                                    Clock clock) {
         GradeRepository grades = new GradeRepository();
@@ -434,7 +435,8 @@ public class HSTSServer extends AbstractServer {
                 new GradeApprovalService(grades, attempts, executions, notifications, clock),
                 new OverrideService(reviews),
                 reviews,
-                new GradingQueueService(executions, grades, attempts)).registerOn(router);
+                new GradingQueueService(executions, grades, attempts),
+                pushGateway).registerOn(router);
 
         ResultsService studentResults = new ResultsService(grades, users);
         new ResultsHandlers(sessionFactory, studentResults,

@@ -30,6 +30,31 @@ import java.util.concurrent.ConcurrentHashMap;
  *       verb → {@code ERROR(BAD_REQUEST)}. The connection always survives
  *       (E1.11).</li>
  * </ul>
+ *
+ * <h2>This is the Command Pattern boundary, in the form the protocol takes it ⚑ (B-34)</h2>
+ *
+ * <p>{@code PLAN.md} §2 claims <b>Command (protocol)</b> and NFR-20 asks that a claimed pattern
+ * be named where it is used rather than only in the document. It is claimed truthfully and the
+ * shape is worth stating precisely, because "we have an enum of verbs" would not be Command on
+ * its own:
+ *
+ * <ul>
+ *   <li>a <b>request is an object</b> — {@link Message}, carrying the {@link Verb} that names
+ *       the operation, its payload and a correlation id — which is what lets a request be
+ *       queued, logged, serialised across a socket and answered out of order;</li>
+ *   <li>every operation wears <b>one uniform invocation interface</b>, {@link Handler}, so the
+ *       router invokes 70 different operations through a single call;</li>
+ *   <li>dispatch is a <b>registry lookup</b>, {@code handlers.get(verb)}, and deliberately not
+ *       a {@code switch}: features register themselves on the way up
+ *       ({@code XxxHandlers.registerOn(router)}), so adding a verb touches no code in this
+ *       class. That is the property the pattern is chosen for.</li>
+ * </ul>
+ *
+ * <p><b>What it is not, said out loud so the defence answer is honest.</b> There is no
+ * {@code undo}, and the command object does not carry its own receiver — {@link Handler} is
+ * bound to its feature service at registration instead. Neither is needed here: nothing in this
+ * product is undoable at the protocol level, and a request that arrived over a wire cannot
+ * carry a server object anyway.
  */
 public class MessageRouter {
 

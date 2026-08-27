@@ -248,9 +248,18 @@ Logging: SLF4J + Logback, colorized console pattern for the terminal demo, plus 
 ## 9. Build & packaging
 
 - Single Maven module (simple for the course), Java 21, JavaFX 21 (`javafx-controls`, `javafx-fxml`).
-- Shade: `G<Num>_Server.jar` (main `server.core.ServerMain`, includes MySQL/Hibernate/Flyway/bot deps, excludes JavaFX? — **no**: server console needs JavaFX; include it) and `G<Num>_Client.jar` (main `client.core.Launcher`). **The client jar ships the FULL project artifact ON PURPOSE — there are no shade filters excluding server code, and there never were** (corrected 2026-08-24; this line previously described filters the pom has never had). It is now load-bearing: E6.11's editor calls `QuestionValidator`/`BankMessages` across the tier so the live rules and the server's verdict cannot drift, and its import closure was measured (JDK + two annotation-free classes). An E20 packaging pass that "restores" filtering breaks the editor on open and no test on the full classpath can see it — do not add filters.
+- Shade: `G<Num>_Server.jar` (main `server.core.ServerMain`, includes MySQL/Hibernate/Flyway/bot deps, excludes JavaFX? — **no**: server console needs JavaFX; include it) and `G<Num>_Client.jar` (**main `client.core.ClientLauncher`** — corrected 2026-08-26 under **B-23**; this line read `client.core.Launcher`, which is a different class, is not the manifest's `Main-Class`, and **does not work in this jar**: it boots `ServerMain` in-process and the client jar deliberately ships no database libraries, so running it throws `NoClassDefFoundError: com/zaxxer/hikari/HikariConfig` on a daemon thread while the GUI comes up with no local server behind it. Read off the built artefact's own manifest in acceptance case 15.1. `README.md` had it right; the tree disagreed with itself in two places out of three). **The client jar ships the FULL project artifact ON PURPOSE — there are no shade filters excluding server code, and there never were** (corrected 2026-08-24; this line previously described filters the pom has never had). It is now load-bearing: E6.11's editor calls `QuestionValidator`/`BankMessages` across the tier so the live rules and the server's verdict cannot drift, and its import closure was measured (JDK + two annotation-free classes). An E20 packaging pass that "restores" filtering breaks the editor on open and no test on the full classpath can see it — do not add filters.
 - Non-`Application` launcher classes so shaded JavaFX runs by double-click.
 - Build on Windows (JavaFX natives match the demo machines).
+- **One import crosses from `server/` to `client/`, and it is stated here rather than discovered
+  at the defence** (recorded 2026-08-26 under **B-36**, acceptance case 20.1).
+  `server/console/ConsoleView.java` imports `client.ui.components.WarnConfirm`: the E19 server
+  console reuses the client's confirm dialog for the reseed prompt rather than drawing a second
+  one. It is **presentation to presentation**, and the layering claim holds where it carries
+  weight — asserted in that case, no file under `server/features` imports anything from
+  `client.`, and no file under `client/` imports `server.db.` or `org.hibernate`. The console is
+  genuinely a presentation surface, so this is reuse rather than a leak; moving the dialog into a
+  neutral package stays available and is not worth a refactor for one import.
 
 ## 10. Phase-2 readiness (course spec §10)
 

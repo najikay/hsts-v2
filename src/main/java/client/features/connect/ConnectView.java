@@ -370,8 +370,13 @@ public final class ConnectView extends AbstractScreen {
         setConnecting(false);
         Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                 ? failure.getCause() : failure;
-        String detail = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        ConnectFlow.Decision fallback = ConnectFlow.afterFailedConnect(endpoint, detail);
+        // B-37: the throwable is logged and never rendered. Working out what to SAY about it
+        // is ConnectFlow's, because that class is pure and its copy has tests; this screen
+        // used to compute the sentence itself and put a Java class name on the first screen
+        // anyone sees.
+        LOG.warn("Connect to {} failed",
+                endpoint == null ? "the remembered server" : endpoint.display(), cause);
+        ConnectFlow.Decision fallback = ConnectFlow.afterFailedConnect(endpoint, cause);
         showManual(fallback);
         showError(fallback.message());
         hostField.apply(ValidationState.invalid("Could not reach this address"));

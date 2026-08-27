@@ -91,7 +91,7 @@ The five above are the ones the demo script names. The complete seeded roster
 | `itay.regev` | Itay Regev | STUDENT | |
 | `shira.dahan` | Shira Dahan | STUDENT | |
 | `omer.katz` | Omer Katz | STUDENT | the TIMED-OUT attempt (S-19); four questions "Not answered" |
-| `maya.levi` | Maya Levi | STUDENT | the demo student: two exams sat, one published (C-3 in one screen) |
+| `maya.levi` | Maya Levi | STUDENT | the demo student: two exams sat, one published (C-3 in one screen); one unread bell item for that published grade, deep-linking to My Grades (seed §11 `N-GRADE-MAYA`, added under B-25) |
 | `noam.peretz` | Noam Peretz | STUDENT | enrolled in neither Algebra nor Databases; the 9.4 outsider probe |
 | `yael.azulay` | Yael Azulay | STUDENT | the manual-override grade with a written justification (T-8.3) |
 | `daniel.shapira` | Daniel Shapira | STUDENT | |

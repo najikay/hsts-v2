@@ -1,12 +1,17 @@
 package client.features.approval;
 
+import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.approval.ApprovalQueue;
 import common.dto.approval.ApprovalRow;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.protocol.Message;
 import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.List;
 import java.util.Objects;
@@ -36,6 +41,20 @@ import java.util.Optional;
  * might send something it should not, and the next person would trust the filter instead of
  * the server. If a foreign subject's exam ever appeared here it would be a server bug, and
  * hiding it in the client is how that bug would survive to the defence.
+ *
+ * <h2>It updates itself ⚑ (B-30)</h2>
+ *
+ * <p>Until 2026-08-26 this was <b>the one inbox in the app that subscribed to nothing</b>: the
+ * server delivered {@code APPROVAL_REQUESTED} to the coordinator's socket correctly, her bell
+ * badge incremented, and the list underneath it stayed exactly as it was until she navigated
+ * (acceptance case 18.2). Clicking the bell did make it current — but clicking the bell is a
+ * user action, which is the whole of what NFR-18 forbids on the screen whose only purpose is
+ * an inbox.
+ *
+ * <p>{@link #subscribeTo(ClientEventBus)} wires it and {@link #onServerPush(ServerPushEvent)}
+ * is the entry point, filtered on the notification's own <em>type</em> rather than on the verb
+ * alone — {@code PUSH_NOTIFICATION} carries every kind this app has, and a grade being
+ * published is not a reason to re-query an approval queue.
  */
 public final class ApprovalQueueSession {
 
@@ -94,6 +113,74 @@ public final class ApprovalQueueSession {
     public void refresh() {
         state = AsyncViewState.IDLE;
         load();
+    }
+
+    // ===================== Live (B-30) ===================================
+
+    /**
+     * Subscribes this session to the app bus, so an exam arriving in her queue appears without
+     * her pressing anything (NFR-18, E17).
+     *
+     * <p>Called from the view's {@code build()}, which is where {@code ExamListSession} and
+     * {@code MyGradesSession} are wired and for the stated reason: the live refresh then sits
+     * somewhere a test can reach, rather than behind a {@code listensToEvents} override only
+     * the shell can exercise.
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class.</b> The
+     * bus invokes subscribers reflectively from its own package, so a package-private
+     * subscriber registers without complaint and then throws {@code IllegalAccessException} on
+     * every push, which the dispatcher catches and logs rather than rethrows — the screen
+     * simply never updates and no test fails. {@code ExamListSession} records the same trap
+     * because it is what happened while E6.14's lock column was being built.
+     *
+     * <p>Optional by design: {@link #load()} alone is a complete screen, and every existing
+     * test that never calls this still describes a working session.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public ApprovalQueueSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read if it changes what this queue would say.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_NOTIFICATION) {
+            return;
+        }
+        if (event.payload() instanceof NotificationDto item && affectsTheQueue(item.type())) {
+            onQueueChanged();
+        }
+    }
+
+    /**
+     * @param type the notification's type
+     * @return {@code true} for the two that change this list. {@code APPROVAL_REQUESTED} adds
+     *         a row; {@code APPROVAL_SUPERSEDED} removes one, because a teacher who revised
+     *         and resubmitted has withdrawn the version her coordinator was about to read.
+     *         Both are sent to the coordinators of the subject and to nobody else
+     *         ({@code ApprovalService}), so no filtering of recipients is needed here
+     */
+    private static boolean affectsTheQueue(NotificationType type) {
+        return type == NotificationType.APPROVAL_REQUESTED
+                || type == NotificationType.APPROVAL_SUPERSEDED;
+    }
+
+    /**
+     * Re-reads after the queue changed under her (E17, NFR-18).
+     *
+     * <p>A re-query rather than patching the pushed row in — the same reasoning as
+     * {@link #refresh()}, and it matters more here: the push says one exam arrived, and a
+     * supersede in the same second may have taken a different one away.
+     */
+    public void onQueueChanged() {
+        refresh();
     }
 
     private void settle(Message response, Throwable failure) {

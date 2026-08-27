@@ -49,7 +49,7 @@ class SeedDocumentTest {
         assertThat(document.exams()).hasSize(6);
         assertThat(document.examTexts()).hasSize(6);
         assertThat(document.grades(1)).hasSize(8);
-        assertThat(document.notifications()).hasSize(8);
+        assertThat(document.notifications()).hasSize(9);
     }
 
     @Test

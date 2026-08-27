@@ -121,6 +121,19 @@ public final class ConnectWiring {
         };
     }
 
+    /**
+     * The technical reason, <b>for the log only</b> ⚑ (B-37).
+     *
+     * <p>This computes the same class-name fallback {@code ConnectView.onFailed} used to compute,
+     * and it is still here on purpose: its output goes into {@link ConnectionLostEvent#detail()},
+     * which has exactly one consumer — {@code ConnectionWatcher}'s {@code log.warn} — and the
+     * banner it raises takes no detail parameter at all
+     * ({@code ReconnectBanner.showDisconnected(String serverLabel)}).
+     *
+     * <p><b>If a future change renders this on screen, it becomes B-37 again.</b> The connect
+     * screen's own copy is {@code ConnectFlow.reasonFor}, which maps causes to product sentences
+     * and never leaks a class name; use that, not this.
+     */
     private static String describe(Throwable cause) {
         if (cause == null) {
             return "";

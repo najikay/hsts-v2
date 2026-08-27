@@ -30,6 +30,7 @@ import server.db.entities.ExecutionStatus;
 import server.db.entities.Grade;
 import server.db.projections.AttemptRecord;
 import server.db.projections.ExecutionContext;
+import server.realtime.PushGateway;
 
 import java.time.Instant;
 import java.util.List;
@@ -75,6 +76,8 @@ class GradingHandlersTest {
     private GradeReviewService reviews;
     @Mock
     private GradingQueueService queues;
+    @Mock
+    private PushGateway pushGateway;
 
     private GradingHandlers handlers;
     private MockSessions.Wiring wiring;
@@ -82,7 +85,8 @@ class GradingHandlersTest {
     @BeforeEach
     void setUp() {
         wiring = MockSessions.commitsOn(session);
-        handlers = new GradingHandlers(wiring.factory(), approvals, overrides, reviews, queues);
+        handlers = new GradingHandlers(wiring.factory(), approvals, overrides, reviews, queues,
+                pushGateway);
     }
 
     // ===================== Fixtures =======================================
@@ -111,6 +115,18 @@ class GradingHandlersTest {
     private static GradeReview aReview() {
         return new GradeReview(new StudentGradeRow(GRADE_ID, 11, "מאיה לוי", 75, null, 75,
                 GradeState.AUTO, null, null, null), List.of());
+    }
+
+    /** An approve outcome that published nothing — the shape most of these tests want. */
+    private static GradeApprovalService.Approval approvalOf(ApproveResult result) {
+        return new GradeApprovalService.Approval(result, List.of());
+    }
+
+    /** One published grade, in the student shape {@code PUSH_GRADE_PUBLISHED} carries (B-32). */
+    private static StudentGradeRow publishedRow(long gradeId, long studentId) {
+        return new StudentGradeRow(gradeId, studentId, "Maya Levi", 60, null, 60,
+                GradeState.APPROVED, null, null, Instant.parse("2026-06-01T10:00:00Z"),
+                "Midterm: Algebra", "11");
     }
 
     private static GradeReviewService.ReviewContext contextOwnedBy(long teacherId) {
@@ -171,8 +187,8 @@ class GradingHandlersTest {
         @Test
         @DisplayName("accepts a coordinator, who is a teacher with an extra hat")
         void acceptsCoordinators() {
-            when(approvals.approve(any(), anyLong(), any()))
-                    .thenReturn(new ApproveResult(1, 0, List.of()));
+            when(approvals.approveAndCollect(any(), anyLong(), any()))
+                    .thenReturn(approvalOf(new ApproveResult(1, 0, List.of())));
 
             Message response = handlers.approve(coordinator(),
                     request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
@@ -231,21 +247,21 @@ class GradingHandlersTest {
         @Test
         @DisplayName("passes the caller's own id, never anything from the payload")
         void passesTheSessionId() {
-            when(approvals.approve(any(), anyLong(), any()))
-                    .thenReturn(new ApproveResult(1, 0, List.of()));
+            when(approvals.approveAndCollect(any(), anyLong(), any()))
+                    .thenReturn(approvalOf(new ApproveResult(1, 0, List.of())));
 
             handlers.approve(teacher(),
                     request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
 
-            verify(approvals).approve(session, TEACHER_ID,
+            verify(approvals).approveAndCollect(session, TEACHER_ID,
                     new ApproveRequest(List.of(GRADE_ID)));
         }
 
         @Test
         @DisplayName("is OK even when part of the batch was refused")
         void partialSuccessIsStillOk() {
-            when(approvals.approve(any(), anyLong(), any()))
-                    .thenReturn(new ApproveResult(8, 0, List.of(1L, 2L)));
+            when(approvals.approveAndCollect(any(), anyLong(), any()))
+                    .thenReturn(approvalOf(new ApproveResult(8, 0, List.of(1L, 2L))));
 
             Message response = handlers.approve(teacher(),
                     request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
@@ -254,6 +270,92 @@ class GradingHandlersTest {
             ApproveResult result = (ApproveResult) response.getPayload();
             assertThat(result.approved()).isEqualTo(8);
             assertThat(result.refused()).containsExactly(1L, 2L);
+        }
+    }
+
+    // ===================== GRADES_APPROVE → PUSH_GRADE_PUBLISHED (B-32) ===
+
+    @Nested
+    @DisplayName("Publishing (B-32)")
+    class Publishing {
+
+        @Test
+        @DisplayName("pushes PUSH_GRADE_PUBLISHED to each student whose grade became visible")
+        void pushesEveryPublishedRow() {
+            StudentGradeRow maya = publishedRow(GRADE_ID, 11);
+            StudentGradeRow daniel = publishedRow(GRADE_ID + 1, 12);
+            when(approvals.approveAndCollect(any(), anyLong(), any())).thenReturn(
+                    new GradeApprovalService.Approval(new ApproveResult(2, 0, List.of()),
+                            List.of(maya, daniel)));
+
+            handlers.approve(teacher(),
+                    request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
+
+            // Each student is pushed her own row and nobody else's — the verb, the recipient
+            // and the payload all checked, because "a push went out" is not the claim.
+            verify(pushGateway).toUser(11, Verb.PUSH_GRADE_PUBLISHED, maya);
+            verify(pushGateway).toUser(12, Verb.PUSH_GRADE_PUBLISHED, daniel);
+        }
+
+        @Test
+        @DisplayName("pushes after the commit, never before it")
+        void pushesOnlyAfterTheCommit() {
+            when(approvals.approveAndCollect(any(), anyLong(), any())).thenReturn(
+                    new GradeApprovalService.Approval(new ApproveResult(1, 0, List.of()),
+                            List.of(publishedRow(GRADE_ID, 11))));
+            // The client answers this push by re-querying MY_GRADES_GET on its own connection,
+            // so a push written inside the transaction could be answered from a database that
+            // does not yet hold the row it announces. Ordering is the whole fix.
+            when(pushGateway.toUser(anyLong(), any(), any())).thenAnswer(invocation -> {
+                assertThat(wiring.tx().committed())
+                        .as("the transaction has committed before the push goes out")
+                        .isTrue();
+                return true;
+            });
+
+            handlers.approve(teacher(),
+                    request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
+
+            verify(pushGateway).toUser(anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a re-approve publishes nothing, so a double click does not push twice")
+        void reApprovingPushesNothing() {
+            when(approvals.approveAndCollect(any(), anyLong(), any()))
+                    .thenReturn(approvalOf(new ApproveResult(0, 1, List.of())));
+
+            handlers.approve(teacher(),
+                    request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
+
+            verify(pushGateway, never()).toUser(anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a refused request pushes nothing at all")
+        void arefusedRequestPushesNothing() {
+            assertThat(handlers.approve(teacher(), request(Verb.GRADES_APPROVE, "nonsense"))
+                    .getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+
+            verify(pushGateway, never()).toUser(anyLong(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a push that throws does not turn a committed approval into an error")
+        void aFailedPushDoesNotFailTheVerb() {
+            when(approvals.approveAndCollect(any(), anyLong(), any())).thenReturn(
+                    new GradeApprovalService.Approval(new ApproveResult(1, 0, List.of()),
+                            List.of(publishedRow(GRADE_ID, 11))));
+            when(pushGateway.toUser(anyLong(), any(), any()))
+                    .thenThrow(new IllegalStateException("socket gone"));
+
+            Message response = handlers.approve(teacher(),
+                    request(Verb.GRADES_APPROVE, new ApproveRequest(List.of(GRADE_ID))));
+
+            // The grade is approved and the durable notification is written. Telling the
+            // teacher her approval failed because a laptop closed its lid would be a lie.
+            assertThat(response.isOk()).isTrue();
+            assertThat(((ApproveResult) response.getPayload()).approved()).isEqualTo(1);
         }
     }
 
@@ -475,15 +577,17 @@ class GradingHandlersTest {
     @DisplayName("rejects null collaborators at construction rather than at first request")
     void rejectsNullCollaborators() {
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(null, approvals, overrides, reviews, queues));
+                new GradingHandlers(null, approvals, overrides, reviews, queues, pushGateway));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), null, overrides, reviews, queues));
+                new GradingHandlers(wiring.factory(), null, overrides, reviews, queues, pushGateway));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), approvals, null, reviews, queues));
+                new GradingHandlers(wiring.factory(), approvals, null, reviews, queues, pushGateway));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), approvals, overrides, null, queues));
+                new GradingHandlers(wiring.factory(), approvals, overrides, null, queues, pushGateway));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
-                new GradingHandlers(wiring.factory(), approvals, overrides, reviews, null));
+                new GradingHandlers(wiring.factory(), approvals, overrides, reviews, null, pushGateway));
+        assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
+                new GradingHandlers(wiring.factory(), approvals, overrides, reviews, queues, null));
         assertThatExceptionOfType(NullPointerException.class).isThrownBy(() ->
                 handlers.registerOn(null));
     }

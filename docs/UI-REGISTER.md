@@ -27,7 +27,7 @@ FUNCTIONAL entry here that breaks an acceptance case gets a B-number there too).
 
 ## Open entries
 
-Both are `DONE` and neither is `VERIFIED`, which is what keeps them here: an entry closes when
+All four are `DONE` and none is `VERIFIED`, which is what keeps them here: an entry closes when
 Naji has seen it fixed on screen, not when the build is green.
 
 ### U-1 · FUNCTIONAL · two rail items named a live screen and could not be pressed
@@ -111,6 +111,92 @@ proof now has a screen. No `B-n` number: nothing about the acceptance case's *re
 only whether a human can reach it.
 
 **Status:** `DONE` — batch C, verify green — pending Naji's on-screen verification.
+
+### U-3 · COSMETIC · two icon constants named glyphs that do not exist, and nothing could tell
+
+**Found by:** **batch C**, 2026-08-26, while fixing U-1 — and then **not fixed by it**, on
+purpose. Batch C's brief was two UI paths; a third fix on a third surface would have arrived with
+no register entry of its own, so it was written up as a recommendation with the two literals
+named and left for the next batch. Fixed by **batch D** the same day. Logged here rather than
+folded into U-1 because it is a different surface and a different class of defect.
+
+**In the finder's words (BATCH-C.md):** "This is the third instance of one bug — a literal that
+does not exist, silently swallowed — and it will keep happening while `Icons` has no test. **A
+guard is worth its ten lines.**"
+
+**The issue, restated:** `Icons.of` catches the icon resolver's exception and renders an
+invisible spacer of the right size. That is correct for a *data-driven* literal — a typo in a
+`NavItem` config must not throw in the middle of building the shell — and quietly wrong for the
+class's own constants, because **a constant is a claim that a glyph exists** and the swallow
+turns a false claim into a `WARN` line nobody reads and a hole in a layout nobody notices. Three
+had already happened: `BOT`/`smart_toy` caught by hand in E16, `MONITOR`/`mdomz-monitor` caught
+by U-1 (where enabling the rail item would have put a blank icon in front of every teacher on
+demo day), and two more found live in the same read:
+
+| Constant | Was | Where it shows | Now |
+|---|---|---|---|
+| `Icons.LOGOUT` | `"mdoal-logout"` | the profile menu's sign-out item | `"mdoal-exit_to_app"` — the pack has `LOGIN` and `EXIT_TO_APP` and has never had `LOGOUT` |
+| `Icons.WARNING` | `"mdomz-warning_amber"` | every warning chip and toast | `"mdomz-warning"` — the pack has `WARNING`; `WARNING_AMBER` postdates it |
+
+**Owning surface:** `client/ui/components/Icons`, and `IconsTest`, which is the actual fix.
+
+**Why the guard needed care, which is the part worth reading:** the obvious check —
+`IkonResolver.getInstance().resolve(literal)` — **passes for both broken literals**. It answers
+on the `mdoal-` / `mdomz-` prefix alone, hands back the pack's handler, and says nothing about
+whether the pack has that name. The claim only has teeth when the returned handler is then asked
+for the glyph, which is what `FontIcon`'s constructor does and what fails at runtime. So the test
+resolves twice. It scans rather than names, so a constant added next month is covered the moment
+it is written, and it needs no JavaFX toolkit because it never builds a node.
+
+**The scan caught nothing else:** 29 constants, 27 already correct.
+
+**Acceptance impact:** none directly; it gets a **B-38** number in `ACCEPTANCE_TESTS.md`
+attributed to batch C's report, because it is a defect a grader could see on stage rather than a
+polish note. `Icons.REFRESH` is a separate, opposite problem — a *valid* literal mounted on
+nothing — and stays open as **B-33**.
+
+**Status:** `DONE` — batch D, verify green — pending Naji's on-screen verification. What to look
+at: the profile menu's sign-out item, and any warning chip or toast.
+
+### U-4 · COPY · the connect screen could print a Java exception class name
+
+**Found by:** the **S18–S21 acceptance walk**, case 21.3, 2026-08-26. Filed there as **B-37**,
+Medium. It is here as well, and deliberately: it is functional copy on the first screen anyone
+sees, which is this register's business as much as the acceptance table's.
+
+**In the finder's words (ACCEPT-S18-S21.md, case 21.3):** "a throwable with no message —
+`SocketTimeoutException`, for one — produces *'Could not reach 192.168.1.5:5555
+(SocketTimeoutException). Check the server is running…'* on the first screen an examiner sees."
+
+**The issue, restated:** `ConnectView.onFailed` computed
+`cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()` and handed
+it to `ConnectFlow.afterFailedConnect`, which folded it into the sentence in brackets. Even the
+non-null branch was a JDK string rather than product copy (*"Connection refused"*, or a bare
+hostname from `UnknownHostException`). PRD §4.1 says a user never meets an error code or a stack
+trace, and a Java class name is one.
+
+**What makes it a defect and not a house style:** the product already knows the rule and this
+screen was the exception. The reconnect banner beside it is clean —
+`ReconnectBanner.showDisconnected(String serverLabel)` takes no detail parameter at all, and
+`ConnectionLostEvent`'s own javadoc says the technical reason is *"never shown as the primary
+message"*. That banner is the house reference and this screen was not following it.
+
+**Owning surface:** `client/features/connect/ConnectFlow` (where the copy and the decision live)
+and `ConnectView` (which now only logs).
+
+**Fix:** `afterFailedConnect` takes the `Throwable` itself, so **there is no longer a parameter a
+caller could pass a JDK string to** — the leak is unrepresentable rather than merely repaired.
+`ConnectFlow.reasonFor` walks the cause chain and maps the four causes the product has words for
+to product sentences (refused → *"Nothing is listening on that address."*, timeout → *"That
+address did not answer."*, unknown host → *"That name could not be found on this network."*, no
+route → *"That address cannot be reached from this network."*), and answers `""` for everything
+else. **The brackets are gone entirely:** a recognised cause gets a sentence of its own between
+the address and the instruction, an unrecognised one leaves the message two sentences long. The
+throwable is logged.
+
+**Status:** `DONE` — batch D, verify green — pending Naji's on-screen verification. What to look
+at: start the client with no server running and read the sentence; then point it at an
+unreachable address and read that one.
 
 ---
 

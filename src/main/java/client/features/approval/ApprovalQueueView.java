@@ -46,7 +46,14 @@ public final class ApprovalQueueView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new ApprovalQueueSession(dispatcher(), onFxThread()).onChange(this::render);
+        session = new ApprovalQueueSession(dispatcher(), onFxThread())
+                .onChange(this::render)
+                // The live re-read when an exam arrives in her queue (B-30, NFR-18).
+                // Subscribed by the SESSION rather than by this screen, which is the shape
+                // ExamListView and MyGradesView use and for its stated reason: the wiring then
+                // sits where a test can reach it, instead of behind a listensToEvents override
+                // only the shell can exercise.
+                .subscribeTo(eventBus());
 
         empty = new EmptyState(Icons.INBOX,
                 ApprovalCopy.QUEUE_EMPTY_TITLE, ApprovalCopy.QUEUE_EMPTY_HINT);
@@ -72,7 +79,10 @@ public final class ApprovalQueueView extends AbstractScreen {
 
     @Override
     public boolean listensToEvents() {
-        // Nothing here subscribes; a decision refreshes the list through the session.
+        // False, and it is not the same "false" it was before B-30. This flag governs whether
+        // ScreenLifecycle registers THE SCREEN on the bus, and the screen has no @Subscribe:
+        // the subscription belongs to ApprovalQueueSession, wired in build() above. Turning
+        // this on would register an object with nothing to receive.
         return false;
     }
 
