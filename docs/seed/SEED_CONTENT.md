@@ -23,10 +23,42 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 | Points sum to 100 per exam version | §5 (service rule, not DDL) | Checked per exam below |
 | Passwords BCrypt-hashed | PRD §5 | Plaintext here is **demo-only**; the loader hashes at insert |
 | All `DATETIME` values are UTC | migration README | Relative times below ("T−14d") resolve at load time |
+| No em dashes in stored text | PRD §4.1 | Every quoted value below is written as the loader stores it, not as prose would write it |
 
 > **National ids are checksum-valid Israeli national id.** S-18 has a student type this to start
 > an attempt; if id validation is ever added, invalid demo data would break the demo
 > rather than the code. Costing nothing now, so they are all valid.
+
+> **Quoted values are written as the database holds them (B-13, 2026-08-27).** PRD §4.1 forbids
+> em dashes in user-visible text and permits a comma, a period or a colon in their place. That is
+> three legal renderings, and the loader picks between them by context: a colon in a title
+> (`Midterm: Algebra`, `Study assistant: Algebra`) and a comma inside a sentence
+> (`A draft, not yet checked against the marking scheme.`). Until 2026-08-27 this document wrote
+> those values with em dashes, so every acceptance case that quoted an exam name read as a
+> mismatch against the loaded row and the walk reports had to quote the database instead of the
+> document. Every value in §7, §8, §8.2, §9.1, §10, §10.1, §10.2 and §11 now matches
+> `QuestionBankSection`, `ExamsSection`, `GradesSection`, `BotSection` and
+> `NotificationsSection` character for character. §9.1 is listed last because it was the section
+> the first sweep missed: its override reason is a bullet rather than a table row, so a sweep
+> written to read tables did not see it, and it had drifted furthest of all of them.
+>
+> This also tightens the checks that exist. `SeedDocument.followsHouseRule` accepts any of the
+> three replacements at each em dash, so while the dashes were here those comparisons passed on a
+> comma, a period **or** a colon; with no dash left it falls through to exact equality.
+>
+> **Which values a test actually compares is a shorter list than this section, and the difference
+> is worth knowing before you trust a value here.** Compared against the loaded database: exam
+> names (added with B-13, after a plant showed nothing was reading them), the §8.2 texts,
+> rejection reasons, question v1 stems and options, bot names, source titles and bodies, session
+> questions and answers, notification titles, and the manual override's reason and comment (also
+> added with B-13). **Not compared, and therefore only as accurate as the last person to edit
+> them:** notification *bodies*, which §11 does not tabulate at all, and every second-version
+> question in §7.5, which `SeedLoadedDbContract.questionsMatch` filters out with
+> `qv.versionNo = 1` and no parser reads. A change to either fails nothing.
+>
+> **Em dashes stay in this document's prose and headings, which are stored nowhere, and as a
+> sentinel in §4, §9.1.1 and §9.2, where `—` in a cell means "no row at all" rather than an
+> empty value.** `SeedDocument` reads that sentinel. Replacing those would rewrite the fixture.
 
 ---
 
@@ -242,7 +274,7 @@ Topics: OOP Basics · Collections · Exceptions · **Recursion (the thin one)**
 | 21005 | Collections | EASY | Which collection forbids duplicate elements? | `HashSet` | `ArrayList` | `LinkedList` | `ArrayDeque` | 1 | |
 | 21006 | Collections | EASY | Which interface does `HashMap` implement? | `List` | `Map` | `Set` | `Queue` | 2 | yes |
 | 21007 | Collections | MEDIUM | What is the average-case time complexity of `HashMap.get`? | `O(n)` | `O(log n)` | `O(1)` | `O(n log n)` | 3 |  |
-| 21008 | Collections | HARD | Removing an element from an `ArrayList` inside a for-each loop throws: | `ConcurrentModificationException` | `IndexOutOfBoundsException` | `UnsupportedOperationException` | Nothing — it is safe | 1 | |
+| 21008 | Collections | HARD | Removing an element from an `ArrayList` inside a for-each loop throws: | `ConcurrentModificationException` | `IndexOutOfBoundsException` | `UnsupportedOperationException` | Nothing, it is safe | 1 | |
 | 21009 | Exceptions | EASY | Which of these is a checked exception? | `NullPointerException` | `IOException` | `ArithmeticException` | `IllegalStateException` | 2 | |
 | 21010 | Recursion | EASY | What does a recursive method need in order to terminate? | An enclosing loop | A `static` modifier | A base case | A `return null` statement | 3 | yes |
 | 21011 | Recursion | MEDIUM | Recursion with no reachable base case fails with: | `OutOfMemoryError` | An infinite loop and no error | `IllegalStateException` | `StackOverflowError` | 4 | |
@@ -297,9 +329,9 @@ sum to **100** (service rule, §5). `status` lives on the *version*, not the exa
 
 | # | display_id6 | course | name | author | versions and status |
 |---|---|---|---|---|---|
-| 1 | `101101` | 11 | Midterm — Algebra | 2 dana.cohen | v1 **REJECTED**, v2 **APPROVED** |
-| 2 | `101102` | 11 | Quiz — Inequalities | 2 dana.cohen | v1 **DRAFT** |
-| 3 | `101201` | 12 | Midterm — Calculus | 2 dana.cohen | v1 **PENDING** (awaiting 3 rina.barak) |
+| 1 | `101101` | 11 | Midterm: Algebra | 2 dana.cohen | v1 **REJECTED**, v2 **APPROVED** |
+| 2 | `101102` | 11 | Quiz: Inequalities | 2 dana.cohen | v1 **DRAFT** |
+| 3 | `101201` | 12 | Midterm: Calculus | 2 dana.cohen | v1 **PENDING** (awaiting 3 rina.barak) |
 | 4 | `202101` | 21 | Java Fundamentals Exam | 4 avi.mizrahi | v1 **APPROVED** |
 | 5 | `202102` | 21 | Collections Quiz | 5 tamar.shani | v1 **REJECTED** |
 | 6 | `202201` | 22 | Databases Final | 6 michal.sharon | v1 **APPROVED** |
@@ -326,12 +358,12 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 | exam | student_text (S-3 general text) | teacher_text (teacher-only) |
 |---|---|---|
-| 1 | Read each question to the end. Only a basic calculator may be used. | Marking note: question 7 — accept a reasoned graphical solution too. |
-| 2 | A short quiz. Duration: 30 minutes. | A draft — not yet checked against the marking scheme. |
+| 1 | Read each question to the end. Only a basic calculator may be used. | Marking note: question 7, accept a reasoned graphical solution too. |
+| 2 | A short quiz. Duration: 30 minutes. | A draft, not yet checked against the marking scheme. |
 | 3 | Justify every step. An answer with no justification will not receive full marks. | Remind Rina: questions 12006 and 12007 are new this year. |
-| 4 | Answer all questions. No IDE or documentation allowed. | Q21010 is the give-away question — keep it first. |
-| 5 | Short quiz on the Collections framework. | Draft — needs a fourth question before resubmitting. |
-| 6 | Closed book. Write SQL keywords in uppercase. | Q22007 historically has the lowest success rate — expect a low mean. |
+| 4 | Answer all questions. No IDE or documentation allowed. | Q21010 is the give-away question, keep it first. |
+| 5 | Short quiz on the Collections framework. | Draft, needs a fourth question before resubmitting. |
+| 6 | Closed book. Write SQL keywords in uppercase. | Q22007 historically has the lowest success rate, expect a low mean. |
 
 **Rejection reasons (T-4.2 — the reason is sent to the teacher and stored):**
 
@@ -427,7 +459,7 @@ exactly. `extra_minutes = 0`.
 - yael.azulay, 45 → 55, by **2 dana.cohen** — the teacher who wrote and released the exam.
   The coordinator approves *exams*, the teacher approves *grades* (T-8.2 / T-8.3); here they
   are deliberately different people.
-- Reason: `Question 11011 has a correct solution with a sign error on the last line — partial credit was given.`
+- Reason: `Question 11011 has a correct solution with a sign error on the last line, so partial credit was given.`
 - Teacher comment to the student (S-22): `A clear improvement on inequalities. Worth revising the domain of definition.`
 
 **Frozen `participation` JSON:** `{"started": 8, "finished": 7, "timed_out": 1}`
@@ -605,8 +637,8 @@ every source below carries real body text, not a placeholder.
 
 | bot | course | name | active |
 |---|---|---|---|
-| 1 | 11 | Study assistant — Algebra | yes |
-| 2 | 12 | Study assistant — Calculus | yes |
+| 1 | 11 | Study assistant: Algebra | yes |
+| 2 | 12 | Study assistant: Calculus | yes |
 | 3 | 21 | Java Study Assistant | yes |
 | 4 | 22 | Databases Study Assistant | **no** — inactive, for the S-31 refusal demo |
 
@@ -644,19 +676,19 @@ grounded on these plus the question bank (S-28), so anything invented here would
 invented by the bot on stage, under questioning, in front of people who teach the
 subject.
 
-**Source 1** · bot 1 · TEXT · `Linear equations — a summary`
+**Source 1** · bot 1 · TEXT · `Linear equations: a summary`
 > A linear equation is an equation in which the variable appears only to the first power, with no powers, roots or products of unknowns. Its general form is ax + b = 0 where a is not zero, and its single solution is x = -b/a. It is solved by isolating the variable: move terms across the equals sign changing their sign, collect like terms, and finally divide by the coefficient of the variable. When the equation contains fractions, multiply both sides by the common denominator to clear them before isolating. When it contains brackets, open them first using the distributive law. A system of two equations in two unknowns is solved by one of two methods. In substitution, isolate one variable in one of the equations and substitute the resulting expression into the second. In elimination, multiply the equations by suitable numbers so that the coefficients of one variable are opposite, then add the equations and that variable cancels out. Both methods give the same answer, and choosing between them is a matter of convenience: substitution is easy when one variable has a coefficient of one, and elimination is easy when the coefficients are already close. Every system has exactly three possibilities, and each of them has a geometric meaning. If the lines cross at one point there is a single solution. If both equations describe the same line there are infinitely many solutions, and the algebra ends in a true statement such as 0 = 0. If they describe parallel lines there is no solution at all, and the algebra ends in a false statement such as 0 = 5. The most common mistake is forgetting to change the sign when moving a term across.
 
-**Source 2** · bot 1 · PDF · `Quadratic functions — chapter 3`
+**Source 2** · bot 1 · PDF · `Quadratic functions: chapter 3`
 > A quadratic function is a function of the form y = ax² + bx + c where a is not zero. Its graph is a parabola, and the coefficient a decides which way it opens: if a is positive the parabola opens upwards and has a minimum point, and if a is negative it opens downwards and has a maximum point. The larger the absolute value of a, the narrower the parabola. The roots of the function, meaning the points where it crosses the x axis, are found with the formula x = (-b ± √(b²-4ac)) / 2a. The expression b²-4ac is called the discriminant and is usually written as delta. It decides how many roots there are: if it is positive there are two different roots, if it is zero there is a single double root and the parabola touches the x axis, and if it is negative there are no real roots and the whole parabola lies either above the axis or below it. The point where the graph crosses the y axis is always found by substituting x = 0 and therefore equals c. The axis of symmetry of the parabola is the line x = -b/2a, and the vertex of the parabola lies on that axis. Substituting this value into the function gives the extreme value. When both roots are known, the axis of symmetry is also halfway between them, which is a quicker way to compute the vertex. The function can also be written in vertex form y = a(x-p)² + k, where (p,k) is the vertex. That form is convenient for sketching and for recognising translations of the graph.
 
-**Source 3** · bot 2 · TEXT · `Limits — definition and use`
+**Source 3** · bot 2 · TEXT · `Limits: definition and use`
 > The limit of a function at a point describes what the values of the function approach as the variable approaches that point, without referring at all to the value of the function at the point itself. That distinction is essential: a function can be undefined at a point and still have a limit there, and conversely the value of the function at a point can differ from the limit. When the limit exists and equals the value of the function at the point, the function is said to be continuous at that point. A point can be approached from either direction, so a limit from the right and a limit from the left are defined as well. The limit exists if and only if both one-sided limits exist and are equal to each other. When they differ, the function jumps at that point and has no limit there. To compute one, try direct substitution first. If the substitution gives a number, that number is the limit. When direct substitution gives an expression of the form zero over zero, the limit is indeterminate and needs algebraic work before substituting. The three main techniques are factorising and cancelling the common factor that makes the denominator zero, multiplying by the conjugate when a root appears, and using known special limits. If the substitution gives a number other than zero over zero, the limit is infinity or minus infinity and the function has a vertical asymptote at that point. A limit at infinity describes the behaviour of the function far out. For a rational function, compare the powers of the numerator and the denominator: if the power in the denominator is larger the limit is zero, if they are equal the limit is the ratio of the leading coefficients, and if the power in the numerator is larger the limit is infinity. A finite limit at infinity indicates a horizontal asymptote.
 
 **Source 4** · bot 2 · PDF · `Rules of differentiation`
 > The derivative measures the rate of change of a function, and geometrically it is the slope of the tangent to the graph of the function at a point. It is defined as the limit of the difference quotient as the difference tends to zero, but in practice it is computed with the rules of differentiation rather than from the definition. The basic rules of differentiation: the derivative of a constant is zero; the derivative of x to the power n is n times x to the power n minus one; the derivative of a sum is the sum of the derivatives; and the derivative of a constant times a function is the constant times the derivative. The derivative of a product is given by f'g + fg', and note that it is not the product of the derivatives. The derivative of a quotient is given by (f'g - fg')/g², and the order in the numerator matters. The chain rule states that the derivative of a composition of functions is the outer derivative times the inner derivative, and it is the rule needed every time one function appears inside another. The main use of the derivative is investigating functions. Candidate extreme points are found where the derivative is zero. To decide which kind of extreme point it is, check the sign of the derivative on both sides of the point: a change from positive to negative indicates a maximum, and a change from negative to positive indicates a minimum. Alternatively use the second derivative test: if the second derivative at the point is positive it is a minimum, and if it is negative it is a maximum. The function increases on an interval where the derivative is positive and decreases on an interval where it is negative. Points where the second derivative is zero and changes sign are inflection points, where the concavity of the graph changes direction. A full investigation covers the domain, the intercepts with the axes, the intervals of increase and decrease, and the extreme points.
 
-**Source 5** · bot 3 · DOCX · `OOP Fundamentals — Lecture Notes`
+**Source 5** · bot 3 · DOCX · `OOP Fundamentals: Lecture Notes`
 > Object-oriented programming in Java rests on four ideas. Encapsulation keeps fields private and exposes behaviour through methods, so an object controls its own invariants. A class that lets callers write its fields directly cannot guarantee anything about its own state, because every caller becomes responsible for rules the class was supposed to enforce. Accessors are not the point; control over change is. Inheritance lets a class extend another and reuse its behaviour, establishing an is-a relationship. It is powerful and easy to overuse. Composition, where a class holds another as a field and delegates to it, is usually the better default: it can be changed at runtime, it does not expose a superclass's internals to its subclasses, and it avoids deep hierarchies that are hard to follow. Prefer inheritance only when a subtype genuinely is a kind of its supertype. Polymorphism means a reference of a supertype can hold any subtype, and the call dispatches to the subtype's implementation at runtime rather than at compile time. This is what lets one loop over a list of shapes call area on each without knowing which shapes are in it. Abstraction hides how something works behind an interface or an abstract class, so callers depend on what a type promises rather than on how it delivers. An interface declares behaviour with no state; an abstract class may provide shared fields and partial implementation. A class implements many interfaces but extends only one class.
 
 **Source 6** · bot 3 · PDF · `The Collections Framework`
@@ -678,7 +710,7 @@ Without it the provider column is a constant and demonstrates nothing.
 |---|---|---|---|---|---|---|
 | 1 | 1 | 7 noa.friedman | T−12d | `deepseek` | How do you solve an equation with fractions? | Multiply both sides by the common denominator to clear the fractions, then solve as usual. |
 | 2 | 1 | 11 maya.levi | T−10d | `deepseek` | What is a discriminant? | The expression b²-4ac. Its sign decides how many real roots the parabola has. |
-| 3 | 1 | 7 noa.friedman | T−9d | `deepseek` | When does a parabola have no roots? | When the discriminant is negative — the whole parabola lies above the x axis or entirely below it. |
+| 3 | 1 | 7 noa.friedman | T−9d | `deepseek` | When does a parabola have no roots? | When the discriminant is negative, the whole parabola lies above the x axis or entirely below it. |
 | 4 | 2 | 16 tal.harari | T−8d | `deepseek` | Why is the limit of sin(x)/x at zero equal to 1? | It is a special limit, proved geometrically with the unit circle and the squeeze theorem. |
 | 5 | 3 | 10 omer.katz | T−6d | `deepseek` | When should I use a LinkedList instead of an ArrayList? | Only when you insert or remove at the ends far more often than you read by index. |
 | 6 | 3 | 17 roni.malka | T−5d | `anthropic` | What is the difference between an interface and an abstract class? | An interface declares a contract and a class may implement many; an abstract class can hold state and a class may extend only one. |
@@ -724,14 +756,14 @@ The `#` column is presentation order only and carries no meaning.
 
 | seed_id | # | recipient | type | title | read |
 |---|---|---|---|---|---|
-| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | APPROVAL_REJECTED | Exam sent back for revision — version 1 of "Midterm — Algebra" | read |
+| `N-EXAM-REJECTED-ALG` | 1 | 2 dana.cohen | APPROVAL_REJECTED | Exam sent back for revision: version 1 of "Midterm: Algebra" | read |
 | `N-EXAM-PENDING-CALC` | 2 | 2 dana.cohen | APPROVAL_REQUESTED | The exam was sent to the subject coordinator for approval | unread |
 | `N-APPROVAL-REQ-MATH` | 3 | 3 rina.barak | APPROVAL_REQUESTED | An exam is waiting for your approval in Mathematics | unread |
 | `N-EXAM-REJECTED-JAVA` | 4 | 5 tamar.shani | APPROVAL_REJECTED | Collections Quiz was returned for revision | unread |
-| `N-GRADE-NOA` | 5 | 7 noa.friedman | GRADE_PUBLISHED | Your grade for Midterm — Algebra is available | read |
+| `N-GRADE-NOA` | 5 | 7 noa.friedman | GRADE_PUBLISHED | Your grade for Midterm: Algebra is available | read |
 | `N-GRADE-YAEL` | 6 | 13 yael.azulay | GRADE_PUBLISHED | Your grade is available, including a teacher's comment | unread |
 | `N-GRADING-DUE-JAVA` | 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
-| `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | Sitting finished — 8 students, average 72.5 | unread |
+| `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | Sitting finished: 8 students, average 72.5 | unread |
 | `N-GRADE-MAYA` | 9 | 11 maya.levi | GRADE_PUBLISHED | Your grade is ready | unread |
 
 `N-EXEC-CLOSED-ALG` exists so the principal's first screen is not empty at login: S-7 makes

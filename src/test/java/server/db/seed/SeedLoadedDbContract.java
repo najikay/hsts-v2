@@ -149,15 +149,28 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     @Test
     @DisplayName("the illustrated questions are exactly the ones the document marks")
     void illustratedQuestionsMatch() {
-        // The flag is informational until real assets land, so this is the only thing keeping
-        // the document's img column and the loader's boolean from drifting apart unnoticed.
+        // Its name and its comment both promised this compared the document's img column against
+        // the loader, and until 2026-08-26 the body did not: it built `expected` from the
+        // document and then asserted only that it had ten entries. Ten of the WRONG ten passed.
+        // The flag stopped being informational when B-8 made it load bytes, so the comparison is
+        // now written rather than described.
         List<String> expected = DOCUMENT.questions().stream()
                 .filter(SeedDocument.QuestionRow::illustrated)
                 .map(SeedDocument.QuestionRow::displayId)
                 .sorted()
                 .toList();
 
+        List<String> loaded = inTx(session -> session.createQuery(
+                "select q.displayId from QuestionVersion qv "
+                        + "join Question q on q.id = qv.questionId "
+                        + "where qv.image is not null and qv.versionNo = 1 "
+                        + "order by q.displayId",
+                String.class).getResultList());
+
         assertThat(expected).hasSize(10);
+        assertThat(loaded)
+                .as("the questions carrying bytes in the database are the ones the document marks")
+                .containsExactlyElementsOf(expected);
     }
 
     @Test
@@ -170,6 +183,37 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                 .containsExactlyInAnyOrderElementsOf(DOCUMENT.exams().stream()
                         .map(row -> List.<Object>of(row.displayId(), row.course(), row.author()))
                         .toList());
+    }
+
+    @Test
+    @DisplayName("every exam version carries the name the document gives its exam")
+    void examNamesMatch() {
+        // Added 2026-08-27 with B-13, after a plant went straight through. examsMatch compares
+        // id, course and author and its DisplayName says exactly that; the name was in no test
+        // at all. ev.name reached only SeedDatasetContract's em dash sweep, which asks whether
+        // a character is absent, never whether the string is the one §8 documents. So all six
+        // seeded exam names were unchecked text, which is how the drift B-13 was filed for
+        // survived a green suite: the document could have said anything.
+        //
+        // The name lives on the version, like §8.2's texts, so an exam's name appears on all of
+        // its versions. followsHouseRule rather than isEqualTo for the same reason as its
+        // sibling: it is the one comparison the loader is licensed to bend. With §8 no longer
+        // writing em dashes it falls through to exact equality anyway.
+        Map<String, String> nameByExam = DOCUMENT.exams().stream()
+                .collect(Collectors.toMap(SeedDocument.ExamRow::displayId,
+                        SeedDocument.ExamRow::name));
+
+        inTx(session -> session.createQuery("""
+                select e.displayId, ev.name
+                from ExamVersion ev, Exam e where e.id = ev.examId
+                """, Object[].class).getResultList()).forEach(row -> {
+            String expected = nameByExam.get((String) row[0]);
+            assertThat(expected).as("exam %s has no row in §8", row[0]).isNotNull();
+            assertThat(SeedDocument.followsHouseRule(expected, (String) row[1]))
+                    .as("%s name: document has '%s', database has '%s'",
+                            row[0], expected, row[1])
+                    .isTrue();
+        });
     }
 
     @Test
@@ -525,6 +569,35 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
 
         assertThat(override).hasSize(1);
         assertThat(override.get(0)).containsExactly(45, 55, "yael.azulay");
+    }
+
+    @Test
+    @DisplayName("the override's reason and comment are the ones the document writes")
+    void overrideTextMatches() {
+        // Added 2026-08-27 with B-13, found by the cold read. The test above uses
+        // overrideReason as an "is not null" filter and never reads it, GradeRow had no field
+        // for either string, and so §9.1's reason had drifted two edits from the loader's: an
+        // em dash where the loader has a comma, and a "so" the document did not have. Both
+        // strings are read by a student, the reason on the grade review screen and the comment
+        // written for them, so a document that quotes them wrongly is the same defect B-13 was
+        // filed for, in the section that fix first skipped.
+        SeedDocument.OverrideRow expected = DOCUMENT.manualOverride();
+
+        List<List<Object>> stored = rows("""
+                select g.overrideReason, g.teacherComment
+                from Grade g where g.overrideReason is not null
+                """);
+
+        assertThat(stored).hasSize(1);
+        assertThat(SeedDocument.followsHouseRule(expected.reason(), (String) stored.get(0).get(0)))
+                .as("override reason: document has '%s', database has '%s'",
+                        expected.reason(), stored.get(0).get(0))
+                .isTrue();
+        assertThat(SeedDocument.followsHouseRule(
+                expected.teacherComment(), (String) stored.get(0).get(1)))
+                .as("teacher comment: document has '%s', database has '%s'",
+                        expected.teacherComment(), stored.get(0).get(1))
+                .isTrue();
     }
 
     @Test

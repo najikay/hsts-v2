@@ -344,17 +344,41 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
     }
 
     @Test
-    @DisplayName("all ten illustrated questions load with a null image")
-    void illustrationsAreNullForNow() {
-        // The bytes arrive later under docs/seed/img/. Until then NULL is correct, and the
-        // loader has to stay idempotent when they land.
+    @DisplayName("every illustrated question loads its bytes, on every version it has")
+    void illustrationsLoadTheirBytes() {
+        // Was "all ten illustrated questions load with a null image" until 2026-08-26, when B-8
+        // supplied the assets. The inversion is the point of the ticket: this test held the known
+        // gap open and is what proves it closed.
         long withImage = inTx(session -> session.createQuery(
                 "select count(qv) from QuestionVersion qv where qv.image is not null",
                 Long.class).getSingleResult());
 
         assertThat(QuestionBankSection.illustratedCount()).isEqualTo(10);
         assertThat(count("question_versions")).isEqualTo(43);
-        assertThat(withImage).isZero();
+
+        // ELEVEN rows, not ten. 11005 is illustrated and has a second version, and the bytes go
+        // on both: case 6.1's demo paper pins v1 while case 2.6's bank list shows the latest, so
+        // an image on only one row leaves one of the two acceptance cases still unwalkable. If
+        // this number ever reads 10 again, that is the regression, not an off-by-one.
+        assertThat(withImage)
+                .as("ten first versions plus 11005 v2")
+                .isEqualTo(11);
+    }
+
+    @Test
+    @DisplayName("11005 carries its illustration on both of its versions")
+    void theRewordedQuestionKeepsItsPicture() {
+        List<byte[]> images = inTx(session -> session.createQuery(
+                "select qv.image from QuestionVersion qv join Question q on q.id = qv.questionId "
+                        + "where q.displayId = '11005' order by qv.versionNo",
+                byte[].class).getResultList());
+
+        assertThat(images).hasSize(2);
+        assertThat(images.get(0)).isNotNull().isNotEmpty();
+        assertThat(images.get(1))
+                .as("the reword changed the stem, not the subject, so v2 keeps the drawing")
+                .isNotNull()
+                .isEqualTo(images.get(0));
     }
 
     @Test
@@ -375,10 +399,26 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
     @Test
     @DisplayName("no stored user-visible string contains an em dash")
     void noEmDashesReachTheDatabase() {
-        // PRD 4.1, and the c2b9c0f sweep put log and user-facing strings in scope. These are
-        // columns rendered on screen: exam names, question stems and options, notification
-        // titles. The seed document itself uses em dashes freely in prose, so this is the
-        // guard that stops them travelling into the product.
+        // PRD 4.1, and the c2b9c0f sweep put log and user-facing strings in scope. The seed
+        // document itself uses em dashes freely in prose, so this is the guard that stops them
+        // travelling into the product.
+        //
+        // What it reads is stringsContaining's list, not every string column in the schema. The
+        // list was exam, question, notification title, course, subject and user text until
+        // 2026-08-27, when B-13 added the bot surface, the two grade comments and the
+        // notification body: the name said "no stored user-visible string" while the whole bot
+        // feature, the comment a student reads on their own grade, and the sentence under every
+        // notification title were outside it. The body was missed on the first pass of that same
+        // fix and found by the cold read, which is the argument for the cold read: the list was
+        // widened by someone who had just convinced himself he knew what was on it.
+        //
+        // Still not covered: bot_sessions.transcript, because it is a JSON document rather than
+        // a mapped column and no HQL projection reaches its turns. A dash could enter the product
+        // there without failing this test. BotSource.raw is excluded for a different reason: it
+        // is byte[], the pre-extraction upload, and nothing renders it.
+        //
+        // This list is columns, not screens. It says nothing about text the client composes at
+        // render time, which is where PRD 4.1's other half lives.
         assertThat(stringsContaining("—")).isEmpty();
     }
 
@@ -519,9 +559,25 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
             found.addAll(matching(session, "select qv.a4 from QuestionVersion qv", needle));
             found.addAll(matching(session, "select qv.topic from QuestionVersion qv", needle));
             found.addAll(matching(session, "select n.title from Notification n", needle));
+            found.addAll(matching(session,
+                    "select n.body from Notification n where n.body is not null", needle));
             found.addAll(matching(session, "select c.name from Course c", needle));
             found.addAll(matching(session, "select s.name from Subject s", needle));
             found.addAll(matching(session, "select u.fullName from User u", needle));
+            // The bot surface, added 2026-08-27 with B-13. It was outside this sweep while the
+            // method's own name said "no stored user-visible string", and the bot chat and the
+            // bot manager render every one of these four.
+            found.addAll(matching(session, "select b.name from Bot b", needle));
+            found.addAll(matching(session, "select bs.title from BotSource bs", needle));
+            found.addAll(matching(session, "select bs.extractedText from BotSource bs", needle));
+            found.addAll(matching(session, "select bm.question from BotMessage bm", needle));
+            found.addAll(matching(session, "select bm.answer from BotMessage bm", needle));
+            found.addAll(matching(session,
+                    "select g.overrideReason from Grade g where g.overrideReason is not null",
+                    needle));
+            found.addAll(matching(session,
+                    "select g.teacherComment from Grade g where g.teacherComment is not null",
+                    needle));
             return found;
         });
     }

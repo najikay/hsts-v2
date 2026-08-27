@@ -208,6 +208,14 @@ public final class SeedDocument {
     public record GradeRow(String student, String attemptStatus, int solvingMinutes,
                            int auto, Integer finalScore) { }
 
+    /**
+     * §9.1's manual override, the one grade in the seed a teacher changed by hand.
+     *
+     * @param reason         the explanation T-8.3 requires, shown on the grade review screen
+     * @param teacherComment the sentence written for the student to read (S-22)
+     */
+    public record OverrideRow(String reason, String teacherComment) { }
+
     /** §10's bot table. */
     public record BotRow(int number, String course, String name, boolean active) { }
 
@@ -263,7 +271,15 @@ public final class SeedDocument {
      *
      * <p>The roster change of 2026-08-20 left a struck-through row in the table rather than
      * deleting it, so that the history stays readable. A dash there means "no teacher on this
-     * line", which is not the same as a missing cell.
+     * line".
+     *
+     * <p><b>An empty cell is skipped too, and that is {@link #isDash}'s behaviour rather than a
+     * decision taken here.</b> This paragraph claimed the two were distinguished until
+     * 2026-08-27; they are not, so a cell blanked by accident reads as a deliberately empty
+     * roster line instead of failing the parse. Contrast §9.1.1's grid, which does draw the
+     * distinction and requires a blank to be written as a dash, because there an invented
+     * "never reached" would move a student's score. Here it drops a teaching assignment, which
+     * {@code SeedLoadedDbContract.facultyMatches} would catch on the next run.
      *
      * @return one row per (course, teacher) pair that names a teacher
      */
@@ -457,6 +473,39 @@ public final class SeedDocument {
      * @param execution 1 for §9.1's closed and approved set, 2 for §9.2's awaiting approval
      * @return one row per student
      */
+    /**
+     * §9.1's manual override, read from the two bullets under its heading rather than a table.
+     *
+     * <p>Neither string was parsed until 2026-08-27 (B-13), and that is how the document's
+     * reason drifted two edits away from the loader's without a test noticing: {@code GradeRow}
+     * has no field for either, and the only query that mentions {@code overrideReason} uses it
+     * as an {@code is not null} filter and never reads the text. Both reach a student, so they
+     * are exactly the kind of string this class exists to hold the loader to.
+     *
+     * @return the override's reason and teacher comment
+     */
+    public OverrideRow manualOverride() {
+        List<String> lines = section("### 9.1");
+        return new OverrideRow(backticked(lines, "- Reason:"),
+                backticked(lines, "- Teacher comment to the student"));
+    }
+
+    /** @return the backticked value on the first line carrying the prefix */
+    private static String backticked(List<String> lines, String prefix) {
+        for (String line : lines) {
+            if (line.startsWith(prefix)) {
+                int open = line.indexOf('`');
+                int close = line.lastIndexOf('`');
+                require(open >= 0 && close > open, "§9.1's \"" + prefix
+                        + "\" line carries no backticked value, so there is nothing to compare "
+                        + "the database against.");
+                return line.substring(open + 1, close);
+            }
+        }
+        throw new IllegalStateException("§9.1 has no line starting with \"" + prefix
+                + "\". If the bullet was reworded, this parser changes in the same commit.");
+    }
+
     public List<GradeRow> grades(int execution) {
         String heading = execution == 1 ? "### 9.1" : "### 9.2";
         // §9.1 carries a note column and §9.2 does not, which is why the widths differ and why
@@ -662,7 +711,9 @@ public final class SeedDocument {
      * <p>PRD §4.1 forbids em dashes in user-visible text and permits <b>a comma, a period or a
      * colon</b> in their place. That is three legal renderings, not one, and the loader uses
      * different ones deliberately: a colon reads correctly in a title
-     * ({@code מבחן אמצע: אלגברה}) and a comma in a sentence ({@code Nothing, it is safe}).
+     * ({@code Midterm: Algebra}) and a comma in a sentence ({@code Nothing, it is safe}). Both
+     * examples were Hebrew until 2026-08-27; the wave-1 translation had removed every Hebrew
+     * string from the seed, so they illustrated the rule with data that no longer existed.
      *
      * <p>So this is a predicate rather than a transformation. An earlier version returned "the
      * comma form" and failed every title, which is a test asserting a rule stricter than the one
@@ -858,7 +909,7 @@ public final class SeedDocument {
     /**
      * The leading code in a cell that pairs one with a name.
      *
-     * <p>§4 and §5 write their key and its label together, as {@code `12` חדו"א}. The code is
+     * <p>§4 and §5 write their key and its label together, as {@code `12` Calculus}. The code is
      * the stable half and the Hebrew name is there for a human reading the table.
      */
     private static String code(String cell) {

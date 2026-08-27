@@ -53,6 +53,53 @@ class SeedDocumentTest {
     }
 
     @Test
+    @DisplayName("no value the document hands to the database carries an em dash")
+    void storedValuesCarryNoEmDash() {
+        SeedDocument document = real();
+        List<String> stored = new java.util.ArrayList<>();
+
+        document.subjects().forEach(row -> stored.add(row.name()));
+        document.courses().forEach(row -> stored.add(row.name()));
+        document.users().forEach(row -> stored.add(row.fullName()));
+        document.questions().forEach(row -> {
+            stored.add(row.text());
+            stored.addAll(row.options());
+        });
+        document.exams().forEach(row -> stored.add(row.name()));
+        document.examTexts().forEach(row -> {
+            stored.add(row.studentText());
+            stored.add(row.teacherText());
+        });
+        document.rejectionReasons().forEach(row -> stored.add(row.reason()));
+        document.bots().forEach(row -> stored.add(row.name()));
+        document.botSources().forEach(row -> {
+            stored.add(row.title());
+            stored.add(row.body());
+        });
+        document.botSessions().forEach(row -> {
+            stored.add(row.question());
+            stored.add(row.answer());
+        });
+        document.notifications().forEach(row -> stored.add(row.title()));
+        stored.add(document.manualOverride().reason());
+        stored.add(document.manualOverride().teacherComment());
+
+        // B-13. The document used to write these with em dashes and the loader stored the
+        // house-rule form, so followsHouseRule was built to accept a comma, a period or a colon
+        // at each dash. That kept the drift invisible: values across seven sections disagreed
+        // with the database and every comparison passed. With the document writing what is stored,
+        // followsHouseRule falls through to exact equality, and this test is what stops a
+        // future edit from reopening the loose path by putting a dash back.
+        //
+        // Only fields that reach a column are listed. The sentinel dash in 9.1.1, 9.2 and 4 is
+        // read as "no row" before any value is built, so it cannot appear here; prose, headings
+        // and 12's open questions are not parsed at all.
+        assertThat(stored).allSatisfy(value ->
+                assertThat(value).as("stored value with an em dash: %s", value)
+                        .doesNotContain("—"));
+    }
+
+    @Test
     @DisplayName("the struck-through roster row is skipped, not read as a teacher")
     void courseTeachersSkipsTheDashedRow() {
         // The 2026-08-20 roster change left rina.barak's Calculus row in the table with a dash
@@ -406,11 +453,29 @@ class SeedDocumentTest {
 
     @Test
     @DisplayName("the parser reports the document verbatim and leaves the house rule to callers")
-    void theParserDoesNotApplyTheHouseRule() {
+    void theParserDoesNotApplyTheHouseRule(@TempDir Path dir) throws IOException {
         // Separation of concerns worth pinning: this class says what the document says. What
         // the loader stores is the loader's policy, applied deliberately by the consumer.
-        assertThat(question("21008").options())
-                .anySatisfy(option -> assertThat(option).contains("—"));
+        //
+        // This read question 21008's fourth option out of the real document until 2026-08-27,
+        // because "Nothing — it is safe" was the last em dash left in a parsed value. B-13
+        // removed it, and the test went red: its fixture was production content, so a content
+        // decision could retire a parser guarantee. The fixture is owned here instead, which
+        // also makes the test stronger than it was. With no dash anywhere in the real document,
+        // a parser that quietly applied the house rule would now pass the borrowed version
+        // vacuously, and this one still fails it.
+        Path document = write(dir, """
+                ## 8. Exams
+
+                | # | display_id6 | course | name | author | versions and status |
+                |---|---|---|---|---|---|
+                | 1 | `101101` | 11 | Midterm — Algebra | 2 dana.cohen | v1 **DRAFT** |
+                """);
+
+        assertThat(SeedDocument.read(document).exams())
+                .singleElement()
+                .extracting(SeedDocument.ExamRow::name)
+                .isEqualTo("Midterm — Algebra");
     }
 
     // ---------------------------------------------- silence is never a pass

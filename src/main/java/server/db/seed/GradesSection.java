@@ -61,8 +61,12 @@ final class GradesSection implements SeedSection {
                     // The one override in the seed. 45 fails, 55 passes: this row is what
                     // moves the frozen pass rate from 6/8 to 7/8.
                     new SeedGrade("yael.azulay", 45, 55,
-                            // Document writes an em dash; PRD 4.1 forbids it in text a student
-                            // reads, and the grade-review screen shows this verbatim.
+                            // Transcribed from §9.1, not transformed. This said "Document writes
+                            // an em dash; PRD 4.1 forbids it" until 2026-08-27: it was true, and
+                            // B-13 fixed the document rather than the loader, so the deviation
+                            // it described no longer exists. SeedLoadedDbContract.overrideTextMatches
+                            // now holds the two together, which it did not while this comment was
+                            // the only record that they differed.
                             "Question 11011 has a correct solution with a sign error on the last line, so partial credit was given.",
                             "A clear improvement on inequalities. Worth revising the domain of definition."),
                     new SeedGrade("omer.katz", 45, null, null, null))),

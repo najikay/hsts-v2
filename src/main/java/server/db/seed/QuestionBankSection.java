@@ -30,15 +30,24 @@ import java.util.List;
  *       {@link #V1_DAYS_BEFORE} days before the load anchor, and second versions to
  *       {@link #V2_DAYS_BEFORE}, so a version is always older than its successor and the whole
  *       bank predates the graded execution at T-14d.</li>
- *   <li><b>Em dashes are replaced.</b> PRD §4.1 forbids them in user-visible text and a question
- *       answer is about as user-visible as text gets. One occurrence, in {@code 21008}'s fourth
- *       option, which the document writes as "Nothing — it is safe". Stored with a comma. The
- *       change is listed in the report so the content owner can object; it alters no meaning and
- *       no score.</li>
- *   <li><b>Illustrations load as NULL.</b> Ten questions are marked {@code img} and no bytes are
- *       supplied. {@code image MEDIUMBLOB NULL} accepts that, and the loader stays idempotent
- *       when real assets land under {@code docs/seed/img/}. The flag is kept in the data below
- *       so the count stays assertable and so the follow-up knows which ten to fill.</li>
+ *   <li><b>No em dash is replaced any more</b> <i>(B-13, 2026-08-27)</i>. This entry read "Em
+ *       dashes are replaced ... one occurrence, in {@code 21008}'s fourth option, which the
+ *       document writes as 'Nothing — it is safe'. Stored with a comma." That was true when it
+ *       was written and is now false in both halves: §7.3 writes {@code Nothing, it is safe},
+ *       so this section transcribes it rather than transforming it, and there is no remaining
+ *       occurrence to transform. The list this entry belongs to is the record of every place
+ *       the loader deviates from the document, which is worth nothing once one entry is wrong,
+ *       so the deviation is recorded as closed rather than deleted.</li>
+ *   <li><b>Illustrations load from the classpath</b> <i>(B-8, 2026-08-26)</i>. Ten questions are
+ *       marked {@code img} and each one's bytes are read from
+ *       {@code /seed/img/q&lt;displayId&gt;.png}. <b>This said "load as NULL ... when real assets
+ *       land under {@code docs/seed/img/}" until 2026-08-26, and that path was never workable</b>:
+ *       nothing in this package reads from disk, {@code docs/} is not on the classpath, and the
+ *       packaged-jar walk requires the seed to work with no working copy. The lead ruled the
+ *       bytes into {@code src/main/resources} for exactly that reason. The name is derived from
+ *       the display id rather than held in a second list, because two lists drift.
+ *       <b>A missing resource fails the load</b>, loudly and by name - see
+ *       {@link #illustrationFor}.</li>
  * </ol>
  *
  * <h2>The thin topic is deliberate</h2>
@@ -225,9 +234,60 @@ final class QuestionBankSection implements SeedSection {
                     "A missing index", "An implicit CROSS JOIN, always",
                     "A NULL in the ON clause", "Duplicate values in the join key", 4));
 
-    /** Ten questions carry an illustration; the bytes arrive later under docs/seed/img/. */
+    /** Ten questions carry an illustration, loaded from {@code /seed/img/} on the classpath. */
     static long illustratedCount() {
         return QUESTIONS.stream().filter(Q::image).count();
+    }
+
+    /**
+     * @return the display ids of every question the seed marks as illustrated, in seed order.
+     *
+     * <p>Exposed because {@link #illustratedCount} is a <b>number</b>, and a number cannot tell a
+     * guard <em>which</em> ten. Without this, {@code SeedImagesTest} had no way to read the
+     * flagged set and was driving itself from the generator's own list - so moving a flag from
+     * one question to another left every test green on a seed that throws at load. Found by a
+     * cold read.
+     */
+    static List<String> illustratedIds() {
+        return QUESTIONS.stream().filter(Q::image).map(Q::displayId).toList();
+    }
+
+    /** The classpath resource holding one question's illustration. Derived, never listed twice. */
+    static String illustrationResource(String displayId) {
+        return "/seed/img/q" + displayId + ".png";
+    }
+
+    /**
+     * @param displayId   the question's display id, which the resource name is derived from
+     * @param illustrated whether the seed marks this question as carrying a picture
+     * @return the PNG bytes for an illustrated question, or {@code null} when it carries none
+     * @throws IllegalStateException when the question is marked {@code img} and no resource
+     *         answers, which is a broken build rather than a degraded demo
+     */
+    // Package-private, and taking two plain values rather than the private Q record, ON PURPOSE:
+    // the first version was private and took Q, which made the refusal below unreachable from any
+    // test. It was described as "fails loudly" in a javadoc and a PR report while never having
+    // been executed. A signature no test can call is a guard nobody has watched fail (rule 4).
+    static byte[] illustrationFor(String displayId, boolean illustrated) {
+        if (!illustrated) {
+            return null;
+        }
+        String resource = illustrationResource(displayId);
+        // Loudly, not NULL. A seed that quietly ships without the illustrations is the exact gap
+        // B-8 exists to close, and it is the kind noticed on stage rather than in a build. The
+        // build-time guard in SeedImagesTest is what should catch this first; reaching here means
+        // the jar was packaged without its resources, which the guard cannot see from a working
+        // copy.
+        try (var in = QuestionBankSection.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new IllegalStateException("question " + displayId
+                        + " is marked as illustrated and " + resource + " is not on the classpath");
+            }
+            return in.readAllBytes();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("could not read " + resource + " for question "
+                    + displayId, e);
+        }
     }
 
     @Override
@@ -258,7 +318,7 @@ final class QuestionBankSection implements SeedSection {
             session.persist(new QuestionVersion(row.getId(), 1, question.text(),
                     question.a1(), question.a2(), question.a3(), question.a4(),
                     (byte) question.correct(), question.topic(), question.difficulty(),
-                    null, authorOf(session, course, 1), firstVersions));
+                    illustrationFor(question.displayId(), question.image()), authorOf(session, course, 1), firstVersions));
             versions++;
         }
 
@@ -270,10 +330,16 @@ final class QuestionBankSection implements SeedSection {
             Q original = originalOf(second.displayId());
             String course = second.displayId().substring(0, 2);
 
+            // The illustration belongs to the QUESTION, not to a wording, so a second version
+            // carries the same bytes. 11005 is the case that makes this load-bearing: it is
+            // illustrated AND has a v2, the demo paper pins v1 (case 6.1) while the bank screen
+            // shows the latest (case 2.6), so putting the image on one row leaves the other case
+            // blank. Its v2 only rewords the stem - same equation, same answers - so one drawing
+            // is honest for both.
             session.persist(new QuestionVersion(questionId, 2, second.text(),
                     second.a1(), second.a2(), second.a3(), second.a4(),
                     (byte) second.correct(), original.topic(), original.difficulty(),
-                    null, authorOf(session, course, 2), secondVersions));
+                    illustrationFor(original.displayId(), original.image()), authorOf(session, course, 2), secondVersions));
             versions++;
         }
 
