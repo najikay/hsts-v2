@@ -64,8 +64,14 @@ import java.util.Set;
  * scoped only by course. The alternative - one query per topic with {@code qv.topic = :topic} -
  * would make the database the authority for the pool while the service stays the authority for
  * the quota buckets, and those two answers diverging silently in Hebrew is precisely P-9.
- * {@code sameTopic} is at least as strict as {@code utf8mb4_unicode_ci} in every dimension
- * (C-7 / ADR-016), so a bucket here can never be wider than the rows the bank screen would show.
+ * {@code sameTopic} must <b>agree with</b> {@code utf8mb4_unicode_ci} in <b>both</b> directions
+ * (C-7 / ADR-016). Until 2026-08-26 this line read "at least as strict in every dimension" and
+ * concluded that a bucket here can never be wider than the rows the bank screen would show. That
+ * premise is the one P-12 retracted, and the conclusion drawn from it was the dangerous half:
+ * availability is the consumer that needs both directions, because a fold wider than the
+ * collation's inflates a bucket and a narrower one deflates it, and §7.2 property 2 promises the
+ * teacher exactly the number she can reproduce by filtering her own bank. Stricter is not the
+ * safe direction here. See {@code QuestionValidator}'s two-consumer invariant.
  */
 public final class AutoComposer {
 

@@ -446,7 +446,9 @@ public final class ExamBuildRepository {
      * <p>Topic is <b>not</b> filtered here. The composer buckets by topic in memory using
      * {@code QuestionValidator.sameTopic}, because a SQL {@code =} on a
      * {@code utf8mb4_unicode_ci} column and a Java comparison would be two expressions of one
-     * rule (P-6), and the service-side one must be at least as strict in every dimension
+     * rule (P-6), and the service-side one must <b>agree with</b> the collation in <b>both</b>
+     * directions, never looser (P-9) and never stricter (P-12) - this said "at least as strict in
+     * every dimension" until 2026-08-26
      * (C-7 / ADR-016). Filtering here would make the database the authority for the pool and the
      * service the authority for the quota buckets, which is exactly the split P-9 was.
      *

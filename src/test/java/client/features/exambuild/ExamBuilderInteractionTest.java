@@ -37,6 +37,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.testfx.framework.junit5.ApplicationTest;
+import org.testfx.service.query.PointQuery;
 import org.testfx.util.WaitForAsyncUtils;
 
 import java.io.IOException;
@@ -70,11 +71,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * subject, and routing every render case through it would make a wiring failure and a rendering
  * failure indistinguishable here.
  *
- * <h2>Every click goes through {@link #clickOnNode} ⚑</h2>
+ * <h2>Every click scrolls first, and cannot not ⚑</h2>
  *
  * <p>The robot presses screen coordinates. A control the headless screen cannot show either throws
  * or, worse, takes no click while everything downstream reads a screen the test never touched.
  * Both happened in this file during PR24, and the silent one cost the longer debugging.
+ *
+ * <p>{@link #point(Node)} is overridden to scroll the node into view first. Every robot method
+ * that takes a {@code Node} resolves its target through it, so this holds by construction for all
+ * of them rather than by convention. It was a separate {@code clickOnNode} helper until
+ * 2026-08-26, and one call site had already grown past it. The query forms
+ * ({@code clickOn("#id")} and friends) resolve through a different overload and are not used here.
  */
 @DisabledIfSystemProperty(named = "hsts.uitests", matches = "false")
 class ExamBuilderInteractionTest extends ApplicationTest {
@@ -214,7 +221,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     void addFromTheBankReachesThePaper() {
         Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
 
-        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         // The act, verified before anything is asserted about what it produced: a click that
@@ -227,9 +234,12 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         List<Button> add = visibleButtonsNamed(scene, ExamBuildCopy.PICKER_ADD);
         assertThat(add).as("the seeded picker row is offered").isNotEmpty();
 
-        // Reachable only because the harness sizes the window past the whole form: the robot
-        // presses coordinates rather than controls, and E7.13 added a pane above this one.
-        clickOnNode(add.get(0));
+        // Reachable because the click scrolls this row into view first, NOT because the harness
+        // sizes the window past the whole form - this comment claimed the latter until 2026-08-26
+        // and measurement disproved it: with the scroll removed from the override, this exact line
+        // throws BoundsLocatorException. E7.13 added a pane above this one, and the window is not
+        // tall enough to make that irrelevant.
+        clickOn(add.get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleButtonsNamed(scene, ExamBuildCopy.PICKER_ALREADY_ADDED))
@@ -245,7 +255,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     void aDuplicateIsRefusedOnTheClick() {
         Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
 
-        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.ADD_BUTTON).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleButtonsNamed(scene, ExamBuildCopy.PICKER_ALREADY_ADDED))
@@ -270,7 +280,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     void pointsCanBeTyped() {
         Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
         TextField points = pointsFieldShowing(scene, "50");
-        clickOnNode(points);
+        clickOn(points);
         eraseText(2);
         write("35");
         WaitForAsyncUtils.waitForFxEvents();
@@ -307,7 +317,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                             List.of())));
         }, VERSION_ID);
 
-        clickOnNode(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
+        clickOn(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         // The act, verified before anything is asserted about what it produced.
@@ -316,7 +326,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                 .contains(ExamBuildCopy.CRITERIA_TITLE);
 
         TextField anyBox = countFieldFor(scene, ExamBuildCopy.ANY_LABEL);
-        clickOnNode(anyBox);
+        clickOn(anyBox);
         eraseText(1);
         write("1");
         WaitForAsyncUtils.waitForFxEvents();
@@ -358,16 +368,16 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                             List.of(new Shortfall("Recursion", Difficulty.HARD, 1, 0)))));
         }, VERSION_ID);
 
-        clickOnNode(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
+        clickOn(visibleTogglesNamed(scene, ExamBuildCopy.AUTO_TAB).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         TextField anyBox = countFieldFor(scene, ExamBuildCopy.ANY_LABEL);
-        clickOnNode(anyBox);
+        clickOn(anyBox);
         eraseText(1);
         write("9");
         WaitForAsyncUtils.waitForFxEvents();
 
-        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.GENERATE).get(0));
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.GENERATE).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -375,7 +385,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                 .contains("Topic 'Recursion': requested 1 Hard, bank has 0")
                 .contains(ExamBuildCopy.INFEASIBLE_TITLE, ExamBuildCopy.INFEASIBLE_HINT);
 
-        clickOnNode(visibleTogglesNamed(scene, ExamBuildCopy.MANUAL_TAB).get(0));
+        clickOn(visibleTogglesNamed(scene, ExamBuildCopy.MANUAL_TAB).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -411,7 +421,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
 
         List<Button> useNewer = visibleButtonsNamed(scene, ExamBuildCopy.USE_NEWER_VERSION);
         assertThat(useNewer).as("offered on the badged row, and only there").hasSize(1);
-        clickOnNode(useNewer.get(0));
+        clickOn(useNewer.get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -459,13 +469,13 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                             4)));
         }, VERSION_ID);
 
-        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.USE_NEWER_VERSION).get(0));
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.USE_NEWER_VERSION).get(0));
         WaitForAsyncUtils.waitForFxEvents();
         assertThat(visibleLabelTexts(scene))
                 .as("the act landed: the row is re-pinned and says it is showing stale details")
                 .contains(ExamBuildCopy.REPINNED_NOTICE);
 
-        clickOnNode(visibleButtonsNamed(scene, ExamBuildCopy.SAVE_BUTTON).get(0));
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.SAVE_BUTTON).get(0));
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(visibleLabelTexts(scene))
@@ -599,7 +609,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
             // the footer, whose Save then sat below the screen: the BorderPane's bottom is
             // pinned to the SCENE, and only the body scrolls. So the scene stays a size a screen
             // can show, and anything inside the scrolling body is brought into view by
-            // body is brought into view by bringIntoView before it is clicked.
+            // bringIntoView before the robot is allowed to aim at it.
             Scene scene = new Scene(view.view(), 1280, 700);
             Stage stage = new Stage();
             stage.setScene(scene);
@@ -613,7 +623,6 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         return holder[0];
     }
 
-    /** Buttons carrying this label that are actually on screen, not merely constructed. */
     /**
      * The count box under a given column heading on the criteria grid.
      *
@@ -637,28 +646,51 @@ class ExamBuilderInteractionTest extends ApplicationTest {
     }
 
     /**
-     * Scrolls the body so a node is actually on the screen before the robot aims at it ⚑.
+     * Bring a node into view before the robot is allowed to aim at it ⚑.
      *
      * <p>TestFX's robot presses screen coordinates. A node that is in the scene but below what the
      * headless screen shows takes no click, and nothing fails: the assertions afterwards read a
-     * screen the test never touched. That failure has now appeared twice in this file, once for
-     * the picker and once for the footer, and both times the symptom was a value that had simply
-     * not moved.
+     * screen the test never touched. That failure has appeared twice in this file, once for the
+     * picker and once for the footer, and both times the symptom was a value that had simply not
+     * moved.
+     *
+     * <p><b>Why this hook and not {@code clickOn}.</b> This began as a {@code clickOnNode} helper
+     * whose javadoc claimed "every click in this file goes through here". That was true when
+     * written and stopped being true as the file grew: by 2026-08-26 one call site, the Generate
+     * button in the auto tab, called {@code clickOn} directly and skipped the scroll. It passed,
+     * though whether because that button sat above the fold or because an earlier click in the
+     * same test had already scrolled it there was never separated. The first
+     * repair overrode {@code clickOn(Node, MouseButton...)} and claimed the gap was now
+     * structural. <b>It was not, and a cold read caught it.</b> That signature is an interface
+     * default on {@code FxRobotInterface} whose whole body forwards to the abstract
+     * {@code clickOn(Node, Motion, MouseButton...)}, so {@code clickOn(node, Motion.DIRECT)},
+     * {@code doubleClickOn(node)} and {@code rightClickOn(node)} all still reached an unscrolled
+     * click. The claim was the same defect it was fixing, one level up.
+     *
+     * <p>{@code point(Node)} is the real choke point: it is abstract on the interface, and
+     * {@code FxRobot}'s node-targeted methods resolve their target through it - verified against
+     * {@code testfx-core-4.0.18} with {@code javap -c}, where both
+     * {@code clickOn(Node, Motion, MouseButton...)} and
+     * {@code doubleClickOn(Node, Motion, MouseButton...)} call {@code point(Node)} as their first
+     * instruction. Scrolling here is also the honest semantics: {@code point(Node)} means "aim at
+     * this node", and aiming at a node the screen cannot show is the bug.
+     *
+     * <p><b>Not covered:</b> the query forms - {@code clickOn("#id")}, {@code clickOn(matcher)},
+     * {@code clickOn(predicate)} - resolve through their own {@code point} overloads. This file
+     * uses none of them, and a future call site that does would be outside this guarantee.
+     */
+    @Override
+    public PointQuery point(Node node) {
+        bringIntoView(node);
+        return super.point(node);
+    }
+
+    /**
+     * Scrolls every {@code ScrollPane} ancestor so the node is on the screen the robot aims at.
      *
      * <p>Does nothing for a node outside any {@code ScrollPane} - the footer is pinned to the
      * scene rather than scrolled - which is why the scene itself is a size a screen can show.
      */
-    /**
-     * Scroll it into view, then click it. Every click in this file goes through here.
-     *
-     * <p>Two steps that must not be separable: a click on a node the screen cannot show either
-     * throws or, worse, lands somewhere else, and both failures have appeared in this file.
-     */
-    private void clickOnNode(Node node) {
-        bringIntoView(node);
-        clickOn(node);
-    }
-
     private void bringIntoView(Node node) {
         // EVERY ScrollPane ancestor, outermost first, re-measuring between each. The picker's rows
         // sit in a ScrollPane inside the body's ScrollPane, and scrolling only the innermost left
@@ -686,6 +718,7 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         }
     }
 
+    /** Buttons carrying this label that are actually on screen, not merely constructed. */
     private static List<Button> visibleButtonsNamed(Scene scene, String label) {
         return scene.getRoot().lookupAll(".button").stream()
                 .filter(Button.class::isInstance)

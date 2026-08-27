@@ -304,8 +304,11 @@ public final class QuestionValidator {
      * <p>That is the failure contract §5.3 and §7.2 property 2 exist to prevent: two quotas
      * drawing on one pool with no rule saying which of them is short, and a shortfall the
      * teacher can disprove by filtering her own bank to the topic named in it. C-7 / ADR-016
-     * states the governing rule for the whole codebase: the service comparison must be
-     * <b>at least as strict as {@code utf8mb4_unicode_ci} in every dimension</b>.
+     * states the governing rule for the whole codebase: the service comparison must
+     * <b>agree with {@code utf8mb4_unicode_ci} in both directions</b> - never looser (P-9) and
+     * never stricter (P-12). <b>This sentence read "at least as strict in every dimension" until
+     * 2026-08-26</b>, which contradicted the two-consumer invariant stated immediately below it
+     * in this same javadoc; P-12 is what that contradiction cost.
      *
      * <h2>The two-consumer invariant, and the test that holds it ⚑</h2>
      *
