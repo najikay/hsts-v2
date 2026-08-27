@@ -1,12 +1,19 @@
 package client.features.exambuild;
 
 import client.core.NavParams;
+import client.core.ScreenManager;
+import client.features.locks.EditLockState;
+import client.features.locks.FxHeartbeat;
+import client.features.locks.LockAwareEditor;
+import client.features.locks.LockBanner;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.logic.AsyncViewState;
 import client.ui.screen.AbstractScreen;
 import common.dto.authoring.Shortfall;
 import common.dto.bank.BankQuestionRow;
+import common.dto.auth.LoginResult;
+import common.dto.lock.EntityRef;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -70,6 +77,11 @@ public final class ExamBuilderView extends AbstractScreen {
     private final Label title = new Label();
     private final Label subtitle = new Label();
     private final Label readOnlyBanner = new Label(ExamBuildCopy.READ_ONLY_BANNER);
+    private final LockBanner lockBanner = new LockBanner();
+    private LockAwareEditor locks;
+
+    /** True between {@code onShow} and {@code onHide}, so a release cannot re-open its own lock. */
+    private boolean showing;
     private final Label loadError = new Label();
 
     private final FormField nameField =
@@ -125,8 +137,9 @@ public final class ExamBuilderView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new ExamBuilderSession(dispatcher(), onFxThread()).onChange(this::render);
+        session = new ExamBuilderSession(dispatcher(), onFxThread()).onChange(this::onSessionChanged);
 
+        wireLocks();
         wireFields();
 
         root.getStyleClass().add("exam-builder");
@@ -146,16 +159,146 @@ public final class ExamBuilderView extends AbstractScreen {
      */
     @Override
     public void onShow(NavParams params) {
+        showing = true;
         long versionId = params.getLong("examVersionId", 0);
         if (versionId > 0) {
+            // No syncLock here. It was called on this line and it was dead: open() begins with
+            // resetLoaded, which zeroes examVersionId, and the answer arrives asynchronously, so
+            // the id syncLock needs does not exist yet. The first render after the answer is what
+            // opens the lock.
             session.open(versionId);
             return;
         }
         session.openNew(params.getString("courseCode", null));
     }
 
+    /**
+     * Gives the lock back the moment she leaves rather than waiting for the TTL (E18.5).
+     *
+     * <p>The server's sweep frees an abandoned hold eventually, so a client that dies still
+     * releases. That is the safety net and not the mechanism: without this call the builder keeps
+     * telling the next teacher that this version "is being edited by Dana" for the whole TTL
+     * after she has navigated away, which is the failure the banner exists to prevent, wearing
+     * the opposite sign.
+     */
+    @Override
+    public void onHide() {
+        // Before the close, not after. close() publishes an IDLE snapshot, IDLE is not OWNED, so
+        // renderLockState sets the session locked-out, which fires onChange, which runs
+        // onSessionChanged, which calls syncLock - and syncLock would find examVersionId still
+        // set and locks.entity() just nulled, and open the lock straight back up. The release and
+        // the re-acquire went out on the same pulse, and the heartbeat then renewed it for the
+        // life of the process, so the hold outlived the TTL that was supposed to be the backstop.
+        //
+        // Found by a cold read. The test that named this behaviour asserted only that a
+        // LOCK_RELEASE was sent, which stayed true while the lock was immediately retaken, so it
+        // could not have failed on it. It now asserts nothing acquires after the last release.
+        showing = false;
+        if (locks != null) {
+            locks.close();
+        }
+    }
+
+    /**
+     * One session change: paint, then reconcile the lock. <b>In that order, and never nested.</b>
+     *
+     * <p>{@code syncLock} was called from the top of {@link #render()} first, and it re-entered:
+     * {@code locks.open} publishes CHECKING synchronously through the event bus's poster, which
+     * lands in {@code renderLockState}, which moves the session flag, which fires this listener
+     * again - all before the outer render had set its {@code rendering} guard or finished
+     * rebuilding the paper. The screen came back with a paper the second render thought was
+     * already current, so the newer-version and Save buttons were simply absent, and three
+     * existing tests failed on empty lookups rather than on anything they were testing.
+     *
+     * <p>Calling the lock after the paint keeps the recursion one level deep and terminating:
+     * the inner change re-enters here, renders, and finds {@code syncLock} a no-op because the
+     * entity it would open is the one already held.
+     */
+    private void onSessionChanged() {
+        render();
+        syncLock();
+    }
+
+    /**
+     * Opens the edit lock once there is a row to lock, and not before (E18.5).
+     *
+     * <p><b>A new exam cannot be locked, because it does not exist.</b> {@code Mode.CREATE} runs
+     * with {@code examVersionId == 0} until {@code EXAM_CREATE} answers, and an
+     * {@code EntityRef} built on 0 would name a row nobody can hold. So the only caller is
+     * {@link #onSessionChanged}, which runs after every render: on the change that carries the
+     * loaded version, and again on the one where a first save supplies the id. This javadoc named
+     * two other call sites until the cold read; {@code onShow} called it on a line where the id
+     * was always still zero, and {@code render} called it re-entrantly, which is the defect
+     * {@code onSessionChanged} documents. Both are gone. Calling it repeatedly is safe:
+     * {@code LockAwareEditor.open} on the entity it already holds is a no-op, and the guard below
+     * stops the acquire storm that would otherwise ride every keystroke.
+     *
+     * <p>The key is {@code new EntityRef(EXAM_VERSION, examVersionId)} because that is the exact
+     * expression {@code ExamService.lockHolderOtherThan} builds when it decides whether to refuse
+     * a write. A banner keyed on anything else would never appear and never fail a test either:
+     * both sides would simply be talking about different rows.
+     *
+     * <p>Three gates, and each one is a case that went wrong. {@code showing} keeps
+     * {@code onHide}'s own release from being undone by the render it causes. A zero id means
+     * {@code Mode.CREATE}, where there is no row. And a READ_ONLY version is not lockable in any
+     * sense worth having: an edit lock is exclusive and heartbeated, so previewing an approved
+     * exam would take a hold nobody can use on a screen where no edit is possible, and every past
+     * version a teacher ever looked at would sit under her name.
+     */
+    private void syncLock() {
+        if (locks == null || !showing) {
+            return;
+        }
+        if (session.mode() == ExamBuilderSession.Mode.READ_ONLY) {
+            return;
+        }
+        long versionId = session.examVersionId();
+        if (versionId <= 0) {
+            return;
+        }
+        EntityRef target = new EntityRef(EntityRef.EXAM_VERSION, versionId);
+        if (target.equals(locks.entity())) {
+            return;
+        }
+        locks.open(target);
+    }
+
+    /** The banner's offer, taken. The server decides; this only asks. */
+    private void takeOver() {
+        if (locks != null) {
+            locks.takeOver();
+        }
+    }
+
+    /**
+     * Paints another teacher's hold onto the builder.
+     *
+     * <p><b>No {@code Platform.runLater} here, deliberately.</b> {@code LockAwareEditor.publish}
+     * delivers through {@code ClientEventBus}'s poster, and that class's javadoc states the rule
+     * for the whole tier: every event reaches subscribers on the FX thread, so "screens therefore
+     * never call {@code Platform.runLater} themselves". {@code QuestionEditorView} has a hop and a
+     * paragraph calling it mandatory; that paragraph describes the bus as it was before
+     * 2026-08-24 and is corrected in this commit.
+     *
+     * <p>The refusal goes to the session rather than only to the button, because
+     * {@link ExamBuilderSession#isEditable()} is the one gate every mutator already consults.
+     * Disabling Save alone would leave the form writable underneath a banner saying it is not.
+     */
+    private void renderLockState(EditLockState.Snapshot state) {
+        // The banner is painted here and the form by the session's own change notification:
+        // setLockedOut fires onChange when the flag actually moves, which is the house pattern
+        // (QuestionEditorSession.setReadOnly). Calling render() here as well would paint twice on
+        // every acquire, and re-entering render from inside a listener that render can itself
+        // trigger is the shape a loop grows out of.
+        lockBanner.show(state, ExamBuildCopy.LOCK_NOUN);
+        session.setLockedOut(!state.isEditable());
+    }
+
     @Override
     public boolean listensToEvents() {
+        // Locks do not need this. LockAwareEditor.open registers itself on the bus and
+        // close unregisters, so its pushes arrive whatever this answers; the flag governs
+        // only @Subscribe methods on the screen itself, and this screen has none.
         return false;
     }
 
@@ -522,6 +665,24 @@ public final class ExamBuilderView extends AbstractScreen {
 
     // ===================== Layout =========================================
 
+    /**
+     * Builds the lock editor, or leaves it null when the collaborators are absent (E18.5).
+     *
+     * <p>The null case is the console harness and the screen-gallery, which build views without a
+     * dispatcher or a signed-in user. Every call site checks, exactly as the bank editor does:
+     * a screen that cannot reach the server still has to render.
+     */
+    private void wireLocks() {
+        LoginResult user = ScreenManager.getInstance().signedInUser();
+        if (dispatcher() == null || user == null || eventBus() == null) {
+            return;
+        }
+        locks = new LockAwareEditor(dispatcher(), eventBus(), user.userId(), new FxHeartbeat(),
+                ExamBuildCopy.LOCK_NOUN);
+        locks.onStateChanged(this::renderLockState);
+        lockBanner.setOnTakeOver(this::takeOver);
+    }
+
     private Node buildHeader() {
         title.getStyleClass().add("h1");
         subtitle.getStyleClass().addAll("small", "muted");
@@ -536,7 +697,13 @@ public final class ExamBuilderView extends AbstractScreen {
 
         show(retryLoad, false);
 
-        VBox header = new VBox(10, new VBox(4, title, subtitle), readOnlyBanner,
+        // Above the read-only banner, which is a layout choice and nothing more. This comment
+        // used to justify the order with "when a version is both APPROVED and held, the lock is
+        // the one she can act on with Take over" - which was false twice over: syncLock no longer
+        // takes a lock on a READ_ONLY version at all, and taking one over would clear lockedOut
+        // while leaving mode() READ_ONLY, so the form would stay inert behind a button that
+        // changed nothing. The two banners cannot now appear together.
+        VBox header = new VBox(10, new VBox(4, title, subtitle), lockBanner, readOnlyBanner,
                 new VBox(8, loadError, retryLoad));
         header.setPadding(new Insets(24, 28, 12, 28));
         return header;
