@@ -30,11 +30,14 @@ import java.util.List;
  *       {@link #V1_DAYS_BEFORE} days before the load anchor, and second versions to
  *       {@link #V2_DAYS_BEFORE}, so a version is always older than its successor and the whole
  *       bank predates the graded execution at T-14d.</li>
- *   <li><b>Em dashes are replaced.</b> PRD §4.1 forbids them in user-visible text and a question
- *       answer is about as user-visible as text gets. One occurrence, in {@code 21008}'s fourth
- *       option, which the document writes as "Nothing — it is safe". Stored with a comma. The
- *       change is listed in the report so the content owner can object; it alters no meaning and
- *       no score.</li>
+ *   <li><b>No em dash is replaced any more</b> <i>(B-13, 2026-08-27)</i>. This entry read "Em
+ *       dashes are replaced ... one occurrence, in {@code 21008}'s fourth option, which the
+ *       document writes as 'Nothing — it is safe'. Stored with a comma." That was true when it
+ *       was written and is now false in both halves: §7.3 writes {@code Nothing, it is safe},
+ *       so this section transcribes it rather than transforming it, and there is no remaining
+ *       occurrence to transform. The list this entry belongs to is the record of every place
+ *       the loader deviates from the document, which is worth nothing once one entry is wrong,
+ *       so the deviation is recorded as closed rather than deleted.</li>
  *   <li><b>Illustrations load from the classpath</b> <i>(B-8, 2026-08-26)</i>. Ten questions are
  *       marked {@code img} and each one's bytes are read from
  *       {@code /seed/img/q&lt;displayId&gt;.png}. <b>This said "load as NULL ... when real assets
