@@ -1,6 +1,7 @@
 package client.features.exambuild;
 
 import common.dto.approval.ApprovalState;
+import common.dto.auth.CourseRef;
 import common.dto.authoring.ExamListRow;
 import common.dto.authoring.ExamVersionRow;
 
@@ -47,6 +48,64 @@ public final class ExamListCopy {
     /** The heading of the panel listing the selected exam's versions. */
     public static final String VERSIONS_TITLE = "Versions";
 
+    // ===================== New exam (M-3) =================================
+
+    /**
+     * The header's primary action, and the only way into the builder without a version.
+     *
+     * <p>Every other route into {@code ExamBuildRoutes.BUILDER} carries an
+     * {@code examVersionId} and therefore opens something that already exists. This is the one
+     * that does not, which is why the screen had a builder behind it and no way to start an
+     * exam until M-3 was found by hand.
+     */
+    public static final String NEW_EXAM = "New exam";
+
+    /**
+     * The line above the courses in the new-exam menu.
+     *
+     * <p>The course is chosen <b>before</b> the builder opens rather than inside it, because
+     * the builder has no control for it: {@code ExamBuilderSession.openNew} takes the code as
+     * given, its bank picker is scoped to it, and {@code ExamCreateRequest} carries it. Opening
+     * the builder without one produces a screen that can pick no questions and save nothing.
+     */
+    public static final String NEW_EXAM_PROMPT = "Which course is it for?";
+
+    /**
+     * Why the action is unavailable, rendered as a visible label beside the disabled control.
+     *
+     * <p>Disabled and explained rather than hidden. A hidden control is indistinguishable from
+     * the absent one M-3 was about, and this screen is reachable by a pure coordinator who
+     * holds no {@code course_teachers} row: {@code rina.barak} is exactly that account. The
+     * server would refuse her with {@code FORBIDDEN} from {@code requireTeachesCourse}, so an
+     * empty menu here is the same answer arriving earlier and in a sentence.
+     *
+     * <p><b>A label and not only a tooltip, and that is the whole point of the sentence.</b>
+     * JavaFX delivers no hover events to a disabled node, so a tooltip installed on one is
+     * unreadable. This javadoc said "shown as the disabled control's tooltip" until a cold read
+     * pointed out that the sentence it describes could not be reached by the person it is for.
+     */
+    public static final String NEW_EXAM_NO_COURSES =
+            "You can only write an exam for a course you teach.";
+
+    /**
+     * One course, as the new-exam menu lists it.
+     *
+     * <p>Same shape as {@link #courseLabel(ExamListRow)} so the menu and the table's Course
+     * column read alike, and separate from it because that one takes a loaded exam and this one
+     * takes a course she has not written anything for yet.
+     *
+     * @param course a course from the sign-in payload
+     * @return "12 · Calculus", or just the code when the name is blank
+     */
+    public static String courseOption(CourseRef course) {
+        if (course == null) {
+            return "";
+        }
+        return course.name() == null || course.name().isBlank()
+                ? course.code()
+                : course.code() + " · " + course.name();
+    }
+
     // ===================== Table headers ==================================
     //
     // Here rather than inline in the view, and the reason is the guard rather than tidiness: the
@@ -79,9 +138,16 @@ public final class ExamListCopy {
      * The empty state's heading.
      *
      * <p>There is deliberately exactly one empty state on this screen, which is what
-     * {@code ExamList}'s javadoc means by "an empty list is a real answer": a teacher who
-     * teaches nothing cannot reach the screen at all, so "you have no exams" is never
-     * ambiguous with "you teach nothing".
+     * {@code ExamList}'s javadoc means by "an empty list is a real answer".
+     *
+     * <p><b>This paragraph used to add "a teacher who teaches nothing cannot reach the screen at
+     * all, so it is never ambiguous with you teach nothing". That is false.</b>
+     * {@code RoleNav} adds the Exams item for both teaching roles with no test of what the
+     * caller teaches, so {@code rina.barak}, who holds zero {@code course_teachers} rows,
+     * reaches this screen and sees this heading. The ambiguity the sentence denied is real for
+     * exactly one seeded account, and it is a starred one. What resolves it is not this heading
+     * but {@link #NEW_EXAM_NO_COURSES} beside the disabled New exam control, which says the
+     * other half out loud.
      */
     public static final String EMPTY_TITLE = "No exams yet";
 

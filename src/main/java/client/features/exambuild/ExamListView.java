@@ -1,6 +1,7 @@
 package client.features.exambuild;
 
 import client.core.NavParams;
+import client.core.ScreenManager;
 import client.ui.components.Buttons;
 import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
@@ -8,6 +9,8 @@ import client.ui.components.Icons;
 import client.ui.components.StatusChip;
 import client.ui.components.WarnConfirm;
 import client.ui.screen.AbstractScreen;
+import common.dto.auth.CourseRef;
+import common.dto.auth.LoginResult;
 import common.dto.authoring.ExamListRow;
 import common.dto.authoring.ExamVersionRow;
 import javafx.geometry.Insets;
@@ -16,13 +19,18 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.List;
 
 /**
  * The teacher's exams, every version of each, and what became of them (Presentation tier,
@@ -328,9 +336,111 @@ public final class ExamListView extends AbstractScreen {
         error.setWrapText(true);
         show(error, false);
 
-        VBox header = new VBox(10, new VBox(6, title, subtitle), error);
+        HBox titleRow = new HBox(16, new VBox(6, title, subtitle),
+                Buttons.spacer(), buildNewExamBox());
+        titleRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox header = new VBox(10, titleRow, error);
         header.setPadding(new Insets(24, 28, 12, 28));
         return header;
+    }
+
+    /**
+     * The one control that opens the builder on nothing (M-3).
+     *
+     * <p>A {@link MenuButton} rather than a button plus a dialog, because the course has to be
+     * chosen before the builder opens and there is no third thing to ask. {@code openNew} takes
+     * the code as given: the bank picker is scoped to it and {@code ExamCreateRequest} carries
+     * it, so a builder entered without one can pick no questions and save nothing. One press,
+     * one course, one navigation.
+     *
+     * <h2>The courses it offers, and the guarantee it deliberately does not claim ⚑</h2>
+     *
+     * <p>They come from the sign-in payload, which is where {@code BankView} reads them and needs
+     * no verb. <b>That set is teaching UNION enrolment</b>, not the taught set:
+     * {@code CourseRepository.findForUser} merges a {@code CourseTeacher} query with an
+     * {@code Enrollment} one, and {@code enrollments} carries no role constraint. So a teacher
+     * enrolled in a colleague's course would be offered it here and refused by
+     * {@code requireTeachesCourse} on save.
+     *
+     * <p><b>An earlier version of this paragraph claimed the menu "cannot offer a course the
+     * server would then refuse". That was false when it was written</b>, and it is the same
+     * sentence {@code BankSession.canWriteIn} already had to retract on the same field for the
+     * same reason. It is unreachable under today's seed, which enrols only students, and that is
+     * precisely what makes it worth writing down: a claim the seed happens to satisfy is P-7's
+     * shape. <b>The client has no taught-only set to switch to</b>, nothing on the wire carries
+     * one, so this stays the best available approximation and the server stays the decider. What
+     * changed is that this comment no longer says otherwise.
+     *
+     * <p>Deliberately <b>not</b> {@code BankSession.courseOptions}'s further union with the
+     * browsed bank: that widening exists for the bank's read scope, which is wider than
+     * authorship on purpose, and it would add courses she demonstrably cannot write.
+     *
+     * <h2>Empty is disabled and explained on screen, never hidden ⚑</h2>
+     *
+     * <p>A hidden control is indistinguishable from the missing one this method exists to fix.
+     * <b>The reason is a visible label beside the control and not only a tooltip</b>: JavaFX does
+     * not deliver hover events to a disabled node, so a tooltip installed on one is a sentence
+     * nobody can read. The tooltip stays as well, for the pointer that does find it, but nothing
+     * depends on it. {@code rina.barak} is the account this is for, and she is a starred demo
+     * login and scenario 4's approver, so a dead end here is a dead end on stage.
+     */
+    private Node buildNewExamBox() {
+        MenuButton newExam = new MenuButton(ExamListCopy.NEW_EXAM);
+        // "button" as well as "primary": the stylesheet's rules are all `.button.primary`, and a
+        // MenuButton's default class is `menu-button`, so `primary` alone matches nothing and the
+        // headline action renders as default chrome. Checked against hsts.css rather than
+        // assumed. No graphic, because Buttons.primary carries none anywhere in this client.
+        newExam.getStyleClass().addAll("button", Buttons.PRIMARY, "new-exam");
+
+        List<CourseRef> courses = coursesOfSignedInUser();
+        if (courses.isEmpty()) {
+            newExam.setDisable(true);
+            newExam.setTooltip(new Tooltip(ExamListCopy.NEW_EXAM_NO_COURSES));
+
+            Label why = new Label(ExamListCopy.NEW_EXAM_NO_COURSES);
+            why.getStyleClass().addAll("small", "muted");
+            why.setWrapText(true);
+            why.setMaxWidth(260);
+
+            HBox box = new HBox(10, why, newExam);
+            box.setAlignment(Pos.CENTER_RIGHT);
+            return box;
+        }
+
+        MenuItem prompt = new MenuItem(ExamListCopy.NEW_EXAM_PROMPT);
+        prompt.setDisable(true);
+        newExam.getItems().add(prompt);
+        for (CourseRef course : courses) {
+            MenuItem item = new MenuItem(ExamListCopy.courseOption(course));
+            item.setOnAction(e -> startNewExam(course.code()));
+            newExam.getItems().add(item);
+        }
+        return newExam;
+    }
+
+    /**
+     * Opens the builder with a course and no version, which is {@code Mode.CREATE}.
+     *
+     * <p>The mirror of {@link #openInBuilder}: that one carries {@code examVersionId} and never
+     * a course, this one carries {@code courseCode} and never a version, and
+     * {@code ExamBuilderView.onShow} reads exactly that difference to decide which of the two
+     * it is doing.
+     *
+     * <p>The key is {@link ExamBuilderView#PARAM_COURSE} and not a literal, which is the house
+     * convention every other navigator in this client already follows
+     * ({@code QuestionEditorView}, the four bot screens). Two spellings of one key, checked
+     * against each other nowhere, is a rename away from a builder opened on a null course.
+     */
+    private void startNewExam(String courseCode) {
+        navigator().navigate(ExamBuildRoutes.BUILDER,
+                NavParams.of(ExamBuilderView.PARAM_COURSE, courseCode));
+    }
+
+    /** @return the signed-in user's own courses, the way {@code BankView} reads them */
+    private static List<CourseRef> coursesOfSignedInUser() {
+        LoginResult user = ScreenManager.getInstance().signedInUser();
+        return user == null ? List.of() : user.courses();
     }
 
     private Node buildBody() {

@@ -29,18 +29,21 @@ public final class ExamBuildRoutes {
     /**
      * The exam builder, reached from the list.
      *
-     * <p><b>Not a declared route yet</b>, and deliberately named here anyway. E7.11 to E7.13 are
-     * the screen behind it and land in a later PR, at which point the lead declares the id in
-     * {@code client.core.Routes} and registers the view. Naming it in one place now is method
-     * rule 3: the pending decision binds at exactly one line, so adopting the real route costs
-     * one edit instead of a sweep through every button that wanted to open a builder.
+     * <p><b>Declared and reachable.</b> {@code Routes.EXAM_BUILD} carries this id and
+     * {@code SessionRoutes} registers the screen for both teaching roles. Two navigations reach
+     * it: the list's Open/Edit action, carrying an {@code examVersionId}, and its New exam
+     * control, carrying an {@link ExamBuilderView#PARAM_COURSE} and no version.
+     *
+     * <p><b>This paragraph used to say "not a declared route yet" and "nothing in this PR
+     * navigates to it".</b> Both were true when written, at #51, when the id was named here
+     * ahead of the screen so the pending decision bound at one line (method rule 3). The lead's
+     * assembly declared the route, #52 built the screen behind it, and the New exam control made
+     * the second sentence twice wrong. Corrected with its history, because a correction nobody
+     * can date reads exactly like a fresh mistake.
      *
      * <p>Spelled on the convention the rest of the app already uses for a view of one thing
      * reached from a list: {@code questions.edit}, {@code approvals.preview},
      * {@code grades.checked}.
-     *
-     * <p>Nothing in this PR navigates to it. The list's Edit action lands with the builder it
-     * opens, in the same change, so there is never a button on a rail that goes nowhere.
      */
     public static final String BUILDER = "exams.build";
 

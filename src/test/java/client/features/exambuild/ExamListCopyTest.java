@@ -1,6 +1,7 @@
 package client.features.exambuild;
 
 import common.dto.approval.ApprovalState;
+import common.dto.auth.CourseRef;
 import common.dto.authoring.ExamListRow;
 import common.dto.authoring.ExamVersionRow;
 import org.junit.jupiter.api.DisplayName;
@@ -236,8 +237,30 @@ class ExamListCopyTest {
         }
 
         @Test
+        @DisplayName("⚑ a course reads the same in the new-exam menu as in the Course column")
+        void courseOptionMatchesTheColumn() {
+            // Cross-asserted against courseLabel rather than against a literal. The named
+            // property is that the two formatters AGREE; a hardcoded "12 · Calculus" pins one
+            // of them and stays green while the other drifts, which is a correct assertion
+            // about the wrong thing.
+            ExamListRow row = new ExamListRow(1L, "120101", "12", "Calculus", "Final", 1,
+                    List.of());
+            assertThat(ExamListCopy.courseOption(new CourseRef("12", "Calculus")))
+                    .isEqualTo(ExamListCopy.courseLabel(row))
+                    .isEqualTo("12 · Calculus");
+        }
+
+        @Test
+        @DisplayName("a nameless course is its code, not a code with a dangling separator")
+        void courseOptionWithoutAName() {
+            assertThat(ExamListCopy.courseOption(new CourseRef("12", "  "))).isEqualTo("12");
+            assertThat(ExamListCopy.courseOption(new CourseRef("12", null))).isEqualTo("12");
+        }
+
+        @Test
         @DisplayName("nulls are empty strings, never the word null on a screen")
         void nullsAreEmpty() {
+            assertThat(ExamListCopy.courseOption(null)).isEmpty();
             assertThat(ExamListCopy.courseLabel(null)).isEmpty();
             assertThat(ExamListCopy.examSummary(null)).isEmpty();
             assertThat(ExamListCopy.versionSummary(null)).isEmpty();
