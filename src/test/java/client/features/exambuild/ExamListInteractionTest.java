@@ -1,7 +1,10 @@
 package client.features.exambuild;
 
 import client.core.FxTestHarness;
+import client.core.NavEntry;
 import client.core.NavParams;
+import client.core.NavigationEvent;
+import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
@@ -24,7 +27,11 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.TableRow;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -91,6 +98,17 @@ class ExamListInteractionTest extends ApplicationTest {
     private static final LoginResult DANA = new LoginResult(2, "dana.cohen", "Dana Cohen",
             Role.TEACHER,
             List.of(new CourseRef("11", "Algebra"), new CourseRef("12", "Calculus")), 0);
+
+    /**
+     * The pure coordinator, who reaches this screen and teaches nothing.
+     *
+     * <p>Modelled on the seeded {@code rina.barak}: a {@code coordinators} row, zero
+     * {@code course_teachers} rows, and therefore an empty {@code courses} list in the sign-in
+     * payload. Wire role COORDINATOR, stored role TEACHER, which is the derivation
+     * {@code docs/DEMO_ACCOUNTS.md} describes and the reason she is a starred demo account.
+     */
+    private static final LoginResult RINA = new LoginResult(3, "rina.barak", "Rina Barak",
+            Role.COORDINATOR, List.of(), 0);
 
     private static final String SENT_BACK = "Question 4 has two correct answers.";
 
@@ -292,6 +310,126 @@ class ExamListInteractionTest extends ApplicationTest {
                 .contains(ExamListCopy.NO_SELECTION);
     }
 
+    // ===================== The new-exam door (M-3) ========================
+
+    /**
+     * The control M-3 was about, on a real screen.
+     *
+     * <p>Manual testing found that a teacher could edit, submit and revise what the seed had
+     * written and could never start an exam: {@code EXAM_CREATE} was registered, the service
+     * implemented it, {@code ExamBuilderSession.Mode.CREATE} sent it, and the only navigation
+     * into the builder in the whole client carried an {@code examVersionId}. Every layer worked
+     * and no control reached the one that mattered.
+     *
+     * <p><b>This file could not have caught that and neither could any other.</b>
+     * {@code ExamBuilderSessionTest} enters {@code CREATE} by calling {@code openNew} itself, so
+     * create-mode was thoroughly covered while being unreachable by a human. That is
+     * {@code docs/PROBLEMS.md} P-6 exactly. The three tests below are written against
+     * <em>reachability</em> rather than against the mode, because reachability is the property
+     * that was missing.
+     */
+    @Test
+    @DisplayName("⚑ M-3: the new-exam control is on the screen and offers her own courses")
+    void newExamOffersHerOwnCourses() {
+        Scene scene = openList(this::serverHasThreeExams);
+
+        MenuButton newExam = newExamControl(scene);
+        assertThat(newExam.isDisabled())
+                .as("Dana teaches two courses, so the door is open")
+                .isFalse();
+        assertThat(itemTexts(newExam))
+                .as("her two courses, and the prompt above them, and nothing else. A menu "
+                        + "offering a course she does not teach would be a FORBIDDEN dressed "
+                        + "up as a choice")
+                .containsExactly(ExamListCopy.NEW_EXAM_PROMPT, "11 · Algebra", "12 · Calculus");
+    }
+
+    /**
+     * The navigation itself, through the real {@code Navigator}.
+     *
+     * <p>Asserts the two halves that distinguish a new exam from an open one: the route id, and
+     * that the parameters carry a {@code courseCode} and <b>no</b> {@code examVersionId}. A
+     * control wired to {@code openInBuilder} instead would satisfy the route half and fail the
+     * second, which is the mutation worth catching, because it is the one that produces a screen
+     * that looks right and edits the wrong thing.
+     *
+     * <p><b>The item's action is fired rather than clicked, and the limit is stated rather than
+     * hidden.</b> A {@code MenuButton}'s popup is a separate window, and this file already
+     * refuses to press modal popups because in a headless run they hang instead of failing. What
+     * is checked here is a real control, looked up from a real scene, whose real action performs
+     * a real navigation. What is not checked is that the popup opens on a mouse press, which is
+     * JavaFX's own behaviour and not this screen's wiring.
+     */
+    @Test
+    @DisplayName("⚑ M-3: picking a course really navigates to the builder, with no version")
+    void newExamNavigatesToTheBuilderWithACourse() {
+        Scene scene = openList(this::serverHasThreeExams);
+
+        ScreenManager manager = ScreenManager.getInstance();
+        manager.navigator().register(Routes.EXAM_BUILD);
+        manager.screens().register(ExamBuildRoutes.BUILDER, StubScreen::new);
+
+        List<NavigationEvent> navigations = new java.util.ArrayList<>();
+        manager.navigator().addListener(navigations::add);
+
+        MenuItem algebra = itemNamed(newExamControl(scene), "11 · Algebra");
+        interact(() -> algebra.getOnAction().handle(null));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(navigations)
+                .as("the act landed: something navigated")
+                .hasSize(1);
+        NavEntry target = navigations.get(0).to();
+        assertThat(target.routeId())
+                .as("the builder, spelled by the feature's own constant")
+                .isEqualTo(ExamBuildRoutes.BUILDER);
+        assertThat(target.params().getString("courseCode", null))
+                .as("the course she picked, which is what openNew and EXAM_CREATE both need")
+                .isEqualTo("11");
+        assertThat(target.params().getLong("examVersionId", 0))
+                .as("⚑ and NO version: this is the one door into the builder that opens on "
+                        + "nothing. A version here would silently reopen a stored exam")
+                .isZero();
+    }
+
+    /**
+     * A pure coordinator reaches this screen and may write for no course.
+     *
+     * <p>{@code rina.barak} holds a {@code coordinators} row and zero {@code course_teachers}
+     * rows deliberately, and the rail adds Exams for her without asking what she teaches. The
+     * server would refuse her with {@code FORBIDDEN} out of {@code requireTeachesCourse}, so the
+     * control says so first, in a sentence, and stays visible while saying it.
+     *
+     * <p><b>Disabled and not hidden</b>, because a hidden control is indistinguishable from the
+     * absent one this whole group of tests exists to prevent. That is not a style preference:
+     * hiding it would make M-3's exact symptom the correct rendering for one real account.
+     */
+    @Test
+    @DisplayName("⚑ M-3: someone who teaches nothing gets the reason, not a missing control")
+    void newExamIsDisabledWhenSheTeachesNothing() {
+        Scene scene = openList(connection ->
+                connection.replyOk(Verb.EXAM_LIST, ExamList.empty()), NavParams.empty(), RINA);
+
+        MenuButton newExam = newExamControl(scene);
+        assertThat(newExam.isDisabled())
+                .as("no course_teachers row, so nothing here is creatable")
+                .isTrue();
+        assertThat(newExam.getItems())
+                .as("and nothing is offered, rather than a course she would be refused")
+                .isEmpty();
+        assertThat(labelTexts(scene))
+                .as("⚑ the reason is READABLE, on screen, beside the control. Asserting only "
+                        + "that a Tooltip object exists would pass with the sentence invisible: "
+                        + "JavaFX delivers no hover events to a disabled node, so a tooltip on "
+                        + "one is a sentence nobody can reach")
+                .contains(ExamListCopy.NEW_EXAM_NO_COURSES);
+        assertThat(newExam.getTooltip())
+                .as("the tooltip is kept too, for the pointer that does find it")
+                .isNotNull()
+                .extracting(Tooltip::getText)
+                .isEqualTo(ExamListCopy.NEW_EXAM_NO_COURSES);
+    }
+
     @Test
     @DisplayName("⚑ a notification's version opens the exam that owns it, on a real screen")
     void deepLinkOpensTheOwningExam() {
@@ -310,8 +448,43 @@ class ExamListInteractionTest extends ApplicationTest {
                 Message.ok(request, new ExamList(List.of(MIDTERM, FINAL_EXAM, GEOMETRY))));
     }
 
+    /** Every item of a menu button, in order, so the offer can be pinned and not merely sampled. */
+    private static List<String> itemTexts(MenuButton button) {
+        return button.getItems().stream().map(MenuItem::getText).toList();
+    }
+
+    private static MenuItem itemNamed(MenuButton button, String text) {
+        return button.getItems().stream()
+                .filter(item -> text.equals(item.getText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no menu item named " + text));
+    }
+
+    /** The new-exam control, looked up from the real scene rather than held from construction. */
+    private static MenuButton newExamControl(Scene scene) {
+        return scene.getRoot().lookupAll(".menu-button").stream()
+                .filter(MenuButton.class::isInstance)
+                .map(MenuButton.class::cast)
+                .filter(button -> ExamListCopy.NEW_EXAM.equals(button.getText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "no control named " + ExamListCopy.NEW_EXAM + " on the screen (M-3)"));
+    }
+
+    /** Stands in for the builder so a navigation can complete without booting it. */
+    private static final class StubScreen extends client.ui.screen.AbstractScreen {
+        @Override
+        protected javafx.scene.Parent build() {
+            return new VBox();
+        }
+    }
+
     private Scene openList(Consumer<FakeClientConnection> script) {
         return openList(script, NavParams.empty());
+    }
+
+    private Scene openList(Consumer<FakeClientConnection> script, NavParams params) {
+        return openList(script, params, DANA);
     }
 
     /**
@@ -322,7 +495,8 @@ class ExamListInteractionTest extends ApplicationTest {
      * after {@code resetForTests} has nulled the event bus and fails a test that was never about
      * connecting. {@code ScreenManager.init} is the seam the shell itself uses.
      */
-    private Scene openList(Consumer<FakeClientConnection> script, NavParams params) {
+    private Scene openList(Consumer<FakeClientConnection> script, NavParams params,
+                           LoginResult user) {
         ScreenManager manager = ScreenManager.getInstance();
         interact(() -> {
             ClientEventBus bus = new ClientEventBus(ClientEventBus.newBus(),
@@ -338,7 +512,7 @@ class ExamListInteractionTest extends ApplicationTest {
             } catch (IOException e) {
                 throw new AssertionError(e);
             }
-            connection.replyOk(Verb.LOGIN, DANA);
+            connection.replyOk(Verb.LOGIN, user);
             connection.replyOk(Verb.LOGOUT, null);
             script.accept(connection);
 
@@ -347,7 +521,7 @@ class ExamListInteractionTest extends ApplicationTest {
             manager.setClient(connection);
             manager.setDispatcher(dispatcher);
             dispatcher.setPushListener(new PushEventBridge(manager.eventBus()));
-            manager.setSignedInUser(DANA);
+            manager.setSignedInUser(user);
         });
         WaitForAsyncUtils.waitForFxEvents();
 

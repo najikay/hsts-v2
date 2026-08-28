@@ -72,6 +72,17 @@ import java.util.List;
  */
 public final class ExamBuilderView extends AbstractScreen {
 
+    /**
+     * The nav key carrying the course of a NEW exam, owned by the screen that reads it.
+
+     * <p>House convention, the same shape as {@code QuestionEditorView.PARAM_COURSE} and the
+     * four bot screens: the receiving view spells the key and every navigator imports it, so a
+     * rename cannot leave a producer and a consumer disagreeing silently. A door that navigates
+     * here with the wrong spelling opens {@code openNew(null)}, which is a builder whose bank
+     * picker is scoped to nothing and whose save carries no course.
+     */
+    public static final String PARAM_COURSE = "courseCode";
+
     private final BorderPane root = new BorderPane();
 
     private final Label title = new Label();
@@ -169,7 +180,7 @@ public final class ExamBuilderView extends AbstractScreen {
             session.open(versionId);
             return;
         }
-        session.openNew(params.getString("courseCode", null));
+        session.openNew(params.getString(PARAM_COURSE, null));
     }
 
     /**
