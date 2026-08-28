@@ -153,11 +153,21 @@ public final class BotChatSession {
         if (response.isError()) {
             ErrorCode code = response.getErrorCode();
             String message = response.errorMessage();
-            if (code == ErrorCode.FORBIDDEN || code == ErrorCode.NOT_FOUND
-                    || code == ErrorCode.CONFLICT) {
-                // The bot is unusable for a reason the server has already put into
-                // a sentence: not enrolled, no bot, switched off, or C-4 locked.
+            if (code == ErrorCode.FORBIDDEN || code == ErrorCode.NOT_FOUND) {
+                // The bot is unusable for a reason that will not change while she sits
+                // here: not enrolled, no bot, switched off. Blocked disables the input.
                 model.blocked(message);
+            } else if (code == ErrorCode.CONFLICT) {
+                // C-4's lockout - and unlike the two above, it is transient: it ends
+                // when her attempt does, which can happen while this screen is open
+                // (her submit, the bell, a teacher closing the execution early). It
+                // used to land in blocked() with the terminal pair, and the lock then
+                // outlived its cause: the input stayed disabled after the exam closed,
+                // with navigation the only way out. Found by the lead's manual round,
+                // 2026-08-28 (B-47). The model keeps the composer editable and drops
+                // any cross-course consent; a retry simply asks the server again, and
+                // the server is the decider for as long as the attempt is live.
+                model.lockedOut(message == null || message.isBlank() ? BotCopy.ASK_FAILED : message);
             } else {
                 model.failed(message == null || message.isBlank() ? BotCopy.ASK_FAILED : message);
             }

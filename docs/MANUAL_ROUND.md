@@ -119,7 +119,9 @@ Sign in as `maya.levi` / `demo123`.
 - [ ] Re-enter code `2075` after submitting: the server's own "already handed in"
       answer, on the code field (F6.7).
 
-**The study bot — see §4, do it with the lead.**
+**The study bot — see §4, do it with the lead. The main bot checks run BEFORE
+this Take Exam block (no live attempt needed); only §4's short C-4 sub-section
+belongs inside the attempt.**
 
 **B-46 ruling, as you move between screens:** whenever you want to go "back",
 notice what you reach for and whether the control you expect is where you expect
@@ -152,16 +154,28 @@ Machine A: `maya.levi` mid-attempt on `2075` (from §2). Machine B: `dana.cohen`
 
 ## 4. The bot, live keys — **do this section on a call with the lead (E16.17)**
 
-Still `maya.levi`. This is the one part that talks to real providers; it was
-deliberately never automated. Ping the lead before starting it.
+This is the one part that talks to real providers; it was deliberately never
+automated. Ping the lead before starting it.
 
-- [ ] **[U-2 verify]** The bot screen offers a **course picker** — Maya is
-      enrolled in three courses; pick **Databases 22** (the cross-course case,
-      C-4's staging: she sits Algebra, asks the Databases bot).
-- [ ] **[case 14.1 ⚠]** Ask a real course question, e.g.
+**Do the main bot checks with NO exam in progress** — either as `maya.levi`
+*before* starting §2's Take Exam block, or as `noam.peretz` on the Java 21 bot at
+any time. Only the C-4 sub-section below wants a live attempt, and it takes two
+minutes of one, not the whole sitting.
+
+**Know the lock rules before judging them** (both are design, not bugs):
+- Asking a course's bot **while sitting that same course's exam** is refused
+  outright, every time, with a sentence naming the exam. There is no way through.
+- Asking a **different** course's bot while sitting an exam shows an integrity
+  notice once; acknowledging it lets her ask, and the teacher is alerted once per
+  attempt.
+
+**Main checks (no live attempt):**
+- [ ] **[U-2 verify]** The bot screen offers a **course picker** with exactly the
+      student's enrolled courses.
+- [ ] **[case 14.1 ⚠]** Ask a real course question, e.g. on Databases 22:
       `What does a LEFT JOIN return when there is no match?`
-      Expected: a grounded answer citing the teacher's sources, streaming or
-      arriving within the timeout, rendered as chat bubbles with sane wrapping.
+      Expected: a grounded answer citing the teacher's sources, arriving within
+      the timeout, rendered as chat bubbles with sane wrapping.
 - [ ] **[case 21.2 ⚠]** While it thinks: the screen shows a working state
       (skeleton/typing indicator), never a frozen or blank pane.
 - [ ] **[case 14.4 ⚠]** Ask something clearly outside the material, e.g.
@@ -169,9 +183,17 @@ deliberately never automated. Ping the lead before starting it.
       an answer and not an error.
 - [ ] **[case 14.5 ⚠]** Open bot history: both conversations above are there;
       reopening one shows the full transcript.
-- [ ] **C-4 check (once, not per message):** if she asks the **Databases** bot
-      while sitting an **Algebra** exam, no exam-in-progress notice blocks her —
-      the notice belongs to same-course asks only, once per attempt.
+
+**C-4 checks (do during §2's attempt, ~2 minutes of it):**
+- [ ] With Maya mid-attempt on Algebra `2075`, open the **Databases 22** bot and
+      ask: the integrity notice appears **once**; acknowledge; the answer comes.
+- [ ] Open the **Algebra 11** bot and ask: refused with the lockout sentence
+      naming Midterm: Algebra. **The input box stays usable** — the refusal is a
+      banner, not a dead screen. *(B-47 re-verdict: before 2026-08-28 this
+      permanently disabled the composer, and the lock survived the exam closing.)*
+- [ ] Have the teacher close `2075` early (or submit the attempt): **the same
+      Algebra bot screen, without navigating away**, now answers when asked
+      again. *(B-47's other half.)*
 
 ---
 

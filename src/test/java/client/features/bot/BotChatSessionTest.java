@@ -94,9 +94,9 @@ class BotChatSessionTest {
     }
 
     @Test
-    @DisplayName("a refusal that means the bot is unusable blocks the composer")
+    @DisplayName("a refusal that means the bot is unusable for good blocks the composer")
     void refusalsBlock() {
-        for (ErrorCode code : List.of(ErrorCode.FORBIDDEN, ErrorCode.NOT_FOUND, ErrorCode.CONFLICT)) {
+        for (ErrorCode code : List.of(ErrorCode.FORBIDDEN, ErrorCode.NOT_FOUND)) {
             connection.replyError(Verb.BOT_ASK, code, "You are not enrolled in this course.");
 
             session.ask("q").join();
@@ -105,6 +105,34 @@ class BotChatSessionTest {
             assertThat(model.banner()).isEqualTo("You are not enrolled in this course.");
             model.startFresh();
         }
+    }
+
+    /**
+     * ⚑ <b>B-47.</b> The C-4 lockout is the one refusal that ends on its own: the attempt
+     * it names can close while this screen is open (her submit, the bell, a teacher's
+     * early close), and the composer must survive to ask again. It used to land in
+     * UNAVAILABLE with the terminal refusals, and the lead's manual round then met a bot
+     * that stayed locked after the teacher had closed the execution.
+     */
+    @Test
+    @DisplayName("⚑ B-47: the C-4 lockout is retryable, not terminal")
+    void theSameCourseLockoutLeavesTheComposerAlive() {
+        connection.replyError(Verb.BOT_ASK, ErrorCode.CONFLICT,
+                "The Algebra bot is locked while you are sitting Midterm: Algebra.");
+
+        session.ask("what is a root?").join();
+
+        assertThat(model.state())
+                .as("refused now is not refused forever")
+                .isEqualTo(ChatState.RETRYABLE_ERROR);
+        assertThat(model.banner())
+                .isEqualTo("The Algebra bot is locked while you are sitting Midterm: Algebra.");
+
+        // The attempt has since closed; the same screen, without renavigation, asks again.
+        connection.replyOk(Verb.BOT_ASK, new BotAnswer(7L, "what is a root?", "A value where...",
+                NOW));
+        session.ask("what is a root?").join();
+        assertThat(model.state()).isEqualTo(ChatState.IDLE);
     }
 
     @Test
@@ -251,10 +279,12 @@ class BotChatSessionTest {
 
         // She started sitting THIS course's exam: the server refuses with the C-4 lockout,
         // which no payload field can lift and which ends the situation she consented to.
+        // Since B-47 the refusal is retryable rather than terminal, but the consent drop
+        // is unchanged: her acknowledgement belonged to a sitting that is over.
         connection.replyError(Verb.BOT_ASK, ErrorCode.CONFLICT, "The Databases 22 bot is locked");
         session.ask("second").join();
 
-        assertThat(model.state()).isEqualTo(ChatState.UNAVAILABLE);
+        assertThat(model.state()).isEqualTo(ChatState.RETRYABLE_ERROR);
         assertThat(model.hasAcknowledged()).isFalse();
     }
 

@@ -200,6 +200,91 @@ unreachable address and read that one.
 
 ---
 
+---
+
+## Manual round 1 (2026-08-28) — Naji's notes, `docs/manual-round-1-notes.txt`
+
+The first full walk with `MANUAL_ROUND.md`. It stopped short on blockers, which is what a
+first walk is for. Every line of the notes file is an entry below; the two that were
+already registered elsewhere are cross-referenced rather than duplicated (bot locked after
+early close = **B-47**, fixed; national IDs = M-2/B-40, extended here as U-15). Waves: **A**
+navigation, **B** visuals, **C** flows, **D** wire; each agent-built in its own worktree,
+lead-verified, one batch commit.
+
+### U-5 · FLOW · the manual connect form has no way back
+**In Naji's words:** "the manual connect window to the server from the client side (UI) doesn't have a go back button, which it should"
+**Restated:** `ConnectView`'s manual card can be reached from the picker and cannot return to it; the only link offered is "Look for servers again".
+**Surface:** `client/features/connect/ConnectView`. **Ruling:** fix, wave A — a "Back to the server list" link that returns to the picker with the decision the view already keeps.
+**Status:** `IN WORK`.
+
+### U-6 · FUNCTIONAL · the login screen still says Connected after the server dies
+**In Naji's words:** "when the server is down, the login window (UI) still doesn't register it and still says it's connected with the green button"
+**Restated:** `LoginView` computes its status row once at build from `client.isConnectionOpen()` and subscribes to nothing; `ConnectionLostEvent` is posted on the bus and the shell's reconnect banner reacts, the login screen does not.
+**Surface:** `client/features/login/LoginView`. **Ruling:** fix, wave C — subscribe; on loss the chip flips, the sign-in button disables, a Reconnect link leads to the connect screen; status re-read on every show.
+**Status:** `IN WORK`.
+
+### U-7 · COSMETIC · the My Grades ring is a little off
+**In Naji's words:** "the my grades page looks nice but the semi-filled circle thing is a little off (not high priority)"
+**Restated:** `ProgressRing` draws the fill arc with round line caps, so each end overhangs its angle by half a stroke; a partial value reads slightly longer than the score and a tiny value shows a dot.
+**Surface:** `client/ui/components/ProgressRing` + `RingGeometry`. **Ruling:** fix, wave B (Low) — subtract the cap angle at each end for 0 < value < 100.
+**Status:** `IN WORK`.
+
+### U-8 · FLOW · a Back control on every screen that is not on the rail
+**In Naji's words:** "grades -> open exam, no go back button" · "grades -> open exam -> print mode, no go back button" · "all print layouts have no go back button" · "IN GENERAL, KEEP A GO BACK BUTTON IN ALL SCREENS THAT AREN'T ON THE SIDE-BAR" · "AGAIN ADD GO BACK BUTTONS TO EVERY SCREEN"
+**Restated:** six screens hand-roll a `BackLink`, the rest of the non-rail screens have nothing, and print mode is worse: `.results-print .toggle-button { visibility: hidden }` hides the very toggle that turns print mode off, so print view has no exit at all.
+**Surface:** `client/ui/shell/AppShell` (the navbar), `hsts.css`, the results and checked-form views. **Ruling:** fix, wave A, **systemically**: the shell renders one Back control for any route that is not a rail item (back stack, else the role's home), the six hand-rolled links go so no screen carries two, and print mode gets an always-visible "Exit print view".
+**Status:** `IN WORK`.
+
+### U-9 · FUNCTIONAL · the opened exam shows no teacher name
+**In Naji's words:** "missing teacher's name"
+**Restated:** My Grades → open exam is `CheckedFormView` over `common.dto.grading.CheckedForm`, which has no teacher field at all; nothing on that wire could carry the name.
+**Surface:** GRADING wire contract (frozen) → amendment **A6**: `CheckedForm.teacherName`, the execution's releasing teacher; `CheckedFormService`, `CheckedFormView`. **Ruling:** fix, wave D.
+**Status:** `IN WORK`.
+
+### U-10 · FLOW · from the dashboard, Take Exam asks for the code again, and its Continue is dead
+**In Naji's words:** "from dashboard -> take exams, it opens the take exams page and asks for the exam code once again, it should skip it (it's a requirement but we want to change it, both in the docs and the code), also in it's current state, we have to modify the code for it to light up the continue button and allow us to move forward - verdict: fix the continue thing and modify it to be a confirmation instead"
+**Restated:** two things. (1) BUG: `ExamEntryView.prefillCode` only sets the field's text; a field that already holds the code from an earlier visit fires no listener after `reset()` emptied the session, so `canContinue()` stays false — the exact "have to modify the code to light it up". (2) DESIGN: the second prompt was F6.4's one-screen guard; Naji's ruling makes it a **confirmation**: read-only code, "Confirm and continue", a "Use a different code" link.
+**Surface:** `ExamEntrySession`, `ExamEntryView`, `ExamCopy`, `TakeExamView.onShow`. Docs already changed: PRD F6.1 amendment, DEMO_SCRIPT 5.1, and this closes **B-45**. **Ruling:** fix, wave C.
+**Status:** `IN WORK`.
+
+### U-11 · COSMETIC · every modal has a "weird shadow"
+**In Naji's words:** "when opening up the handing out exam modal, the same weird shadow thing appears, get rid of it or fix it like you did previously" · "dashboard modals has the same weird shadow thing" · "almost all modals if not all have weird shadows, fix it or get rid of it"
+**Restated:** every modal is `WarnConfirm`: a transparent stage sized to the dialog plus a 40px scrim margin, and the scrim carries `-hsts-scrim` (42% dark). The dim therefore paints as a dark box hugging the dialog instead of dimming the window. The "previous" fix (c2b9c0f, 2026-08-19) softened the drop-shadow recipes; this is the scrim, not the shadow, which is why softening did not reach it.
+**Surface:** `client/ui/components/WarnConfirm`. **Ruling:** fix, wave B — the modal stage takes the owner window's bounds so the scrim dims the whole window with the dialog centered; the soft dialog shadow stays.
+**Status:** `IN WORK`.
+
+### U-12 · FUNCTIONAL · grading: students look like they are loading and never show
+**In Naji's words:** "grading for teachers: students look like they're loading but never show"
+**Restated:** `GradingQueueView.render` only calls `table.setItems` when the rows differ from what the table holds; when an execution answers with zero rows, empty equals empty, `setItems` is never called and the `DataTable` never leaves its initial skeleton. Whether the execution should have had rows is a second question that needs the account used (asked).
+**Surface:** `client/features/grading/GradingQueueView`. **Ruling:** fix, wave C; filed as **B-48** too because it breaks scenario 8 on screen.
+**Status:** `IN WORK`.
+
+### U-13 · COSMETIC · the question bank table leaves its width unused
+**In Naji's words:** "question bank: the table doesn't look good, the cells (columns) ares too packed leaving a lot of empty space unused, we need better spacing for the table"
+**Restated:** `DataTable` sets no column resize policy, so every table's columns sit at pref width and the remainder of the row is dead space; the bank is where it shows most.
+**Surface:** `client/ui/components/DataTable`. **Ruling:** fix, wave B — a constrained proportional resize policy on the component, so every table fills its width and `columnWidths` become the proportions.
+**Status:** `IN WORK`.
+
+### U-14 · FUNCTIONAL · "the number of study bots isn't limited for teachers"
+**In Naji's words:** "BIG BUG: the number of study bots isn't limited for teachers, the teacher can create and manage bots, not just one bot"
+**Restated:** PRD F12.1 is one bot per course (S-30). The server holds that structurally: `bots.course` is `UNIQUE` (V6) and `BOT_CREATE` is idempotent — a second create hands back the existing bot. So the database cannot hold two bots for a course. What the screen showed is not yet known: a teacher of two courses (`dana.cohen`) legitimately sees two bots, one per course; or the manager kept offering "Create the study bot" after a create.
+**Surface:** `client/features/bot/BotManagerView` (suspected). **Ruling:** `NEW` — the exact steps and what was on screen are needed before this is fixed or closed as design.
+**Status:** `NEW`.
+
+### U-15 · COPY · national IDs in the demo files
+**In Naji's words:** "The IDs for the students aren't in the demo file (need to be added for easier testing) - or redo the demo"
+**Restated:** M-2 put them in DEMO_ACCOUNTS.md and DEMO_SCRIPT 5.2; DEMO_DAY.md and the manual round's own §0 are where the tester looked.
+**Surface:** docs. **Fix:** DEMO_DAY.md §sign-in and the accounts-sheet line now carry both IDs; MANUAL_ROUND §0's account table carries them.
+**Status:** `DONE`.
+
+### U-16 · FLOW · a better, time-aware manual testing document
+**In Naji's words:** "NEED A BETTER MORE ORGANIZED AND TIME AWARE MANUAL TESTING DOCUMENT"
+**Restated:** the first walk stalled on blockers with no way to see what was still worth doing; the doc needs minute budgets per section, blockers first, and a round tracker.
+**Surface:** `docs/MANUAL_ROUND.md`. **Ruling:** rewrite as v2 after the wave lands, so its expectations describe the fixed build.
+**Status:** `IN WORK`.
+
+---
+
 ## Closed entries
 
 *(none yet — an entry closes when Naji has seen it fixed on screen)*

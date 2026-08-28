@@ -210,8 +210,29 @@ public final class BotChatModel {
     }
 
     /**
-     * The bot cannot be used: not enrolled, no bot, switched off, or the C-4
-     * same-course lockout.
+     * The C-4 same-course lockout: refused now, but not forever (B-47).
+     *
+     * <p>{@link #failed}'s recovery — question handed back, composer editable —
+     * because the lockout ends when her attempt does, and that can happen while
+     * this screen is open (her submit, the bell, a teacher closing the execution
+     * early). It carried {@link #blocked}'s permanence until the lead's manual
+     * round met a bot that stayed locked after the exam was closed. Plus
+     * {@link #blocked}'s consent drop: starting THIS course's exam ends the
+     * situation any cross-course acknowledgement belonged to (B-20).
+     *
+     * @param message the server's lockout sentence
+     * @return the question, so the view can put it back in the box
+     */
+    public String lockedOut(String message) {
+        String question = failed(message);
+        acknowledgedNotice = null;
+        return question;
+    }
+
+    /**
+     * The bot cannot be used, and staying on this screen will not change it:
+     * not enrolled, no bot, switched off. The transient case is
+     * {@link #lockedOut}.
      *
      * @param message the server's own sentence, which already says what to do next
      */
@@ -220,9 +241,9 @@ public final class BotChatModel {
         state = ChatState.UNAVAILABLE;
         banner = message == null ? BotCopy.UNAVAILABLE_TITLE : message;
         heldQuestion = "";
-        // The bot has become unusable — not enrolled, switched off, or the same-course
-        // lockout, which means she has started sitting THIS course's exam. Whatever she
-        // agreed to belonged to a situation that is over (B-20).
+        // The bot has become unusable for good on this screen. Whatever she agreed to
+        // belonged to a situation that is over (B-20). The same-course lockout used to
+        // land here too; it is transient and lives in lockedOut() since B-47.
         acknowledgedNotice = null;
         changed();
     }

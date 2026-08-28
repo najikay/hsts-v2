@@ -1,0 +1,19 @@
+- The IDs for the students aren't in the demo file (need to be added for easier testing) - or redo the demo
+- the manual connect window to the server from the client side (UI) doesn't have a go back button, which it should
+- when the server is down, the login window (UI) still doesn't register it and still says it's connected with the green button
+- the my grades page looks nice but the semi-filled circle thing is a little off (not high priority)
+- grades -> open exam, no go back button
+- grades -> open exam -> print mode, no go back button
+- missing teacher's name
+- from dashboard -> take exams, it opens the take exams page and asks for the exam code once again, it should skip it (it's a requirement but we want to change it, both in the docs and the code), also in it's current state, we have to modify the code for it to light up the continue button and allow us to move forward - verdict: fix the continue thing and modify it to be a confirmation instead
+- when opening up the handing out exam modal, the same weird shadow thing appears, get rid of it or fix it like you did previously
+- dashboard modals has the same weird shadow thing
+- almost all modals if not all have weird shadows, fix it or get rid of it
+- when the teacher closes the exam early, the bot stays locked out, which smells like a bug
+- grading for teachers: students look like they're loading but never show
+- question bank: the table doesn't look good, the cells (columns) ares too packed leaving a lot of empty space unused, we need better spacing for the table
+- all print layouts have no go back button
+- IN GENERAL, KEEP A GO BACK BUTTOM IN ALL SCREENS THAT AREN'T ON THE SIDE-BAR
+- BIG BUG: the number of study bots isn't limited for teachers, the teacher can create and manage bots, not just one bot
+- AGAIN ADD GO BACK BUTTONS TO EVERY SCREEN
+- NEED A BETTER MORE ORGANIZED AND TIME AWARE MANUAL TESTING DOCUMENT

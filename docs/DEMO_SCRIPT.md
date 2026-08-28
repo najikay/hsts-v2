@@ -264,7 +264,8 @@ count and the general text. The paper stays on the server, because `ExamHeader` 
 question list could travel in."
 **Note — three doors, not one shut one:** Take Exam on her rail, the dashboard code box and the
 notification for an opening sitting are all the same screen. Every entry starts at the code screen
-and the dashboard simply pre-fills the code it already validated, which is why F6.4 is a property
+and the dashboard hands its validated code over as a **confirmation step** (read-only code, one
+"Confirm and continue" button; ruling 2026-08-28, manual round 1), which is why F6.4 is a property
 of one screen rather than a guard on three navigations. Use the dashboard card on the day because
 it is the shortest sentence; say the other two exist if anyone asks how she would find it cold.
 

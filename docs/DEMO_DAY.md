@@ -138,7 +138,9 @@ therefore the layout with the fewest ways to go wrong, and it is the layout to h
 - [ ] The log pane shows the Flyway and pool lines, ending with the listener started
 - [ ] Double-click `G12-1_Client.jar`. The client window opens and goes to **Login**, showing
       "Connected to &lt;server name&gt; · change server"
-- [ ] Sign in as `maya.levi` / `demo123` (the seed must be loaded, see §3)
+- [ ] Sign in as `maya.levi` / `demo123` (the seed must be loaded, see §3). Her national ID for
+      the exam's identity step is `374301851`; `noam.peretz`'s (the wrong-ID refusal) is
+      `385612098`. Both are also in DEMO_ACCOUNTS.md and inline in DEMO_SCRIPT act 5.2 (M-2).
 - [ ] Close both windows. Neither leaves a java.exe running (check Task Manager)
 
 If double-clicking does nothing at all, the association is wrong, not the JAR. Confirm with
@@ -437,7 +439,8 @@ what is being handed in, and zipping before the rehearsal means the zip holds an
 - [ ] MySQL service set to start automatically on A, and A restarted once to prove it
 - [ ] Backup laptop with Java 21, MySQL, the JARs and a seeded database, prepared the same way
 - [ ] Phone hotspot charged and tested (§4.6)
-- [ ] Demo accounts sheet to hand: `docs/DEMO_ACCOUNTS.md`, password `demo123`
+- [ ] Demo accounts sheet to hand: `docs/DEMO_ACCOUNTS.md`, password `demo123`, national IDs
+      for the two students on stage: `maya.levi` `374301851`, `noam.peretz` `385612098`
 - [ ] Reseeded this morning, so the live exam window is live now
 
 ---
