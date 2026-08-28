@@ -156,11 +156,14 @@ in §1.4 belongs there and not here.
 
 ### 1.6 What is **not** scoped, named rather than hidden
 
-**`acquire` is not scoped.** Its refusal names the holder, so it is the same disclosure one verb
-over. Narrowing it changes what the E6.14 editor does the moment it opens, which is a decision of
-its own and not one to make silently inside a snapshot fix. It is recorded in `EditLockService`'s
-rule 6 and pinned by `Scoping.acquireIsNotScoped`, so whoever closes it has to come here and say
-so. **This is the one item in this report that is still open.**
+**`acquire` is not scoped.** *(CLOSED the same day this report was written, 2026-08-25, and the
+record did not follow until Member A's #56 review caught the drift on 2026-08-27 - his B-13 class,
+in the lead's own report.)* The lead closed it hours later with the same ruling that scoped the
+snapshot: an out-of-scope acquire answers the free shape, takes nothing and names nobody; the pin
+test flipped from `acquireIsNotScoped` to `anOutOfScopeAcquireIsRefusedAsFree`, and
+`EditLockService`'s rule 6 was rewritten to the closed rule. Whoever reads this report as current
+should read the class javadoc instead. #56 then installed the second scope (`exam-version`,
+author-only), so both lockable types are covered.
 
 ### 1.7 The wiring, and the duplication it avoided
 
@@ -358,8 +361,8 @@ reverted, see §1.7.
 
 ## 6. Open, stated rather than implied
 
-1. **`LOCK_ACQUIRE` is still an existence oracle** for the same rows, one verb over (§1.6). Fixing
-   it is a decision about editor behaviour, not a filter.
+1. ~~**`LOCK_ACQUIRE` is still an existence oracle**~~ Closed 2026-08-25 (see the corrected §1.6);
+   the `exam-version` scope followed with #56 on 2026-08-27.
 2. **P-10's log entry does not exist yet.** It arrives with #49; the appendix line is drafted in
    §0.2.
 3. **PR20 §5.4's truncate-vs-refuse tension** (Member A's client-side cap truncates where the

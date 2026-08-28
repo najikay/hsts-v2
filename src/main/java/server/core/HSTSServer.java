@@ -47,6 +47,7 @@ import server.features.exam.JpaExamStore;
 import server.features.exam.MonitorService;
 import server.features.exam.TimerService;
 import server.features.exambuild.ExamHandlers;
+import server.features.exambuild.ExamLockScope;
 import server.features.exambuild.ExamService;
 import server.features.grading.GradeApprovalService;
 import server.features.grading.GradeReviewService;
@@ -342,6 +343,11 @@ public class HSTSServer extends AbstractServer {
     private static void installQuestionLockScope(EditLockService locks,
                                                  SessionFactory sessionFactory) {
         locks.scopes().install(EntityRef.QUESTION, questionLockScope(sessionFactory));
+        // The exam-version scope beside it (#56 §4): author-only, so LOCK_ACQUIRE on an
+        // exam version stops answering any probing teacher with the author's name - the
+        // last door of P-5's class in the lock group. Built in ExamLockScope so its H2
+        // test runs this exact lambda; installed here, 2026-08-27.
+        locks.scopes().install(EntityRef.EXAM_VERSION, ExamLockScope.of(sessionFactory));
     }
 
     /**

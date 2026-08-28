@@ -186,6 +186,52 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     }
 
     @Test
+    @DisplayName("the three second versions carry exactly the changes section 7.5 documents")
+    void secondVersionsMatch() {
+        // Added 2026-08-27 closing PR26 section 7 item 1 (restated in #56): section 7.5's
+        // v1-to-v2 changes were compared by nothing - questionsMatch filters to latest
+        // versions, and the em dash sweep asks about characters, not content. These three
+        // rows are C-2's demo (a released exam pinned to v1 while the bank shows v2), so
+        // drifted content here is what an examiner would be shown. The expected strings
+        // are section 7.5's own backticked values, held here verbatim; the document side
+        // stays eye-checked because the table's change column is prose (the same reach
+        // limit PR26 section 6.4 recorded for its note).
+        inTx(session -> {
+            Object[] v2of11005 = (Object[]) session.createQuery("""
+                    select qv.text, qv.a4 from QuestionVersion qv, Question q
+                    where q.id = qv.questionId and q.displayId = '11005' and qv.versionNo = 2
+                    """, Object[].class).getSingleResult();
+            assertThat((String) v2of11005[0])
+                    .as("11005 v2 stem is the section 7.5 rewording")
+                    .isEqualTo("Find the roots of the equation x\u00b2 - 5x + 6 = 0");
+
+            List<Object[]> both21003 = session.createQuery("""
+                    select qv.versionNo, qv.a4 from QuestionVersion qv, Question q
+                    where q.id = qv.questionId and q.displayId = '21003' order by qv.versionNo
+                    """, Object[].class).getResultList();
+            assertThat(both21003).hasSize(2);
+            // Section 7.5's change row abbreviates to the error class names; the full
+            // option texts are the bank table's (section 7, row 21003) with the same
+            // "A runtime" prefix on both sides of the correction.
+            assertThat((String) both21003.get(0)[1])
+                    .as("21003 v1 answer 4, the one v2 corrects")
+                    .isEqualTo("A runtime AmbiguousMethodError");
+            assertThat((String) both21003.get(1)[1])
+                    .as("21003 v2 answer 4, the correction")
+                    .isEqualTo("A runtime IncompatibleClassChangeError");
+
+            String v2of22004 = session.createQuery("""
+                    select qv.text from QuestionVersion qv, Question q
+                    where q.id = qv.questionId and q.displayId = '22004' and qv.versionNo = 2
+                    """, String.class).getSingleResult();
+            assertThat(v2of22004)
+                    .as("22004 v2 appends the NULLs clarification")
+                    .endsWith("(assume no NULLs in the join key)");
+            return null;
+        });
+    }
+
+    @Test
     @DisplayName("every exam version carries the name the document gives its exam")
     void examNamesMatch() {
         // Added 2026-08-27 with B-13, after a plant went straight through. examsMatch compares
