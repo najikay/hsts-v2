@@ -167,7 +167,27 @@ public class CheckedFormService {
                 new GradeReviewService.ReviewContext(grade, attempt, execution));
 
         return new CheckedForm(header, execution.examName(), execution.courseCode(),
-                wireState(attempt.status()), attempt.actualMinutes(), answers);
+                teacherName(session, execution), wireState(attempt.status()),
+                attempt.actualMinutes(), answers);
+    }
+
+    /**
+     * The name of the teacher who released this sitting (A6, 2026-08-28).
+     *
+     * <p>{@code executingTeacherId} is {@code exam_executions.created_by}, and that is the
+     * teacher the student should see: one sitting has exactly one releasing teacher, whereas a
+     * grade can be overridden by somebody else without changing whose paper it was. The same
+     * lookup the student's own name goes through two lines above, because a second way to turn
+     * a user id into a display name is a second way for two screens to disagree.
+     *
+     * <p>Empty rather than a placeholder when the row has gone. The wire says "unresolvable"
+     * and the screen decides what to do about it, which here is to omit the line — a marked
+     * paper is not the place to explain a missing join.
+     */
+    private String teacherName(Session session, ExecutionContext execution) {
+        return users.findById(session, execution.executingTeacherId())
+                .map(User::getFullName)
+                .orElse("");
     }
 
     /**

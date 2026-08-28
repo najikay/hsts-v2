@@ -78,7 +78,7 @@ open dashboard; the notification is the durable record.
   enforced STRUCTURALLY: both student containers (`MyGrades` and `CheckedForm`) strip it in their
   compact constructors, so no handler can leak it by assembly.
 - `CheckedFormRequest(long gradeId)`
-- `CheckedForm(StudentGradeRow grade, String examName, String courseCode,
+- `CheckedForm(StudentGradeRow grade, String examName, String courseCode, String teacherName,
   AttemptState attemptStatus, Integer actualMinutes, List<AnswerReviewRow> answers)` — the
   E13.2 checked form; reaches a student only under the three conditions above. Reuses
   `AnswerReviewRow` deliberately: one row shape for both audiences, gated by verb, so there is
@@ -92,6 +92,7 @@ open dashboard; the notification is the durable record.
   list wire pays nothing for data most of its rows would never show. `StudentGradeRow` stays at
   v1.1. A "timed out" glyph on the *list* is priced separately as polish; the case as written is
   satisfied on the paper.
+  **A6 (2026-08-28):** `teacherName` added, third of the three header labels. See below.
 
 ## Error codes
 
@@ -240,6 +241,65 @@ the screen T-10.2 names.
 "43 min" — never a tint alone, per the B-5 / wave rule: a colour survives neither a printout, a
 screenshot, nor a colour-blind reader. The ordinary case says "Submitted" rather than staying
 blank, because a column whose only content is the exception reads as data that failed to load.
+
+### A6 — `CheckedForm` gains `teacherName` (E13.4 / T-9.2, added 2026-08-28, lead's manual round)
+
+**What was missing.** The student's marked paper named the exam, the course and the score, and
+never said **whose exam it was**. A student sitting papers from several teachers opens a
+checked form and cannot tell which of them wrote it, released it and stood behind the score,
+and "Your teacher's note" is signed by nobody. Flagged in the lead's manual round of 2026-08-28
+against the My Grades → open a graded exam screen.
+
+A shape fact, not a null, and the same shape A5 turned around one screen earlier: the DTO had
+six components and **none of them was a teacher**. Nothing on this wire carried one, so no
+amount of client work could have put a name on that screen.
+
+**The record, with the component third among the header labels:**
+
+```
+CheckedForm(StudentGradeRow grade, String examName, String courseCode, String teacherName,
+            AttemptState attemptStatus, Integer actualMinutes, List<AnswerReviewRow> answers)
+```
+
+- **Which teacher.** The **releasing** one: `exam_executions.created_by`, which by the seed
+  document's §9 rule is the author of the exam version being released (executions 1 and 4 →
+  `2 dana.cohen`). One sitting has exactly one, and it is the answer to the question the
+  student is actually asking. It is deliberately **not** `grades.approved_by`: on the seed the
+  two are the same person, but an override or an approval by a colleague would change the name
+  under the exam title without anything about the paper having changed.
+- **Never null, empty when unresolvable.** The compact constructor normalises null to `""`, so
+  a screen reading this has one absence to test rather than two, and the word "null" cannot
+  reach a marked paper. The client drops the line entirely on a blank rather than drawing a
+  label with nothing after it, which is the rule the teacher's note already follows. This is
+  the same treatment `TimerExtended.teacherName` gets in EXAM_WIRE_CONTRACT.md, one step
+  further: that one substitutes "Your teacher" because it is inside a sentence, and a line on
+  its own has the option of not being there.
+- **Placed third rather than appended last**, unlike A3 and A5. It belongs with `examName` and
+  `courseCode` — the three labels the screen prints one under the other, and the three the
+  2026-08-22 note describes as carried "because a student opening a result from a notification
+  has no queue row to inherit a header from". Both jars ship together, so nothing is bought by
+  putting a header label at the end of the record, and a call site that misses the change fails
+  to compile on the arity rather than silently passing a course code as a teacher's name.
+- `serialVersionUID` goes **2 → 3**, on the precedent this record set at its own amendment and
+  `StudentGradeRow` set at A5. Stated plainly for the same reason A3 states it: this is the one
+  place "additive" is not literally true of the bytes. A v1 *client jar* would refuse a form
+  from an amended server — **there is no compatibility shim and none is wanted**, because client
+  and server ship as one pair of jars from one build and always have. There is no deployment in
+  which one is upgraded without the other.
+
+**Server side:** `CheckedFormService` resolves it through the `UserRepository` it already holds,
+from `ExecutionContext.executingTeacherId`, by the same `findById(…).map(User::getFullName)`
+lookup that puts the student's own name in the header two lines above. One way to turn a user id
+into a display name, so two lines of one screen cannot disagree about how a person is named.
+Nothing new is read: the execution context was already loaded to run gate 3.
+
+**Client side:** one line under the exam name, `"Teacher: Dana Cohen"`, in the same muted style
+as the attempt line beneath it. The label word is carried because a bare name under a title
+reads as a second title.
+
+**Nothing about the checked form's gates changes.** The name is assembled after all three have
+passed, from the execution the gates themselves resolved, and it reaches nobody a marked paper
+does not already reach.
 
 ## What is deliberately absent
 

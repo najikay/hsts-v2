@@ -5,15 +5,14 @@ import client.ui.anim.Motion;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.Icons;
+import client.ui.components.ModalHost;
 import client.ui.components.logic.ValidationState;
 import common.dto.release.ReleasableVersion;
 import common.dto.release.ReleaseCodeIssue;
 import common.dto.release.ReleaseCreateRequest;
 import common.dto.release.ReleaseOptions;
 import common.dto.release.ReleaseWindow;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
@@ -98,7 +97,7 @@ public final class CreateReleaseDialog {
     /**
      * Shows the dialog modally and blocks until she answers.
      *
-     * @param owner   the window to centre on and block; may be {@code null}
+     * @param owner   the window to dim and block; may be {@code null}
      * @param options the approved versions she may release
      * @param now     the server's clock reading, so the defaults are not a wrong laptop's idea
      *                of the time
@@ -253,7 +252,7 @@ public final class CreateReleaseDialog {
      *
      * <p>Stage plumbing only: every rule is in {@link Form}.
      *
-     * @param owner   the window to centre on and block; may be {@code null}
+     * @param owner   the window to dim and block; may be {@code null}
      * @param options the approved versions she may release
      * @param now     the server's clock reading
      * @param zone    the viewer's time zone, which the pickers work in
@@ -276,15 +275,9 @@ public final class CreateReleaseDialog {
             stage.close();
         });
 
-        StackPane scrim = new StackPane(form.node());
-        scrim.getStyleClass().add("hsts-scrim");
-        scrim.setPadding(new Insets(40));
+        StackPane scrim = ModalHost.mount(stage, owner, form.node());
 
-        Scene scene = new Scene(scrim);
-        scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
-        inheritStyles(owner, scene);
-        stage.setScene(scene);
-
+        Animations.fadeIn(scrim, Motion.DIALOG_MS);
         Animations.scaleIn(form.node(), Motion.DIALOG_FROM_SCALE, Motion.DIALOG_MS);
         stage.showAndWait();
         return Optional.ofNullable(answer[0]);
@@ -396,22 +389,5 @@ public final class CreateReleaseDialog {
                 return null;
             }
         };
-    }
-
-    /**
-     * A dialog opens in its own {@link Stage} with its own {@link Scene}, so it does not
-     * inherit the owner's stylesheets or the {@code dark} root class. Copying both across is
-     * what keeps a modal from flashing up unstyled and light-themed over a dark app.
-     */
-    private static void inheritStyles(Window owner, Scene scene) {
-        if (owner == null || owner.getScene() == null) {
-            return;
-        }
-        Scene ownerScene = owner.getScene();
-        scene.getStylesheets().setAll(ownerScene.getStylesheets());
-        if (ownerScene.getRoot() != null
-                && ownerScene.getRoot().getStyleClass().contains("dark")) {
-            scene.getRoot().getStyleClass().add("dark");
-        }
     }
 }

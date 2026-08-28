@@ -211,7 +211,8 @@ class ResultsCopyTest {
                 ResultsCopy.NEVER_RELEASED_TITLE, ResultsCopy.NEVER_RELEASED_HINT,
                 ResultsCopy.NOBODY_SAT_TITLE, ResultsCopy.NOBODY_SAT_HINT,
                 ResultsCopy.NOTHING_MARKED_TITLE, ResultsCopy.NOTHING_MARKED_HINT,
-                ResultsCopy.GRADING_UNFINISHED_TITLE, ResultsCopy.GRADING_UNFINISHED_HINT);
+                ResultsCopy.GRADING_UNFINISHED_TITLE, ResultsCopy.GRADING_UNFINISHED_HINT,
+                ResultsCopy.PRINT_EXIT, ResultsCopy.PRINT_EXIT_TARGET);
 
         assertThat(everySentence).allSatisfy(text ->
                 assertThat(text).doesNotContain("—").doesNotContain("–").isNotBlank());

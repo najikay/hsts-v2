@@ -4,7 +4,6 @@ import client.ui.anim.Animations;
 import client.ui.anim.Motion;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
@@ -135,7 +134,7 @@ public final class WarnConfirm {
     /**
      * Shows the dialog modally and blocks until the user answers.
      *
-     * @param owner the window to centre on and block; may be {@code null}
+     * @param owner the window to dim and block; may be {@code null}
      * @return {@code true} when the user confirmed
      */
     public static boolean show(Window owner, Spec spec) {
@@ -143,6 +142,12 @@ public final class WarnConfirm {
     }
 
     /**
+     * <p>2026-08-28, manual round 1: the dialog is mounted through
+     * {@link ModalHost}, so the scrim dims the whole owner window instead of
+     * painting a dark rectangle around the dialog. The stage is still
+     * transparent and the dialog still carries its own soft
+     * {@code .hsts-dialog} shadow; what changed is how big the stage is.
+     *
      * @return {@code Optional.of(true)} on confirm, {@code Optional.of(false)} on
      *         cancel; the {@code Optional} shape mirrors JavaFX's own dialogs for
      *         call sites that want to distinguish "dismissed" handling later
@@ -169,14 +174,7 @@ public final class WarnConfirm {
         cancel.setOnAction(e -> stage.close());
 
         VBox dialog = buildDialog(spec, confirm, cancel);
-        StackPane scrim = new StackPane(dialog);
-        scrim.getStyleClass().add("hsts-scrim");
-        scrim.setPadding(new javafx.geometry.Insets(40));
-
-        Scene scene = new Scene(scrim);
-        scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
-        inheritStyles(owner, scene);
-        stage.setScene(scene);
+        StackPane scrim = ModalHost.mount(stage, owner, dialog);
 
         // UI wave 2: 160ms, scale 0.98 to 1, with the scrim fading in parallel.
         // A dialog is already the thing the user asked for, so it settles into
@@ -213,23 +211,5 @@ public final class WarnConfirm {
         }
         dialog.getChildren().add(Buttons.row(cancel, confirm));
         return dialog;
-    }
-
-    /**
-     * A dialog opens in its own {@link Stage} with its own {@link Scene}, so it
-     * does not inherit the owner's stylesheets or the {@code dark} root class.
-     * Copying both across is what keeps a modal from flashing up unstyled and
-     * light-themed over a dark app.
-     */
-    private static void inheritStyles(Window owner, Scene scene) {
-        if (owner == null || owner.getScene() == null) {
-            return;
-        }
-        Scene ownerScene = owner.getScene();
-        scene.getStylesheets().setAll(ownerScene.getStylesheets());
-        if (ownerScene.getRoot() != null
-                && ownerScene.getRoot().getStyleClass().contains("dark")) {
-            scene.getRoot().getStyleClass().add("dark");
-        }
     }
 }

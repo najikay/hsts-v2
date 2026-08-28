@@ -28,6 +28,16 @@ import java.util.Objects;
  * are</i>; this says <i>how to leave</i>, and a reader should not have to derive
  * the second from the first.
  *
+ * <h2>Who builds it now</h2>
+ *
+ * <p>The six screens above each built their own, which meant a seventh drill-in
+ * was one forgotten line away from having no exit at all, and the manual test
+ * round found exactly that. {@code AppShell} builds it instead, once, for every
+ * route its rail cannot reach, so this class is now the shell's component rather
+ * than each screen's. What is left for a screen to build is the case the shell
+ * cannot see: a full-pane view that is a mode of one screen and not a route
+ * ({@link #action}), and leaving a layout rather than a place ({@link #exit}).
+ *
  * <h2>Why the label is just "Back"</h2>
  *
  * <p>Because that is the only label that cannot lie. The click prefers
@@ -43,6 +53,17 @@ public final class BackLink {
 
     /** The style class every back affordance carries; see the wave-1 CSS section. */
     public static final String STYLE_CLASS = "hsts-back-link";
+
+    /**
+     * The style class an {@link #exit} control carries <b>instead of</b>
+     * {@link #STYLE_CLASS}.
+     *
+     * <p>It is the same button and it is styled to look the same. It is a class of
+     * its own because both print layouts hide {@code .hsts-back-link} on purpose,
+     * and the one control that turns print mode off has to outlive every rule that
+     * hides navigation, or the reader lands on a page with no exit.
+     */
+    public static final String EXIT_STYLE_CLASS = "hsts-exit-link";
 
     /** The label. One word, sentence case, the same on every screen. */
     public static final String LABEL = "Back";
@@ -86,14 +107,39 @@ public final class BackLink {
      * @param back       what going back does
      */
     public static Button action(String targetName, Runnable back) {
-        Objects.requireNonNull(targetName, "targetName");
-        Objects.requireNonNull(back, "back");
+        return build(LABEL, STYLE_CLASS, targetName, back);
+    }
 
-        Button button = Buttons.withIcon(LABEL, Icons.CHEVRON_LEFT, Buttons.GHOST, Buttons.SMALL);
-        button.getStyleClass().add(STYLE_CLASS);
+    /**
+     * The same control reading its own word, for leaving a <b>layout</b> rather
+     * than a place.
+     *
+     * <p>Print mode is the case that named this. It hides the application chrome,
+     * which is the whole point of it, and the chrome included the toggle that had
+     * switched it on: the reader was left on a page whose only exit had been
+     * painted out from under them. So the exit is a control of its own, wearing
+     * {@link #EXIT_STYLE_CLASS} so that no rule about hiding navigation can reach
+     * it, and reading what pressing it does rather than "Back", because nobody
+     * navigated anywhere and going back is not what happens.
+     *
+     * @param label      what the control reads ("Exit print view")
+     * @param targetName what the reader returns to, for the tooltip ("the normal view")
+     * @param leave      what leaving does
+     */
+    public static Button exit(String label, String targetName, Runnable leave) {
+        return build(label, EXIT_STYLE_CLASS, targetName, leave);
+    }
+
+    private static Button build(String label, String styleClass, String targetName, Runnable run) {
+        Objects.requireNonNull(label, "label");
+        Objects.requireNonNull(targetName, "targetName");
+        Objects.requireNonNull(run, "back");
+
+        Button button = Buttons.withIcon(label, Icons.CHEVRON_LEFT, Buttons.GHOST, Buttons.SMALL);
+        button.getStyleClass().add(styleClass);
         button.setTooltip(new Tooltip("Back to " + targetName.toLowerCase(Locale.ROOT)));
-        button.setAccessibleText(LABEL + ", to " + targetName);
-        button.setOnAction(event -> back.run());
+        button.setAccessibleText(label + ", to " + targetName);
+        button.setOnAction(event -> run.run());
         return button;
     }
 }

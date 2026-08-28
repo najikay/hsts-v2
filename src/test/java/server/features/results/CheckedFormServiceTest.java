@@ -56,6 +56,8 @@ import static org.mockito.Mockito.when;
 class CheckedFormServiceTest {
 
     private static final long MAYA = 11;
+    /** The teacher who wrote, released and approved the seeded Algebra sitting (A6). */
+    private static final long DANA = 2;
     private static final long OTHER_STUDENT = 13;
     private static final long GRADE_ID = 900;
     private static final long ATTEMPT_ID = 500;
@@ -113,9 +115,11 @@ class CheckedFormServiceTest {
     }
 
     private static ExecutionContext execution(ExecutionStatus status) {
+        // executingTeacherId and authorId are both DANA, which is the seeded execution 4821:
+        // exam_executions.created_by is the author of the released version (SEED_CONTENT §9).
         return new ExecutionContext(EXECUTION_ID, 77, 12, "11", "אלגברה", "מבחן אמצע — אלגברה",
                 60, null, "4821", status, Instant.parse("2026-06-01T08:00:00Z"),
-                Instant.parse("2026-06-01T10:00:00Z"), 0, 3, 2);
+                Instant.parse("2026-06-01T10:00:00Z"), 0, DANA, DANA);
     }
 
     private static AnswerReviewRow answerRow() {
@@ -139,6 +143,9 @@ class CheckedFormServiceTest {
         User maya = new User("maya.levi", "hash", "מאיה לוי", UserRole.STUDENT, "312345678");
         setId(maya, MAYA);
         lenient().when(users.findById(session, MAYA)).thenReturn(Optional.of(maya));
+        User dana = new User("dana.cohen", "hash", "Dana Cohen", UserRole.TEACHER, "214703951");
+        setId(dana, DANA);
+        lenient().when(users.findById(session, DANA)).thenReturn(Optional.of(dana));
     }
 
     // ===================== It opens =======================================
@@ -251,6 +258,51 @@ class CheckedFormServiceTest {
 
             // "Not recorded" and "took no time at all" are different facts.
             assertThat(form.actualMinutes()).isNull();
+        }
+    }
+
+    // ===================== A6: whose exam it was ==========================
+
+    @Nested
+    @DisplayName("The releasing teacher's name (A6, 2026-08-28)")
+    class TeacherName {
+
+        @Test
+        @DisplayName("the seeded Algebra paper carries Dana Cohen, who released the sitting")
+        void carriesTheReleasingTeacher() {
+            givenEverythingPasses();
+
+            CheckedForm form = service.checkedForm(session, MAYA, GRADE_ID).orElseThrow();
+
+            // SEED_CONTENT §9: exam_executions.created_by for executions 1 and 4 is
+            // 2 dana.cohen, the author of the released version.
+            assertThat(form.teacherName()).isEqualTo("Dana Cohen");
+        }
+
+        @Test
+        @DisplayName("the name comes from the execution's releasing teacher, not the student")
+        void resolvesTheExecutionsTeacher() {
+            givenEverythingPasses();
+
+            CheckedForm form = service.checkedForm(session, MAYA, GRADE_ID).orElseThrow();
+
+            // Two different people are looked up on this path and they must not be confused:
+            // the header names the student, the new line names her teacher.
+            verify(users).findById(session, DANA);
+            assertThat(form.grade().studentName()).isEqualTo("מאיה לוי");
+        }
+
+        @Test
+        @DisplayName("an unresolvable teacher is the empty string, never null and never a name")
+        void unresolvableTeacherIsEmpty() {
+            givenEverythingPasses();
+            when(users.findById(session, DANA)).thenReturn(Optional.empty());
+
+            CheckedForm form = service.checkedForm(session, MAYA, GRADE_ID).orElseThrow();
+
+            // A missing join must not cost a student her marked paper, and it must not print
+            // a placeholder onto it either. The client drops the line.
+            assertThat(form.teacherName()).isEmpty();
         }
     }
 

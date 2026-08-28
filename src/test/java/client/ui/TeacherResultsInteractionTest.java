@@ -10,6 +10,7 @@ import client.features.login.ShellBoot;
 import client.features.results.ResultsCopy;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
+import client.ui.components.BackLink;
 import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
@@ -26,6 +27,7 @@ import common.protocol.Message;
 import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.stage.Stage;
@@ -191,6 +193,21 @@ class TeacherResultsInteractionTest extends ApplicationTest {
         assertThat(manager.scene().getRoot().lookup(".results-exam-rail"))
                 .as("navigation is exactly what a printed page does not need")
                 .isNull();
+
+        // The chrome print mode drops used to include the toggle that turned it on, so
+        // there was no way out of the print view at all. The exit is the one control the
+        // layout leaves alone, which is why it is not styled as a back link.
+        Node exit = manager.scene().getRoot().lookup("." + BackLink.EXIT_STYLE_CLASS);
+        assertThat(exit).as("print mode has to leave one control that leaves print mode").isNotNull();
+        assertThat(((Button) exit).getText()).isEqualTo(ResultsCopy.PRINT_EXIT);
+
+        clickOn(exit);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.scene().getRoot().lookup(".teacher-results").getStyleClass())
+                .as("and pressing it really leaves")
+                .doesNotContain(ResultsCopy.PRINT_STYLE_CLASS);
+        assertThat(manager.scene().getRoot().lookup(".results-exam-rail")).isNotNull();
     }
 
     @Test

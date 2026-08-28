@@ -45,8 +45,27 @@ public final class ExamCopy {
     /** Label of the code field. */
     public static final String CODE_LABEL = "Exam code";
 
+    /** The helper line under the code field; hidden when the step is confirming a code. */
+    public static final String CODE_HINT = "Your teacher reads it out at the start of the exam.";
+
     /** Local rule, checked before anything is sent. */
     public static final String CODE_INVALID = "Codes are 4 letters or digits.";
+
+    /**
+     * Heading of the code step when the dashboard already handed one over ⚑.
+     *
+     * <p>2026-08-28, manual round 1, lead's ruling: a student who pressed her own exam card
+     * was then asked to type the code printed on it. The step is not removed, because the
+     * join still has to happen and its refusals still have to land somewhere, but it becomes
+     * what it actually is: a confirmation of the code she chose, not a question.
+     */
+    public static final String CONFIRM_TITLE = "Confirm your exam";
+
+    /** The confirming button, which sends the same join as Continue does. */
+    public static final String CONFIRM_BUTTON = "Confirm and continue";
+
+    /** The way out of the confirmation, for the card that was pressed by mistake. */
+    public static final String DIFFERENT_CODE = "Use a different code";
 
     /** Heading of the identity screen. */
     public static final String ID_TITLE = "Confirm it is you";
@@ -172,6 +191,21 @@ public final class ExamCopy {
      */
     public static String progress(int answered, int total) {
         return "Answered " + answered + " of " + total;
+    }
+
+    /**
+     * The confirmation sentence under {@link #CONFIRM_TITLE} ⚑.
+     *
+     * <p>Says the code back to her, because the whole point of the confirming variant is that
+     * she can see she is about to enter the exam she meant to. The code is the only thing she
+     * could have got wrong at this step, so it is the only thing the sentence carries.
+     *
+     * @param code the code the dashboard handed over
+     * @return "You are about to enter the exam with code 2075."
+     */
+    public static String confirmSubtitle(String code) {
+        return "You are about to enter the exam with code " + (code == null ? "" : code.trim())
+                + ".";
     }
 
     /**

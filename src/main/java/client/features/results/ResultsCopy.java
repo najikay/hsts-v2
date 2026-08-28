@@ -96,6 +96,19 @@ public final class ResultsCopy {
     /** The style class the print-friendly pass adds to the screen's root (E14.4). */
     public static final String PRINT_STYLE_CLASS = "results-print";
 
+    /**
+     * The way out of the print layout, on both screens that have one.
+     *
+     * <p>Print mode drops the chrome, and the chrome included the toggle that had turned
+     * it on, so the reader was left on a page with no exit. This control is the exit. It
+     * says what pressing it does rather than "Back", because nothing was navigated away
+     * from and there is nowhere to go back to.
+     */
+    public static final String PRINT_EXIT = "Exit print view";
+
+    /** What the print exit returns to, for its tooltip. */
+    public static final String PRINT_EXIT_TARGET = "the normal view";
+
     /** Date and time as a teacher reads it off a schedule: "20 Aug 09:00". */
     private static final DateTimeFormatter WINDOW_START =
             DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH);

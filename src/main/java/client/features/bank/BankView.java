@@ -169,6 +169,13 @@ public final class BankView extends AbstractScreen {
                 : session.editorOf(row.displayId5())
                         .map(holder -> BankCopy.editing(holder, session.isSelf(holder)))
                         .orElse(""));
+        // 2026-08-28, manual round 1. The bank was the screen the dead space was
+        // reported on, and it is the one table that never passed widths: eight
+        // columns at the default meant an even split, which gives a question stem
+        // the same room as "v3". Now that the table shares its width out in the
+        // ratio of these numbers, the stem gets the room and the id and the
+        // version get almost none.
+        list.columnWidths(80, 340, 150, 120, 160, 80, 150, 160);
         list.getStyleClass().add("bank-list");
         list.emptyState(new EmptyState(Icons.BANK, BankCopy.NO_QUESTIONS.title(),
                 BankCopy.NO_QUESTIONS.hint()));

@@ -140,6 +140,11 @@ abstract class TeacherCommentFlowContract extends RepositoryTestBase {
         assertThat(form.grade().effectiveScore()).isEqualTo(75);
         assertThat(form.grade().autoScore()).isEqualTo(60);
         assertThat(form.answers()).hasSize(2);
+        // A6, through the database rather than a stub: the name is joined from the execution's
+        // releasing teacher, who is the Dana who wrote the exam, released it and marked it.
+        assertThat(form.teacherName())
+                .as("A6: the paper says whose exam it was")
+                .isEqualTo("דנה כהן");
     }
 
     @Test

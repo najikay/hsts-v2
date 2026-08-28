@@ -4,6 +4,7 @@ import client.core.ConnectPrefs;
 import client.core.NavParams;
 import client.core.Routes;
 import client.core.ServerEndpoint;
+import client.events.ConnectionLostEvent;
 import client.features.connect.ConnectFlow;
 import client.features.connect.ConnectView;
 import client.core.ScreenManager;
@@ -34,6 +35,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.Optional;
 
@@ -55,6 +57,12 @@ import java.util.Optional;
  */
 public final class LoginView extends AbstractScreen {
 
+    /** The status line when there is no server to name. */
+    private static final String NOT_CONNECTED = "Not connected";
+
+    /** The one thing to do about that; it goes to the connect screen. */
+    private static final String RECONNECT = "Reconnect";
+
     private static final double BRAND_WIDTH = 620;
     private static final double CARD_WIDTH = 400;
 
@@ -70,6 +78,18 @@ public final class LoginView extends AbstractScreen {
     private Label errorText;
     private VBox card;
     private HBox connectionRow;
+
+    /**
+     * Whether the server was reachable the last time this screen looked ⚑.
+     *
+     * <p>2026-08-28, manual round 1, lead's ruling. The status row was computed once, in
+     * {@code build()}, and a screen is built once: kill the server in front of a signed-out
+     * client and the chip went on saying Connected while every sign-in attempt timed out.
+     * The row is now recomputed on every visit and on {@link ConnectionLostEvent}, and this
+     * field is what the button reads, because a form that cannot reach anything must not
+     * look ready.
+     */
+    private boolean connectionUp = true;
 
     @Override
     protected Parent build() {
@@ -89,6 +109,9 @@ public final class LoginView extends AbstractScreen {
         session.reset();
         usernameField.textField().clear();
         passwordField.textField().clear();
+        // Re-asked rather than remembered: a visit that follows a reconnect must not inherit
+        // the last visit's verdict, and a visit that follows a drop must not inherit "up".
+        connectionUp = true;
         renderConnection();
         Animations.slideInY(card, true, 12, Motion.SLOW_MS);
         usernameField.textField().requestFocus();
@@ -97,6 +120,36 @@ public final class LoginView extends AbstractScreen {
     @Override
     public void onHide() {
         Animations.stop(card);
+    }
+
+    /**
+     * Yes, and this is the pre-shell screen that says so.
+     *
+     * <p>{@code ScreenLifecycle} registers a screen on the bus exactly while it is visible,
+     * and it does that for every route rather than only for the ones inside the shell: the
+     * navigation that shows Login runs the same {@code show()}. So one override and one
+     * {@code @Subscribe} method are the whole subscription, and the unregister that pairs
+     * with it is the framework's rather than this class's.
+     */
+    @Override
+    public boolean listensToEvents() {
+        return true;
+    }
+
+    /**
+     * The socket dropped while she was looking at the form (E4.6 — lead's ruling ⚑).
+     *
+     * <p>Delivered on the FX thread by the bus, so the row is repainted here directly. What
+     * she gets is the truth and a way out of it: the chip flips, the line stops naming a
+     * server that is not there, the button that would only time out is disabled, and the
+     * link goes to the connect screen.
+     *
+     * @param event the lost connection, named by the endpoint it was talking to
+     */
+    @Subscribe
+    public void onConnectionLost(ConnectionLostEvent event) {
+        connectionUp = false;
+        renderConnection();
     }
 
     // ------------------------------------------------------------ brand panel
@@ -273,7 +326,8 @@ public final class LoginView extends AbstractScreen {
     }
 
     private void renderButton() {
-        signInButton.setDisable(!session.canSubmit(usernameField.text(), passwordField.text()));
+        signInButton.setDisable(!connectionUp
+                || !session.canSubmit(usernameField.text(), passwordField.text()));
     }
 
     private void renderCapsLock() {
@@ -295,26 +349,38 @@ public final class LoginView extends AbstractScreen {
      */
     private void renderConnection() {
         IClientConnection client = client();
-        boolean connected = client != null && client.isConnectionOpen();
+        boolean connected = connectionUp && client != null && client.isConnectionOpen();
+        connectionUp = connected;
         ServerEndpoint endpoint = connected
                 ? new ServerEndpoint(client.getHost(), client.getPort()) : null;
 
         Label label = new Label(connected
                 ? ConnectFlow.statusLine(ConnectPrefs.userHome().pinnedName().orElse(null), endpoint)
-                : "Not connected");
+                : NOT_CONNECTED);
         label.getStyleClass().addAll("small", "muted");
 
-        Hyperlink change = new Hyperlink(ConnectFlow.changeServerLabel());
-        change.getStyleClass().add("small");
-        change.setOnAction(e -> navigator().navigate(Routes.CONNECT.id(),
-                NavParams.of(ConnectView.PARAM_MANUAL, true)));
+        // Two different offers, because they answer two different questions. With a server
+        // there, the only useful thing is to point somewhere else; with no server there,
+        // it is to get back to one, and the connect screen is where both of those happen.
+        Hyperlink action = new Hyperlink(connected
+                ? ConnectFlow.changeServerLabel() : RECONNECT);
+        action.getStyleClass().add("small");
+        action.setOnAction(e -> {
+            if (connected) {
+                navigator().navigate(Routes.CONNECT.id(),
+                        NavParams.of(ConnectView.PARAM_MANUAL, true));
+            } else {
+                navigator().navigate(Routes.CONNECT.id());
+            }
+        });
 
         Label separator = new Label("·");
         separator.getStyleClass().addAll("small", "faint");
 
         connectionRow.getChildren().setAll(
                 new StatusChip(ChipCatalog.forConnection(connected ? "CONNECTED" : "DISCONNECTED")),
-                label, separator, change);
+                label, separator, action);
+        renderButton();
     }
 
     /**

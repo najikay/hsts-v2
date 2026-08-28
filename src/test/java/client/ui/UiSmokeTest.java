@@ -5,6 +5,7 @@ import client.core.ClientApp;
 import client.core.FxTestHarness;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.events.ConnectionLostEvent;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -15,6 +16,8 @@ import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
+import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
@@ -28,6 +31,8 @@ import org.testfx.util.WaitForAsyncUtils;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -151,6 +156,49 @@ class UiSmokeTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("\u26a1 the login screen stops saying Connected when the server dies (E4.6)")
+    void loginReactsToTheServerDying() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+
+        interact(() -> {
+            attachFakeConnection(manager);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Scene scene = manager.scene();
+        assertThat(labelTexts(scene))
+                .as("a reachable server is named, which is the state the bug froze")
+                .contains("Connected");
+        typeCredentials(scene, "dana.cohen", "demo123");
+        assertThat(buttonNamed(scene, ".button.primary").isDisabled()).isFalse();
+
+        // 2026-08-28, manual round 1: kill the server in front of a signed-out client. The
+        // status row was computed once in build(), so it went on saying Connected for as
+        // long as the screen lived.
+        interact(() -> manager.eventBus().post(
+                new ConnectionLostEvent("demo-server:5555", "socket closed")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Set<String> labels = labelTexts(manager.scene());
+        assertThat(labels)
+                .as("the chip flips and the line stops naming a server that is not there")
+                .contains("Disconnected", "Not connected");
+        assertThat(labels).doesNotContain("Connected");
+        assertThat(buttonNamed(manager.scene(), ".button.primary").isDisabled())
+                .as("a form that cannot reach anything must not look ready")
+                .isTrue();
+        assertThat(linkNamed(manager.scene(), "Reconnect"))
+                .as("and there is one thing to do about it")
+                .isNotNull();
+
+        clickOn(linkNamed(manager.scene(), "Reconnect"));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.CONNECT.id());
+    }
+
+    @Test
     @DisplayName("signing in installs the role's shell; signing out tears it down (E5.4/E5.7)")
     void shellBootsAndTearsDown() {
         launchApp(AppArgs.none());
@@ -251,5 +299,42 @@ class UiSmokeTest extends ApplicationTest {
 
     private Node lookupOne(Scene scene, String selector) {
         return scene.getRoot().lookup(selector);
+    }
+
+    /** Fills the login form without pressing anything. */
+    private void typeCredentials(Scene scene, String username, String password) {
+        PasswordField passwordField = (PasswordField) scene.getRoot().lookup(".password-field");
+        TextField usernameField = scene.getRoot().lookupAll(".text-input").stream()
+                .filter(node -> node instanceof TextField && !(node instanceof PasswordField))
+                .map(TextField.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no username field on the login screen"));
+        interact(() -> {
+            usernameField.setText(username);
+            passwordField.setText(password);
+        });
+    }
+
+    private Button buttonNamed(Scene scene, String selector) {
+        Node node = scene.getRoot().lookup(selector);
+        assertThat(node).as("a button matching " + selector).isInstanceOf(Button.class);
+        return (Button) node;
+    }
+
+    private Hyperlink linkNamed(Scene scene, String text) {
+        return scene.getRoot().lookupAll(".hyperlink").stream()
+                .filter(Hyperlink.class::isInstance)
+                .map(Hyperlink.class::cast)
+                .filter(link -> text.equals(link.getText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no link labelled " + text));
+    }
+
+    private static Set<String> labelTexts(Scene scene) {
+        return scene.getRoot().lookupAll(".label").stream()
+                .filter(Label.class::isInstance)
+                .map(node -> ((Label) node).getText())
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 }

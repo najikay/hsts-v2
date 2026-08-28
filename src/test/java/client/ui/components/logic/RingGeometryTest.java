@@ -59,6 +59,73 @@ class RingGeometryTest {
         assertThat(RingGeometry.centreLabel(Double.NaN)).isEqualTo("0");
     }
 
+    // ===================== round caps (2026-08-28, manual round 1) ==========
+
+    /** The ring the app actually draws: 84px across, 7px stroke. */
+    private static final double STROKE = 7;
+    private static final double RADIUS = (84 - STROKE) / 2;
+
+    @Test
+    @DisplayName("⚑ a partial fill is shortened by one round cap at each end")
+    void roundCapsComeOffBothEnds() {
+        // A round cap is a half-disc painted OUTSIDE the angle it terminates, so
+        // an untrimmed arc reads longer than the score it stands for. This is the
+        // "a little off" the manual round reported.
+        double cap = RingGeometry.capAngle(STROKE, RADIUS);
+        assertThat(cap).isCloseTo(Math.toDegrees(3.5 / RADIUS), within(0.001));
+
+        assertThat(RingGeometry.sweepFor(50, STROKE, RADIUS))
+                .isCloseTo(-180 + 2 * cap, within(0.001));
+        assertThat(RingGeometry.sweepFor(25, STROKE, RADIUS))
+                .isCloseTo(-90 + 2 * cap, within(0.001));
+    }
+
+    @Test
+    @DisplayName("the two boundaries are exact: nothing at 0, the whole circle at 100")
+    void theBoundariesAreNotTrimmed() {
+        // Neither end has a visible cap to overhang: an empty ring paints no arc,
+        // and a full one closes on itself.
+        assertThat(RingGeometry.sweepFor(0, STROKE, RADIUS)).isZero();
+        assertThat(RingGeometry.sweepFor(100, STROKE, RADIUS))
+                .isEqualTo(-RingGeometry.FULL_SWEEP);
+        assertThat(RingGeometry.sweepFor(140, STROKE, RADIUS))
+                .isEqualTo(-RingGeometry.FULL_SWEEP);
+        assertThat(RingGeometry.sweepFor(-30, STROKE, RADIUS)).isZero();
+        assertThat(RingGeometry.sweepFor(Double.NaN, STROKE, RADIUS)).isZero();
+    }
+
+    @Test
+    @DisplayName("⚑ a score too small to survive its own caps draws nothing, not a dot")
+    void aTinyScoreIsNotADot() {
+        // Two caps are about 10 degrees together, so anything under roughly three
+        // marks used to render as a dot at twelve o'clock with no arc behind it —
+        // a mark that looked like a rendering fault rather than a low average.
+        assertThat(RingGeometry.sweepFor(1, STROKE, RADIUS)).isZero();
+        assertThat(RingGeometry.sweepFor(0.5, STROKE, RADIUS)).isZero();
+        // And the fill never runs the wrong way to make up the difference.
+        assertThat(RingGeometry.sweepFor(2, STROKE, RADIUS)).isLessThanOrEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("the trimmed sweep is never longer than the untrimmed one")
+    void trimmingOnlyEverShortens() {
+        for (double score = 1; score < 100; score += 1) {
+            assertThat(Math.abs(RingGeometry.sweepFor(score, STROKE, RADIUS)))
+                    .as("score %s", score)
+                    .isLessThanOrEqualTo(Math.abs(RingGeometry.sweepFor(score)));
+        }
+    }
+
+    @Test
+    @DisplayName("a ring with no size yet subtracts nothing rather than an angle nobody can reason about")
+    void anUnsizedRingTrimsNothing() {
+        assertThat(RingGeometry.capAngle(0, RADIUS)).isZero();
+        assertThat(RingGeometry.capAngle(STROKE, 0)).isZero();
+        assertThat(RingGeometry.capAngle(Double.NaN, RADIUS)).isZero();
+        assertThat(RingGeometry.capAngle(STROKE, Double.POSITIVE_INFINITY)).isZero();
+        assertThat(RingGeometry.sweepFor(50, 0, 0)).isCloseTo(-180, within(0.001));
+    }
+
     @Test
     @DisplayName("the number inside is a whole mark, not six decimal places")
     void theLabelIsAWholeMark() {

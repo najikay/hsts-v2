@@ -1,7 +1,6 @@
 package client.features.results;
 
 import client.core.NavParams;
-import client.core.Routes;
 import client.ui.components.BackLink;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
@@ -48,6 +47,7 @@ public final class CheckedFormView extends AbstractScreen {
     private final VBox root = new VBox(16);
     private final Label heading = new Label(CheckedFormCopy.TITLE);
     private final Label header = new Label();
+    private final Label teacherLine = new Label();
     private final Label attemptLine = new Label();
     private final Label teacherNote = new Label();
     private final VBox noteBox = new VBox(4);
@@ -57,7 +57,7 @@ public final class CheckedFormView extends AbstractScreen {
             new EmptyState(Icons.RESULTS, "Not available", CheckedFormSession.NOT_AVAILABLE);
 
     private CheckedFormSession session;
-    private Node back;
+    private Node printExit;
 
     @Override
     protected Parent build() {
@@ -65,6 +65,7 @@ public final class CheckedFormView extends AbstractScreen {
 
         heading.getStyleClass().add("h1");
         header.getStyleClass().add("h3");
+        teacherLine.getStyleClass().addAll("small", "muted");
         attemptLine.getStyleClass().addAll("small", "muted");
 
         Label noteHeading = new Label(CheckedFormCopy.TEACHER_NOTE);
@@ -75,13 +76,18 @@ public final class CheckedFormView extends AbstractScreen {
 
         printToggle.selectedProperty().addListener((obs, was, now) -> applyPrintLayout(now));
 
-        HBox titleRow = new HBox(12, heading, spacer(), printToggle);
-        titleRow.setAlignment(Pos.CENTER_LEFT);
+        // The way off the screen is the shell's navbar Back now: this route is not on
+        // the rail, so the shell carries one for every screen in this position rather
+        // than each of them remembering to build its own.
+        // The way out of the print layout is a different thing and still belongs here,
+        // beside the toggle whose place it takes: print mode hides that toggle, which is
+        // how this screen came to have no exit from its own print view.
+        printExit = BackLink.exit(ResultsCopy.PRINT_EXIT, ResultsCopy.PRINT_EXIT_TARGET,
+                () -> printToggle.setSelected(false));
+        show(printExit, false);
 
-        // F-7: this screen is reached from a My Grades row and has no rail entry of
-        // its own, so before this there was no way off it at all. Above the title,
-        // which is the wave-1 convention for every drill-in.
-        back = BackLink.to(navigator(), Routes.MY_GRADES.id(), "My grades");
+        HBox titleRow = new HBox(12, heading, spacer(), printToggle, printExit);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
 
         ScrollPane scroller = new ScrollPane(questions);
         scroller.setFitToWidth(true);
@@ -90,8 +96,8 @@ public final class CheckedFormView extends AbstractScreen {
 
         root.getStyleClass().add(CheckedFormCopy.STYLE_CLASS);
         root.setPadding(new Insets(24));
-        root.getChildren().addAll(back, titleRow, header, attemptLine, noteBox, unavailable,
-                scroller);
+        root.getChildren().addAll(titleRow, header, teacherLine, attemptLine, noteBox,
+                unavailable, scroller);
         return root;
     }
 
@@ -117,6 +123,7 @@ public final class CheckedFormView extends AbstractScreen {
                     unavailable.set("Not available", message);
                     show(unavailable, true);
                     show(header, false);
+                    show(teacherLine, false);
                     show(attemptLine, false);
                     show(noteBox, false);
                     questions.getChildren().clear();
@@ -131,6 +138,12 @@ public final class CheckedFormView extends AbstractScreen {
         attemptLine.setText(CheckedFormCopy.attemptLine(form));
         show(header, true);
         show(attemptLine, true);
+
+        // A6: whose exam this was, under its name. Hidden rather than blank when the server
+        // could not resolve a name, on the same rule the teacher's note follows.
+        String teacher = CheckedFormCopy.teacherLine(form);
+        teacherLine.setText(teacher == null ? "" : teacher);
+        show(teacherLine, teacher != null);
 
         String note = CheckedFormCopy.teacherNote(form);
         teacherNote.setText(note == null ? "" : note);
@@ -210,10 +223,10 @@ public final class CheckedFormView extends AbstractScreen {
         if (printing) {
             root.getStyleClass().add(ResultsCopy.PRINT_STYLE_CLASS);
         }
-        // The back link is navigation, and navigation is what a printed page does not
-        // need — the same rule the rail follows on the two print-capable screens.
-        back.setVisible(!printing);
-        back.setManaged(!printing);
+        // The exit appears exactly when the layout that needs one is on. It is the only
+        // control print mode does not take away: `.results-print` hides the toggle that
+        // switched print on, which is what left this screen with no way back at all.
+        show(printExit, printing);
     }
 
     private static HBox spacer() {

@@ -4,6 +4,7 @@ import client.core.Navigator;
 import client.core.Route;
 import client.ui.anim.Animations;
 import client.ui.anim.Motion;
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.Icons;
 import client.ui.components.Logo;
@@ -34,6 +35,7 @@ import javafx.scene.layout.VBox;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The chrome every signed-in screen lives inside (Presentation tier, E4.10).
@@ -54,6 +56,10 @@ import java.util.Objects;
  * <p>The shell also owns the two overlays every screen may need — the
  * {@link ToastStack} (F11.3) and the {@link ReconnectBanner} (E4.6) — so screens
  * reach them through the shell instead of each mounting their own.
+ *
+ * <p>It owns the way out of a screen for the same reason. The navbar carries a
+ * Back control on every route the rail cannot reach; see
+ * {@link #renderBackControl()} for why that belongs here and not on the screens.
  */
 public final class AppShell extends BorderPane {
 
@@ -61,6 +67,7 @@ public final class AppShell extends BorderPane {
     private final Navigator navigator;
 
     private final VBox rail = new VBox();
+    private final HBox backSlot = new HBox();
     private final HBox breadcrumbs = new HBox();
     private final StackPane contentHost = new StackPane();
     private final ToastStack toasts = new ToastStack();
@@ -283,10 +290,19 @@ public final class AppShell extends BorderPane {
         Animations.riseIn(content, Motion.RISE_DISTANCE, Motion.ROUTE_MS);
     }
 
-    /** Re-renders the rail and the bell badge from the model. */
+    /** Re-renders the rail, the bell badge and the Back control from the model. */
     public void refresh() {
         renderRail();
         renderBellBadge();
+        renderBackControl();
+    }
+
+    /**
+     * @return the navbar's Back control, present only while the current route is
+     *         one the rail cannot reach
+     */
+    public Optional<Button> backControl() {
+        return backSlot.getChildren().stream().findFirst().map(Button.class::cast);
     }
 
     /**
@@ -317,6 +333,9 @@ public final class AppShell extends BorderPane {
         Label brand = new Label("HSTS");
         brand.getStyleClass().add("brand-name");
 
+        backSlot.getStyleClass().add("hsts-shell-back");
+        backSlot.setAlignment(Pos.CENTER_LEFT);
+
         breadcrumbs.getStyleClass().add("hsts-breadcrumbs");
         breadcrumbs.setAlignment(Pos.CENTER_LEFT);
 
@@ -337,7 +356,7 @@ public final class AppShell extends BorderPane {
         avatarChip.setSpacing(8);
 
         navbar.getChildren().addAll(
-                railToggle, Logo.create(28), brand, separator(), breadcrumbs,
+                railToggle, Logo.create(28), brand, separator(), backSlot, breadcrumbs,
                 Buttons.spacer(), bellStack, avatarChip);
 
         // The banner sits under the navbar so it pushes content down rather than
@@ -368,6 +387,64 @@ public final class AppShell extends BorderPane {
         Label separator = new Label("/");
         separator.getStyleClass().add("crumb-separator");
         return separator;
+    }
+
+    /**
+     * Puts a Back control in the navbar for every route the rail cannot reach.
+     *
+     * <p>The manual test round found the same defect on six screens and named the
+     * rule it wanted: a screen that is not on the rail needs a way off it. Six
+     * screens had built their own control, each in its own corner, and the ones
+     * that had not were simply stuck. This is that rule as one control instead of
+     * six, and it holds for the seventh screen too, because it reads the rail
+     * rather than a list kept by hand.
+     *
+     * <p>A rail route deliberately gets nothing. The user can leave it by clicking
+     * the item they are already looking at, and a Back beside a highlighted rail
+     * item would be answering a question nobody asked.
+     */
+    private void renderBackControl() {
+        backSlot.getChildren().clear();
+        String routeId = state.activeRouteId();
+        Optional<NavItem> fallback = backFallback(routeId);
+        boolean show = routeId != null && state.item(routeId).isEmpty() && fallback.isPresent();
+        backSlot.setVisible(show);
+        backSlot.setManaged(show);
+        if (!show) {
+            return;
+        }
+        String fallbackRouteId = fallback.get().routeId();
+        backSlot.getChildren().add(BackLink.action(fallback.get().label(), () -> {
+            // History first, because it is where the user actually came from: a drill-in
+            // is reachable from its list and from a notification, and only the back-stack
+            // knows which of the two this was.
+            if (navigator.canGoBack()) {
+                navigator.back();
+                return;
+            }
+            // No history means the screen was entered cold (a deep link, a notification
+            // into a fresh session). reset() rather than navigate(), so pressing Back on
+            // a screen with nothing behind it cannot build a history out of the failure.
+            navigator.reset(fallbackRouteId);
+        }));
+    }
+
+    /**
+     * @return where Back goes when there is no history: the rail item this route is
+     *         {@linkplain ShellState#alias aliased} to if it has one, and otherwise
+     *         the role's home, which is the first rail item on every rail
+     *         ({@link RoleNav} puts Dashboard first for all four roles)
+     */
+    private Optional<NavItem> backFallback(String routeId) {
+        if (routeId == null) {
+            return Optional.empty();
+        }
+        Optional<NavItem> aliased = state.activeItem();
+        if (aliased.isPresent()) {
+            return aliased;
+        }
+        List<NavItem> items = state.items();
+        return items.isEmpty() ? Optional.empty() : Optional.of(items.get(0));
     }
 
     private void renderBellBadge() {

@@ -189,15 +189,11 @@ public final class GradingQueueView extends AbstractScreen {
                 examName.setText(GradingCopy.examLabel(open.summary()));
                 progress.setText(GradingCopy.progress(open.summary()) + "  ·  closed "
                         + GradingCopy.closedAt(open.summary(), ZONE));
-                if (!table.table().getItems().equals(session.rows())) {
-                    table.setItems(session.rows());
-                }
+                setRows(session.rows());
             }, () -> {
                 examName.setText("");
                 progress.setText("");
-                if (!table.table().getItems().isEmpty()) {
-                    table.setItems(java.util.List.of());
-                }
+                setRows(java.util.List.of());
             });
 
             String message = session.error().orElse("");
@@ -211,6 +207,28 @@ public final class GradingQueueView extends AbstractScreen {
                     || !GradingCopy.canOverride(selectedRow().get()));
         } finally {
             selecting = false;
+        }
+    }
+
+    /**
+     * Hands the table its rows, but only when that changes something ⚑.
+     *
+     * <p>Skipping the write when the rows are already there is what keeps a re-render from
+     * wiping the teacher's selection, and that half is unchanged. What it must not skip is
+     * the <em>first</em> write: 2026-08-28, manual round 1, lead's ruling, after a sitting
+     * whose every paper was already approved answered with zero rows. Empty equals empty, so
+     * the guard held, {@code setItems} was never called, and a {@link DataTable} that has
+     * never been given content is still showing its loading skeleton. She was left watching
+     * a table pretend to load a list the server had already said was empty.
+     *
+     * <p>"Never been given content" is exactly {@code IDLE} or {@code LOADING}: every other
+     * state is one {@code setItems} or an explicit failure put it in.
+     *
+     * @param rows what the session holds for the open sitting, possibly none
+     */
+    private void setRows(List<StudentGradeRow> rows) {
+        if (!table.table().getItems().equals(rows) || table.state().showsSkeleton()) {
+            table.setItems(rows);
         }
     }
 

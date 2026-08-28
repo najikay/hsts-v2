@@ -336,6 +336,95 @@ class ExamEntrySessionTest {
     }
 
     @Nested
+    @DisplayName("arriving with a code from the dashboard \u26a1")
+    class Prefill {
+
+        @Test
+        @DisplayName("prefill fills the code through the session, so Continue is live at once")
+        void prefillEnablesContinue() {
+            session.prefill("4B7Q");
+
+            assertThat(session.code()).isEqualTo("4B7Q");
+            assertThat(session.canContinue()).isTrue();
+            assertThat(session.isConfirming())
+                    .as("the step is a confirmation, not a question she has already answered")
+                    .isTrue();
+            assertThat(connection.sentCount())
+                    .as("nothing is sent until she confirms")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("\u26a1 the same code twice is still live: the bug the text field had")
+        void secondVisitToTheSameExam() {
+            // The manual round's defect, in three lines. prefillCode() typed into the control,
+            // and setText with the value already there fires no listener, so after reset()
+            // emptied the session the field read 4B7Q and Continue stayed dead.
+            session.prefill("4B7Q");
+            session.reset();
+
+            session.prefill("4B7Q");
+
+            assertThat(session.code()).isEqualTo("4B7Q");
+            assertThat(session.canContinue()).isTrue();
+            assertThat(session.isConfirming()).isTrue();
+        }
+
+        @Test
+        @DisplayName("confirming sends the same join as typing it would")
+        void confirmSendsTheSameJoin() {
+            connection.replyOk(Verb.EXAM_JOIN, HEADER);
+            session.prefill("4b7q");
+
+            session.submitCode().join();
+
+            assertThat(session.phase()).isEqualTo(EntryPhase.IDENTITY);
+            assertThat(((ExamJoinRequest) connection.lastSent().getPayload()).code())
+                    .isEqualTo("4B7Q");
+        }
+
+        @Test
+        @DisplayName("Use a different code returns to the editable step, cleared")
+        void useDifferentCodeClears() {
+            session.prefill("4B7Q");
+
+            session.useDifferentCode();
+
+            assertThat(session.isConfirming()).isFalse();
+            assertThat(session.code()).isEmpty();
+            assertThat(session.canContinue()).isFalse();
+            assertThat(session.codeState().isPristine())
+                    .as("a field she was handed and rejected is empty, not wrong")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("reset clears the confirmation, so the next arrival decides for itself")
+        void resetClearsConfirming() {
+            session.prefill("4B7Q");
+
+            session.reset();
+
+            assertThat(session.isConfirming()).isFalse();
+            assertThat(session.code()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a blank or malformed code leaves the ordinary step alone")
+        void nothingUsableIsIgnored() {
+            session.prefill(null);
+            session.prefill("   ");
+            assertThat(session.isConfirming()).isFalse();
+            assertThat(session.code()).isEmpty();
+
+            session.prefill("nope!");
+            assertThat(session.isConfirming())
+                    .as("a parameter that is not a code is not something to confirm")
+                    .isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("housekeeping")
     class Housekeeping {
 
@@ -356,6 +445,7 @@ class ExamEntrySessionTest {
             assertThat(session.codeState().isPristine()).isTrue();
             assertThat(session.idState().isPristine()).isTrue();
             assertThat(session.blockedMessage()).isEmpty();
+            assertThat(session.isConfirming()).isFalse();
         }
 
         @Test

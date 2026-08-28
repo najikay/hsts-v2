@@ -385,6 +385,15 @@
 
 .hsts-field.required .field-label .required-star { -fx-fill: -hsts-danger; }
 
+/* A field showing a value rather than asking for one: flat, quieter, and it does
+   not take the focus ring, so the read-only state is visible before it is tried. */
+.text-input.read-only {
+    -fx-background-color: -hsts-bg;
+    -fx-text-fill: -hsts-muted;
+    -fx-border-color: -hsts-border;
+}
+.text-input.read-only:focused { -fx-border-color: -hsts-border; -fx-border-width: 1px; }
+
 /* =====================================================================
    7. TOASTS  (E4.14)
    ===================================================================== */
@@ -1750,23 +1759,40 @@
    ========================================================================= */
 
 /* ---- F-7: the back affordance ----
-   One control, one look, top-left of every drill-in. Quiet by construction:
-   it is the way out, not the thing to do, so it must never compete with the
-   screen's primary action for attention. */
-.hsts-back-link {
+   One control, one look, leading in the navbar on every route the rail cannot
+   reach. Quiet by construction: it is the way out, not the thing to do, so it
+   must never compete with the screen's primary action for attention.
+
+   `.hsts-exit-link` is the same control leaving a layout rather than a place,
+   and it shares every rule here because it is meant to read as the same thing.
+   It differs in exactly one place, four rules down. */
+.hsts-back-link,
+.hsts-exit-link {
     -fx-padding: 2px 10px 2px 4px;
     -fx-background-radius: 6px;
     -fx-cursor: hand;
 }
-.hsts-back-link .label    { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
-.hsts-back-link .nav-icon { -fx-fill: -hsts-muted; }
-.hsts-back-link:hover           { -fx-background-color: -hsts-accent-soft; }
-.hsts-back-link:hover .label    { -fx-text-fill: -hsts-accent; }
-.hsts-back-link:hover .nav-icon { -fx-fill: -hsts-accent; }
+.hsts-back-link .label,
+.hsts-exit-link .label    { -fx-font-size: 12px; -fx-text-fill: -hsts-muted; }
+.hsts-back-link .nav-icon,
+.hsts-exit-link .nav-icon { -fx-fill: -hsts-muted; }
+.hsts-back-link:hover,
+.hsts-exit-link:hover           { -fx-background-color: -hsts-accent-soft; }
+.hsts-back-link:hover .label,
+.hsts-exit-link:hover .label    { -fx-text-fill: -hsts-accent; }
+.hsts-back-link:hover .nav-icon,
+.hsts-exit-link:hover .nav-icon { -fx-fill: -hsts-accent; }
 
 /* A printed page carries no navigation. The two print-capable screens that
    host a back link hide the node from Java (visible + managed), so this is
-   only the belt to that braces: a stray one never inks the page. */
+   only the belt to that braces: a stray one never inks the page.
+
+   `.hsts-exit-link` is deliberately absent from this rule, and that absence is
+   the whole reason it is a class of its own. Print mode hides the chrome, and
+   the chrome included the toggle that turned print mode on, so the reader was
+   left on a page whose only exit had been painted out from under them. The one
+   control that leaves the layout has to survive every rule that hides
+   navigation, because it is the exit and not navigation. */
 .results-print .hsts-back-link,
 .reports-print .hsts-back-link { -fx-opacity: 0; }
 

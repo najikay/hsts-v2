@@ -174,7 +174,7 @@ class ResultsHandlersTest {
         CheckedForm form = new CheckedForm(
                 new StudentGradeRow(900, STUDENT_ID, "מאיה לוי", 71, 71, 71,
                         GradeState.APPROVED, null, null, null, "Algebra midterm", "11"),
-                "Algebra midterm", "11", AttemptState.SUBMITTED, 70, List.of());
+                "Algebra midterm", "11", "Dana Cohen", AttemptState.SUBMITTED, 70, List.of());
         when(checkedForms.checkedForm(session, STUDENT_ID, 900)).thenReturn(Optional.of(form));
 
         Message response = handlers.checkedForm(

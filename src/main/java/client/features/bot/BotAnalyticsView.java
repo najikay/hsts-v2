@@ -3,7 +3,6 @@ package client.features.bot;
 import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
-import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
@@ -90,12 +89,11 @@ public final class BotAnalyticsView extends AbstractScreen {
         Button manager = Buttons.secondary(BotCopy.MANAGER_TITLE);
         manager.setOnAction(e -> navigator().navigate(Routes.BOT_MANAGER.id(),
                 NavParams.of(PARAM_COURSE, courseCode)));
-        // F-7: reached from the bot manager and absent from the rail, so it needs the
-        // convention's own way out; the manager button on the right stays as the
-        // named shortcut it always was.
+        // The way out is the shell's navbar Back, since this route is not on the rail.
+        // The manager button on the right stays as the named shortcut it always was:
+        // it carries the course, which a direction cannot.
         HBox row = new HBox(12,
-                new VBox(2, BackLink.to(navigator(), Routes.BOT_MANAGER.id(), "Study bot"),
-                        heading, subheading, explainer),
+                new VBox(2, heading, subheading, explainer),
                 Buttons.spacer(), manager);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(16, 20, 8, 20));

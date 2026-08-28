@@ -81,6 +81,18 @@ public final class ShellBoot {
 
         AppShell shell = new AppShell(manager.navigator(), new ShellState());
         shell.setNavItems(RoleNav.itemsFor(login.role()));
+        // Drill-in routes name their rail parent (2026-08-28, manual round 1, U-8): the
+        // shell's navbar Back falls back to it on a cold deep link with no history, and the
+        // breadcrumb shows the parent crumb. Registered here, beside the rail itself,
+        // because the pairing is role-independent and this is the one place every shell
+        // is assembled.
+        ShellState state = shell.state();
+        state.alias(Routes.EXAM_PREVIEW.id(), Routes.APPROVALS.id());
+        state.alias(Routes.BOT_HISTORY.id(), Routes.BOT_CHAT.id());
+        state.alias(Routes.BOT_ANALYTICS.id(), Routes.BOT_MANAGER.id());
+        state.alias(Routes.CHECKED_FORM.id(), Routes.MY_GRADES.id());
+        state.alias(Routes.QUESTION_EDIT.id(), Routes.QUESTIONS.id());
+        state.alias(Routes.EXAM_BUILD.id(), Routes.EXAMS.id());
         shell.setUser(login.displayName(), login.role());
         startNotifications(manager, shell, login);
         shell.setOnLogout(() -> logout(manager));

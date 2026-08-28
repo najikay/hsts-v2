@@ -100,14 +100,27 @@ class GradingDtoTest {
                     .isThrownBy(() -> new GradeReview(null, List.of()))
                     .withMessageContaining("grade");
             assertThatNullPointerException()
-                    .isThrownBy(() -> new CheckedForm(null, "Midterm", "11", AttemptState.SUBMITTED, 45, List.of()))
+                    .isThrownBy(() -> new CheckedForm(null, "Midterm", "11", "Dana Cohen",
+                            AttemptState.SUBMITTED, 45, List.of()))
                     .withMessageContaining("grade");
             assertThatNullPointerException()
-                    .isThrownBy(() -> new CheckedForm(approvedRow(), null, "11", AttemptState.SUBMITTED, 45, List.of()))
+                    .isThrownBy(() -> new CheckedForm(approvedRow(), null, "11", "Dana Cohen",
+                            AttemptState.SUBMITTED, 45, List.of()))
                     .withMessageContaining("examName");
             assertThatNullPointerException()
-                    .isThrownBy(() -> new CheckedForm(approvedRow(), "Midterm", null, AttemptState.SUBMITTED, 45, List.of()))
+                    .isThrownBy(() -> new CheckedForm(approvedRow(), "Midterm", null, "Dana Cohen",
+                            AttemptState.SUBMITTED, 45, List.of()))
                     .withMessageContaining("courseCode");
+        }
+
+        @Test
+        @DisplayName("a missing teacher name is the empty string rather than a refusal (A6)")
+        void nullTeacherNameBecomesEmpty() {
+            // Not required, unlike the three above: the server sends "" when it cannot resolve
+            // the releasing teacher, and null is normalised to the same thing so no screen has
+            // two absences to tell apart and the word "null" cannot reach a marked paper.
+            assertThat(new CheckedForm(approvedRow(), "Midterm", "11", null,
+                    AttemptState.SUBMITTED, 45, List.of()).teacherName()).isEmpty();
         }
     }
 
@@ -124,7 +137,8 @@ class GradingDtoTest {
             assertThat(new ApproveRequest(null).gradeIds()).isEmpty();
             assertThat(new ApproveResult(0, 0, null).refused()).isEmpty();
             assertThat(new MyGrades(null).grades()).isEmpty();
-            assertThat(new CheckedForm(approvedRow(), "Midterm", "11", AttemptState.SUBMITTED, 45, null).answers()).isEmpty();
+            assertThat(new CheckedForm(approvedRow(), "Midterm", "11", "Dana Cohen",
+                    AttemptState.SUBMITTED, 45, null).answers()).isEmpty();
         }
 
         @Test
@@ -205,7 +219,8 @@ class GradingDtoTest {
             StudentGradeRow teacherSide = new StudentGradeRow(9L, 2001L, "Maya Levi", 72, 80, 80,
                     GradeState.APPROVED, "Question 4 was ambiguous", "Well done", APPROVED_AT);
 
-            CheckedForm form = new CheckedForm(teacherSide, "Algebra Midterm", "11", AttemptState.SUBMITTED, 45, List.of());
+            CheckedForm form = new CheckedForm(teacherSide, "Algebra Midterm", "11", "Dana Cohen", AttemptState.SUBMITTED,
+                    45, List.of());
 
             // Both student containers enforce the same structural rule; a CheckedForm
             // that kept the justification would leak through the second door.
@@ -279,7 +294,8 @@ class GradingDtoTest {
             assertThat(new ExecutionGrades(summary(), List.of(approvedRow())).size()).isEqualTo(1);
             assertThat(new ExecutionGrades(summary(), List.of()).isEmpty()).isTrue();
             assertThat(new GradeReview(approvedRow(), List.of(answer)).size()).isEqualTo(1);
-            assertThat(new CheckedForm(approvedRow(), "Midterm", "11", AttemptState.SUBMITTED, 45, List.of(answer)).size())
+            assertThat(new CheckedForm(approvedRow(), "Midterm", "11", "Dana Cohen", AttemptState.SUBMITTED, 45,
+                    List.of(answer)).size())
                     .isEqualTo(1);
             assertThat(new GradingQueue(List.of(summary())).size()).isEqualTo(1);
         }

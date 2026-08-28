@@ -1,32 +1,49 @@
-# HSTS — the full manual round, in one sitting
+# HSTS — the manual round (v2, time-aware)
 
-One file, every manual check still owed, ordered so you sign in the fewest times.
-Everything typeable is paste-ready. Expected results are stated per check; anything
-that looks different from what this file says **is a note**, even if it seems minor.
+**What this is.** Every check that needs human eyes, in one file, in the order that costs the
+fewest sign-ins and puts blockers first. v2 replaces the 2026-08-28 v1 after round 1 stopped
+on blockers: it adds a **time plan**, a **round tracker**, a **re-verdict block** for the
+sixteen things round 1 found, and it moves the bot out from behind the 75-minute exam.
 
-**How to take notes.** Keep your own notes file open beside this one. One line per
-observation, in your own words, naming the screen ("bank list", "take exam paper").
-Do not fix, do not re-test, do not decide severity — paste the notes to the lead
-afterwards and they get triaged into UI-REGISTER.md / ACCEPTANCE_TESTS.md with
-rulings. Verbatim wording beats careful wording.
+**How to take notes.** One line per observation in your own words, naming the screen. Do not
+fix, do not re-test, do not decide severity. Paste the file to the lead unedited; every line
+becomes a numbered register entry with a ruling the same day. Verbatim beats careful.
 
-**What this round settles** (why each section exists):
+**Skip what round 1 already confirmed.** Round 1 got through the student flow, the teacher
+side and the bank before stopping. Tick those boxes from memory; re-check only what a fix
+touched (§1 lists exactly those).
 
-| Owed item | Where it is below |
-|---|---|
-| Omar's re-verdicts on M-1 / M-4 / M-5 (fixed 2026-08-28, need on-screen confirmation) | §2, §3 |
-| The 18 acceptance cases that passed below the screen with the screen half unseen (⚠) | woven through §2–§9, tagged `[case n.m]` |
-| U-1..U-4 verification (fixed, awaiting eyes) | §2, §5, §8 |
-| B-45 / B-46 rulings (dashboard double code box; back control) | §2 |
-| Re-walks 8.4 and 13.4 (fixes landed after their walks) | §6, §7 |
-| E2.16 seed content review on rendered screens, the ten question images included | §5, §9 |
-| The E16.17 live-key bot session | §4 — **do this part with the lead on a call** |
+## The time plan
+
+| § | Block | Sign in as | Minutes | Needs |
+|---|---|---|---|---|
+| 0 | Pre-flight: pull, rebuild, reseed, start | — | 10 | — |
+| 1 | **Round-1 re-verdicts** (16 fixes, blockers first) | several | 30 | second machine for 1.9 |
+| 2 | Before sign-in: throttle, connect refusals, back link | — | 5 | — |
+| 3 | Bot, live keys (no exam running) | `maya.levi` | 15 | **the lead on a call** |
+| 4 | Student day: bell, grades, dashboard, **then** the exam | `maya.levi` | 25 | — |
+| 5 | Two machines: live monitor, extension, reconnect, C-4 | `dana.cohen` + Maya | 15 | second machine |
+| 6 | Teacher authoring: exam list, builder, results, releases | `dana.cohen` | 20 | — |
+| 7 | Grading trail + bot manager + edit lock | `avi.mizrahi`, `tamar.shani` | 20 | second machine for the lock |
+| 8 | One screen: the timed-out result | `omer.katz` | 3 | — |
+| 9 | Coordinator | `rina.barak` | 8 | — |
+| 10 | Principal, bank images, theme | `principal.avia` | 12 | — |
+| | **Total** | | **≈ 2 h 45 m** | |
+
+**If you have less time**, cut from the bottom: §10, §9, §8 are the cheapest to skip; §1 and §4
+are never skipped. The exam attempt (§4's last block) runs on a 75-minute clock: start it
+**last** in §4 so nothing else waits on it, and do §5 while it runs.
+
+## Round tracker
+
+| Round | Date | Got to | Stopped because | Notes file |
+|---|---|---|---|---|
+| 1 | 2026-08-28 | student flow, teacher side, bank, grading | 18 findings, 4 blockers (M-4 paper, bot lock, login status, grading skeleton) | `docs/manual-round-1-notes.txt` |
+| 2 | | | | `docs/manual-round-2-notes.txt` |
 
 ---
 
-## 0. Pre-flight (10 minutes, PowerShell, in `C:\dev\hsts-v2`)
-
-Everything below assumes today's main and fresh execution windows.
+## 0. Pre-flight (10 min, PowerShell, in `C:\dev\hsts-v2`)
 
 ```
 git pull
@@ -34,300 +51,230 @@ git pull
 java -cp target\hsts-server.jar server.db.seed.SeedMain --reseed
 ```
 
-Expected: reseed answers a per-table breakdown ending in a total (376 rows as of
-B-25). If you get `ClassNotFoundException: server.db.seed.SeedMain`, the rebuild
-step didn't run — it is required every time, because any clean build empties
-`target\`.
+Reseed answers a per-table breakdown and a total (376 rows). `ClassNotFoundException:
+server.db.seed.SeedMain` means the rebuild did not run: any clean build empties `target\`.
+**A stale client jar re-shows every bug this round is meant to close.**
 
 Start the server, start a client, connect to `localhost:5555`.
 
-**Every seeded account's password is `demo123`.** The accounts used in this round:
+**Every account's password is `demo123`.**
 
 | Username | Role | For | National ID |
 |---|---|---|---|
-| `maya.levi` | student | take-exam, bell, bot, grades | `374301851` |
+| `maya.levi` | student | bell, grades, bot, the exam | `374301851` |
 | `noam.peretz` | student | the wrong-ID refusal | `385612098` |
 | `omer.katz` | student | the timed-out result screen | — |
-| `dana.cohen` | teacher | exam list, builder, monitor, releases | — |
-| `avi.mizrahi` | teacher | grading override, bot manager | — |
-| `tamar.shani` | teacher | the second-teacher lock + notification | — |
-| `rina.barak` | coordinator (pure) | approval queue, the disabled New exam | — |
+| `dana.cohen` | teacher (Algebra 11, Calculus 12) | exam list, builder, monitor, releases, results | — |
+| `avi.mizrahi` | teacher (Java 21) | grading override, bot manager | — |
+| `tamar.shani` | teacher (Java 21, co-teacher) | the second-teacher lock and notification | — |
+| `rina.barak` | coordinator, teaches nothing | approval queue, the disabled New exam | — |
 | `principal.avia` | principal | reports, data browser, read-only | — |
 
-Execution codes as seeded: **`2075`** live now (Algebra Midterm, closes ~3h after
-reseed), **`5164`** scheduled (+4h), **`4821`** and **`7390`** closed.
+Execution codes as seeded: **`2075`** live now (Algebra Midterm, closes ~3 h after reseed),
+**`5164`** scheduled (+4 h), **`4821`** and **`7390`** closed.
 
 ---
 
-## 1. Before signing in (5 min)
+## 1. Round-1 re-verdicts (30 min) — do these first
 
-- [ ] **[case 1.4] The throttle.** Sign in as `maya.levi` with password `wrong` —
-      five times. Expected: each refusal is the same generic sentence (it must not
-      reveal whether the account exists). The 6th attempt **with the correct
-      password** is refused with the too-many-attempts sentence; ~30 seconds later
-      it works. Watch that the lockout sentence is product copy, no codes.
-- [ ] **[case 21.3, U-4 verify] The connect screen refuses like a product.** Stop
-      the server, try to connect. Expected: a plain-English sentence naming the
-      address, **no Java class name, no brackets with jargon** (B-37's fix).
-      Restart the server.
+Each line is a fix from your round-1 notes. The verdict is yours: tick, or write what you
+still see. Ordered by sign-in so you cross accounts once.
 
----
+**Nobody signed in (2 min):**
+- [ ] **U-6 login status.** With the client on the login screen, **stop the server**. The
+      green Connected chip turns to Disconnected, the label reads "Not connected", the
+      sign-in button greys out and a "Reconnect" link appears leading to the connect screen.
+      Start the server again before continuing.
+- [ ] **U-5 connect back.** Connect screen → "change server" (the manual form) → there is now a
+      "Back to the server list" link beside "Look for servers again", and it returns to the
+      list you came from.
 
-## 2. `maya.levi` — the student's whole day (30–40 min, the heart of the round)
+**`maya.levi` (10 min):**
+- [ ] **U-10 dashboard → exam is a confirmation.** Dashboard code card: type `2075`, press it.
+      Take Exam opens with the title **"Confirm your exam"**, the code shown read-only, the
+      subtitle "You are about to enter the exam with code 2075.", the button **"Confirm and
+      continue" already enabled**, and a "Use a different code" link. Press Confirm: the
+      identity screen. Press Back (top-left of the navbar), return via the card again: still
+      enabled on the second visit (the bug was the second visit).
+- [ ] **U-8 back on every non-rail screen.** My Grades → open an exam: the navbar shows
+      **Back** (left of the breadcrumbs). It returns to My Grades. The old link above the
+      title is gone (one Back per screen).
+- [ ] **U-8 print exit.** On that opened exam, switch the print layout on: the chrome
+      disappears **except** an "Exit print view" control; it turns print off.
+- [ ] **U-9 teacher's name.** Same opened exam: under the exam name a muted line
+      **"Teacher: Dana Cohen"**.
+- [ ] **U-7 ring.** My Grades' term-average ring: the filled arc ends where the number says,
+      no overhang, no stray dot at small values. Cosmetic; note anything still off.
+- [ ] **U-11 modal scrim.** Trigger any modal (e.g. Take Exam → start an attempt → Submit):
+      the **whole window dims** behind a centered dialog with a soft shadow; no dark box
+      hugging the dialog. Cancel.
+- [ ] **B-47 bot lock is transient.** Start the `2075` attempt (ID `374301851`), open the
+      **Algebra 11** bot, ask anything: refused with the lockout sentence, **but the input
+      stays usable**. Have the teacher close `2075` early (§1.9 below) or submit the attempt;
+      ask again on the same screen without navigating: answered.
 
-Sign in as `maya.levi` / `demo123`.
+**`dana.cohen` (10 min):**
+- [ ] **U-13 table width.** Question Bank: the columns share the whole width, the stem
+      column is the widest, no dead space on the right. Check the exam list and the results
+      table too (same component).
+- [ ] **U-11 the "handing out" modal.** Releases → hand out an exam: the dialog appears over a
+      fully dimmed window, no box. Cancel.
+- [ ] **U-12 / B-48 grading rows.** Grading → pick a queued execution: the students **appear**
+      (or an honest empty state if there are none) — never the loading skeleton forever.
+      **Write down which execution and how many rows you saw.** If it is empty for an
+      execution that should have papers, that is the second half of B-48 and I need it.
+- [ ] **U-8 back on the builder.** Exams → open a version in the builder: navbar Back returns
+      to Exams. Exams → New exam → a course: Back returns to Exams.
+- [ ] **U-8 back on the live monitor drill-in.** Releases → a live row → the monitor. Live
+      Monitor is a rail item now, so by your own rule it carries **no** Back; the rail's
+      Releases item is the way back. If that feels wrong in practice, write it down — it was
+      the one judgment call in the wave.
+- [ ] **U-14 bots.** Study Bot: what you see is **one bot per course you teach** (Dana: two,
+      Algebra and Calculus). Create the study bot is only offered for a course that has none.
+      **Round 1 called this "unlimited bots" — please write the exact clicks that produced
+      it**; the server enforces one per course structurally, so the screen is the question.
 
-**The bell, first — this is M-1/M-5's re-verdict:**
-- [ ] The badge shows a count **and the panel shows the rows at first open** —
-      Maya has a seeded unread "grade published" notification. Before today's fix
-      the panel was empty until something arrived live. *(B-39 re-verdict)*
-- [ ] Click the notification: it deep-links to My Grades.
-- [ ] Back in the panel: **mark one as read** — the row visibly changes and the
-      badge count drops. *(B-43 re-verdict — this control did nothing before.)*
+**`avi.mizrahi` (3 min):**
+- [ ] **U-8 back on bot history / analytics.** Study Bot → history and analytics screens
+      each show the navbar Back; it returns to the Study Bot screen.
 
-**My Grades while you're here:**
-- [ ] Her published Algebra grade renders with score, status and teacher comment
-      in one screen (C-3). Names and copy in English, no placeholders.
+**`rina.barak` (3 min):**
+- [ ] **U-8 back on the approval preview.** Approvals → open `101201` from the queue: navbar
+      Back returns to Approvals. The footer's own "Back to approvals" remains (it carries the
+      queue's state and is not a duplicate of the navbar).
 
-**The dashboard — B-45's ruling happens here:**
-- [ ] Use the dashboard's exam-code card: type `2075`, press its button. It lands
-      on Take Exam **with the code pre-filled, asking again**. That double-ask is
-      B-45. Decide with it in front of you: acceptable one-screen guard (F6.4's
-      design) or worth a copy change ("Confirm the code" instead of a second
-      identical prompt)? Write the verdict down either way.
-
-**Take Exam — M-4's re-verdict, the one that blocked everything:**
-- [ ] Code `2075` → accepted, header screen shows exam name, 75 minutes,
-      7 questions, the instructions line — and **no questions yet** (S-18).
-- [ ] **[case from 5.2]** Type `noam.peretz`'s ID first: `385612098`. Expected:
-      refused inline, no attempt started, no clock running.
-- [ ] Now her own: `374301851`. **The paper must render**: 7 questions, countdown
-      running, progress bar, navigator strip with 7 chips. Before today's fix this
-      was a blank screen. *(B-42 re-verdict)*
-- [ ] Three of the seven questions carry an **illustration** (11005, 11007,
-      11010). Each renders as a real diagram, sized sanely, not stretched or
-      clipped. *(E2.16 half; B-8's images on their real screen)*
-- [ ] Answer two questions. The save indicator moves ("Saving…" → "All changes
-      saved"). Change an answer; it moves again.
-- [ ] Navigator chips: answered ones look answered; clicking a chip jumps.
-- [ ] **[case 21.6]** While the paper is open: resize the window smaller/larger —
-      nothing overlaps or vanishes; question text wraps.
-
-**Leave the exam open and go to §3 (two machines). Come back for:**
-- [ ] Submit: the confirm dialog shows the answered/blank grid and remaining time;
-      confirming lands on the Submitted screen with exactly one action.
-- [ ] Re-enter code `2075` after submitting: the server's own "already handed in"
-      answer, on the code field (F6.7).
-
-**The study bot — see §4, do it with the lead. The main bot checks run BEFORE
-this Take Exam block (no live attempt needed); only §4's short C-4 sub-section
-belongs inside the attempt.**
-
-**B-46 ruling, as you move between screens:** whenever you want to go "back",
-notice what you reach for and whether the control you expect is where you expect
-it. That vague feeling is exactly the finding — write down each moment it happens
-and on which screen.
-
----
-
-## 3. Two machines — the live monitor moment (15 min, needs a second laptop)
-
-Machine A: `maya.levi` mid-attempt on `2075` (from §2). Machine B: `dana.cohen`.
-
-- [ ] **[F1.3 quick check]** While signed in on B as `dana.cohen`, try signing in
-      as `dana.cohen` on A's second client — refused with the
-      already-signed-in sentence. Sign out, retry, works.
-- [ ] **[case 7.1 ⚠ — the Time Extended designed moment]** On B: open the Live
-      Monitor for `2075`. Maya's row is live. Add **15 minutes**. On A, watch for
-      all three at once: the countdown chip **flashes green**, a floating
-      **"+15:00"** rises off it, and a **toast names Dana Cohen** and the new end
-      time. On B, the monitor's own close time moves consistently with what Maya
-      sees (B-14's fix: the two screens must agree).
-- [ ] **[case 21.3 ⚠]** Pull machine A's network cable / disable Wi-Fi
-      mid-attempt: the reconnect banner appears, in product words. Reconnect: the
-      paper rebuilds itself, answers intact, clock still server-anchored.
-- [ ] **[U-1 verify]** The Live Monitor was reached from a real rail item, not a
-      placeholder — both rail items batch C enabled (Live Monitor, Take Exam) are
-      live screens now.
+**Two machines (2 min, 1.9):**
+- [ ] With Maya mid-attempt on A, Dana on B: Releases → **close `2075` early**. Maya's paper
+      takes over with the Time Up screen; her Algebra bot (B-47 above) answers on the next
+      ask. Reseed afterwards if you want `2075` live again for §5.
 
 ---
 
-## 4. The bot, live keys — **do this section on a call with the lead (E16.17)**
+## 2. Before signing in (5 min)
 
-This is the one part that talks to real providers; it was deliberately never
-automated. Ping the lead before starting it.
-
-**Do the main bot checks with NO exam in progress** — either as `maya.levi`
-*before* starting §2's Take Exam block, or as `noam.peretz` on the Java 21 bot at
-any time. Only the C-4 sub-section below wants a live attempt, and it takes two
-minutes of one, not the whole sitting.
-
-**Know the lock rules before judging them** (both are design, not bugs):
-- Asking a course's bot **while sitting that same course's exam** is refused
-  outright, every time, with a sentence naming the exam. There is no way through.
-- Asking a **different** course's bot while sitting an exam shows an integrity
-  notice once; acknowledging it lets her ask, and the teacher is alerted once per
-  attempt.
-
-**Main checks (no live attempt):**
-- [ ] **[U-2 verify]** The bot screen offers a **course picker** with exactly the
-      student's enrolled courses.
-- [ ] **[case 14.1 ⚠]** Ask a real course question, e.g. on Databases 22:
-      `What does a LEFT JOIN return when there is no match?`
-      Expected: a grounded answer citing the teacher's sources, arriving within
-      the timeout, rendered as chat bubbles with sane wrapping.
-- [ ] **[case 21.2 ⚠]** While it thinks: the screen shows a working state
-      (skeleton/typing indicator), never a frozen or blank pane.
-- [ ] **[case 14.4 ⚠]** Ask something clearly outside the material, e.g.
-      `Who won the 2022 World Cup?` Expected: the polite out-of-scope refusal, not
-      an answer and not an error.
-- [ ] **[case 14.5 ⚠]** Open bot history: both conversations above are there;
-      reopening one shows the full transcript.
-
-**C-4 checks (do during §2's attempt, ~2 minutes of it):**
-- [ ] With Maya mid-attempt on Algebra `2075`, open the **Databases 22** bot and
-      ask: the integrity notice appears **once**; acknowledge; the answer comes.
-- [ ] Open the **Algebra 11** bot and ask: refused with the lockout sentence
-      naming Midterm: Algebra. **The input box stays usable** — the refusal is a
-      banner, not a dead screen. *(B-47 re-verdict: before 2026-08-28 this
-      permanently disabled the composer, and the lock survived the exam closing.)*
-- [ ] Have the teacher close `2075` early (or submit the attempt): **the same
-      Algebra bot screen, without navigating away**, now answers when asked
-      again. *(B-47's other half.)*
+- [ ] **[1.4] Throttle.** `maya.levi` with password `wrong`, five times: same generic refusal
+      every time; the 6th attempt **with the right password** is refused with the
+      too-many-attempts sentence; ~30 s later it works.
+- [ ] **[21.3, U-4]** Stop the server, try to connect: a plain-English sentence naming the
+      address, no Java class name, no brackets. Restart the server.
 
 ---
 
-## 5. `dana.cohen` — the authoring side (25 min)
+## 3. The bot, live keys (15 min) — **on a call with the lead (E16.17)**
 
-Sign out, sign in as `dana.cohen` / `demo123`.
+Sign in as `maya.levi`. **No exam running** (this is why it moved ahead of §4).
 
-**The exam list — today's M-6 and #57 land here:**
-- [ ] Hover a row: **no "Open →" hint appears** (M-6/B-44 re-verdict). Clicking a
-      row selects it and fills the versions panel on the right.
-- [ ] **[B-41 / #57 verify]** The header has a **New exam** menu button offering
-      exactly her courses (Algebra 11, Calculus 12). Pick one: the builder opens
-      empty, scoped to that course.
-- [ ] **[U-3-adjacent]** Rail icons all render (no blank squares anywhere on her
-      rail — the Icons guard says they can't be missing; eyes confirm).
-- [ ] The Exams rail item's tooltip reads the new wording, not "arrives with E7".
-- [ ] **[case 4.2 ⚠ context]** A version with a rejection reason shows it **on its
-      own card** (Dana's **Algebra Midterm v1** is seeded REJECTED, reason "Only
-      five questions for 60 minutes…"; v2 is the APPROVED one that ran).
-- [ ] Open a version in the builder: bank picker scoped to the course, points sum
-      indicator, the auto-compose tab. Illustrated bank questions show a
-      **has-image marker** in the picker.
+Lock rules first, both are design: the same course's bot is refused outright while you sit
+its exam; a different course's bot shows a one-time integrity notice you acknowledge.
 
-**Releases and results:**
-- [ ] **[case 10.2 ⚠]** Open closed execution `4821`'s results table. Expected
-      per row: student, score, attempt status, actual minutes (B-16's columns).
-      `omer.katz`'s row says TIMED_OUT with the full 75 minutes. Frozen stats
-      match SEED_CONTENT §9.1's numbers — mean/median/deciles render, nothing
-      says "grading unfinished".
-- [ ] Release manager: `5164` sits SCHEDULED (opens ~4h after reseed); `2075`
-      LIVE. Codes, windows and statuses all readable and consistent.
-- [ ] **[case 17.3 ⚠, E2.16]** As you pass each screen: does anything look
-      empty, fake, or lorem-ipsum-ish? The seed was built so no demoed screen is
-      hollow — this is the eyes-on confirmation.
+- [ ] **[U-2 verify]** Course picker offers exactly her three courses.
+- [ ] **[14.1]** Databases 22: `What does a LEFT JOIN return when there is no match?` → a
+      grounded answer citing the teacher's sources, within the timeout, readable bubbles.
+- [ ] **[21.2]** While it thinks, a working state shows; never a frozen pane.
+- [ ] **[14.4]** `Who won the 2022 World Cup?` → the polite out-of-scope refusal.
+- [ ] **[14.5]** Bot history lists both conversations; reopening shows the transcript.
 
 ---
 
-## 6. `avi.mizrahi` — grading trail and bot manager (20 min)
+## 4. The student's day (25 min) — `maya.levi`
 
-Sign out, sign in as `avi.mizrahi` / `demo123`.
+**Bell (M-1/M-5 re-verdicts, if not already ticked in §1):**
+- [ ] Badge count and rows **at first open**; click a row → deep-links to My Grades; mark one
+      read → the row changes and the badge drops.
 
-**Re-walk 8.4 (the override audit trail, screen half):**
-- [ ] Open the grading queue for closed Java execution `7390` (awaiting
-      grading). Open `itay.regev`'s paper. Override his grade: new score, a
-      justification, **and a comment to the student**. Save.
-- [ ] Re-open the same record: original auto grade, the change, the reason and
-      the comment are **all still visible** — the full F8.3 trail on screen, not
-      just in the database.
+**My Grades:**
+- [ ] Published Algebra grade with score, status, teacher comment; English copy, no
+      placeholders.
 
-**Re-walk 13.4 (the source editor's edit half — B-21's fix):**
-- [ ] Open the bot manager for Java 21. The sources list shows 5 rows.
-- [ ] **Edit a TEXT source** (the Edit control on a TEXT row is the half that did
-      not exist before B-21): change its content, save. Expected: it saves and
-      the list reflects it.
-- [ ] Remove a different source. Expected: gone, list at 4.
-- [ ] Leave this signed in and check on `tamar.shani` (any machine) that she
-      received **both** notifications: one for the change, one for the removal
-      (F12.3).
-
-**[case 13.6 ⚠ — the edit lock, needs both teachers at once]:**
-- [ ] With `avi.mizrahi` holding a source editor open, have `tamar.shani` open
-      the same source on the other machine. Expected: she gets the **locked
-      banner naming Avi Mizrahi**, read-only, no silent overwrite. Avi closes;
-      she can edit.
-
-**[case 14.6 ⚠]:**
-- [ ] The bot's teacher view: sessions/analytics for his course render with the
-      seeded numbers, charts drawn, no empty panels.
+**The exam — start this block last:**
+- [ ] Dashboard card `2075` → Confirm and continue → header screen: exam name, 75 minutes,
+      7 questions, the instructions line, **no questions yet**.
+- [ ] **[5.2]** `noam.peretz`'s ID `385612098` → refused inline, no clock. Her own
+      `374301851` → the paper: 7 questions, countdown, progress bar, 7 chips.
+- [ ] Three illustrated questions (11005, 11007, 11010) render as real diagrams.
+- [ ] Answer two; the save indicator moves. Change one; moves again. Chips reflect answers.
+- [ ] **[21.6]** Resize the window: nothing overlaps; text wraps.
+- [ ] **C-4 (2 min):** open the **Databases 22** bot → integrity notice once → acknowledge →
+      answered. Open the **Algebra 11** bot → lockout sentence, input still usable.
+- [ ] *(go do §5 now, come back)* Submit: the confirm grid and remaining time; the Submitted
+      screen has one action. Re-enter `2075`: the server's "already handed in" answer.
 
 ---
 
-## 7. `omer.katz` — one screen (3 min)
+## 5. Two machines (15 min) — `dana.cohen` on B, Maya mid-attempt on A
 
-Sign in as `omer.katz` / `demo123`.
-
-- [ ] **[case 9.5 ⚠]** Open his result for the Algebra Midterm. Expected: the
-      TIMED_OUT attempt renders honestly — score computed from what he answered,
-      four questions shown as **"Not answered"**, and the timed-out status
-      visible, in words, not as an enum name.
-
----
-
-## 8. `rina.barak` — the coordinator (10 min)
-
-Sign in as `rina.barak` / `demo123`.
-
-- [ ] Her rail has Approvals; the Mathematics queue shows Calculus exam `101201`
-      PENDING.
-- [ ] **[case 4.2 ⚠]** Open it **from the queue**: the read-only preview renders
-      the full paper — questions, points, images if any — nothing editable.
-- [ ] Approve-with-comment or send back (either): the state flips live and Dana
-      gets the notification.
-- [ ] **[B-41's other half / #57]** On her Exams screen the **New exam control is
-      disabled with the reason beside it** (she teaches nothing) — visible label,
-      not a hidden button.
+- [ ] **[F1.3]** `dana.cohen` signing in on a second client is refused with the
+      already-signed-in sentence; sign out, retry, works.
+- [ ] **[7.1 ⚑ Time Extended]** B: Live Monitor for `2075`, Maya's row live, add **15
+      minutes**. A: chip flashes green, "+15:00" rises, toast names Dana Cohen and the new
+      end. B's close time agrees with A's countdown (B-14).
+- [ ] **[21.3]** Cut A's network mid-attempt: reconnect banner in product words; reconnect:
+      the paper rebuilds, answers intact.
 
 ---
 
-## 9. `principal.avia` — read-only world (10 min)
+## 6. Teacher authoring (20 min) — `dana.cohen`
 
-Sign in as `principal.avia` / `demo123`.
-
-- [ ] **[case 12.1 ⚠]** Reports: run the same-teacher exam comparison with
-      whatever pairing the screen offers over the seeded data (the graded
-      executions are Dana's Algebra `4821` and Avi's Java `7390`). Expected: the
-      chart renders with the frozen stats, labeled in English, series
-      distinguishable, and an honest empty-state if a pairing has no data rather
-      than a broken chart.
-- [ ] Data browser: exams and results tables fill; **not one mutating control
-      anywhere on her surface** (S-7) — no edit, no delete, no approve.
-- [ ] **[case 2.6 + 18.5 ⚠, E2.16]** Wherever the bank is browsable (also check
-      as `dana.cohen` if her view is richer): filter by course → topic →
-      difficulty → free-text; scroll a list with many illustrated questions.
-      Expected: filters compose, the scroll is smooth (images are 7-8 KB, there
-      is no reason for jank), and **each of the ten images belongs to its
-      question** — a diagram about the wrong question is exactly the kind of
-      thing only this pass can catch.
-- [ ] **[case 21.5 ⚠]** Anywhere convenient: switch light ↔ dark and change the
-      accent palette. Every screen you have open follows, text stays readable,
-      nothing stays stuck in the old theme.
+- [ ] Exams: hover a row → **no "Open →" hint**; click selects and fills the versions panel.
+- [ ] **New exam** menu offers Algebra 11 and Calculus 12; pick one → empty builder scoped to it.
+- [ ] Rail icons all render; the Exams tooltip reads the new wording.
+- [ ] Algebra Midterm **v1** shows its rejection reason on its own card ("Only five questions
+      for 60 minutes…"); v2 is APPROVED.
+- [ ] Builder on a version: picker scoped to the course, points sum indicator, auto-compose
+      tab, has-image markers.
+- [ ] **[10.2]** Results for `4821`: student, score, attempt status, actual minutes;
+      `omer.katz` TIMED_OUT with 75 minutes; frozen stats render, nothing says "unfinished".
+- [ ] Releases: `5164` SCHEDULED, `2075` LIVE (or CLOSED if you closed it in §1.9).
+- [ ] **[17.3, E2.16]** Nothing on any screen looks empty or fake.
 
 ---
 
-## 10. When you're done
+## 7. Grading trail, bot manager, edit lock (20 min) — `avi.mizrahi` (+ `tamar.shani`)
 
-Paste your notes file to the lead, unedited. What happens next:
+- [ ] **Re-walk 8.4.** Grading → `7390` → `itay.regev` → override with score, justification
+      and a comment; save; reopen: original, change, reason and comment all visible.
+- [ ] **Re-walk 13.4.** Bot manager, Java 21: 5 sources; **edit a TEXT source** and save;
+      remove another → 4. `tamar.shani` receives one notification for each.
+- [ ] **[13.6 ⚠, two machines]** Avi holds a source editor open; Tamar opens the same source:
+      locked banner naming Avi Mizrahi, read-only; Avi closes; she can edit.
+- [ ] **[14.6]** The bot's teacher view renders sessions and analytics with seeded numbers.
 
-1. Every note becomes a U-n / B-n entry with a ruling (fix now / fix later /
-   as-designed with a reason).
-2. The ⚠ cases you confirmed flip from "passed below the screen" to passed
-   outright in ACCEPTANCE_TESTS.md; B-39/42/43 get their re-verdict lines.
-3. B-45 and B-46 get closed with whatever you ruled.
+---
 
-What this round deliberately does **not** cover: E20.2 (clean-Windows
-double-click) and E20.5 (two-machine on the real university network) — those need
-their specific hardware/network and stay their own sessions; and the dry-run
-defenses, which need the whole team and the clock.
+## 8. One screen (3 min) — `omer.katz`
+
+- [ ] **[9.5]** His Algebra result: TIMED_OUT rendered in words, four questions "Not
+      answered", score from what he answered.
+
+---
+
+## 9. Coordinator (8 min) — `rina.barak`
+
+- [ ] Approvals rail item; Mathematics queue shows `101201` PENDING.
+- [ ] **[4.2]** Open it from the queue: full read-only paper. Approve-with-comment or send
+      back: state flips live, Dana gets the notification.
+- [ ] Exams: **New exam disabled with the reason beside it** (she teaches nothing).
+
+---
+
+## 10. Principal, bank images, theme (12 min) — `principal.avia`
+
+- [ ] **[12.1]** Reports: the same-teacher comparison with whatever pairing the screen
+      offers over `4821` (Dana) and `7390` (Avi); chart renders, honest empty state if a
+      pairing has no data.
+- [ ] Data browser fills; **no mutating control anywhere** (S-7).
+- [ ] **[2.6 + 18.5, E2.16]** Bank browse (as `dana.cohen` if richer): filters compose,
+      scroll is smooth, **each of the ten images belongs to its question**.
+- [ ] **[21.5]** Light ↔ dark and an accent change: every open screen follows.
+
+---
+
+## 11. When you're done
+
+Paste your notes file unedited. Then: every note → a U-n/B-n entry with a ruling; the ⚠
+cases you confirmed flip to passed; §1's re-verdicts close U-5..U-13, B-47, B-48; the
+tracker above gets its round-2 line.
+
+Not in this round, by design: E20.2 (clean-Windows double-click) and E20.5 (the real
+university network) need their own hardware and sessions; the dry-run defenses need the whole
+team and the clock.

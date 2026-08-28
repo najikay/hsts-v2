@@ -99,6 +99,7 @@ public final class TeacherResultsView extends AbstractScreen {
     private boolean selecting;
     private Node chartBack;
     private Node chartPane;
+    private Node printExit;
 
     @Override
     protected Parent build() {
@@ -163,8 +164,14 @@ public final class TeacherResultsView extends AbstractScreen {
                     }
                 });
 
+        // The exit sits beside the toggle that turns print on, because in print mode it
+        // is what stands where that toggle was: `.results-print` hides the toggle, which
+        // is how this screen came to have no way out of its own print layout.
+        printExit = BackLink.exit(ResultsCopy.PRINT_EXIT, ResultsCopy.PRINT_EXIT_TARGET,
+                () -> session.setPrintLayout(false));
+
         HBox pickerRow = new HBox(12, executionPicker, releasedByOther, Buttons.spacer(),
-                buildToggle(), printToggle);
+                buildToggle(), printToggle, printExit);
         pickerRow.setAlignment(Pos.CENTER_LEFT);
 
         statCards.getStyleClass().add("results-stats");
@@ -379,6 +386,12 @@ public final class TeacherResultsView extends AbstractScreen {
         root.setLeft(printing ? null : examRail);
         // Same rule for the histogram's way back: it is navigation, not content.
         show(chartBack, !printing);
+        // The exit is the exception, and the reason it is not a back link. It appears
+        // exactly when print mode is on, and it is the one control print mode does not
+        // hide, because the toggle beside it is hidden and it would otherwise be the only
+        // way back. setSelected does not fire the toggle's action, so this cannot loop.
+        printToggle.setSelected(printing);
+        show(printExit, printing);
     }
 
     private static VBox cardNode(ResultsCopy.StatCard card) {

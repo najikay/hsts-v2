@@ -41,10 +41,30 @@ import java.util.Objects;
  * <p>{@code actualMinutes} is boxed because it is genuinely absent for an attempt that was never
  * recorded, which is a different fact from having taken zero minutes.
  *
+ * <h2>A6 (2026-08-28, additive) — {@code teacherName}</h2>
+ *
+ * <p>The screen named the exam, the course and the score, and never said whose exam it was. A
+ * student who sits papers from several teachers cannot tell from a marked paper which of them
+ * wrote it, marked it and stood behind the score, and the note under it is signed by nobody.
+ * The lead's manual round of 2026-08-28 flagged it, and the field was missing rather than
+ * unset: nothing on this wire carried a teacher at all.
+ *
+ * <p>It is the <b>releasing teacher</b> — {@code exam_executions.created_by}, who by the seed
+ * document's rule is the author of the released version, and on execution 1 is also the teacher
+ * who approved every grade in it. One sitting has exactly one of those, which is why the name
+ * hangs off the execution rather than off the grade: an override by a colleague does not change
+ * whose paper this is.
+ *
+ * <p>Never {@code null}, and the empty string when the row cannot be resolved. A blank means
+ * the client omits the line, which is what a student should see rather than the word "null"
+ * printed under her exam name.
+ *
  * @param grade         the student's grade header; {@code overrideReason} is stripped
  *                      structurally, exactly as {@link MyGrades} does
  * @param examName      the exam this paper belongs to
  * @param courseCode    the course it was taken in
+ * @param teacherName   the display name of the teacher who released this sitting (A6); never
+ *                      {@code null}, empty when the name could not be resolved
  * @param attemptStatus how the attempt ended — {@code SUBMITTED} when she handed in,
  *                      {@code TIMED_OUT} when the server did it for her (9.5)
  * @param actualMinutes recorded solving time (S-19), or {@code null} when none was recorded
@@ -53,11 +73,12 @@ import java.util.Objects;
 public record CheckedForm(StudentGradeRow grade,
                           String examName,
                           String courseCode,
+                          String teacherName,
                           AttemptState attemptStatus,
                           Integer actualMinutes,
                           List<AnswerReviewRow> answers) implements Serializable {
 
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
 
     public CheckedForm {
         Objects.requireNonNull(grade, "grade");
@@ -66,6 +87,9 @@ public record CheckedForm(StudentGradeRow grade,
         grade = grade.withoutJustification();
         Objects.requireNonNull(examName, "examName");
         Objects.requireNonNull(courseCode, "courseCode");
+        // A6: empty rather than null, so the client tests one thing (is it blank?) and no
+        // screen can print the word "null" under a student's exam name.
+        teacherName = teacherName == null ? "" : teacherName;
         // List.copyOf yields an immutable, Serializable list — safe on the wire.
         answers = answers == null ? List.of() : List.copyOf(answers);
     }

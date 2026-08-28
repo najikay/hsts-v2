@@ -2,10 +2,12 @@ package client.ui;
 
 import client.core.ClientApp;
 import client.core.FxTestHarness;
+import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.PushEventBridge;
 import client.features.exam.ExamCopy;
+import client.features.home.StudentHomeSession;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -25,6 +27,7 @@ import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
@@ -146,6 +149,62 @@ class TakeExamInteractionTest extends ApplicationTest {
         assertThat(form.getRoot().lookup(".hsts-countdown"))
                 .as("and the countdown is running")
                 .isNotNull();
+    }
+
+    @Test
+    @DisplayName("\u26a1 arriving from the dashboard card confirms the code instead of asking for it")
+    void dashboardCodeBecomesAConfirmation() {
+        ScreenManager manager = signIn();
+
+        interact(() -> manager.navigator().navigate(Routes.TAKE_EXAM.id(),
+                NavParams.of(StudentHomeSession.CODE_PARAM, "4B7Q")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Scene scene = manager.scene();
+        assertThat(labelTexts(scene))
+                .as("2026-08-28, manual round 1: the code she pressed is stated, not asked for")
+                .contains(ExamCopy.CONFIRM_TITLE, ExamCopy.confirmSubtitle("4B7Q"));
+        assertThat(labelTexts(scene)).doesNotContain(ExamCopy.CODE_TITLE);
+
+        TextField code = visibleTextFields(scene).get(0);
+        assertThat(code.getText()).isEqualTo("4B7Q");
+        assertThat(code.isEditable())
+                .as("the field shows the code; it is not a question any more")
+                .isFalse();
+
+        Button confirm = buttonNamed(scene, ExamCopy.CONFIRM_BUTTON);
+        assertThat(confirm.isDisabled())
+                .as("live without a keystroke, which is the bug the session-level prefill fixes")
+                .isFalse();
+
+        clickOn(confirm);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(manager.scene()))
+                .as("the same EXAM_JOIN, so the identity step still follows (S-18)")
+                .contains(ExamCopy.ID_TITLE, "Java Midterm");
+    }
+
+    @Test
+    @DisplayName("Use a different code hands the code step back, empty")
+    void useADifferentCodeReturnsToTyping() {
+        ScreenManager manager = signIn();
+
+        interact(() -> manager.navigator().navigate(Routes.TAKE_EXAM.id(),
+                NavParams.of(StudentHomeSession.CODE_PARAM, "4B7Q")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        clickOn(linkNamed(manager.scene(), ExamCopy.DIFFERENT_CODE));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Scene scene = manager.scene();
+        assertThat(labelTexts(scene)).contains(ExamCopy.CODE_TITLE);
+        TextField code = visibleTextFields(scene).get(0);
+        assertThat(code.getText()).isEmpty();
+        assertThat(code.isEditable()).isTrue();
+        assertThat(buttonNamed(scene, ExamCopy.CODE_BUTTON).isDisabled())
+                .as("nothing typed yet, so nothing to send")
+                .isTrue();
     }
 
     @Test
@@ -318,15 +377,49 @@ class TakeExamInteractionTest extends ApplicationTest {
 
     /** Real keyboard input into the nth visible text field. */
     private void typeInto(Scene scene, int index, String text) {
-        List<TextField> fields = scene.getRoot().lookupAll(".text-input").stream()
-                .filter(TextField.class::isInstance)
-                .map(TextField.class::cast)
-                .filter(Node::isVisible)
-                .toList();
+        List<TextField> fields = visibleTextFields(scene);
         assertThat(fields).as("a visible text field to type into").hasSizeGreaterThan(index);
         clickOn(fields.get(index));
         write(text);
         WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    private static List<TextField> visibleTextFields(Scene scene) {
+        return scene.getRoot().lookupAll(".text-input").stream()
+                .filter(TextField.class::isInstance)
+                .map(TextField.class::cast)
+                .filter(TakeExamInteractionTest::onScreen)
+                .toList();
+    }
+
+    /**
+     * Effective visibility, not the node's own flag ⚑.
+     *
+     * <p>The three entry cards share one node graph and swap which of them is showing, so the
+     * code field's own {@code visible} stays {@code true} while the card holding it is hidden.
+     * Filtering on {@code Node::isVisible} therefore returned it as field zero on the identity
+     * screen, and the robot clicked the coordinates a hidden node happened to have last: it hit
+     * the ID field by luck of the layout, and stopped hitting it the moment the code card
+     * changed shape. Walking the parents is the difference between a test that passes and a
+     * test that means something.
+     */
+    private static boolean onScreen(Node node) {
+        for (Node walk = node; walk != null; walk = walk.getParent()) {
+            if (!walk.isVisible()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Hyperlink linkNamed(Scene scene, String text) {
+        return scene.getRoot().lookupAll(".hyperlink").stream()
+                .filter(Hyperlink.class::isInstance)
+                .map(Hyperlink.class::cast)
+                .filter(link -> text.equals(link.getText()))
+                .filter(TakeExamInteractionTest::onScreen)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no visible link labelled " + text));
     }
 
     private Button buttonNamed(Scene scene, String text) {
@@ -334,7 +427,7 @@ class TakeExamInteractionTest extends ApplicationTest {
                 .filter(Button.class::isInstance)
                 .map(Button.class::cast)
                 .filter(button -> text.equals(button.getText()))
-                .filter(Node::isVisible)
+                .filter(TakeExamInteractionTest::onScreen)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no visible button labelled " + text));
     }

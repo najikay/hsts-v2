@@ -58,7 +58,10 @@ import java.util.concurrent.CompletionException;
  *   <li><b>Choosing.</b> One button per server found, each reading name, address
  *       and id, plus a link to the manual form.</li>
  *   <li><b>Manual.</b> The original host and port card, with a sentence saying why
- *       it is on screen.</li>
+ *       it is on screen, and a link back to the picker when there was one. That
+ *       door used to open one way only: a user who chose "enter an address
+ *       instead" and thought better of it had to re-run the two-second sweep to
+ *       see the list she had just been reading.</li>
  *   <li><b>Connecting.</b> The button becomes its own progress state.</li>
  * </ul>
  *
@@ -97,6 +100,7 @@ public final class ConnectView extends AbstractScreen {
     private VBox pickerList;
     private Label pickerMessage;
     private Label manualMessage;
+    private Hyperlink backToPicker;
 
     private volatile boolean connecting;
     private volatile boolean showing;
@@ -279,10 +283,32 @@ public final class ConnectView extends AbstractScreen {
         manualMessage.setText(decision.message());
         setShown(manualMessage, !decision.message().isBlank());
         prefillFromPrefs();
+        // Only offer the way back to a list the user has actually seen. On the paths
+        // that reach this card without a picker — nothing answered, "change server" on
+        // Login, a failed connect — there is no list to return to and a link promising
+        // one would be a dead end.
+        setShown(backToPicker, !lastChoices.isEmpty());
         setShown(searchingCard, false);
         setShown(pickerCard, false);
         setShown(manualCard, true);
         hostField.textField().requestFocus();
+    }
+
+    /**
+     * Returns to the picker with the servers it last offered.
+     *
+     * <p>The rows and the sentence are the ones {@link #showPicker} last built, so this
+     * re-offers the choice the user was actually making rather than whatever a fresh
+     * sweep would find a moment later. A sweep is the answer only when there was never
+     * a list, which the link's own visibility already rules out.
+     */
+    private void showLastChoices() {
+        if (lastChoices.isEmpty()) {
+            startDiscovery();
+            return;
+        }
+        showPicker(new ConnectFlow.Decision(ConnectFlow.Step.CHOOSE_SERVER, null, "", null,
+                lastChoices, pickerMessage.getText()));
     }
 
     private Node serverButton(DiscoveredServer server) {
@@ -464,7 +490,16 @@ public final class ConnectView extends AbstractScreen {
         Hyperlink retry = new Hyperlink("Look for servers again");
         retry.setOnAction(e -> startDiscovery());
 
-        VBox box = new VBox(16, title, manualMessage, fields, errorBox, connectButton, retry);
+        backToPicker = new Hyperlink("Back to the server list");
+        backToPicker.setOnAction(e -> showLastChoices());
+        setShown(backToPicker, false);
+
+        // The two ways out of this card belong on one line: the left one returns to what
+        // the sweep already found, the right one sweeps again.
+        HBox links = new HBox(12, backToPicker, retry);
+        links.setAlignment(Pos.CENTER_LEFT);
+
+        VBox box = new VBox(16, title, manualMessage, fields, errorBox, connectButton, links);
         box.getStyleClass().add("hsts-card");
         box.setId("connect-manual");
         setShown(box, false);

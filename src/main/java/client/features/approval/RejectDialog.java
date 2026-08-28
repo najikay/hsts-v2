@@ -5,11 +5,10 @@ import client.ui.anim.Motion;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.Icons;
+import client.ui.components.ModalHost;
 import client.ui.components.logic.ValidationState;
 import common.dto.approval.ExamRejectRequest;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
@@ -32,7 +31,9 @@ import java.util.Optional;
  * and this is the one case it cannot serve: rejection needs an <b>input</b>, and a required
  * one. So this is its sibling rather than a variant of it, built the same way — a modal
  * transparent stage over a scrim, inheriting the owner's stylesheets and dark class — with
- * one field in the middle.
+ * one field in the middle. Both are mounted through
+ * {@link client.ui.components.ModalHost}, which is where "the scrim covers the owner
+ * window" lives (2026-08-28, manual round 1).
  *
  * <h2>The rule is live, and it is the server's rule</h2>
  *
@@ -53,7 +54,7 @@ public final class RejectDialog {
     /**
      * Shows the dialog modally and blocks until the coordinator answers.
      *
-     * @param owner    the window to centre on and block; may be {@code null}
+     * @param owner    the window to dim and block; may be {@code null}
      * @param examName the exam being sent back, named in the title so there is no doubt
      * @return the trimmed reason, or empty when she cancelled
      */
@@ -102,15 +103,9 @@ public final class RejectDialog {
         counter.setText(ApprovalCopy.reasonHint(""));
 
         VBox dialog = build(examName, field, counter, cancel, confirm);
-        StackPane scrim = new StackPane(dialog);
-        scrim.getStyleClass().add("hsts-scrim");
-        scrim.setPadding(new Insets(40));
+        StackPane scrim = ModalHost.mount(stage, owner, dialog);
 
-        Scene scene = new Scene(scrim);
-        scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
-        inheritStyles(owner, scene);
-        stage.setScene(scene);
-
+        Animations.fadeIn(scrim, Motion.DIALOG_MS);
         Animations.scaleIn(dialog, Motion.DIALOG_FROM_SCALE, Motion.DIALOG_MS);
         input.requestFocus();
         stage.showAndWait();
@@ -139,22 +134,5 @@ public final class RejectDialog {
         dialog.getStyleClass().addAll("hsts-dialog", "danger", "reject-dialog");
         dialog.setMaxWidth(520);
         return dialog;
-    }
-
-    /**
-     * A dialog opens in its own {@link Stage} with its own {@link Scene}, so it does not
-     * inherit the owner's stylesheets or the {@code dark} root class. Copying both across is
-     * what keeps a modal from flashing up unstyled and light-themed over a dark app.
-     */
-    private static void inheritStyles(Window owner, Scene scene) {
-        if (owner == null || owner.getScene() == null) {
-            return;
-        }
-        Scene ownerScene = owner.getScene();
-        scene.getStylesheets().setAll(ownerScene.getStylesheets());
-        if (ownerScene.getRoot() != null
-                && ownerScene.getRoot().getStyleClass().contains("dark")) {
-            scene.getRoot().getStyleClass().add("dark");
-        }
     }
 }

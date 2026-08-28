@@ -21,8 +21,9 @@ import javafx.scene.shape.StrokeLineCap;
  * than a theme colour. Colours come from the stylesheet through the style
  * classes below, never from code.
  *
- * <p>All arithmetic — the sweep, the direction, the clamping, the label — is
- * {@link RingGeometry}, which is unit tested. This class positions nodes.
+ * <p>All arithmetic — the sweep, the direction, the clamping, the round-cap
+ * overhang, the label — is {@link RingGeometry}, which is unit tested. This
+ * class positions nodes.
  */
 public final class ProgressRing extends StackPane {
 
@@ -31,6 +32,9 @@ public final class ProgressRing extends StackPane {
 
     /** How thick the ring's stroke is. */
     private static final double STROKE = 7;
+
+    /** The stroke is centred on this, so the ring's outer edge is the diameter. */
+    private static final double RADIUS = (DIAMETER - STROKE) / 2;
 
     private final Arc fill;
     private final Label centre = new Label();
@@ -42,13 +46,11 @@ public final class ProgressRing extends StackPane {
         setPrefSize(DIAMETER, DIAMETER);
         setMaxSize(DIAMETER, DIAMETER);
 
-        double radius = (DIAMETER - STROKE) / 2;
-
-        Arc track = arc(radius);
+        Arc track = arc(RADIUS);
         track.getStyleClass().add("ring-track");
         track.setLength(RingGeometry.FULL_SWEEP);
 
-        fill = arc(radius);
+        fill = arc(RADIUS);
         fill.getStyleClass().add("ring-fill");
 
         centre.getStyleClass().add("ring-value");
@@ -62,7 +64,11 @@ public final class ProgressRing extends StackPane {
      * an average does not have to be rebuilt.
      */
     public void set(double score) {
-        fill.setLength(RingGeometry.sweepFor(score));
+        // 2026-08-28, manual round 1: the sweep is shortened by one round cap at
+        // each end, because a round cap is painted outside the angle it ends. The
+        // stroke and the radius go in so the geometry class can work that out;
+        // the label is untouched, and it is still the number the reader is given.
+        fill.setLength(RingGeometry.sweepFor(score, STROKE, RADIUS));
         centre.setText(RingGeometry.centreLabel(score));
         setAccessibleText("Term average " + RingGeometry.centreLabel(score) + " out of 100.");
     }

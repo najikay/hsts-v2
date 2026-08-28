@@ -56,6 +56,9 @@ import java.util.function.Function;
  * gets all of it by using this class, which is the only way a treatment applied
  * to nine tables stays applied to nine tables.
  *
+ * <p>The width policy is part of that list: the table always fills the width it
+ * is given, sharing it out in the ratio of {@link #columnWidths(double...)}.
+ *
  * @param <T> the row type
  */
 public final class DataTable<T> extends VBox {
@@ -105,6 +108,12 @@ public final class DataTable<T> extends VBox {
         sorted.comparatorProperty().bind(table.comparatorProperty());
         table.setItems(sorted);
         table.getStyleClass().add("hsts-table");
+        // 2026-08-28, manual round 1: without a resize policy the columns sit at
+        // their pref widths and the rest of every row is empty, which is the dead
+        // space testers reported on the question bank. This policy hands the
+        // table's whole width out in proportion to those pref widths, so
+        // columnWidths still decides the shape and nothing is left over.
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
         // The wrapper owns the empty state; TableView's own placeholder must not
         // flash "No content in table" underneath it.
         table.setPlaceholder(new Label(""));
@@ -224,6 +233,18 @@ public final class DataTable<T> extends VBox {
      * still drag a divider. All this does is set the starting proportions from
      * what the column actually contains, so nothing is truncated at the default
      * window size.
+     *
+     * <p>2026-08-28, manual round 1: these are now <b>proportions</b> rather than
+     * starting widths. The table runs
+     * {@code CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS}, which shares the full table
+     * width out in the ratio of the pref widths, so a table wider than their sum
+     * grows every column instead of leaving a gap and a narrower one shrinks them
+     * all together. The numbers a screen already passes keep meaning what they
+     * meant: it is their ratio that was carrying the intent.
+     *
+     * <p>A table that leaves this alone gets equal columns, which is right for
+     * four columns of similar content and wrong the moment one of them holds a
+     * question stem. Pass widths when the columns are not alike.
      *
      * @param widths one per column, in the order the columns were added; extra
      *               values are ignored, missing ones leave that column alone

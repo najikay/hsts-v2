@@ -231,7 +231,7 @@ class WaveOneInteractionTest extends ApplicationTest {
     // ===================== F-7: the back convention =======================
 
     @Test
-    @DisplayName("⚑ F-7: the exam preview has a back control top-left, and it goes back")
+    @DisplayName("⚑ F-7: the exam preview has a back control, and it goes back")
     void theDrillInHasAWayBack() {
         ScreenManager manager = signIn(connection -> {
             connection.replyOk(Verb.APPROVALS_QUEUE_GET, new ApprovalQueue(List.of(PENDING), true));
@@ -243,6 +243,10 @@ class WaveOneInteractionTest extends ApplicationTest {
                 client.core.NavParams.of("examVersionId", CALCULUS_V1)));
         WaitForAsyncUtils.waitForFxEvents();
 
+        // The control moved into the navbar after the lead's manual round: the screen
+        // used to build its own, and a drill-in that forgot to had no exit at all.
+        // What F-7 asked for is unchanged — one control, one word, one behaviour — so
+        // this test is unchanged too, and now covers every drill-in rather than this one.
         Node back = manager.scene().getRoot().lookup("." + BackLink.STYLE_CLASS);
         assertThat(back).as("every drill-in carries the convention's control").isNotNull();
         assertThat(((Button) back).getText()).isEqualTo(BackLink.LABEL);

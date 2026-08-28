@@ -73,6 +73,7 @@ public final class ExamEntrySession {
     private ValidationState codeState = ValidationState.pristine();
     private ValidationState idState = ValidationState.pristine();
     private String blockedMessage = "";
+    private boolean confirming;
 
     /**
      * @param dispatcher the shared request correlator
@@ -113,6 +114,51 @@ public final class ExamEntrySession {
         this.codeTouched = true;
         this.codeState = localCodeState();
         onChange.run();
+    }
+
+    /**
+     * Takes a code the dashboard already validated and turns the step into a confirmation ⚑.
+     *
+     * <p>2026-08-28, manual round 1, lead's ruling. Two things were wrong with pre-filling the
+     * text control instead. The first is a bug: {@code setText} with the value the control
+     * already holds fires no listener, so a second visit to the same exam left the session
+     * empty behind a filled-in field and Continue stayed disabled forever. The second is the
+     * design: she had just pressed a card carrying this code, and the screen asked her for it.
+     *
+     * <p>So the code goes in through the session, which is the only thing {@link #canContinue()}
+     * reads, and {@link #isConfirming()} tells the view to render the step as the confirmation
+     * it is. Nothing else about the flow moves: the same {@code EXAM_JOIN} is sent, by the same
+     * button, and the same four refusals land on the same field.
+     *
+     * @param raw the code to confirm; blank, or anything that is not a well-formed code, is
+     *            ignored and leaves the ordinary editable step
+     */
+    public void prefill(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        setCode(raw);
+        confirming = CODE_PATTERN.matcher(code).matches();
+        onChange.run();
+    }
+
+    /**
+     * Leaves the confirmation for the ordinary editable step, cleared (lead's ruling).
+     *
+     * <p>Cleared rather than left filled: the student pressing this is saying the code is not
+     * the one she wants, and a field she has to empty first is a field arguing with her.
+     */
+    public void useDifferentCode() {
+        confirming = false;
+        code = "";
+        codeTouched = false;
+        codeState = ValidationState.pristine();
+        onChange.run();
+    }
+
+    /** @return {@code true} when the code step is confirming a code rather than asking for one. */
+    public boolean isConfirming() {
+        return confirming;
     }
 
     /** @return what was typed, trimmed. */
@@ -327,6 +373,7 @@ public final class ExamEntrySession {
         codeState = ValidationState.pristine();
         idState = ValidationState.pristine();
         blockedMessage = "";
+        confirming = false;
         onChange.run();
     }
 

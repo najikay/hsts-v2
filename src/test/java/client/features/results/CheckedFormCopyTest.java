@@ -31,11 +31,16 @@ class CheckedFormCopyTest {
     }
 
     private static CheckedForm form(AttemptState state, Integer minutes, String comment) {
+        return form(state, minutes, comment, "Dana Cohen");
+    }
+
+    private static CheckedForm form(AttemptState state, Integer minutes, String comment,
+                                    String teacherName) {
         return new CheckedForm(
                 new StudentGradeRow(900, 11, "מאיה לוי", 71, 71, 71, GradeState.APPROVED,
                         null, comment, Instant.parse("2026-08-20T09:00:00Z"),
                         "Algebra midterm", "11"),
-                "Algebra midterm", "11", state, minutes, List.of());
+                "Algebra midterm", "11", teacherName, state, minutes, List.of());
     }
 
     // ===================== Marking ========================================
@@ -148,6 +153,40 @@ class CheckedFormCopyTest {
         assertThat(CheckedFormCopy.teacherNote(form(AttemptState.SUBMITTED, 45, "  "))).isNull();
     }
 
+    // ===================== Whose exam it was (A6) =========================
+
+    @Nested
+    @DisplayName("The teacher's name (A6)")
+    class TeacherName {
+
+        @Test
+        @DisplayName("names the teacher who released the exam, with a word saying who she is")
+        void namesTheTeacher() {
+            String line = CheckedFormCopy.teacherLine(form(AttemptState.SUBMITTED, 45, null));
+
+            // The seeded Algebra sitting: dana.cohen wrote it, released it and approved it.
+            assertThat(line).isEqualTo("Teacher: Dana Cohen");
+            assertThat(line).startsWith(CheckedFormCopy.TEACHER_PREFIX);
+        }
+
+        @Test
+        @DisplayName("an unresolved name drops the line rather than showing an empty label")
+        void emptyNameDropsTheLine() {
+            // The server sends "" when it cannot resolve the releasing teacher. A label with
+            // nothing after it reads as data that failed to load.
+            assertThat(CheckedFormCopy.teacherLine(form(AttemptState.SUBMITTED, 45, null, "")))
+                    .isNull();
+            assertThat(CheckedFormCopy.teacherLine(form(AttemptState.SUBMITTED, 45, null, "  ")))
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("the prefix carries no em dash, which no user-visible string here does")
+        void prefixIsPlain() {
+            assertThat(CheckedFormCopy.TEACHER_PREFIX).doesNotContain("—");
+        }
+    }
+
     @Test
     @DisplayName("the justification is never reachable from this screen's copy")
     void noJustification() {
@@ -157,7 +196,7 @@ class CheckedFormCopyTest {
                 new StudentGradeRow(900, 11, "מאיה לוי", 45, 55, 55, GradeState.APPROVED,
                         "teacher-only audit text", "well done",
                         Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11"),
-                "Algebra midterm", "11", AttemptState.SUBMITTED, 45, List.of());
+                "Algebra midterm", "11", "Dana Cohen", AttemptState.SUBMITTED, 45, List.of());
 
         assertThat(leaky.grade().overrideReason()).isNull();
         assertThat(CheckedFormCopy.header(leaky)).doesNotContain("audit");
@@ -173,5 +212,7 @@ class CheckedFormCopyTest {
                 .isThrownBy(() -> CheckedFormCopy.header(null));
         assertThatExceptionOfType(NullPointerException.class)
                 .isThrownBy(() -> CheckedFormCopy.attemptLine(null));
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(() -> CheckedFormCopy.teacherLine(null));
     }
 }

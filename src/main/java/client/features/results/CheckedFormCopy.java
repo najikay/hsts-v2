@@ -55,6 +55,15 @@ public final class CheckedFormCopy {
     /** The heading over the teacher's note, when there is one. */
     public static final String TEACHER_NOTE = "Your teacher's note";
 
+    /**
+     * What the teacher's name is labelled with (A6, 2026-08-28).
+     *
+     * <p>A bare name under an exam title would read as a second title. The word says whose
+     * name it is, which is the whole point of the line: a student sitting papers from several
+     * teachers should not have to work out who set this one.
+     */
+    public static final String TEACHER_PREFIX = "Teacher: ";
+
     private CheckedFormCopy() {
         // static helper — no instances
     }
@@ -136,6 +145,23 @@ public final class CheckedFormCopy {
             return how;
         }
         return how + " · " + minutes + (minutes == 1 ? " minute" : " minutes");
+    }
+
+    /**
+     * The teacher who set and released this exam (A6).
+     *
+     * <p>Null when the server could not resolve the name, which it reports as an empty string.
+     * The line is then left out entirely rather than shown with nothing after the colon: a
+     * label with no value reads as data that failed to load, and on this screen it would be
+     * the only thing on the paper that looked broken.
+     *
+     * @param form the loaded form
+     * @return for example {@code "Teacher: Dana Cohen"}, or {@code null} when there is no name
+     */
+    public static String teacherLine(CheckedForm form) {
+        Objects.requireNonNull(form, "form");
+        String name = form.teacherName();
+        return name == null || name.isBlank() ? null : TEACHER_PREFIX + name;
     }
 
     /**

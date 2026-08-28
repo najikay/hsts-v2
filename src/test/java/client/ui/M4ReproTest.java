@@ -220,12 +220,26 @@ class M4ReproTest extends ApplicationTest {
         TextField field = scene.getRoot().lookupAll(".text-field").stream()
                 .filter(TextField.class::isInstance)
                 .map(TextField.class::cast)
-                .filter(Node::isVisible)
+                .filter(M4ReproTest::onScreen)
                 .min(Comparator.comparingDouble(f ->
                         f.localToScene(f.getLayoutBounds()).getMinY()))
                 .orElseThrow(() -> new AssertionError("no visible text field"));
         clickOn(field);
         write(text);
+    }
+
+    /**
+     * Effective visibility, walked up the parents: a node's own flag stays true inside a
+     * hidden card, which is how a robot ends up typing into the wrong field (found by
+     * agent C's fixture repair in TakeExamInteractionTest, 2026-08-28).
+     */
+    private static boolean onScreen(Node node) {
+        for (Node walk = node; walk != null; walk = walk.getParent()) {
+            if (!walk.isVisible()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Button buttonNamed(Scene scene, String text) {

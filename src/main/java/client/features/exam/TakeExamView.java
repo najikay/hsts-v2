@@ -98,11 +98,14 @@ public final class TakeExamView extends AbstractScreen {
         attempt.stop();
         entry.reset();
         content.setCenter(entryView);
-        // The dashboard card can hand over a code it has already validated. It is a
-        // pre-fill and nothing more: the join still happens here and the identity step
-        // still follows it.
+        // The dashboard card can hand over a code it has already validated. 2026-08-28,
+        // manual round 1, lead's ruling: that arrival renders the code step as a
+        // confirmation rather than as a question she has already answered. It goes into the
+        // session and not into the text control, which is what makes Continue enabled on
+        // the second visit to the same exam as well as the first. The join still happens
+        // here and the identity step still follows it.
         params.get(client.features.home.StudentHomeSession.CODE_PARAM, String.class)
-                .ifPresent(entryView::prefillCode);
+                .ifPresent(entry::prefill);
         entryView.focusCurrentField();
     }
 

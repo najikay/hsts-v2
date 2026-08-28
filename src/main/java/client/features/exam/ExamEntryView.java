@@ -7,6 +7,7 @@ import common.dto.exam.ExamHeader;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
@@ -28,11 +29,18 @@ import java.util.Objects;
  */
 public final class ExamEntryView extends StackPane {
 
+    /** Style hook for the confirming variant's field; the look is in {@code hsts.css}. */
+    private static final String READ_ONLY_CLASS = "read-only";
+
     private final ExamEntrySession session;
 
     private final FormField codeField = FormField.text(ExamCopy.CODE_LABEL, "e.g. 4B7Q");
     private final FormField idField = FormField.text(ExamCopy.ID_LABEL, "Your ID number");
     private final Button continueButton = Buttons.primary(ExamCopy.CODE_BUTTON);
+    private final Label codeTitle = new Label(ExamCopy.CODE_TITLE);
+    private final Label codeSubtitle = new Label(ExamCopy.CODE_SUBTITLE);
+    /** The way out of the confirming variant; hidden on the ordinary code step. */
+    private final Hyperlink differentCode = new Hyperlink(ExamCopy.DIFFERENT_CODE);
     private final Button startButton = Buttons.primary(ExamCopy.START_BUTTON);
     private final Label summaryTitle = new Label();
     private final Label summaryMeta = new Label();
@@ -50,7 +58,7 @@ public final class ExamEntryView extends StackPane {
         getStyleClass().add("exam-entry");
         setPadding(new Insets(32));
 
-        codeField.hint("Your teacher reads it out at the start of the exam.");
+        codeField.hint(ExamCopy.CODE_HINT);
         codeField.textField().setPrefColumnCount(8);
         codeField.textField().textProperty().addListener((obs, old, value) -> session.setCode(value));
         codeField.textField().setOnAction(e -> observed(session.submitCode()));
@@ -61,7 +69,10 @@ public final class ExamEntryView extends StackPane {
         idField.textField().setOnAction(e -> observed(session.start()));
         startButton.setOnAction(e -> observed(session.start()));
 
-        codeCard = card(ExamCopy.CODE_TITLE, ExamCopy.CODE_SUBTITLE, codeField, continueButton);
+        differentCode.getStyleClass().add("small");
+        differentCode.setOnAction(e -> session.useDifferentCode());
+
+        codeCard = codeCard();
         identityCard = identityCard();
         blockedCard = blockedCard();
 
@@ -89,6 +100,7 @@ public final class ExamEntryView extends StackPane {
 
     /** Mirrors the session onto the two cards. */
     public void refresh() {
+        renderCodeStep();
         codeField.apply(session.codeState());
         idField.apply(session.idState());
         continueButton.setDisable(!session.canContinue());
@@ -102,23 +114,43 @@ public final class ExamEntryView extends StackPane {
     }
 
     /**
-     * Fills the code field in from a code the dashboard already validated.
+     * The code step in whichever of its two moods the session is in ⚑.
      *
-     * <p>Typing it into the control rather than into the session, so the session's own
-     * listener runs and the button state, the validation and the field stay one thing.
+     * <p>2026-08-28, manual round 1, lead's ruling: arriving from the dashboard card renders
+     * this step as a confirmation. Same card, same field and same button, because it is the
+     * same request underneath and a second card would be a second thing to keep in step; what
+     * changes is that the code is stated rather than asked for, the field is read-only, and
+     * the button already means yes.
      *
-     * @param code the code to pre-fill; blank is ignored
+     * <p>The control's text is written from the session rather than the other way round, and
+     * only when the two differ, so the text listener that feeds the session cannot loop.
      */
-    public void prefillCode(String code) {
-        if (code != null && !code.isBlank()) {
+    private void renderCodeStep() {
+        boolean confirming = session.isConfirming();
+        String code = session.code();
+        if (!code.equals(codeField.textField().getText())) {
             codeField.textField().setText(code);
         }
+        codeTitle.setText(confirming ? ExamCopy.CONFIRM_TITLE : ExamCopy.CODE_TITLE);
+        codeSubtitle.setText(confirming
+                ? ExamCopy.confirmSubtitle(code) : ExamCopy.CODE_SUBTITLE);
+        continueButton.setText(confirming ? ExamCopy.CONFIRM_BUTTON : ExamCopy.CODE_BUTTON);
+        codeField.textField().setEditable(!confirming);
+        codeField.textField().getStyleClass().remove(READ_ONLY_CLASS);
+        if (confirming) {
+            codeField.textField().getStyleClass().add(READ_ONLY_CLASS);
+        }
+        codeField.hint(confirming ? "" : ExamCopy.CODE_HINT);
+        show(differentCode, confirming);
     }
 
-    /** Puts keyboard focus where the student is about to type. */
+    /** Puts keyboard focus where the student is about to act. */
     public void focusCurrentField() {
         if (session.phase() == EntryPhase.IDENTITY) {
             idField.textField().requestFocus();
+        } else if (session.isConfirming()) {
+            // Nothing to type: the one thing left to do is the thing the button does.
+            continueButton.requestFocus();
         } else {
             codeField.textField().requestFocus();
         }
@@ -148,6 +180,28 @@ public final class ExamEntryView extends StackPane {
                     ExamCopy.sittingShortened(header.windowClosesAt(), header.sittingMinutes()));
         }
         show(summaryWindow, shortened);
+    }
+
+    /**
+     * The code card, built once and re-titled by {@link #renderCodeStep()}.
+     *
+     * <p>Not the shared {@link #card} helper, because this card's title, explanation and
+     * button all change with the session and it carries one node the identity card does not:
+     * the link out of the confirming variant.
+     */
+    private VBox codeCard() {
+        codeTitle.getStyleClass().add("h1");
+        codeSubtitle.getStyleClass().addAll("body", "muted");
+        codeSubtitle.setWrapText(true);
+
+        HBox actions = new HBox(12, differentCode, Buttons.spacer(), continueButton);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+
+        VBox card = new VBox(16, codeTitle, codeSubtitle, codeField, actions);
+        card.getStyleClass().addAll("hsts-card", "exam-entry-card");
+        card.setMaxWidth(460);
+        card.setMaxHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+        return card;
     }
 
     private VBox identityCard() {
