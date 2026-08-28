@@ -1,6 +1,7 @@
 package client.features.exam;
 
 import client.events.ClientEventBus;
+import client.events.FxThreadPoster;
 import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import common.dto.exam.ExecutionMonitor;
@@ -49,6 +50,8 @@ public final class ExecutionMonitorSession {
 
     private final RequestDispatcher dispatcher;
     private final ClientEventBus eventBus;
+    /** The FX-thread seam (P-14, 2026-08-28): responses settle through it, never raw. */
+    private final FxThreadPoster poster;
     private final List<Consumer<ExecutionMonitor>> listeners = new ArrayList<>();
 
     private long executionId;
@@ -65,6 +68,7 @@ public final class ExecutionMonitorSession {
     public ExecutionMonitorSession(RequestDispatcher dispatcher, ClientEventBus eventBus) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.poster = eventBus.poster();
     }
 
     /**
@@ -132,11 +136,13 @@ public final class ExecutionMonitorSession {
      */
     public CompletableFuture<Void> refresh() {
         long asked = executionId;
-        return dispatcher.send(Verb.EXECUTION_MONITOR_GET, new MonitorRequest(asked))
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+                dispatcher.send(Verb.EXECUTION_MONITOR_GET, new MonitorRequest(asked))
+                        .whenComplete((response, failure) -> poster.run(() -> {
                     apply(Verb.EXECUTION_MONITOR_GET, asked, response, failure);
-                    return null;
-                });
+                            settled.complete(null);
+                        }));
+                return settled;
     }
 
     /**
@@ -157,11 +163,13 @@ public final class ExecutionMonitorSession {
             return CompletableFuture.completedFuture(null);
         }
         long asked = executionId;
-        return dispatcher.send(Verb.EXECUTION_EXTEND, ask)
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+                dispatcher.send(Verb.EXECUTION_EXTEND, ask)
+                        .whenComplete((response, failure) -> poster.run(() -> {
                     apply(Verb.EXECUTION_EXTEND, asked, response, failure);
-                    return null;
-                });
+                            settled.complete(null);
+                        }));
+                return settled;
     }
 
     // ===================== Pushes ========================================

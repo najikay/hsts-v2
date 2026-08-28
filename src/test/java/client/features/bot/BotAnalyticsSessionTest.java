@@ -1,5 +1,6 @@
 package client.features.bot;
 
+import client.events.DirectFxThreadPoster;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.bot.BotActivityPoint;
@@ -40,7 +41,7 @@ class BotAnalyticsSessionTest {
         connection.connect();
         RequestDispatcher dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
-        session = new BotAnalyticsSession(dispatcher, "22");
+        session = new BotAnalyticsSession(dispatcher, new DirectFxThreadPoster(), "22");
     }
 
     @Test

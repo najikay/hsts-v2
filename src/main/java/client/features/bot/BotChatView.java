@@ -173,7 +173,7 @@ public final class BotChatView extends AbstractScreen {
         courseCode = course;
         String name = courseNameOf(course);
         BotChatModel model = new BotChatModel(course, name);
-        session = new BotChatSession(dispatcher(), model, Clock.systemUTC());
+        session = new BotChatSession(dispatcher(), eventBus().poster(), model, Clock.systemUTC());
         renderedEntries = 0;
         pendingIndex = -1;
         messages.getChildren().clear();

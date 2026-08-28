@@ -74,7 +74,7 @@ public final class BotAnalyticsView extends AbstractScreen {
         String resolved = requested.isBlank() ? firstCourse() : requested;
         if (session == null || !resolved.equalsIgnoreCase(courseCode)) {
             courseCode = resolved;
-            session = new BotAnalyticsSession(dispatcher(), resolved);
+            session = new BotAnalyticsSession(dispatcher(), eventBus().poster(), resolved);
             session.onChange(() -> onFxThread().run(this::render));
         }
         session.refresh();

@@ -1,6 +1,7 @@
 package client.features.release;
 
 import client.events.ClientEventBus;
+import client.events.FxThreadPoster;
 import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import common.dto.release.ReleaseActionRequest;
@@ -61,6 +62,8 @@ public final class ReleaseManagerSession {
 
     private final RequestDispatcher dispatcher;
     private final ClientEventBus eventBus;
+    /** The FX-thread seam (P-14, 2026-08-28): responses settle through it, never raw. */
+    private final FxThreadPoster poster;
     private final List<Consumer<ReleaseList>> listeners = new ArrayList<>();
 
     private boolean started;
@@ -79,6 +82,7 @@ public final class ReleaseManagerSession {
     public ReleaseManagerSession(RequestDispatcher dispatcher, ClientEventBus eventBus) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.poster = eventBus.poster();
     }
 
     /**
@@ -146,12 +150,14 @@ public final class ReleaseManagerSession {
     public CompletableFuture<Void> refresh() {
         loading = true;
         publish();
-        return dispatcher.send(Verb.RELEASE_LIST_GET, null)
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+                dispatcher.send(Verb.RELEASE_LIST_GET, null)
+                        .whenComplete((response, failure) -> poster.run(() -> {
                     loading = false;
                     applyList(response, failure);
-                    return null;
-                });
+                            settled.complete(null);
+                        }));
+                return settled;
     }
 
     /**
@@ -160,8 +166,9 @@ public final class ReleaseManagerSession {
      * @return a future completing when the picker has been filled
      */
     public CompletableFuture<Void> loadOptions() {
-        return dispatcher.send(Verb.RELEASE_OPTIONS_GET, null)
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+                dispatcher.send(Verb.RELEASE_OPTIONS_GET, null)
+                        .whenComplete((response, failure) -> poster.run(() -> {
                     if (failure == null && response.isOk()
                             && response.getPayload() instanceof ReleaseOptions fresh) {
                         options = fresh;
@@ -169,8 +176,9 @@ public final class ReleaseManagerSession {
                     } else if (failure != null) {
                         log.warn("Could not load releasable exams: {}", failure.toString());
                     }
-                    return null;
-                });
+                            settled.complete(null);
+                        }));
+                return settled;
     }
 
     /**
@@ -219,16 +227,18 @@ public final class ReleaseManagerSession {
         if (malformed != null) {
             return refuseLocally(malformed.sentence());
         }
-        return dispatcher.send(Verb.RELEASE_CREATE, ask)
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+                dispatcher.send(Verb.RELEASE_CREATE, ask)
+                        .whenComplete((response, failure) -> poster.run(() -> {
                     ReleaseRow created = applyRow(response, failure);
                     if (created != null) {
                         // Sticky, not a toast: this is the code she is about to read out.
                         lastCreated = created;
                         publish();
                     }
-                    return null;
-                });
+                            settled.complete(null);
+                        }));
+                return settled;
     }
 
     /**
@@ -256,11 +266,13 @@ public final class ReleaseManagerSession {
     }
 
     private CompletableFuture<Void> act(Verb verb, long executionId) {
-        return dispatcher.send(verb, new ReleaseActionRequest(executionId))
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+                dispatcher.send(verb, new ReleaseActionRequest(executionId))
+                        .whenComplete((response, failure) -> poster.run(() -> {
                     applyRow(response, failure);
-                    return null;
-                });
+                            settled.complete(null);
+                        }));
+                return settled;
     }
 
     // ===================== Pushes ========================================

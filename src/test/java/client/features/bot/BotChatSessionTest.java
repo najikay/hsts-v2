@@ -1,5 +1,6 @@
 package client.features.bot;
 
+import client.events.DirectFxThreadPoster;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.bot.BotAnswer;
@@ -45,7 +46,8 @@ class BotChatSessionTest {
         dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
         model = new BotChatModel("22", "Databases 22");
-        session = new BotChatSession(dispatcher, model, Clock.fixed(NOW, ZoneOffset.UTC));
+        session = new BotChatSession(dispatcher, new DirectFxThreadPoster(), model,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -278,7 +280,8 @@ class BotChatSessionTest {
         // view rebuilds model and session for the chosen course; this is that rebuild.
         BotChatModel switched = new BotChatModel("11", "Algebra 11");
         BotChatSession other =
-                new BotChatSession(dispatcher, switched, Clock.fixed(NOW, ZoneOffset.UTC));
+                new BotChatSession(dispatcher, new DirectFxThreadPoster(), switched,
+                        Clock.fixed(NOW, ZoneOffset.UTC));
         connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Algebra 11",
                 "You are sitting a Databases 22 exam right now."));
 
@@ -303,7 +306,8 @@ class BotChatSessionTest {
     void acknowledgingAfterASwitchStaysOnTheNewCourse() {
         BotChatModel switched = new BotChatModel("11", "Algebra 11");
         BotChatSession other =
-                new BotChatSession(dispatcher, switched, Clock.fixed(NOW, ZoneOffset.UTC));
+                new BotChatSession(dispatcher, new DirectFxThreadPoster(), switched,
+                        Clock.fixed(NOW, ZoneOffset.UTC));
         connection.replyOk(Verb.BOT_ASK, new BotIntegrityNotice("Algebra 11", "notice"));
         other.ask("what is a discriminant").join();
         connection.replyOk(Verb.BOT_ASK,

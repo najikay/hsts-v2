@@ -114,7 +114,7 @@ public final class BotManagerView extends AbstractScreen {
         String resolved = requested.isBlank() ? firstTaughtCourse() : requested;
         if (session == null || !resolved.equalsIgnoreCase(courseCode)) {
             courseCode = resolved;
-            session = new BotManagerSession(dispatcher(), resolved);
+            session = new BotManagerSession(dispatcher(), eventBus().poster(), resolved);
             session.onChange(() -> onFxThread().run(this::render));
             heading.setText(BotCopy.MANAGER_TITLE);
             subheading.setText(courseNameOf(resolved));

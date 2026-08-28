@@ -1,5 +1,6 @@
 package client.features.bot;
 
+import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
 import common.dto.bot.BotAnswer;
 import common.dto.bot.BotAskRequest;
@@ -52,6 +53,7 @@ public final class BotChatSession {
     private static final Logger log = LoggerFactory.getLogger(BotChatSession.class);
 
     private final RequestDispatcher dispatcher;
+    private final FxThreadPoster poster;
     private final BotChatModel model;
     private final Clock clock;
 
@@ -66,12 +68,17 @@ public final class BotChatSession {
 
     /**
      * @param dispatcher the shared request correlator
+     * @param poster     the FX-thread seam (M-4, 2026-08-28). Responses arrive on OCSF's
+     *                   read thread and every settle here ends in a bubble being drawn, so
+     *                   answers are applied through the poster rather than on the socket
      * @param model      the state this session drives
      * @param clock      the client's clock; only ever used for optimistic bubble
      *                   timestamps, since every stored time comes from the server
      */
-    public BotChatSession(RequestDispatcher dispatcher, BotChatModel model, Clock clock) {
+    public BotChatSession(RequestDispatcher dispatcher, FxThreadPoster poster,
+                          BotChatModel model, Clock clock) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.poster = Objects.requireNonNull(poster, "poster");
         this.model = Objects.requireNonNull(model, "model");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -128,11 +135,13 @@ public final class BotChatSession {
         long sessionId = model.sessionId();
         BotAskRequest payload = new BotAskRequest(model.courseCode(),
                 sessionId > 0 ? sessionId : null, text, acknowledged);
-        return dispatcher.send(Verb.BOT_ASK, payload)
-                .handle((response, failure) -> {
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(Verb.BOT_ASK, payload)
+                .whenComplete((response, failure) -> poster.run(() -> {
                     applyAsk(response, failure);
-                    return null;
-                });
+                    applied.complete(null);
+                }));
+        return applied;
     }
 
     private void applyAsk(Message response, Throwable failure) {
@@ -177,30 +186,36 @@ public final class BotChatSession {
      */
     public CompletableFuture<Void> reopen(long sessionId) {
         requestedSessionId = sessionId;
-        return dispatcher.send(Verb.BOT_SESSION_GET, new BotSessionRequest(sessionId))
-                .handle((response, failure) -> {
-                    if (sessionId != requestedSessionId) {
-                        // She reopened another conversation while this was in flight. Adopting it
-                        // would load one conversation's turns into a screen headed by another.
-                        // BotChatView calls this from onShow, which runs on every navigation.
-                        return null;
-                    }
-                    if (failure != null) {
-                        log.warn("BOT_SESSION_GET failed: {}", failure.toString());
-                        model.failed(BotCopy.HISTORY_FAILED);
-                        return null;
-                    }
-                    if (response.isError()) {
-                        model.failed(response.errorMessage());
-                        return null;
-                    }
-                    if (response.getPayload() instanceof BotConversation conversation) {
-                        model.load(conversation);
-                    } else {
-                        log.warn("BOT_SESSION_GET answered with an unexpected payload");
-                        model.failed(BotCopy.HISTORY_FAILED);
-                    }
-                    return null;
-                });
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(Verb.BOT_SESSION_GET, new BotSessionRequest(sessionId))
+                .whenComplete((response, failure) -> poster.run(() -> {
+                    applyReopen(sessionId, response, failure);
+                    applied.complete(null);
+                }));
+        return applied;
+    }
+
+    private void applyReopen(long sessionId, Message response, Throwable failure) {
+        if (sessionId != requestedSessionId) {
+            // She reopened another conversation while this was in flight. Adopting it
+            // would load one conversation's turns into a screen headed by another.
+            // BotChatView calls this from onShow, which runs on every navigation.
+            return;
+        }
+        if (failure != null) {
+            log.warn("BOT_SESSION_GET failed: {}", failure.toString());
+            model.failed(BotCopy.HISTORY_FAILED);
+            return;
+        }
+        if (response.isError()) {
+            model.failed(response.errorMessage());
+            return;
+        }
+        if (response.getPayload() instanceof BotConversation conversation) {
+            model.load(conversation);
+        } else {
+            log.warn("BOT_SESSION_GET answered with an unexpected payload");
+            model.failed(BotCopy.HISTORY_FAILED);
+        }
     }
 }

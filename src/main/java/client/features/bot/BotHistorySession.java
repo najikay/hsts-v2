@@ -1,5 +1,6 @@
 package client.features.bot;
 
+import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
 import common.dto.bot.BotCourseRequest;
 import common.dto.bot.BotSessionRow;
@@ -33,6 +34,7 @@ public final class BotHistorySession {
     private static final Logger log = LoggerFactory.getLogger(BotHistorySession.class);
 
     private final RequestDispatcher dispatcher;
+    private final FxThreadPoster poster;
     private final String courseCode;
     private final List<Runnable> listeners = new ArrayList<>();
 
@@ -43,10 +45,15 @@ public final class BotHistorySession {
 
     /**
      * @param dispatcher the shared request correlator
+     * @param poster     the FX-thread seam (M-4, 2026-08-28). The answer arrives on OCSF's
+     *                   read thread and settling it redraws the list of conversations, so it
+     *                   is applied through the poster rather than on the socket
      * @param courseCode the course whose history to show
      */
-    public BotHistorySession(RequestDispatcher dispatcher, String courseCode) {
+    public BotHistorySession(RequestDispatcher dispatcher, FxThreadPoster poster,
+                             String courseCode) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.poster = Objects.requireNonNull(poster, "poster");
         this.courseCode = Objects.requireNonNull(courseCode, "courseCode");
         this.page = BotSessionsPage.empty(courseCode, courseCode);
     }
@@ -85,11 +92,13 @@ public final class BotHistorySession {
         busy = true;
         status = "";
         changed();
-        return dispatcher.send(Verb.BOT_SESSIONS_GET, new BotCourseRequest(courseCode))
-                .handle((response, failure) -> {
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(Verb.BOT_SESSIONS_GET, new BotCourseRequest(courseCode))
+                .whenComplete((response, failure) -> poster.run(() -> {
                     apply(response, failure);
-                    return null;
-                });
+                    applied.complete(null);
+                }));
+        return applied;
     }
 
     /** Subscribes a renderer; called on every change. */

@@ -64,7 +64,7 @@ public final class TakeExamView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        entry = new ExamEntrySession(dispatcher())
+        entry = new ExamEntrySession(dispatcher(), eventBus().poster())
                 .onChange(this::refreshEntry)
                 .onStarted(this::enterForm);
         attempt = new ExamAttemptSession(dispatcher(), eventBus(), model, DelayedRunner.shared());
@@ -135,8 +135,11 @@ public final class TakeExamView extends AbstractScreen {
 
     /** The identity screen succeeded: the paper takes over and the clock starts. */
     private void enterForm(AttemptForm form) {
-        attempt.start(form.header().executionId(), form);
+        // The swap happens before the paper renders (M-4): if anything below throws, the
+        // student faces the form's chrome with an empty body instead of a blank screen,
+        // and so does whoever tests this next.
         content.setCenter(formView);
+        attempt.start(form.header().executionId(), form);
         formView.refresh();
         formView.startCountdown();
         watchFocus();

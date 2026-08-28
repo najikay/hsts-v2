@@ -101,7 +101,7 @@ public final class BotHistoryView extends AbstractScreen {
         String resolved = requested.isBlank() ? firstCourse() : requested;
         if (session == null || !resolved.equalsIgnoreCase(courseCode)) {
             courseCode = resolved;
-            session = new BotHistorySession(dispatcher(), resolved);
+            session = new BotHistorySession(dispatcher(), eventBus().poster(), resolved);
             session.onChange(() -> onFxThread().run(this::render));
         }
         session.refresh();

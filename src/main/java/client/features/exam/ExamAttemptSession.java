@@ -2,6 +2,7 @@ package client.features.exam;
 
 import client.events.ClientEventBus;
 import client.events.ConnectionLostEvent;
+import client.events.FxThreadPoster;
 import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import common.dto.exam.AttemptForm;
@@ -90,6 +91,13 @@ public final class ExamAttemptSession {
 
     private final RequestDispatcher dispatcher;
     private final ClientEventBus eventBus;
+    /**
+     * The FX-thread seam (M-4, 2026-08-28). Pushes arrive through the bus already posted,
+     * but responses complete on OCSF's read thread, and everything they touch here ends in
+     * a render. Taken from the bus rather than a fifth parameter so every constructor site
+     * gets it for free and the two can never disagree about which thread "the" FX thread is.
+     */
+    private final FxThreadPoster poster;
     private final AttemptModel model;
     private final DelayedRunner delayed;
     private final AttentionTracker attention;
@@ -125,6 +133,7 @@ public final class ExamAttemptSession {
                               AttentionTracker attention) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.poster = eventBus.poster();
         this.model = Objects.requireNonNull(model, "model");
         this.delayed = Objects.requireNonNull(delayed, "delayed");
         this.attention = Objects.requireNonNull(attention, "attention");
@@ -277,21 +286,25 @@ public final class ExamAttemptSession {
      */
     public CompletableFuture<AttemptOutcome> submit() {
         long attemptId = model.attemptId();
-        return flush().thenCompose(ignored -> dispatcher.send(Verb.ATTEMPT_SUBMIT,
+        CompletableFuture<AttemptOutcome> settled = new CompletableFuture<>();
+        flush().thenCompose(ignored -> dispatcher.send(Verb.ATTEMPT_SUBMIT,
                         new SubmitAttemptRequest(attemptId)))
-                .handle((response, failure) -> {
+                .whenComplete((response, failure) -> poster.run(() -> {
                     if (failure != null) {
                         log.warn("Submit failed: {}", failure.toString());
-                        return null;
+                        settled.complete(null);
+                        return;
                     }
                     if (response.isError() || !(response.getPayload() instanceof AttemptOutcome outcome)) {
                         log.warn("Submit refused: {} {}", response.getErrorCode(), response.errorMessage());
-                        return null;
+                        settled.complete(null);
+                        return;
                     }
                     model.finish(outcome);
                     notifyFinished(outcome);
-                    return outcome;
-                });
+                    settled.complete(outcome);
+                }));
+        return settled;
     }
 
     /**
@@ -304,15 +317,18 @@ public final class ExamAttemptSession {
      *         failed (the model is then unchanged)
      */
     public CompletableFuture<Void> resume() {
-        return dispatcher.send(Verb.ATTEMPT_RESUME, new AttemptResumeRequest(executionId))
-                .handle((response, failure) -> {
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+        dispatcher.send(Verb.ATTEMPT_RESUME, new AttemptResumeRequest(executionId))
+                .whenComplete((response, failure) -> poster.run(() -> {
                     if (failure != null) {
                         log.warn("Resume failed: {}", failure.toString());
-                        return null;
+                        settled.complete(null);
+                        return;
                     }
                     if (response.isError() || !(response.getPayload() instanceof AttemptForm form)) {
                         log.warn("Resume refused: {} {}", response.getErrorCode(), response.errorMessage());
-                        return null;
+                        settled.complete(null);
+                        return;
                     }
                     boolean wasLive = !model.isFinished();
                     model.apply(form);
@@ -325,8 +341,9 @@ public final class ExamAttemptSession {
                         // discard the absence it is in the middle of.
                         attention.start();
                     }
-                    return null;
-                });
+                    settled.complete(null);
+                }));
+        return settled;
     }
 
     // ===================== Pushes ========================================
@@ -395,21 +412,25 @@ public final class ExamAttemptSession {
             return;
         }
         flushScheduled = true;
-        delayed.runAfter(Duration.ofMillis(DEBOUNCE_MS), () -> {
+        // Posted: the debounce fires on DelayedRunner's timer thread, and the dirty map
+        // it flushes belongs to the FX thread that fills it (M-4's sibling race).
+        delayed.runAfter(Duration.ofMillis(DEBOUNCE_MS), () -> poster.run(() -> {
             flushScheduled = false;
             flush();
-        });
+        }));
     }
 
     /** One write, and what its answer means for the indicator and the clock. */
     private CompletableFuture<Void> send(long questionVersionId, int option) {
-        return dispatcher.send(Verb.ANSWER_SAVE,
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+        dispatcher.send(Verb.ANSWER_SAVE,
                         new SaveAnswerRequest(model.attemptId(), questionVersionId, option))
-                .handle((response, failure) -> {
+                .whenComplete((response, failure) -> poster.run(() -> {
                     if (failure != null) {
                         log.warn("Autosave of question {} failed: {}", questionVersionId, failure.toString());
                         retry(questionVersionId, option);
-                        return null;
+                        settled.complete(null);
+                        return;
                     }
                     if (response.isError()) {
                         // A refusal is the server's decision and is not retried: the usual
@@ -418,7 +439,8 @@ public final class ExamAttemptSession {
                         log.info("Autosave refused: {} {}", response.getErrorCode(), response.errorMessage());
                         model.setSaveState(SaveState.FAILED);
                         resume();
-                        return null;
+                        settled.complete(null);
+                        return;
                     }
                     if (response.getPayload() instanceof SaveAnswerResult result) {
                         model.syncTiming(result.timing());
@@ -426,8 +448,9 @@ public final class ExamAttemptSession {
                     if (dirty.isEmpty()) {
                         model.setSaveState(SaveState.SAVED);
                     }
-                    return null;
-                });
+                    settled.complete(null);
+                }));
+        return settled;
     }
 
     /** Puts a failed write back in the queue, unless the student has since changed it. */

@@ -97,7 +97,7 @@ public final class RoleNav {
         // list at the same route id, so the tooltip says what is here today rather than
         // letting the label over-promise.
         items.add(NavItem.of(Routes.EXAMS.id(), "Exams", Icons.EXAMS)
-                .withTooltip("Where your submitted exams stand. The exam builder arrives with E7."));
+                .withTooltip("Your exams: build new versions, follow approvals, release executions."));
         if (coordinator) {
             // Live since E8. The one item that separates a coordinator's rail from a
             // teacher's (PRD §3).

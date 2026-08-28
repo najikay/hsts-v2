@@ -1,5 +1,6 @@
 package client.features.exam;
 
+import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.ValidationState;
 import common.dto.exam.AttemptForm;
@@ -57,6 +58,7 @@ public final class ExamEntrySession {
     public static final Pattern CODE_PATTERN = Pattern.compile("[A-Za-z0-9]{4}");
 
     private final RequestDispatcher dispatcher;
+    private final FxThreadPoster poster;
 
     private Runnable onChange = () -> { };
     private Consumer<AttemptForm> onStarted = form -> { };
@@ -72,9 +74,18 @@ public final class ExamEntrySession {
     private ValidationState idState = ValidationState.pristine();
     private String blockedMessage = "";
 
-    /** @param dispatcher the shared request correlator */
-    public ExamEntrySession(RequestDispatcher dispatcher) {
+    /**
+     * @param dispatcher the shared request correlator
+     * @param poster     the FX-thread seam (M-4). Responses arrive on OCSF's read thread;
+     *                   everything downstream of them renders, so every answer is applied
+     *                   through the poster. This session went without one until 2026-08-28,
+     *                   which put the whole paper render on the network thread in production
+     *                   while every test delivered on the FX thread: P-8's shape, on the
+     *                   screen that failed the first defence.
+     */
+    public ExamEntrySession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.poster = Objects.requireNonNull(poster, "poster");
     }
 
     /** Registers the "re-read me and re-render" callback. */
@@ -136,12 +147,15 @@ public final class ExamEntrySession {
             return CompletableFuture.completedFuture(null);
         }
         setBusy(true);
-        return dispatcher.send(Verb.EXAM_JOIN, new ExamJoinRequest(code))
-                .handle((response, failure) -> {
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(Verb.EXAM_JOIN, new ExamJoinRequest(code))
+                .whenComplete((response, failure) -> poster.run(() -> {
                     setBusy(false);
                     applyJoin(response, failure);
-                    return null;
-                }).thenCompose(ignored -> resumeIfAlreadySitting());
+                    resumeIfAlreadySitting()
+                            .whenComplete((ignored, ignoredFailure) -> applied.complete(null));
+                }));
+        return applied;
     }
 
     private void applyJoin(Message response, Throwable failure) {
@@ -188,12 +202,14 @@ public final class ExamEntrySession {
             return CompletableFuture.completedFuture(null);
         }
         setBusy(true);
-        return dispatcher.send(Verb.ATTEMPT_RESUME, new AttemptResumeRequest(header.executionId()))
-                .handle((response, failure) -> {
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(Verb.ATTEMPT_RESUME, new AttemptResumeRequest(header.executionId()))
+                .whenComplete((response, failure) -> poster.run(() -> {
                     setBusy(false);
                     applyForm(response, failure, true);
-                    return null;
-                });
+                    applied.complete(null);
+                }));
+        return applied;
     }
 
     // ===================== Step two: the identity ========================
@@ -234,13 +250,15 @@ public final class ExamEntrySession {
             return CompletableFuture.completedFuture(null);
         }
         setBusy(true);
-        return dispatcher.send(Verb.ATTEMPT_START,
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(Verb.ATTEMPT_START,
                         new AttemptStartRequest(header.executionId(), nationalId))
-                .handle((response, failure) -> {
+                .whenComplete((response, failure) -> poster.run(() -> {
                     setBusy(false);
                     applyForm(response, failure, false);
-                    return null;
-                });
+                    applied.complete(null);
+                }));
+        return applied;
     }
 
     /** Applies a form answer from either {@code ATTEMPT_START} or {@code ATTEMPT_RESUME}. */

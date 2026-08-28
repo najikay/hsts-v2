@@ -18,6 +18,25 @@ So the standard step before a demo is a **reseed**, from the server console butt
 command line flag. It empties the database and reloads, resolving every timestamp against the
 current clock. It asks for confirmation first, because it deletes everything.
 
+**On the packaged deliverable** (demo day), against the jar:
+
+```
+java -cp G12-1_Server.jar server.db.seed.SeedMain --reseed
+```
+
+**On a dev machine** (working copy at `C:\dev\hsts-v2`), the jar has to exist first — any
+clean build empties `target\`, so `ClassNotFoundException: server.db.seed.SeedMain` means
+"rebuild first", not "the class is gone" (that was the 2026-08-26 reseed stumble). The
+two-command block, PowerShell:
+
+```
+.\mvnw -DskipTests clean package
+java -cp target\hsts-server.jar server.db.seed.SeedMain --reseed
+```
+
+A successful reseed answers with the per-table breakdown and a total (376 rows as of B-25;
+the exact number moves when the dataset does — the breakdown mattering more than the total).
+
 A plain load, the default and what first boot offers, only inserts rows that are missing. It is
 safe to repeat and safe to run against a database somebody is using, but it will **not** refresh
 those windows, because the rows are already there.
@@ -35,8 +54,9 @@ password below.
 > If a correct password is being refused, load the seed before suspecting the credentials:
 >
 > ```
-> java -cp hsts-server.jar server.db.seed.SeedMain
+> java -cp G12-1_Server.jar server.db.seed.SeedMain
 > ```
+> (or the dev-machine two-command block above)
 >
 > That was defect **B-1**, found in acceptance case 1.1: the message is doing exactly what F1.1
 > requires by not revealing whether the account exists, which is also why nothing on screen can
@@ -45,13 +65,19 @@ password below.
 The seed hashes it with BCrypt at load, once per user, so the eighteen stored hashes all differ.
 Verification goes through the real `BCrypt.verifyer()` path (F1.1, S-38).
 
-| Username | Password | Name | Role | Courses |
-|---|---|---|---|---|
-| `dana.cohen` | `demo123` | Dana Cohen | TEACHER | Algebra 11, Calculus 12 — teaches |
-| `rina.barak` | `demo123` | Rina Barak | COORDINATOR \* | none; coordinates Mathematics 10 without teaching. The **pure-coordinator** login (roster decision, 2026-08-20); the dual-hat case is `michal.sharon` |
-| `maya.levi` | `demo123` | Maya Levi | STUDENT | Algebra 11, Java Programming 21, Databases 22 — enrolled |
-| `noam.peretz` | `demo123` | Noam Peretz | STUDENT | Calculus 12, Java Programming 21 — enrolled |
-| `principal.avia` | `demo123` | Avia Shalev | PRINCIPAL | none (school-wide read-only, S-7) |
+| Username | Password | Name | Role | National ID \*\* | Courses |
+|---|---|---|---|---|---|
+| `dana.cohen` | `demo123` | Dana Cohen | TEACHER | `214703951` | Algebra 11, Calculus 12 — teaches |
+| `rina.barak` | `demo123` | Rina Barak | COORDINATOR \* | `248190639` | none; coordinates Mathematics 10 without teaching. The **pure-coordinator** login (roster decision, 2026-08-20); the dual-hat case is `michal.sharon` |
+| `maya.levi` | `demo123` | Maya Levi | STUDENT | `374301851` | Algebra 11, Java Programming 21, Databases 22 — enrolled |
+| `noam.peretz` | `demo123` | Noam Peretz | STUDENT | `385612098` | Calculus 12, Java Programming 21 — enrolled |
+| `principal.avia` | `demo123` | Avia Shalev | PRINCIPAL | `301548202` | none (school-wide read-only, S-7) |
+
+\*\* **National IDs are on stage during the take-exam act** (M-2, 2026-08-28): starting an
+attempt asks for the student's ID number, so the two the demo types live here rather than in
+someone's memory — `maya.levi` = `374301851`, `noam.peretz` = `385612098` (synthetic
+`UsersSection` values, not real IDs). The full-roster values are in `UsersSection`, one per
+account, if another student is ever put on stage.
 
 \* **`COORDINATOR` is a wire role, not a stored one.** `users.role` is
 `ENUM('STUDENT','TEACHER','PRINCIPAL')` and has no COORDINATOR member. `rina.barak` is stored as

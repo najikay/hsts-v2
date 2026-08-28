@@ -178,12 +178,23 @@ public final class NotificationsSession {
      * <p>Both verbs answer with a {@link NotificationsPage}, so there is exactly
      * one response path — which is why {@code markRead} needs no logic of its own
      * and cannot drift out of step with {@code refresh}.
+     *
+     * <p><b>Applied through the poster (M-1/M-5, 2026-08-28 — P-14's class).</b> The
+     * answer arrives on OCSF's read thread and {@code model.apply} repaints the open
+     * panel. Unposted, that repaint died off the FX thread inside a future both
+     * callers discard, which is why the list stayed empty at sign-in and mark-as-read
+     * looked dead while the push path — already posted by the bus — worked perfectly.
+     * Holding the bus was not the same as using its poster; the response path has to
+     * post explicitly, exactly as the exam sessions now do.
      */
     private CompletableFuture<Void> send(Verb verb, Object payload) {
-        return dispatcher.send(verb, payload).handle((response, failure) -> {
-            apply(verb, response, failure);
-            return null;
-        });
+        CompletableFuture<Void> settled = new CompletableFuture<>();
+        dispatcher.send(verb, payload).whenComplete((response, failure) ->
+                eventBus.poster().run(() -> {
+                    apply(verb, response, failure);
+                    settled.complete(null);
+                }));
+        return settled;
     }
 
     private void apply(Verb verb, Message response, Throwable failure) {

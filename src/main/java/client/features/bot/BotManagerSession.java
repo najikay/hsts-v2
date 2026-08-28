@@ -1,5 +1,6 @@
 package client.features.bot;
 
+import client.events.FxThreadPoster;
 import client.net.RequestDispatcher;
 import common.dto.bot.BotActiveRequest;
 import common.dto.bot.BotCourseRequest;
@@ -51,6 +52,7 @@ public final class BotManagerSession {
     private static final Logger log = LoggerFactory.getLogger(BotManagerSession.class);
 
     private final RequestDispatcher dispatcher;
+    private final FxThreadPoster poster;
     private final String courseCode;
     private final List<Runnable> listeners = new ArrayList<>();
 
@@ -61,10 +63,15 @@ public final class BotManagerSession {
 
     /**
      * @param dispatcher the shared request correlator
+     * @param poster     the FX-thread seam (M-4, 2026-08-28). Responses arrive on OCSF's
+     *                   read thread and every settle here redraws the sources table, so
+     *                   answers are applied through the poster rather than on the socket
      * @param courseCode the taught course this screen manages
      */
-    public BotManagerSession(RequestDispatcher dispatcher, String courseCode) {
+    public BotManagerSession(RequestDispatcher dispatcher, FxThreadPoster poster,
+                             String courseCode) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.poster = Objects.requireNonNull(poster, "poster");
         this.courseCode = Objects.requireNonNull(courseCode, "courseCode");
     }
 
@@ -212,10 +219,13 @@ public final class BotManagerSession {
         busy = true;
         status = "";
         changed();
-        return dispatcher.send(verb, payload).handle((response, failure) -> {
-            apply(verb, response, failure, fallbackMessage);
-            return null;
-        });
+        CompletableFuture<Void> applied = new CompletableFuture<>();
+        dispatcher.send(verb, payload)
+                .whenComplete((response, failure) -> poster.run(() -> {
+                    apply(verb, response, failure, fallbackMessage);
+                    applied.complete(null);
+                }));
+        return applied;
     }
 
     private void apply(Verb verb, Message response, Throwable failure, String fallbackMessage) {

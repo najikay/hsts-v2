@@ -85,7 +85,9 @@ public final class ExamListView extends AbstractScreen {
                 .emptyState(new EmptyState(Icons.EXAMS,
                         ExamListCopy.EMPTY_TITLE, ExamListCopy.EMPTY_HINT))
                 .onRetry(ExamListCopy.LOAD_FAILED, () -> session.load());
-        table.openOnClick(row -> session.select(row.examId()));
+        // Master-detail: the click drives the versions panel, it does not navigate,
+        // so it must not light the "Open" hint (M-6).
+        table.selectOnClick(row -> session.select(row.examId()));
         VBox.setVgrow(table, Priority.ALWAYS);
 
         root.getStyleClass().add("exam-list");

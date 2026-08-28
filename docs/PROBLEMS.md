@@ -169,4 +169,76 @@ there is a list to add to.
 the generation retires an answer in flight, and it was true when written and false for two of the
 three counters by the time it mattered. See method rule 5's note on comments that decay.
 
+---
+
+## P-14 — A seam that mocks away the thread mocks away the bug    (2026-08-28, found by Member A's manual round as M-4; root-caused by the lead)
+
+**Problem.** A student typed a valid code and a valid ID for the live exam and met a completely
+blank screen: no questions, no countdown, no error, and nothing in either terminal. M-4, the
+blocker of the first manual round, on the screen that failed the team's first defence.
+
+**Investigation, by elimination.** The mechanism was traced by Member A before the cause was
+known: everything downstream of `ATTEMPT_START` runs inside callbacks on a future that two button
+handlers discard, so a throw there is invisible — the entry cards had already hidden for the
+form's arrival, and the form never arrived. What threw remained open. The lead then eliminated in
+order: **the server** (an acceptance probe pulled the exact form the server answers for that
+student and execution — seven questions, three images with real bytes, sane timing, nothing null);
+**the data** (a TestFX test drove the real entry flow with that byte-exact form and rendered the
+paper perfectly). One difference remained between the passing test and the failing product:
+**the thread the answer arrives on.** `RequestDispatcher`'s javadoc states it plainly — futures
+complete on whichever thread delivered the outcome, the FX hop belongs to `FxThreadPoster` — and
+in production that thread is OCSF's socket reader. A second test variant delivered the same form
+from a thread named `fake-ocsf-reader`, and the product's exact failure appeared on the first
+run: `IllegalStateException: Not on FX application thread` out of `content.setCenter(formView)`,
+swallowed whole by the discarded future.
+
+**Why every test was green.** `FakeClientConnection` answers synchronously on the calling
+thread, and every caller in every test is the FX thread (unit tests are single-threaded; TestFX
+robots click on the FX thread). So the fake satisfied the dispatcher's *data* contract and
+silently strengthened its *thread* contract. Both suites on either side of the seam were green
+throughout — P-8's shape exactly, with the mocked-away truth being the thread rather than a
+payload. The entry screens even worked off-thread in production, because visibility toggles do
+not cross the toolkit's checked paths; the first checked path was attaching the paper to the
+live scene, which is why the failure landed on the last step and looked like a rendering
+mystery rather than a threading one.
+
+**Why it was these sessions — and the census, in the order found.** The two exam sessions had
+no poster at all; a field-scan for that shape immediately named four more, the whole bot
+feature. Then the sweep of *bodies* rather than fields found three sessions that **hold** the
+seam and never route responses through it: `NotificationsSession` (which is M-1 and M-5 in one
+line — the initial fetch's repaint died off-thread while the push path, posted by the bus,
+worked, which is exactly the "list fills only on a live arrival" signature the manual round
+recorded), `ExecutionMonitorSession` and `ReleaseManagerSession`. Nine classes, one shape:
+`.handle((response, failure) -> apply(...))`, reads correctly, runs on the wrong thread. The
+convention was real and honoured in the remaining nineteen, and had no tripwire — and three of
+the nine would have satisfied any tripwire that checked possession rather than use.
+
+**Solution.** (1) Both exam sessions and all four bot sessions now hold the poster and apply
+every response through it; futures they return are completed *inside* the posted block, so
+downstream callbacks inherit the FX thread instead of re-importing the bug. (2) The debounce
+callback is posted too — the dirty map belongs to the FX thread that fills it. (3) The two
+button handlers observe the futures they used to discard and log any failure: the next
+mystery arrives with a stack trace. (4) `TakeExamView.enterForm` swaps the form in before
+rendering it, so this failure class shows chrome with an empty body rather than nothing.
+(5) `DispatcherThreadSeamGuardTest` scans every compiled client class: holding a
+`RequestDispatcher` field without the seam fails the build with the six-defect story in the
+assertion message.
+
+**Evidence.** `M4ReproTest`: the same byte-exact paper delivered twice, once on the FX thread
+(always passed) and once from `fake-ocsf-reader` (failed with the production signature before
+the fix, green through the poster after). The guard test found the four bot sessions the same
+hour the exam fix landed — written against one defect, it caught four more before it was ever
+red in CI. The body sweep that found the last three is recorded here as part of the fix
+rather than follow-up (P-12's sweep lesson): every `dispatcher.send` settle in
+`client/features` was read, and the guard's javadoc names its own blind spot so nobody
+mistakes a green guard for the full property.
+
+**The generalisation worth carrying.** A test double satisfies the contract you wrote down, and
+quietly strengthens the ones you did not. Threading is the canonical unstated contract: any
+fake that answers synchronously promises "same thread, before your next line", which no socket
+ever promised. When a seam hides a thread boundary, at least one test must reintroduce it — a
+delivery from a thread that is *named for what it impersonates* — or the whole class of defect
+is invisible to a suite of any size. And when a convention holds up an invariant in twenty
+places, the twenty-first is not a review item; it is a guard's job.
+
 *(more entries follow)*

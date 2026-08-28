@@ -269,7 +269,9 @@ of one screen rather than a guard on three navigations. Use the dashboard card o
 it is the shortest sentence; say the other two exist if anyone asks how she would find it cold.
 
 ### 5.2 Her own id, and only hers · `maya.levi`
-**Clicks:** enter `noam.peretz`'s id first, then her own.
+**Clicks:** enter `noam.peretz`'s id first: `385612098` → refused. Then her own: `374301851`
+(both also in DEMO_ACCOUNTS.md's table; M-2 put them on stage so nobody leaves the script to
+search the seed document mid-act).
 **Say:** "Refused, and no attempt row was created, so a mistake costs her nothing and starts no
 clock. The check is against the caller's own record, F6.1, and there is no payload field that could
 name a different student."

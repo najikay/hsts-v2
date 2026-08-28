@@ -53,13 +53,13 @@ public final class ExamEntryView extends StackPane {
         codeField.hint("Your teacher reads it out at the start of the exam.");
         codeField.textField().setPrefColumnCount(8);
         codeField.textField().textProperty().addListener((obs, old, value) -> session.setCode(value));
-        codeField.textField().setOnAction(e -> session.submitCode());
-        continueButton.setOnAction(e -> session.submitCode());
+        codeField.textField().setOnAction(e -> observed(session.submitCode()));
+        continueButton.setOnAction(e -> observed(session.submitCode()));
 
         idField.textField().setPrefColumnCount(12);
         idField.textField().textProperty().addListener((obs, old, value) -> session.setNationalId(value));
-        idField.textField().setOnAction(e -> session.start());
-        startButton.setOnAction(e -> session.start());
+        idField.textField().setOnAction(e -> observed(session.start()));
+        startButton.setOnAction(e -> observed(session.start()));
 
         codeCard = card(ExamCopy.CODE_TITLE, ExamCopy.CODE_SUBTITLE, codeField, continueButton);
         identityCard = identityCard();
@@ -68,6 +68,23 @@ public final class ExamEntryView extends StackPane {
         getChildren().addAll(codeCard, identityCard, blockedCard);
         session.onChange(this::refresh);
         refresh();
+    }
+
+    /**
+     * Observes a button's future instead of dropping it (M-4).
+     *
+     * <p>The session's futures never complete exceptionally by contract, but the
+     * {@code onStarted} listener runs downstream of them and renders the whole paper;
+     * a throw there used to vanish into a discarded future, which is how a student
+     * met a blank screen with no evidence anywhere. This is the evidence.
+     */
+    private static void observed(java.util.concurrent.CompletableFuture<Void> future) {
+        future.whenComplete((ignored, failure) -> {
+            if (failure != null) {
+                org.slf4j.LoggerFactory.getLogger(ExamEntryView.class)
+                        .error("Exam entry failed after the server answered", failure);
+            }
+        });
     }
 
     /** Mirrors the session onto the two cards. */

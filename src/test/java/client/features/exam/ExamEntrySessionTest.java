@@ -1,5 +1,6 @@
 package client.features.exam;
 
+import client.events.DirectFxThreadPoster;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.exam.AttemptForm;
@@ -44,6 +45,7 @@ class ExamEntrySessionTest {
             "Java Programming", 45, "Answer every question.", 3, AttemptState.NOT_STARTED);
 
     private FakeClientConnection connection;
+    private RequestDispatcher dispatcher;
     private ExamEntrySession session;
     private List<AttemptForm> started;
 
@@ -51,10 +53,10 @@ class ExamEntrySessionTest {
     void setUp() throws IOException {
         connection = new FakeClientConnection();
         connection.connect();
-        RequestDispatcher dispatcher = new RequestDispatcher(connection);
+        dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
         started = new ArrayList<>();
-        session = new ExamEntrySession(dispatcher).onStarted(started::add);
+        session = new ExamEntrySession(dispatcher, new DirectFxThreadPoster()).onStarted(started::add);
     }
 
     @Nested
@@ -380,7 +382,8 @@ class ExamEntrySessionTest {
         @Test
         @DisplayName("its collaborators are all required")
         void constructorGuards() {
-            assertThatNullPointerException().isThrownBy(() -> new ExamEntrySession(null));
+            assertThatNullPointerException().isThrownBy(() -> new ExamEntrySession(null, new DirectFxThreadPoster()));
+            assertThatNullPointerException().isThrownBy(() -> new ExamEntrySession(dispatcher, null));
             assertThatNullPointerException().isThrownBy(() -> session.onChange(null));
             assertThatNullPointerException().isThrownBy(() -> session.onStarted(null));
         }

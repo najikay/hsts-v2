@@ -81,6 +81,7 @@ public final class DataTable<T> extends VBox {
     private BiPredicate<T, String> searchMatcher;
     private AsyncViewState state = AsyncViewState.IDLE;
     private Consumer<T> openAction;
+    private Consumer<T> selectAction;
 
     /**
      * Whether the next batch of rows is the table's first.
@@ -252,11 +253,31 @@ public final class DataTable<T> extends VBox {
      */
     public DataTable<T> openOnClick(Consumer<T> open) {
         this.openAction = Objects.requireNonNull(open, "open");
+        this.selectAction = null;
         // The row factory is installed once, in the constructor, and reads this
         // field. Wave 1 set a factory here instead, which meant a table gained
         // the open gesture and lost whatever else a factory was doing — and
         // wave 2 gives every row a first-load entrance and a hover affordance,
         // both of which a second factory would have silently replaced.
+        table.refresh();
+        return this;
+    }
+
+    /**
+     * The same click and Enter gesture as {@link #openOnClick}, without the hover
+     * hint (M-6).
+     *
+     * <p>The affordance is a promise: "Open →" says the click navigates somewhere.
+     * A master-detail screen where the click drives the detail panel keeps the
+     * gesture but must not make that promise, or the control says one thing and
+     * does another. A table is given one of these, never both; a second call
+     * replaces the first either way.
+     *
+     * @param select what to do with the row that was clicked
+     */
+    public DataTable<T> selectOnClick(Consumer<T> select) {
+        this.selectAction = Objects.requireNonNull(select, "select");
+        this.openAction = null;
         table.refresh();
         return this;
     }
@@ -277,16 +298,20 @@ public final class DataTable<T> extends VBox {
             }
         };
         row.setOnMouseClicked(event -> {
-            if (openAction != null && event.getButton() == MouseButton.PRIMARY
+            Consumer<T> action = rowAction();
+            if (action != null && event.getButton() == MouseButton.PRIMARY
                     && event.getClickCount() == 1 && !row.isEmpty()) {
-                openAction.accept(row.getItem());
+                action.accept(row.getItem());
             }
         });
         row.setOnKeyPressed(event -> {
-            if (openAction != null && event.getCode() == KeyCode.ENTER && !row.isEmpty()) {
-                openAction.accept(row.getItem());
+            Consumer<T> action = rowAction();
+            if (action != null && event.getCode() == KeyCode.ENTER && !row.isEmpty()) {
+                action.accept(row.getItem());
             }
         });
+        // The hover hint stays tied to openAction alone: a select gesture makes no
+        // navigation promise, so it must not advertise one (M-6).
         row.hoverProperty().addListener((obs, was, hovered) -> {
             if (hovered && openAction != null && !row.isEmpty()) {
                 showAffordance(row);
@@ -295,6 +320,11 @@ public final class DataTable<T> extends VBox {
             }
         });
         return row;
+    }
+
+    /** The gesture a row click or Enter fires; the two setters keep it single-valued. */
+    private Consumer<T> rowAction() {
+        return openAction != null ? openAction : selectAction;
     }
 
     /**
