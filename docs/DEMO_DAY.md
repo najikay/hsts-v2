@@ -224,11 +224,14 @@ cause before the stack trace. Read the sentence:
 ### 3.4 Seed
 
 - [ ] In the server console, click **Load demo data if missing** (safe, inserts only what is missing)
-- [ ] The result panel reports the rows loaded (**376** in all, 18 users among them)
+- [ ] The result panel reports the rows loaded (**414** in all, 18 users among them)
 - [ ] Sign in from a client as `maya.levi` / `demo123` to prove the seed took — **her bell
       should read 1 unread**, and clicking it should land on My Grades (seed §11
       `N-GRADE-MAYA`, added under B-25; before it she was the one demoed account with an
       empty bell)
+- [ ] Sign in as `dana.cohen` / `demo123` and open **Grading** — sitting `3318` should be
+      waiting, "4 sat · 4 marked · 4 still to approve" (seed §9.4, added under U-34; before it
+      her queue read "Nothing to grade", correctly and uselessly)
 
 **Before every demo, reload rather than load.** The seed's exam windows are relative to load
 time: one execution is "live right now", and a database seeded yesterday has no live exam today.
@@ -451,9 +454,10 @@ what is being handed in, and zipping before the rehearsal means the zip holds an
 reports screen demonstrates badly in the other order, and the fix costs nothing.**
 
 The report engine's corpus is `REPORTABLE` = *CLOSED and statistics frozen*. On a fresh seed
-exactly **one** execution qualifies — `4821`, the Algebra midterm. `7390` is closed but every
-grade on it is still `AUTO`, **deliberately**, because it is the fixture case 8.2 uses to prove
-that auto-checking publishes nothing; `5164` is scheduled and `2075` is live. So on a fresh seed
+exactly **one** execution qualifies — `4821`, the Algebra midterm. `7390` and `3318` are closed
+but every grade on both is still `AUTO`, **deliberately**, because `7390` is the fixture case 8.2
+uses to prove that auto-checking publishes nothing and `3318` is the same fixture released by
+`dana.cohen` (seed §9.4, U-34); `5164` is scheduled and `2075` is live. So on a fresh seed
 every report dimension returns a **one-row table**, and the screen that exists to *compare* gets
 demonstrated comparing one thing. Side-by-side deciles, the participant-weighted mean and the
 pooled σ are all unobservable — the summary of one row is that row.

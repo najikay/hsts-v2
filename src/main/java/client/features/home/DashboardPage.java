@@ -172,8 +172,9 @@ public final class DashboardPage {
         grid.getStyleClass().add("hsts-card-grid");
         grid.setHgap(16);
         grid.setVgap(16);
+        rememberForResize(grid, cards, navigate, bodies);
 
-        int columns = Math.max(1, Math.min(cards.size(), 4));
+        int columns = columnsFor(grid, cards.size());
         for (int i = 0; i < columns; i++) {
             ColumnConstraints column = new ColumnConstraints();
             column.setPercentWidth(100.0 / columns);
@@ -198,6 +199,67 @@ public final class DashboardPage {
             nodes.add(node);
         }
         Animations.staggerCards(nodes);
+    }
+
+    /**
+     * The narrowest a card may be and still read (2026-08-29, manual rounds 3-4,
+     * U-28).
+     *
+     * <p>Measured from the widest thing a card carries on one line: a tracked
+     * kicker ("A W A I T I N G  G R A D I N G" needs 135px) beside a "To do" chip
+     * (48px) with 8px between them, inside 34px of card padding. Four cards across
+     * a 1024px window gave each of them far less than that, which is where the
+     * kicker and the chip both ended in dots.
+     */
+    private static final double MIN_CARD_WIDTH = 240;
+
+    /** Where the grid remembers what it was last filled with, for a re-flow. */
+    private static final Object REFLOW_KEY = new Object();
+
+    /**
+     * How many cards fit across, given the width the grid actually has.
+     *
+     * <p>Never more than four and never fewer than one. Before the first layout
+     * the grid has no width and the answer is the old unconditional four, which
+     * is right: the first pulse re-flows it if the window cannot take them.
+     */
+    private static int columnsFor(GridPane grid, int cardCount) {
+        int most = Math.max(1, Math.min(cardCount, 4));
+        double width = grid.getWidth();
+        if (width <= 0) {
+            return most;
+        }
+        int fit = (int) Math.floor((width + grid.getHgap()) / (MIN_CARD_WIDTH + grid.getHgap()));
+        return Math.max(1, Math.min(most, fit));
+    }
+
+    /**
+     * Re-flows the grid when the window changes what will fit across it.
+     *
+     * <p>One listener per grid, installed on the first fill and re-armed with the
+     * latest cards on every fill after it. It re-enters {@code fillCardGrid} only
+     * when the column count actually changes, so a drag that does not cross a
+     * breakpoint costs nothing and the number rolls are not disturbed.
+     */
+    private static void rememberForResize(GridPane grid, List<DashboardCard> cards,
+                                          Consumer<String> navigate, List<Node> bodies) {
+        // The card count comes from this list and never from the grid's children:
+        // a width change arriving mid-refill would otherwise see an empty grid,
+        // decide on one column, and re-enter the refill it interrupted.
+        Runnable reflow = () -> {
+            if (grid.getColumnConstraints().size() != columnsFor(grid, cards.size())) {
+                fillCardGrid(grid, cards, navigate, bodies);
+            }
+        };
+        boolean first = grid.getProperties().put(REFLOW_KEY, reflow) == null;
+        if (!first) {
+            return;
+        }
+        grid.widthProperty().addListener((observable, was, now) -> {
+            if (grid.getProperties().get(REFLOW_KEY) instanceof Runnable latest) {
+                latest.run();
+            }
+        });
     }
 
     /**
@@ -341,7 +403,13 @@ public final class DashboardPage {
     }
 
     private static StatusChip chip(ChipSpec spec) {
-        return new StatusChip(spec);
+        StatusChip pill = new StatusChip(spec);
+        // 2026-08-29, manual rounds 3-4, U-28: the kicker beside it grows with the
+        // card's own copy, and an HBox pays for that out of whichever child will
+        // give. "To do" came back as "T…" on a 1024px window. The chip is four
+        // characters of state and has nothing to give.
+        pill.setMinWidth(Region.USE_PREF_SIZE);
+        return pill;
     }
 
     // ===================== The teacher's rich bodies =====================

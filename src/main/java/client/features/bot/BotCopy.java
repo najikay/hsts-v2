@@ -143,6 +143,62 @@ public final class BotCopy {
     /** The manager screen's title. */
     public static final String MANAGER_TITLE = "Bot manager";
 
+    // ---- The list of bots (2026-08-29, manual round 3, U-26) ------------
+
+    /**
+     * The manager screen's title, now that it lists every course's bot ⚑ (U-26).
+     *
+     * <p>Plural, and that is the whole point of it. The screen managed one course's bot behind
+     * a course picker, so a teacher of two courses read a singular title over a single card and
+     * concluded the product gives her one bot in total. The rule did not change (S-30, one per
+     * course, and {@code bots.course} is {@code UNIQUE} in V6); what changed is that the screen
+     * now says how many she has by showing them.
+     */
+    public static final String LIST_TITLE = "Your study bots";
+
+    /**
+     * The subtitle that states the one-per-course rule where a teacher reads it (U-26).
+     *
+     * <p>Both halves are load-bearing. The first answers "why can I not make a second one for
+     * this course"; the second answers "whose bot is this", which is the question a co-teacher
+     * asks the moment she sees a colleague's name on a source row.
+     */
+    public static final String LIST_SUBTITLE =
+            "One study bot per course. Co-teachers share it.";
+
+    /** What a course card says when that course has no bot yet (U-26). */
+    public static final String NO_BOT_YET = "No study bot yet";
+
+    /** The button on a card whose course already has a bot (U-26). */
+    public static final String MANAGE = "Manage";
+
+    /** The chip on a card whose bot students can use right now (F12.4). */
+    public static final String ACTIVE_CHIP = "Active";
+
+    /** The chip on a card whose bot is switched off (F12.4). */
+    public static final String INACTIVE_CHIP = "Inactive";
+
+    /**
+     * What a card says between the screen opening and that course's read landing (NFR-21).
+     *
+     * <p>Not blank and not "No study bot yet": a card that guesses "none" for a third of a
+     * second and then corrects itself is how a teacher ends up pressing Create on a bot she
+     * already has.
+     */
+    public static final String CARD_LOADING = "Checking this course";
+
+    /** The detail pane before any course has been chosen (U-26). */
+    public static final String CHOOSE_COURSE =
+            "Choose a course on the left to manage its study bot.";
+
+    /** The list's own empty state, for an account attached to no course. */
+    public static final String NO_COURSES_TITLE = "You do not teach any courses yet";
+
+    /** Its hint, which names the one thing the teacher can actually do about it. */
+    public static final String NO_COURSES_HINT =
+            "A study bot belongs to a course. Ask the system administrator to add you to "
+                    + "the course you teach, then open this screen again.";
+
     /**
      * What the manager screen is for (UI wave 1, F-14).
      *
@@ -286,6 +342,24 @@ public final class BotCopy {
             "The activity could not be loaded. Check your connection and try again.";
 
     // ===================== Shared ========================================
+
+    /**
+     * The material count a course card carries (U-26).
+     *
+     * <p>Singular for one, and "No sources yet" rather than "0 sources" for none: a zero on a
+     * card reads as a measurement, and what a teacher needs there is the same instruction the
+     * sources table's own empty state gives her.
+     *
+     * @param count how many sources that course's bot answers from
+     * @return the line under the bot's name on its card
+     */
+    public static String sourceCountLabel(int count) {
+        return switch (count) {
+            case 0 -> SOURCES_EMPTY_TITLE;
+            case 1 -> "1 source";
+            default -> count + " sources";
+        };
+    }
 
     /**
      * @param kind a source kind

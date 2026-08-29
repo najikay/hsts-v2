@@ -4,6 +4,7 @@ import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.Icons;
+import client.ui.components.TextFit;
 import common.dto.exam.ExamHeader;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -69,6 +70,15 @@ public final class ExamEntryView extends StackPane {
     private final Label summaryWindow = new Label();
     private final Label blockedText = new Label();
 
+    /**
+     * How wide the code card is allowed to get.
+     *
+     * <p>The other two entry cards stay at 460. This one carries "Back to my
+     * dashboard", "Use a different code" and "Confirm and continue" on one row in
+     * the confirming mood, and 460 is 60px short of all three (U-28).
+     */
+    private static final double CONFIRM_CARD_WIDTH = 560;
+
     private final VBox codeCard;
     private final VBox identityCard;
     private final VBox blockedCard;
@@ -99,6 +109,11 @@ public final class ExamEntryView extends StackPane {
         leaveFromCode.setOnAction(e -> onLeave.run());
         leaveFromBlocked.getStyleClass().add("small");
         leaveFromBlocked.setOnAction(e -> onLeave.run());
+        // 2026-08-29, manual rounds 3-4, U-28: the confirming variant puts both links
+        // and the button on one row, and the row paid for the button out of the links
+        // — "Back to my dashboa…" beside "Use a differen…". A way out of an exam is
+        // not the thing to abbreviate.
+        TextFit.oneLine(leaveFromCode, differentCode, leaveFromBlocked);
 
         codeCard = codeCard();
         identityCard = identityCard();
@@ -249,7 +264,11 @@ public final class ExamEntryView extends StackPane {
 
         VBox card = new VBox(16, codeTitle, codeSubtitle, codeField, actions);
         card.getStyleClass().addAll("hsts-card", "exam-entry-card");
-        card.setMaxWidth(460);
+        // Wider than the other two cards, and only because this one has three
+        // controls on its action row in the confirming mood (U-28). Pinning the
+        // links without giving the card the width would have pushed the overflow
+        // outside the card instead of removing it.
+        card.setMaxWidth(CONFIRM_CARD_WIDTH);
         card.setMaxHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
         return card;
     }

@@ -123,6 +123,99 @@ class StylesheetParseTest {
                 canonical(".hsts-notification-panel .row-unread-dot"));
     }
 
+    /**
+     * Round 3's selectors are in the parsed rules too (2026-08-29, manual round 3).
+     *
+     * <p>Same claim as the wave-2 group above and the same reason: a rule inside a block the
+     * parser gave up on is in the file and not in the stylesheet. U-29's menu rules are the ones
+     * this matters most for, because their whole job is to WIN a specificity tie against
+     * {@code .button.primary .label} - a rule that never parsed would leave the tie uncontested
+     * and the bug exactly where it was, with a green build behind it.
+     */
+    @Test
+    @DisplayName("⚑ round 3's menu and chip selectors survive parsing")
+    void theRoundThreeSelectorsSurviveParsing() {
+        List<String> selectors = parse("/css/hsts.css").getRules().stream()
+                .map(Rule::getSelectors)
+                .flatMap(List::stream)
+                .map(StylesheetParseTest::normalise)
+                .collect(Collectors.toList());
+
+        assertThat(selectors).as("U-29: the dropdown and the navbar profile menu").contains(
+                canonical(".context-menu"),
+                canonical(".menu-item"),
+                canonical(".context-menu .menu-item .label"),
+                canonical(".context-menu .menu-item:focused .label"),
+                canonical(".context-menu .menu-item:disabled .label"));
+        assertThat(selectors).as("U-32: the compact chip and its tone-coloured glyph").contains(
+                canonical(".hsts-chip.compact"),
+                canonical(".hsts-chip.ok .chip-icon"),
+                canonical(".hsts-chip.danger .chip-icon"));
+        assertThat(selectors).as("U-30: the builder's course line").contains(
+                canonical(".exam-builder-course"));
+    }
+
+    /**
+     * The menu rules come AFTER the button rules, which is what breaks the tie ⚑ (U-29).
+     *
+     * <p>{@code .context-menu .menu-item .label} and {@code .button.primary .label} are both
+     * three-class selectors. JavaFX resolves equal specificity by position in the stylesheet, so
+     * the menu block being later in the file is not tidiness, it is the fix: a ContextMenu
+     * resolves its CSS through {@code PopupControl.getStyleableParent()}, which is the owner
+     * node, so the items of a MenuButton styled {@code .button.primary} were inheriting
+     * {@code -hsts-on-accent} - white on a white menu in light mode, near-black on a dark one.
+     *
+     * <p>Asserted on the file rather than on a rendered colour, because a rendered colour needs
+     * a booted toolkit, a shown popup and a palette, and this needs none of the three.
+     */
+    @Test
+    @DisplayName("⚑ U-29: the menu block is later in the file than the button block")
+    void theMenuRulesOutrankTheButtonInk() throws IOException {
+        String css = new String(StylesheetParseTest.class
+                .getResourceAsStream("/css/hsts.css").readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        int buttonInk = css.indexOf(".button.primary .label");
+        int menuInk = css.indexOf(".context-menu .menu-item .label");
+
+        assertThat(buttonInk).as("the rule that caused U-29 is still in the file").isNotEqualTo(-1);
+        assertThat(menuInk).as("and so is the one that has to beat it").isNotEqualTo(-1);
+        assertThat(menuInk)
+                .as("equal specificity is broken by order, so the menu rule must come last")
+                .isGreaterThan(buttonInk);
+    }
+
+    /**
+     * A source row is not dressed as something to press ⚑ (U-33).
+     *
+     * <p>{@code .source-row} shared the accent hover border with {@code .history-row}, which is
+     * genuinely openable. A source row's actions are the Edit and Remove buttons sitting on it,
+     * so the border was advertising a press whose only visible outcome was the lock banner
+     * sliding in and back out again.
+     *
+     * <p>Checked here rather than in the interaction test because a {@code :hover} rule is a
+     * fact about the stylesheet: TestFX can move a pointer, but asserting the resulting border
+     * colour means reading a rendered pixel, and the rule's absence is the actual claim.
+     */
+    @Test
+    @DisplayName("⚑ U-33: .source-row has no hover treatment, .history-row still does")
+    void aSourceRowIsNotPressable() {
+        List<String> hovered = parse("/css/hsts.css").getRules().stream()
+                .map(Rule::getSelectors)
+                .flatMap(List::stream)
+                .map(Selector::toString)
+                .filter(selector -> selector.contains(":hover"))
+                .toList();
+
+        assertThat(hovered)
+                .as("the row carries no action of its own, so it must not offer a press")
+                .noneMatch(selector -> selector.contains("source-row"));
+        assertThat(hovered)
+                .as("guard against the guard: a history row IS openable and keeps the tint, so "
+                        + "a stylesheet that had simply lost every hover rule fails here")
+                .anyMatch(selector -> selector.contains("history-row"));
+    }
+
     @Test
     @DisplayName("both palettes are still one file: dark redefines tokens, never components")
     void darkIsStillOnlyTokens() {

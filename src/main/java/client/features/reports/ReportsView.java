@@ -22,6 +22,8 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -75,7 +77,16 @@ public final class ReportsView extends AbstractScreen {
     private final Label heading = new Label();
     private final Label error = new Label();
     private final Label participants = new Label();
-    private final HBox summaryCards = new HBox(12);
+    /**
+     * The five summary cards, in a pane that wraps (2026-08-29, manual rounds 3-4,
+     * U-28).
+     *
+     * <p>An HBox stood here and shared its shortfall out among the cards, which is
+     * how "7 of 8 (87.5%)" ended as "7 of…" and three of the five hints lost their
+     * last word on a 1024px window. A row of cards that cannot fit should become
+     * two rows of cards, not five squeezed ones.
+     */
+    private final FlowPane summaryCards = new FlowPane(12, 12);
 
     private final EmptyState tableEmpty = new EmptyState(Icons.REPORTS,
             ReportsCopy.NOTHING_PICKED.title(), ReportsCopy.NOTHING_PICKED.hint());
@@ -317,7 +328,10 @@ public final class ReportsView extends AbstractScreen {
         hint.getStyleClass().add("stat-hint");
         VBox box = new VBox(2, value, label, hint);
         box.getStyleClass().addAll("hsts-card", "hsts-stat-card", "compact", "reports-stat-card");
-        box.setMinWidth(140);
+        // U-28: 140px was a floor and a ceiling at once, because the row it sat in
+        // could not give it more. Its own content is the honest minimum now, and
+        // the pane above wraps when the five of them stop fitting across.
+        box.setMinWidth(Region.USE_PREF_SIZE);
         return box;
     }
 

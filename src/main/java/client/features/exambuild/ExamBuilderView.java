@@ -1,6 +1,8 @@
 package client.features.exambuild;
 
 import client.core.NavParams;
+import client.core.Navigator;
+import client.core.Routes;
 import client.core.ScreenManager;
 import client.features.locks.EditLockState;
 import client.features.locks.FxHeartbeat;
@@ -8,10 +10,12 @@ import client.features.locks.LockAwareEditor;
 import client.features.locks.LockBanner;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
+import client.ui.components.ToastStack;
 import client.ui.components.logic.AsyncViewState;
 import client.ui.screen.AbstractScreen;
 import common.dto.authoring.Shortfall;
 import common.dto.bank.BankQuestionRow;
+import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
 import common.dto.lock.EntityRef;
 import javafx.geometry.Insets;
@@ -86,6 +90,16 @@ public final class ExamBuilderView extends AbstractScreen {
     private final BorderPane root = new BorderPane();
 
     private final Label title = new Label();
+
+    /**
+     * Which course this exam is for (2026-08-29, manual round 3, U-30).
+     *
+     * <p>Its own line rather than another clause of {@link #subtitle}, because it is the fact
+     * that decides what the bank picker offers and what {@code EXAM_CREATE} carries, and it has
+     * to be readable in {@code Mode.CREATE} where the subtitle is empty: a new exam has no
+     * six-digit id yet.
+     */
+    private final Label courseLine = new Label();
     private final Label subtitle = new Label();
     private final Label readOnlyBanner = new Label(ExamBuildCopy.READ_ONLY_BANNER);
     private final LockBanner lockBanner = new LockBanner();
@@ -416,6 +430,9 @@ public final class ExamBuilderView extends AbstractScreen {
     private void renderHeader() {
         ExamBuilderSession.Mode mode = session.mode();
         title.setText(ExamBuildCopy.title(mode));
+        String course = ExamBuildCopy.courseLine(session.courseCode(), courseNameFor());
+        courseLine.setText(course);
+        show(courseLine, !course.isBlank());
         subtitle.setText(subtitleFor());
 
         // Only once an answer has landed ⚑. modeFor treats an opened version with no state yet
@@ -433,15 +450,53 @@ public final class ExamBuilderView extends AbstractScreen {
         show(retryLoad, failed);
     }
 
+    /**
+     * The six-digit id, and nothing else since U-30.
+     *
+     * <p>It used to fold the course in here, which is how a new exam ended up saying nothing at
+     * all: {@code Mode.CREATE} has no id AND, until U-30, no resolved course name either, so the
+     * whole line came out as the bare course code or as an empty string. The course now has
+     * {@link #courseLine} to itself and is stated in both modes.
+     *
+     * @return the id staff quote when they talk about this exam, or "" before there is one
+     */
     private String subtitleFor() {
         String id = session.displayId6();
-        String course = session.courseName() == null || session.courseName().isBlank()
-                ? session.courseCode()
-                : session.courseName();
-        if (id == null || id.isBlank()) {
-            return course == null ? "" : course;
+        return id == null ? "" : id;
+    }
+
+    /**
+     * The course's name, from the server when it has answered and from the sign-in payload
+     * before it has (U-30).
+     *
+     * <p>{@code ExamBuilderSession} carries a name only for a version it has LOADED:
+     * {@code openNew} takes the code as given and resets the name to blank, so a new exam knows
+     * which course it is for and not what that course is called. The names are already on the
+     * client - {@code ExamListView} resolves its New exam menu from exactly this list - so the
+     * builder resolves the code against it rather than asking the server a second time for a
+     * string it was handed at sign-in.
+     *
+     * @return the course's name, or "" when nothing on the client knows it
+     */
+    private String courseNameFor() {
+        String fromServer = session.courseName();
+        if (fromServer != null && !fromServer.isBlank()) {
+            return fromServer;
         }
-        return id + (course == null || course.isBlank() ? "" : " · " + course);
+        String code = session.courseCode();
+        if (code == null || code.isBlank()) {
+            return "";
+        }
+        LoginResult user = ScreenManager.getInstance().signedInUser();
+        if (user == null) {
+            return "";
+        }
+        for (CourseRef course : user.courses()) {
+            if (code.equals(course.code()) && course.name() != null) {
+                return course.name();
+            }
+        }
+        return "";
     }
 
     private void renderMetadata() {
@@ -661,17 +716,82 @@ public final class ExamBuilderView extends AbstractScreen {
         // completed action here announces itself, and silence would leave her looking at a
         // different paper wondering whether she pressed the right thing.
         session.composeNotice().ifPresent(notice -> {
-            toasts().success(notice);
+            success(notice);
             session.dismissComposeNotice();
         });
         session.saveNotice().ifPresent(notice -> {
-            toasts().success(notice);
+            // ⚑ U-31. The leave goes BEFORE the toast, and the order is load-bearing rather
+            // than cosmetic: the toast is a courtesy that needs a shell to land on and the
+            // leave is the behaviour, so a leave written after it would be a leave that never
+            // ran wherever there is no shell. Either way the sentence appears over the list,
+            // which is where the exam it names now is.
             session.dismissNotice();
+            backToTheList();
+            success(notice);
         });
         session.saveError().ifPresent(sentence -> {
-            toasts().error(ExamBuildCopy.title(session.mode()), sentence);
+            ToastStack toasts = toasts();
+            if (toasts != null) {
+                toasts.error(ExamBuildCopy.title(session.mode()), sentence);
+            }
             session.dismissSaveError();
         });
+    }
+
+    /**
+     * A success toast where there is somewhere to put one.
+     *
+     * <p>{@code ScreenManager.toasts()} is documented to answer {@code null} when no shell is
+     * up, which is the component gallery and every harness that builds this screen directly.
+     * Calling it unguarded made the notice a latent {@code NullPointerException} on exactly
+     * those paths, thrown out of an FX event handler where nothing fails and nothing is logged;
+     * what it cost was the line AFTER it, which since U-31 is the navigation.
+     */
+    private void success(String sentence) {
+        ToastStack toasts = toasts();
+        if (toasts != null) {
+            toasts.success(sentence);
+        }
+    }
+
+    /**
+     * Leaves for the exam list once a save has landed (2026-08-29, manual round 3, U-31).
+     *
+     * <p>A save used to leave her exactly where she was, with a toast reading "Saved." and a
+     * screen that looked identical before and after. Create was the worse half: the exam existed,
+     * the builder had quietly become an EDIT of it, and the only way to see the thing she had
+     * just made was the rail. The list is where a saved exam lives, so that is where a save goes.
+     *
+     * <h2>A navigate rather than a back, and the reason is the selection</h2>
+     *
+     * <p>{@code Navigator.back()} pops the entry she ARRIVED from, and that entry cannot name
+     * this exam: a new exam had no version id when the list handed her over, and an edit carries
+     * the version she opened rather than the one the server has just written. Nor is the previous
+     * entry necessarily the list - an approval notification opens the builder directly, and a
+     * back from there lands on the dashboard. So the id travels as {@code examVersionId}, which
+     * is the parameter {@code ExamListView.onShow} already reads, and the destination is named
+     * rather than remembered.
+     *
+     * <p>{@code back()} stays as the fallback for a shell where {@code Routes.EXAMS} was never
+     * registered - the component gallery, and the interaction tests that drive this screen
+     * directly - where it is a no-op at the root rather than the
+     * {@code IllegalArgumentException} an unregistered navigate would throw.
+     *
+     * <p>Only a SUCCESSFUL save gets here: it hangs off {@code saveNotice}, which
+     * {@code settleSave} sets on the answer and nowhere else, so a refusal keeps her on the
+     * builder with the server's sentence and the paper it is about.
+     */
+    private void backToTheList() {
+        Navigator navigator = navigator();
+        if (navigator == null) {
+            return;
+        }
+        if (navigator.isRegistered(Routes.EXAMS.id())) {
+            navigator.navigate(Routes.EXAMS.id(),
+                    NavParams.of("examVersionId", session.examVersionId()));
+            return;
+        }
+        navigator.back();
     }
 
     // ===================== Layout =========================================
@@ -696,6 +816,11 @@ public final class ExamBuilderView extends AbstractScreen {
 
     private Node buildHeader() {
         title.getStyleClass().add("h1");
+        // Body rather than "small muted": the course is the one fact on this header a teacher
+        // checks before she types, and a caption-weight grey is what she would skip.
+        courseLine.getStyleClass().addAll("body", "exam-builder-course");
+        courseLine.setWrapText(true);
+        show(courseLine, false);
         subtitle.getStyleClass().addAll("small", "muted");
 
         readOnlyBanner.getStyleClass().addAll("small", "hsts-card", "warn-banner");
@@ -714,8 +839,8 @@ public final class ExamBuilderView extends AbstractScreen {
         // takes a lock on a READ_ONLY version at all, and taking one over would clear lockedOut
         // while leaving mode() READ_ONLY, so the form would stay inert behind a button that
         // changed nothing. The two banners cannot now appear together.
-        VBox header = new VBox(10, new VBox(4, title, subtitle), lockBanner, readOnlyBanner,
-                new VBox(8, loadError, retryLoad));
+        VBox header = new VBox(10, new VBox(4, title, courseLine, subtitle), lockBanner,
+                readOnlyBanner, new VBox(8, loadError, retryLoad));
         header.setPadding(new Insets(24, 28, 12, 28));
         return header;
     }

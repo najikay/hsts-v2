@@ -285,7 +285,7 @@ class BankScreenInteractionTest extends ApplicationTest {
         clickOn(rowShowing(scene, "Read the diagram"));
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled())
+        assertThat(buttonNamed(scene, BankCopy.EDIT).isDisabled())
                 .as("QuestionEditorSession.forEdit takes the bytes as a required argument, and "
                         + "this button is the only route into it from a question. If it fired "
                         + "now, the editor would open showing 'No illustration' about a question "
@@ -308,7 +308,7 @@ class BankScreenInteractionTest extends ApplicationTest {
         clickOn(rowShowing(scene, "Read the diagram"));
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled())
+        assertThat(buttonNamed(scene, BankCopy.EDIT).isDisabled())
                 .as("otherwise the gate would be a button nobody can ever press")
                 .isFalse();
     }
@@ -331,7 +331,7 @@ class BankScreenInteractionTest extends ApplicationTest {
         clickOn(rowShowing(scene, "Read the diagram"));
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled())
+        assertThat(buttonNamed(scene, BankCopy.EDIT).isDisabled())
                 .as("forEdit refuses an illustrated question with no bytes, so enabling the "
                         + "button here would make pressing it throw")
                 .isTrue();
@@ -352,7 +352,7 @@ class BankScreenInteractionTest extends ApplicationTest {
                 .as("her read scope shows her the row; her write scope does not cover it, and "
                         + "the server would refuse a delete")
                 .isTrue();
-        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled()).isTrue();
+        assertThat(buttonNamed(scene, BankCopy.EDIT).isDisabled()).isTrue();
         assertThat(buttonNamed(scene, BankCopy.DELETE).getTooltip())
                 .as("a greyed control with no reason is a defect of its own here: she reached "
                         + "this state by doing nothing wrong")
@@ -370,7 +370,7 @@ class BankScreenInteractionTest extends ApplicationTest {
         clickOn(rowShowing(scene, "Read the diagram"));
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(buttonNamed(scene, QuestionEditorCopy.EDIT_QUESTION).isDisabled()).isFalse();
+        assertThat(buttonNamed(scene, BankCopy.EDIT).isDisabled()).isFalse();
     }
 
     // ===================== Fixture and harness ============================

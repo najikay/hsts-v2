@@ -8,16 +8,24 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §9.1 and §9.2: sixteen grades in two deliberately different states (E2.15).
+ * Seed §9.1, §9.2 and §9.4: twenty grades in two deliberately different states (E2.15).
  *
- * <h2>The two executions are the two halves of the grading story</h2>
+ * <h2>Three executions, and still the two halves of the grading story</h2>
  *
  * <p>Execution 1's eight grades are <b>APPROVED</b>: the machine scored, a teacher approved, and
- * only then does a student see anything (S-24). Execution 2's eight are <b>AUTO</b> with
- * {@code final_score}, {@code override_reason}, {@code teacher_comment}, {@code approved_by} and
- * {@code approved_at} all null, which is what "awaiting grading" means and is the fixture T-8.2
- * is demonstrated on. Without the second set there is nothing for a teacher to approve during
- * the demo; without the first there is nothing for a student to look at.
+ * only then does a student see anything (S-24). Execution 2's eight and execution 5's four are
+ * <b>AUTO</b> with {@code final_score}, {@code override_reason}, {@code teacher_comment},
+ * {@code approved_by} and {@code approved_at} all null, which is what "awaiting grading" means
+ * and is the fixture T-8.2 is demonstrated on. Without the second set there is nothing for a
+ * teacher to approve during the demo; without the first there is nothing for a student to look
+ * at.
+ *
+ * <p><b>⚑ U-34: the awaiting-grading set had to exist twice, once per teacher.</b> Execution 2
+ * belongs to {@code avi.mizrahi}, and the grading queue is scoped to the teacher who released
+ * the sitting, so {@code dana.cohen} - the account the demo signs in as on the teacher side -
+ * opened Grading and read "Nothing to grade". Correct, and empty. Execution 5's four AUTO
+ * grades (§9.4) are the same fixture released by her, so both teachers have one sitting to
+ * approve and neither screen is blank on day one.
  *
  * <h2>The override never overwrites the machine's score</h2>
  *
@@ -44,8 +52,8 @@ import java.util.List;
  * score. The other four stay empty on purpose, because "no note from the teacher" is a state
  * the card has to render too and one sitting has to show both.
  *
- * <p>Execution 2 stays comment-free. Nothing there is approved, and S-24 means no student can
- * read any of it; a comment on a grade nobody can open would be a row that contradicts the
+ * <p>Executions 2 and 5 stay comment-free. Nothing there is approved, and S-24 means no student
+ * can read any of it; a comment on a grade nobody can open would be a row that contradicts the
  * fixture it lives in.
  *
  * <h2>Who approves, and why it is not the coordinator</h2>
@@ -105,11 +113,20 @@ final class GradesSection implements SeedSection {
                     new SeedGrade("itay.regev", 60, null, null, null),
                     new SeedGrade("noam.peretz", 55, null, null, null),
                     new SeedGrade("omer.katz", 40, null, null, null),
-                    new SeedGrade("daniel.shapira", 30, null, null, null))));
+                    new SeedGrade("daniel.shapira", 30, null, null, null))),
+
+            // ⚑ U-34, §9.4. dana.cohen's own awaiting-grading sitting. AUTO, no final, no
+            // override, no comment, nothing approved: comment-free for §9.2's reason, that
+            // S-24 means no student can open any of these yet.
+            new Sitting("3318", false, null, List.of(
+                    new SeedGrade("noa.friedman", 85, null, null, null),
+                    new SeedGrade("shira.dahan", 75, null, null, null),
+                    new SeedGrade("daniel.shapira", 60, null, null, null),
+                    new SeedGrade("itay.regev", 45, null, null, null))));
 
     @Override
     public String name() {
-        return "9.1-9.2 grades";
+        return "9.1-9.4 grades";
     }
 
     @Override

@@ -319,3 +319,26 @@ it keeps the id. That is a real difference and a smaller one than an "Edit" butt
 would imply, so file kinds keep Add and Remove. If the affordance is wanted later, the verb
 already accepts any `BotSourceKind` and the server already handles it — only the button is
 missing.
+
+### A2 — considered and NOT taken: a bot summary verb (U-26, 2026-08-29)
+
+**The ask.** Manual round 3 found the teacher's Bot Manager showing one course's bot behind a nav
+parameter, so `dana.cohen` (Algebra 11, Calculus 12) read it as "a teacher gets one bot". The
+ruling was to keep one bot per course (S-30) and make the manager a **list**: a card per taught
+course carrying the bot's name, whether it is active, and how many sources it has.
+
+**Why no verb was added.** Those three facts are already on `BotManagerPage`, which
+`BOT_MANAGER_GET` answers for one course. The client therefore issues that read **once per taught
+course** on show — a teacher has two or three — and the answer it gets for a course is exactly the
+page the detail pane needs the moment she selects it. A `BOT_SUMMARY_GET` would have been a second
+wire shape of the same fact, kept in step with the first by hand, bought for a handful of requests
+against an indexed read. **This contract is unchanged by U-26**: no verb, no payload, no field.
+
+The client-side shape is `client.features.bot.BotManagerListSession`, which holds one
+`BotManagerSession` per course and owns no page of its own — the property that makes a create or a
+toggle addressed to one course structurally unable to touch another's card. `BotCourseSummary` is
+a client record, deliberately not in `common/dto/bot`, because nothing about it travels.
+
+**If the shape ever changes**, the trigger to watch is a teacher with enough courses for n reads
+to be felt on show. Nothing in the seed or in the demo is near it, and a summary verb would be
+additive under §10's rules if it ever is.

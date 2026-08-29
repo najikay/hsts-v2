@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §11: nine notifications, so the bell is populated at login (E2.15).
+ * Seed §11: ten notifications, so the bell is populated at login (E2.15).
  *
  * <p>NFR-21 wants feedback present rather than an empty panel on first sign-in. Every recipient
  * is the person the event actually concerns: rejections and pending notices go to the author,
@@ -19,8 +19,8 @@ import java.util.List;
  *
  * <h2>⚑ B-25: the one bell a grader is most likely to open was the empty one</h2>
  *
- * <p>The eight rows above reach seven recipients and <b>{@code maya.levi} was not one of
- * them</b>. She is the student {@code DEMO_ACCOUNTS.md} and the acceptance table use
+ * <p>The eight rows this list held then reached seven recipients and <b>{@code maya.levi} was
+ * not one of them</b>. She is the student {@code DEMO_ACCOUNTS.md} and the acceptance table use
  * throughout, and the account {@code DEMO_DAY.md} §2.3 signs in as on the clean-machine pass,
  * so acceptance case 17.3 — "every demoed screen has real content" — found her bell answering
  * {@code 0 items, 0 unread} on a freshly seeded database.
@@ -155,7 +155,19 @@ final class NotificationsSection implements SeedSection {
             new Note("maya.levi", NotificationType.GRADE_PUBLISHED,
                     "Your grade is ready",
                     "Your grade for Midterm: Algebra has been published.",
-                    new Link(NotificationCatalog.ROUTE_GRADES, "4821"), false, 12));
+                    new Link(NotificationCatalog.ROUTE_GRADES, "4821"), false, 12),
+            // ⚑ U-34. The mirror of N-GRADING-DUE-JAVA, for the teacher the demo signs in as.
+            // Execution 5 (§9.4) closed yesterday with four AUTO grades on it and nothing
+            // approved, and avi.mizrahi has had a row for exactly that situation since this
+            // list was written. The count in the title is §9.4's four, the same coupling the
+            // row above it carries with §9.2's eight. No ref: the catalog's grading-due draft
+            // has no target, and inventing one would give the seed a notification the product
+            // cannot produce.
+            new Note("dana.cohen", NotificationType.GRADING_DUE,
+                    // One day ago: the day sitting 3318 ran, which is the same rule
+                    // N-GRADING-DUE-JAVA follows for 7390's T-3d. created_at is unspecified
+                    // in §11, so it is derived from the sitting's own day rather than picked.
+                    "4 attempts awaiting your grade approval", null, null, false, 1));
 
     @Override
     public String name() {

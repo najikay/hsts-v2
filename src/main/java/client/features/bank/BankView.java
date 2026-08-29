@@ -93,7 +93,7 @@ public final class BankView extends AbstractScreen {
     private final Button historyToggle = Buttons.outline(BankCopy.HISTORY_OPEN);
     private final Button delete = Buttons.danger(BankCopy.DELETE);
     private final Button retry = Buttons.outline(BankCopy.RETRY);
-    private final Button edit = Buttons.secondary(QuestionEditorCopy.EDIT_QUESTION);
+    private final Button edit = Buttons.secondary(BankCopy.EDIT);
     private final Button newQuestion = Buttons.primary(QuestionEditorCopy.NEW_QUESTION);
 
     private BankSession session;

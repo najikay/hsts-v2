@@ -6,6 +6,7 @@ import client.core.ScreenManager;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
+import client.ui.components.TextFit;
 import client.ui.components.WarnConfirm;
 import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
@@ -21,6 +22,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
@@ -205,8 +207,18 @@ public final class BotChatView extends AbstractScreen {
 
         HBox actions = new HBox(8, buildCoursePicker(), history, fresh);
         actions.setAlignment(Pos.CENTER_RIGHT);
+        // 2026-08-29, manual rounds 3-4, U-28: the buttons keep their own width now,
+        // so the row took its shortfall out of the two controls left — the course
+        // picker showed "Algebr…" and the word "Course" beside it showed "C…". The
+        // cluster keeps its width as a whole; the heading beside it is the part of
+        // this row that can wrap.
+        actions.setMinWidth(Region.USE_PREF_SIZE);
 
-        HBox row = new HBox(12, new VBox(2, heading, subheading), Buttons.spacer(), actions);
+        heading.setWrapText(true);
+        VBox headingBox = new VBox(2, heading, subheading);
+        HBox.setHgrow(headingBox, Priority.ALWAYS);
+
+        HBox row = new HBox(12, headingBox, Buttons.spacer(), actions);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(16, 20, 8, 20));
         return row;
@@ -222,10 +234,13 @@ public final class BotChatView extends AbstractScreen {
     private HBox buildCoursePicker() {
         Label label = new Label(BotCopy.COURSE_PICKER_LABEL);
         label.getStyleClass().addAll("small", "muted");
+        TextFit.oneLine(label);
 
         coursePicker.setCellFactory(view -> new CourseCell());
         coursePicker.setButtonCell(new CourseCell());
         coursePicker.setPrefWidth(200);
+        // A picker narrower than the course it names is a picker that cannot be read.
+        coursePicker.setMinWidth(Region.USE_PREF_SIZE);
         coursePicker.getStyleClass().add("bot-course-picker");
         coursePicker.setTooltip(new Tooltip(BotCopy.COURSE_PICKER_TOOLTIP));
         coursePicker.getSelectionModel().selectedItemProperty()

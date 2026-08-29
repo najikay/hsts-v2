@@ -71,6 +71,16 @@ public final class Icons {
     public static final String BELL = "mdomz-notifications_none";
     public static final String CLOCK = "mdoal-access_time";
     public static final String CHECK = "mdoal-check_circle_outline";
+    /**
+     * The circled cross, and the outlined twin of {@link #CHECK} (2026-08-29, manual round 3,
+     * U-32): a refusal, drawn at the same weight as the tick it sits beside in a list.
+     *
+     * <p>Not "mdoal-cancel", which is the same mark filled in: a solid disc beside an outlined
+     * tick reads as two icon sets rather than as two answers to one question.
+     */
+    public static final String CROSS = "mdoal-highlight_off";
+    /** A pencil: work still being written, which is what an exam DRAFT is (U-32). */
+    public static final String EDIT = "mdoal-edit";
     public static final String ERROR = "mdoal-error_outline";
     // Not "mdomz-warning_amber" ⚑ (B-38): the pack has WARNING but no WARNING_AMBER, so every
     // warning chip and toast in the app drew a blank spacer where its glyph should be.

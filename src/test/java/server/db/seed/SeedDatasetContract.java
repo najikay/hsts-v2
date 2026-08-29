@@ -13,6 +13,7 @@ import server.db.Transactions;
 import server.db.entities.Difficulty;
 import server.db.entities.QuestionVersion;
 import server.features.bank.QuestionValidator;
+import server.features.grading.AutoGrader;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -68,8 +69,9 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
             "questions", 40L,
             "question_versions", 43L,
             // 9 since 2026-08-26: B-25 added N-GRADE-MAYA, so DEMO_DAY's sign-in account
-            // has a bell at all.
-            "notifications", 9L);
+            // has a bell at all. 10 since 2026-08-29: U-34 added N-GRADING-DUE-ALG, so the
+            // teacher the demo signs in as is told her own sitting is waiting.
+            "notifications", 10L);
 
     private SeedLoader loader() {
         return new SeedLoader(factory(), java.time.Clock.fixed(ANCHOR, java.time.ZoneOffset.UTC),
@@ -85,6 +87,15 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         assertThat(count("exams")).isEqualTo(6);
         assertThat(count("exam_versions")).isEqualTo(7);
         assertThat(count("exam_version_questions")).isEqualTo(39);
+
+        // §9 and §9.4, moved by U-34 (2026-08-29, manual round 3): execution 5 is one sitting,
+        // four attempts, twenty-eight answers and four grades. These four counts were not
+        // asserted anywhere until then, which is how the seed grew a sitting with nothing
+        // watching the totals.
+        assertThat(count("exam_executions")).isEqualTo(5);
+        assertThat(count("exam_attempts")).isEqualTo(20);
+        assertThat(count("attempt_answers")).isEqualTo(136);
+        assertThat(count("grades")).isEqualTo(20);
     }
 
     @Test
@@ -122,7 +133,10 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         assertThat(count("users")).isEqualTo(18);
         assertThat(count("question_versions")).isEqualTo(43);
         assertThat(count("exam_version_questions")).isEqualTo(39);
-        assertThat(count("notifications")).isEqualTo(9);
+        assertThat(count("notifications")).isEqualTo(10);
+        assertThat(count("exam_executions")).isEqualTo(5);
+        assertThat(count("exam_attempts")).isEqualTo(20);
+        assertThat(count("grades")).isEqualTo(20);
     }
 
     // ===== B-24: the loader can see dataset drift ==========================
@@ -206,7 +220,7 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
             SeedSummary summary = loader().load(SeedMode.LOAD_IF_MISSING, Confirmation.refused());
 
             assertThat(summary.warning())
-                    .contains("notifications: this dataset says 9, the database says 10");
+                    .contains("notifications: this dataset says 10, the database says 11");
         } finally {
             Transactions.runInTx(factory(), session -> session
                     .createMutationQuery(
@@ -469,6 +483,90 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
 
         assertThat(storedRole).isEqualTo("TEACHER");
         assertThat(coordinatorRows).isEqualTo(1);
+    }
+
+    /**
+     * ⚑ <b>Every seeded {@code auto_score} is recomputed, by the product's own grader.</b>
+     *
+     * <p>This is the check §9.1's own warning asks for. An earlier draft of that section used
+     * scores like 92 and 78, which no combination of a 6x15 + 10 paper can produce: invisible
+     * while the seed was only demo data, and wrong the first time {@code AutoGrader} recomputed
+     * one. {@code SeedLoadedDbContract} cannot catch it, because it compares the loaded score
+     * against the document's and both would carry the same impossible number.
+     *
+     * <p>So this recomputes rather than compares, and it recomputes by <b>calling
+     * {@link AutoGrader#grade} itself</b> with the exam version's pinned questions and the
+     * attempt's saved answers, exactly as {@code GradingService} does. A score the seed states
+     * that the grader would not produce fails here, and so does an answer grid quietly edited
+     * without its total.
+     *
+     * <p><b>It is driven by what is in the database, not by a list of sittings written here.</b>
+     * Every grade is recomputed, so a new execution is covered the day it is seeded rather than
+     * the day somebody remembers to add its number to a loop. The sittings it found are asserted
+     * afterwards, so "covered everything" cannot be satisfied by covering nothing.
+     */
+    @Test
+    @DisplayName("⚑ every seeded auto score is what AutoGrader produces from the seeded answers")
+    void everyAutoScoreIsWhatTheGraderProduces() {
+        Map<Long, List<AutoGrader.PinnedQuestion>> papers = inTx(session -> session.createQuery("""
+                        select evq.id.examVersionId, evq.id.questionVersionId, evq.points,
+                               qv.correctAnswer
+                        from ExamVersionQuestion evq, QuestionVersion qv
+                        where qv.id = evq.id.questionVersionId
+                        order by evq.id.examVersionId, evq.ordinal
+                        """, Object[].class).getResultList()).stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        row -> ((Number) row[0]).longValue(),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.mapping(
+                                row -> new AutoGrader.PinnedQuestion(((Number) row[1]).longValue(),
+                                        ((Number) row[2]).intValue(),
+                                        ((Number) row[3]).byteValue()),
+                                java.util.stream.Collectors.toList())));
+
+        Map<Long, Map<Long, Byte>> chosen = new java.util.HashMap<>();
+        for (Object[] row : inTx(session -> session.createQuery("""
+                select aa.id.attemptId, aa.id.questionVersionId, aa.selected
+                from AttemptAnswer aa
+                """, Object[].class).getResultList())) {
+            chosen.computeIfAbsent(((Number) row[0]).longValue(), key -> new java.util.HashMap<>())
+                    .put(((Number) row[1]).longValue(), (Byte) row[2]);
+        }
+
+        List<Object[]> graded = inTx(session -> session.createQuery("""
+                select g.attemptId, g.autoScore, x.code, u.username, x.examVersionId
+                from Grade g, ExamAttempt a, ExamExecution x, User u
+                where a.id = g.attemptId and x.id = a.executionId and u.id = a.studentId
+                """, Object[].class).getResultList());
+
+        assertThat(graded).as("every seeded attempt carries a grade").hasSize(20);
+
+        for (Object[] row : graded) {
+            long attemptId = ((Number) row[0]).longValue();
+            int stored = ((Number) row[1]).intValue();
+            String code = (String) row[2];
+            String student = (String) row[3];
+            List<AutoGrader.PinnedQuestion> paper = papers.get(((Number) row[4]).longValue());
+
+            // A question with no attempt_answers row is simply absent from the map, which is
+            // how the grader is told "unanswered" and why omer.katz's four dashes are rows
+            // that do not exist rather than rows holding a null.
+            int recomputed = AutoGrader.grade(paper,
+                    chosen.getOrDefault(attemptId, Map.of())).score();
+
+            assertThat(recomputed)
+                    .as("sitting %s, %s: the seeded auto score is not what AutoGrader produces "
+                            + "from the seeded answers", code, student)
+                    .isEqualTo(stored);
+        }
+
+        // U-34 added sitting 3318, and this is the assertion that says so: the loop above is
+        // data-driven, so without this it would still pass over three sittings, or two.
+        assertThat(graded).extracting(row -> row[2]).as("every graded sitting is recomputed")
+                .containsOnly("4821", "7390", "3318");
+        assertThat(graded).filteredOn(row -> row[2].equals("3318"))
+                .as("execution 5's four AUTO grades, dana.cohen's awaiting-grading queue (U-34)")
+                .hasSize(4);
     }
 
     private long count(String table) {

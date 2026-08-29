@@ -7,6 +7,7 @@ import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
 import client.ui.components.StatChart;
+import client.ui.components.TextFit;
 import client.ui.screen.AbstractScreen;
 import common.dto.grading.StudentGradeRow;
 import common.dto.results.ExamResultRow;
@@ -27,6 +28,8 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -79,7 +82,15 @@ public final class TeacherResultsView extends AbstractScreen {
     private final Label releasedByOther = new Label("Run by another teacher");
     private final Label markedLabel = new Label();
 
-    private final HBox statCards = new HBox(12);
+    /**
+     * The statistics cards, in a pane that wraps (2026-08-29, manual rounds 3-4,
+     * U-28).
+     *
+     * <p>Same defect and same cure as the principal's report: a row that cannot
+     * fit its cards took the shortfall out of the numbers on them, and "7 of 8
+     * (87.5%)" is not a number anyone can read half of.
+     */
+    private final FlowPane statCards = new FlowPane(12, 12);
     private final EmptyState unfinished = new EmptyState(Icons.RESULTS,
             ResultsCopy.GRADING_UNFINISHED_TITLE, ResultsCopy.GRADING_UNFINISHED_HINT);
 
@@ -173,6 +184,11 @@ public final class TeacherResultsView extends AbstractScreen {
         HBox pickerRow = new HBox(12, executionPicker, releasedByOther, Buttons.spacer(),
                 buildToggle(), printToggle, printExit);
         pickerRow.setAlignment(Pos.CENTER_LEFT);
+        // 2026-08-29, manual rounds 3-4, U-28: these three are not made through
+        // Buttons, so nothing was stopping the row paying for the picker beside
+        // them out of their labels — "Print layo…" on a 1024px window. The picker
+        // is the control on this row that can afford to give.
+        TextFit.oneLine(tableSegment, chartSegment, printToggle);
 
         statCards.getStyleClass().add("results-stats");
         statCards.setAlignment(Pos.CENTER_LEFT);
@@ -403,7 +419,8 @@ public final class TeacherResultsView extends AbstractScreen {
         hint.getStyleClass().add("stat-hint");
         VBox box = new VBox(2, value, label, hint);
         box.getStyleClass().addAll("hsts-card", "hsts-stat-card", "compact", "results-stat-card");
-        box.setMinWidth(130);
+        // U-28: what the card says is its own minimum; the pane above wraps.
+        box.setMinWidth(Region.USE_PREF_SIZE);
         return box;
     }
 
@@ -439,8 +456,20 @@ public final class TeacherResultsView extends AbstractScreen {
         }
     }
 
-    /** One sitting in the picker: code, window, state and how many sat it. */
+    /**
+     * One sitting in the picker: code, window, state and how many sat it.
+     *
+     * <p>2026-08-29, manual rounds 3-4, U-28: the line names four facts about a
+     * sitting nobody here chose the length of, and on a 1024px window the picker
+     * beside the two view toggles is 37px short of it. The row cannot be widened
+     * without taking the toggles' labels instead, so this is the case the house
+     * rule covers: the whole line stays on a tooltip.
+     */
     private static final class ExecutionCell extends ListCell<ExecutionResultRow> {
+
+        private ExecutionCell() {
+            TextFit.keepOnHover(this);
+        }
 
         @Override
         protected void updateItem(ExecutionResultRow execution, boolean empty) {

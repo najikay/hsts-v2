@@ -181,7 +181,7 @@ Scenario 8 is walked and green — all seven cases, 2026-08-23, four bugs found 
 
 | Id | Claim | Implemented in | Guarded by | Acceptance | Status |
 |---|---|---|---|---|---|
-| F12.1 | Teacher creates the bot for a taught course; one bot per course, a second teacher extends it | `server.features.bot.BotAdminService` | `BotAdminServiceTest`, `BotFeatureRepositoryContract` | 13.1, 13.5 | **LIVE-unwalked** |
+| F12.1 | Teacher creates the bot for a taught course; one bot per course, a second teacher extends it | `server.features.bot.BotAdminService`; `client.features.bot.BotManagerView` + `BotManagerListSession` (the list of one bot per taught course, U-26) | `BotAdminServiceTest`, `BotFeatureRepositoryContract`, `BotManagerSessionTest$TheListOfBots`, `BotInteractionTest` | 13.1, 13.5 | **LIVE-unwalked** |
 | F12.2 | Sources: PDF, Word, free text — parsed server-side into indexed chunks at upload, failures surfaced | `server.features.bot.SourceExtractor`, `Chunker` | `SourceExtractorTest`, `BotAdminServiceTest` | 13.2, 13.3 | **LIVE-unwalked** |
 | F12.3 | Sources add/edit/remove for any teacher of the course, edit-locked, co-teachers notified | `BotAdminService`; `client.features.bot.BotManagerView` | `BotAdminServiceTest`, `RecordingNotifier` | 13.4, 13.6 | **LIVE-unwalked** |
 | F12.4 | Active/inactive toggle; a student needs enrolled **and** active **and** not locked out | `BotService`, `BotAdminService`, `BotData.isEnrolled` | `BotServiceTest`, `BotAdminServiceTest` | 14.2, 14.3 | **LIVE-unwalked** |

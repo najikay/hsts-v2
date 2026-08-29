@@ -82,6 +82,11 @@ public final class Buttons {
     public static Button styled(String text, String... styleClasses) {
         Button button = new Button(text);
         button.getStyleClass().addAll(styleClasses);
+        // 2026-08-29, manual round 3 (general issue): a button whose row gets tight was
+        // ellipsised to "Edit questi..." by the toolkit. A button never lies about its own
+        // label: its minimum width is the width of its text, and the row around it is
+        // what has to give (wrap, scroll, or a shorter label chosen on purpose).
+        button.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
         return button;
     }
 

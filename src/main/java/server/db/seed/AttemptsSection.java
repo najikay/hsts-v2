@@ -11,7 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Seed §9.1, §9.1.1, §9.2 and §9.2.1: sixteen attempts and their saved answers (E2.15).
+ * Seed §9.1, §9.1.1, §9.2, §9.2.1, §9.4 and §9.4.1: twenty attempts and their saved answers
+ * (E2.15).
  *
  * <h2>A dash means no row, not a null selection</h2>
  *
@@ -54,7 +55,13 @@ final class AttemptsSection implements SeedSection {
     private record Sitting(String executionCode, List<String> questions,
                            List<Integer> pinnedVersions, List<Paper> papers) { }
 
-    /** §9.1.1: exam 1 v2's seven questions. 11005 is pinned to v1; the rest take their only one. */
+    /**
+     * §9.1.1: exam 1 v2's seven questions. 11005 is pinned to v1; the rest take their only one.
+     *
+     * <p>Execution 5 uses this same list, because it releases the same exam version (§9.4.1).
+     * One constant rather than a copy: the paper is one paper, and two lists that had to agree
+     * would be one more place for them to stop agreeing.
+     */
     private static final List<String> EXECUTION_1_QUESTIONS =
             List.of("11001", "11002", "11005", "11007", "11009", "11010", "11011");
     private static final List<Integer> EXECUTION_1_VERSIONS = List.of(1, 1, 1, 1, 1, 1, 1);
@@ -100,7 +107,21 @@ final class AttemptsSection implements SeedSection {
                     new Paper("omer.katz", 59, AttemptStatus.SUBMITTED,
                             List.of(1, 1, 2, 1, 1, 3, 4)),
                     new Paper("daniel.shapira", 58, AttemptStatus.SUBMITTED,
-                            List.of(1, 1, 2, 1, 1, 3, 1)))));
+                            List.of(1, 1, 2, 1, 1, 3, 1)))),
+
+            // ⚑ U-34, §9.4.1. Exam 1 v2 again, so the same question list and the same key.
+            // Four Algebra students, deliberately not maya.levi: her My Grades holds exactly
+            // one row on a fresh seed and cases 8.2, 9.1 and 17.3 all read that count.
+            // Nobody timed out, so every one of the twenty-eight cells is a row.
+            new Sitting("3318", EXECUTION_1_QUESTIONS, EXECUTION_1_VERSIONS, List.of(
+                    new Paper("noa.friedman", 49, AttemptStatus.SUBMITTED,
+                            List.of(1, 2, 1, 2, 1, 2, 3)),
+                    new Paper("shira.dahan", 57, AttemptStatus.SUBMITTED,
+                            List.of(1, 2, 1, 3, 2, 2, 1)),
+                    new Paper("daniel.shapira", 63, AttemptStatus.SUBMITTED,
+                            List.of(3, 2, 1, 1, 1, 2, 1)),
+                    new Paper("itay.regev", 71, AttemptStatus.SUBMITTED,
+                            List.of(1, 4, 1, 3, 3, 1, 2)))));
 
     /** Minutes between one student starting and the next, so starts are not identical. */
     private static final int STAGGER_MINUTES = 1;
@@ -110,7 +131,7 @@ final class AttemptsSection implements SeedSection {
 
     @Override
     public String name() {
-        return "9.1-9.2 attempts and answers";
+        return "9.1-9.4 attempts and answers";
     }
 
     @Override

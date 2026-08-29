@@ -1,7 +1,7 @@
 # Seed content (E2.15 / E2.16) — the demo dataset
 
 > **This document is machine-read.** `SeedDocument` (`src/test/java`) parses the tables in
-> sections 3–9.1.1 and two build-failing tests consume the parsed view. Reformatting a table is a
+> sections 3–9.4.1 and two build-failing tests consume the parsed view. Reformatting a table is a
 > contract change: update the parser expectations in the same commit, or the build goes red by
 > design.
 
@@ -378,7 +378,7 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 ---
 
-## 9. Executions (4) — S-2 "the same exam can be taken out of the drawer many times"
+## 9. Executions (5) — S-2 "the same exam can be taken out of the drawer many times"
 
 Times are **relative to load time**, resolved by the loader, and stored UTC. Codes are 4
 alphanumeric (C-1); the demo uses digits.
@@ -388,8 +388,8 @@ here rather than repeated per row, and the loader applies them uniformly:
 
 | Column | Rule |
 |---|---|
-| `exam_executions.created_by` | the **releasing teacher** — the author of the exam version being released. Executions 1 and 4 → `2 dana.cohen`; execution 2 → `4 avi.mizrahi`; execution 3 → `6 michal.sharon`. |
-| `grades.status` / `approved_by` / `approved_at` | **execution 1 only**: every grade is `APPROVED`, `approved_by` = the **executing teacher** (`2 dana.cohen`, who released it and owns the grades per T-8.2), `approved_at` = close time + 2 days. Execution 2's grades are `AUTO` with all three left null — that is what "awaiting grading" means. |
+| `exam_executions.created_by` | the **releasing teacher** — the author of the exam version being released. Executions 1, 4 and 5 → `2 dana.cohen`; execution 2 → `4 avi.mizrahi`; execution 3 → `6 michal.sharon`. |
+| `grades.status` / `approved_by` / `approved_at` | **execution 1 only**: every grade is `APPROVED`, `approved_by` = the **executing teacher** (`2 dana.cohen`, who released it and owns the grades per T-8.2), `approved_at` = close time + 2 days. Executions 2 and 5 carry `AUTO` grades with all three left null — that is what "awaiting grading" means. |
 | `exam_attempts.started_at` | **derived, not invented**: window start + a small stagger, such that `started_at + solving time` lands inside the window. The per-student solving times in §9.1 and §9.2 are the input; the loader computes the timestamp so the two can never disagree. |
 
 `ended_at` follows from `started_at` + solving time for `SUBMITTED` attempts, and equals the
@@ -402,13 +402,15 @@ allotted duration rather than a number someone chose.
 | 2 | 4 / v1 | `7390` | T−3d 10:00 → T−3d 11:30 | **CLOSED** | Awaiting grading — nothing approved yet |
 | 3 | 6 / v1 | `5164` | T+4h → T+6h | **SCHEDULED** | Opening later today, for the release demo |
 | 4 | 1 / v2 | `2075` | T−30m → T+3h | **LIVE** | Second execution of exam 1 — the S-2 proof |
+| 5 | 1 / v2 | `3318` | T−1d 09:00 → T−1d 10:30 | **CLOSED** | Awaiting grading, and it is `dana.cohen`'s — U-34 |
 
 Executions 3 and 4 are the two non-CLOSED rows, and their codes differ — the E9 service
-rule (unique code among non-CLOSED executions) holds on the seed as loaded.
+rule (unique code among non-CLOSED executions) holds on the seed as loaded. Execution 5 is
+CLOSED, so its `3318` is outside that rule and stays its own forever.
 
 **Two different kinds of `T` in that column, and the difference is load-bearing** (corrected
-2026-08-26, B-10). Executions 1 and 2 are historical, so their `T−14d 09:00` and `T−3d 10:00`
-mean *a wall-clock hour on a date relative to the load date* — the loader resolves them with
+2026-08-26, B-10). Executions 1, 2 and 5 are historical, so their `T−14d 09:00`, `T−3d 10:00`
+and `T−1d 09:00` mean *a wall-clock hour on a date relative to the load date* — the loader resolves them with
 `SeedTimes.dayOffsetAt`, which discards the load's own time of day. Executions 3 and 4 are the two
 the demo needs to be *happening*, so their offsets are from the **load instant** itself, through
 `SeedTimes.fromNow`: execution 4 opened half an hour ago and closes three hours from now,
@@ -430,7 +432,10 @@ starting. **Anything this document wants to be in the future when it is read mus
 offset from the load instant**, never as an hour on the load date.
 
 Execution 4 being the *same exam version* as execution 1 is the point: one exam, two
-releases, separate codes, windows, participants and statistics.
+releases, separate codes, windows, participants and statistics. **Execution 5 makes it three**
+(added 2026-08-29, manual round 3, U-34), and the claim does not weaken with the third: `4821`
+is finished and approved, `2075` is running, `3318` is closed and unmarked, and no counter on
+any of them can reach any other because `exam_executions` holds no participation columns at all.
 
 ### 9.1 Execution 1 — participation (S-21) and grades
 
@@ -558,9 +563,11 @@ therefore moves a real student across a real threshold, and the execution's pass
 a prefix of the same list, so the per-question difficulty in the results view varies the way a
 real class does. 11007 and 11010 are the two most-missed; 11001 and 11005 are missed by nobody.
 
-**Executions 2, 3 and 4 have no `attempt_answers`.** Execution 2's eight Java attempts carry auto
-scores only (§9.2) and are the fixture for approving grades, not for re-grading; 3 and 4 have no
-attempts at all by design (§9.3).
+**Executions 3 and 4 have no `attempt_answers`, because they have no attempts at all** (§9.3).
+Executions 2 and 5 have both: §9.2.1 and §9.4.1 give their grids, and each is a fixture for
+approving grades rather than for re-grading. This paragraph said "executions 2, 3 and 4 have no
+`attempt_answers`" until 2026-08-29 (manual round 3, U-34), which §9.2.1 four screens below it
+had already contradicted.
 
 ---
 
@@ -640,6 +647,85 @@ that the fourth option is a real answer and not decoration.
 Execution 3 (SCHEDULED) and execution 4 (LIVE) have **no attempts**. They exist so the
 demo can create attempts live. Seeding attempts into them would make the take-exam
 demo unrepeatable.
+
+---
+
+### 9.4 Execution 5 — closed, awaiting grading, and it is Dana's ⚑ (added 2026-08-29, manual round 3, U-34)
+
+Four of the eight students enrolled in Algebra (11) sat exam 1 v2 again, all
+**SUBMITTED** — nobody timed out. Auto-scores are computed; **no grade is approved**.
+`grades.status = AUTO` for all four, with `final_score`, `override_reason`, `teacher_comment`,
+`approved_by` and `approved_at` all null. `extra_minutes = 0`.
+
+| student | attempt status | solving time (S-19) | auto | final |
+|---|---|---|---|---|
+| 7 noa.friedman | SUBMITTED | 49 min | 85 | — |
+| 9 shira.dahan | SUBMITTED | 57 min | 75 | — |
+| 14 daniel.shapira | SUBMITTED | 63 min | 60 | — |
+| 8 itay.regev | SUBMITTED | 71 min | 45 | — |
+
+**Why this sitting exists (U-34).** `dana.cohen` opened Grading on a freshly seeded database and
+read **"Nothing to grade"**. Nothing was broken: her only closed sitting, `4821`, is fully
+approved and the queue excludes what is signed off (§9.1), and the one sitting that is waiting,
+`7390`, was released by `avi.mizrahi` and is scoped to him (§9.2). Two correct rules, and the
+demo teacher's grading screen empty on day one. This is §9.2's shape with §9.1's exam and
+§9.1's teacher, so `dana.cohen` now owns one sitting in each state: `4821` finished, `3318`
+waiting for her.
+
+**Four students, not eight, and `maya.levi` is not one of them.** Both halves are decisions.
+Four keeps this sitting's counters visibly unlike `7390`'s eight, so a walkthrough that opens
+both queues cannot mistake one for the other. Leaving the demo student out keeps §9.1's story
+intact: her My Grades holds **exactly one row** on a freshly seeded database, which cases 8.2,
+9.1 and 17.3 all read, and an unapproved second Algebra grade behind it would change that count
+the moment anybody approved this sitting during a walkthrough.
+
+**`participation` and `stats` are not frozen.** Freezing happens once at close for a sitting
+whose grading is done (S-21, S-25, §9.1); this one's has not started, so both JSON columns are
+null and the counts a teacher sees are derived live from `exam_attempts` — exactly as they are
+for `7390`.
+
+Exam 1 v2 is 6×15 + 10, so the reachable totals are §9.1's fourteen values and every score above
+is one of them. Solving times stay inside the paper's **75 minutes** and inside the 90-minute
+window, and none equals either: nobody here ran out of time.
+
+**The spread is deliberately unlike both other sittings.** Execution 1 finals are
+`45, 55, 60, 70, 75, 85, 90, 100` and execution 2's autos are `30, 40, 55, 60, 70, 75, 85, 100`;
+these are `45, 60, 75, 85`. **One student sits below the pass mark**, which is `itay.regev` on 45
+— the same number §9.1's override moved to 55 — so the override demo has a second candidate that
+nothing in the seed has already used.
+
+#### 9.4.1 `attempt_answers` for execution 5
+
+The same key as §9.1.1, because it is the same paper released again (S-2):
+
+| # | question | correct | points |
+|---|---|---|---|
+| 1 | 11001 | 1 | 15 |
+| 2 | 11002 | 2 | 15 |
+| 3 | 11005 **v1** | 1 | 15 |
+| 4 | 11007 | 3 | 15 |
+| 5 | 11009 | 1 | 15 |
+| 6 | 11010 | 2 | 15 |
+| 7 | 11011 | 3 | 10 |
+
+Every student answered every question — there are no `—` entries here, because nobody timed out.
+
+| student | 11001 | 11002 | 11005 | 11007 | 11009 | 11010 | 11011 | auto |
+|---|---|---|---|---|---|---|---|---|
+| 7 noa.friedman | 1 | 2 | 1 | 2 | 1 | 2 | 3 | **85** |
+| 9 shira.dahan | 1 | 2 | 1 | 3 | 2 | 2 | 1 | **75** |
+| 14 daniel.shapira | 3 | 2 | 1 | 1 | 1 | 2 | 1 | **60** |
+| 8 itay.regev | 1 | 4 | 1 | 3 | 3 | 1 | 2 | **45** |
+
+**No row here repeats a row in §9.1.1**, and that is worth stating because three of these four
+students sat that paper too: a student whose second sitting reproduced her first, cell for cell,
+would make a per-question breakdown across the two look like a copied fixture rather than two
+classes. Each of the four misses a different combination.
+
+**`11011` is the most-missed question here** — three of four — where §9.1.1's were `11007` and
+`11010`, and **`11005` is missed by nobody** in either. Two releases of one paper with different
+difficulty profiles is what makes the S-2 claim visible on the results screens rather than only
+in the row counts.
 
 ---
 
@@ -762,7 +848,7 @@ Enough that the notification centre is populated at login rather than empty (NFR
 
 **`seed_id` is a naming handle, not a database column** (D8, corrected). `notifications` has no
 such column: the loader keys idempotency on **recipient + type + title**, which is unique across
-the nine rows below and is what a re-load actually matches on.
+the ten rows below and is what a re-load actually matches on.
 
 The `seed_id` column stays because that composite key is useless in a sentence — an acceptance
 case, a demo script or a failing assertion needs to say *which* notification, and
@@ -788,6 +874,7 @@ The `#` column is presentation order only and carries no meaning.
 | `N-GRADING-DUE-JAVA` | 7 | 4 avi.mizrahi | GRADING_DUE | 8 attempts awaiting your grade approval | unread |
 | `N-EXEC-CLOSED-ALG` | 8 | 1 principal.avia | EXECUTION_CLOSED | Sitting finished: 8 students, average 72.5 | unread |
 | `N-GRADE-MAYA` | 9 | 11 maya.levi | GRADE_PUBLISHED | Your grade is ready | unread |
+| `N-GRADING-DUE-ALG` | 10 | 2 dana.cohen | GRADING_DUE | 4 attempts awaiting your grade approval | unread |
 
 `N-EXEC-CLOSED-ALG` exists so the principal's first screen is not empty at login: S-7 makes
 her read-only, so she can never generate her own activity. **Its title quotes the mean, so it is
@@ -812,8 +899,8 @@ itself would have written on approval. Three things about it are deliberate:
   `Your grade for Midterm: Algebra has been published.` — exactly what
   `NotificationCatalog.gradePublished` composes, so the bell on the day shows what a live
   approval produces.
-- **It deep-links, and it is the first seeded row that does.** The other eight carry no
-  `ref_type`/`ref_id` at all, so clicking one goes nowhere. Hers stores
+- **It deep-links, and it is still the only seeded row that does.** Every other row in this
+  table carries no `ref_type`/`ref_id` at all, so clicking one goes nowhere. Hers stores
   `grades` + her own attempt id on sitting `4821`, resolved at load time because the id is
   whatever `AUTO_INCREMENT` gave it.
 - **Its title differs from `N-GRADE-NOA`'s and `N-GRADE-YAEL`'s on purpose**, because the
@@ -837,12 +924,33 @@ is the string to revisit if the product ever composes a comment-aware body, and 
 `noa.friedman`, whose title makes no such promise, is one of the four §9.1 grades deliberately
 left without a comment.
 
-**Row count: 375 → 376.** One row in `notifications` (8 → 9) and nothing else moves.
+**`N-GRADING-DUE-ALG` ⚑ (added 2026-08-29, manual round 3, U-34).** Execution 5 gives
+`dana.cohen` a closed sitting with nothing approved on it (§9.4), and `avi.mizrahi` has had a
+`GRADING_DUE` for exactly that situation since the section was written. Hers is the same row for
+the same reason: **a queue with work in it and no bell saying so is the state that let "Nothing to
+grade" go unnoticed in the first place.** It says four attempts, which is §9.4's four AUTO grades,
+and it carries the same coupling `N-GRADING-DUE-JAVA` does: change the roster on that sitting and
+this string changes with it. It is the second row in this table whose title quotes a count, and
+both are counts a test recomputes rather than reads.
+
+It carries no `ref_type`/`ref_id`. `N-GRADE-MAYA` is still the only seeded row that deep-links:
+the catalog composes a grading-due draft without a target, and inventing one here would give the
+seed a notification the product does not produce, which is precisely the property `N-GRADE-MAYA`
+exists to have.
+
+**Row count: 375 → 376** with `N-GRADE-MAYA`: one row in `notifications` (8 → 9) and nothing
+else moved.
+
+**Row count: 376 → 414** with execution 5 (2026-08-29, manual round 3, U-34). Five tables move
+and no other does: `exam_executions` 4 → 5, `exam_attempts` 16 → 20, `attempt_answers` 108 → 136
+(four students × seven questions, none absent), `grades` 16 → 20, and `notifications` 9 → 10 for
+`N-GRADING-DUE-ALG`. That is +1 +4 +28 +4 +1 = **+38**.
 
 Every recipient is the person the event actually concerns: rejections and pending-approval
 notices go to the **author** (`dana.cohen`, `tamar.shani`), the approval request goes to the
-**subject coordinator** (`rina.barak`), and grade publications go to the **students who sat
-the exam** (`noa.friedman`, `yael.azulay`, `maya.levi` — all three sat §9.1's Algebra midterm). A notification addressed to someone with no stake in the event is the kind of
+**subject coordinator** (`rina.barak`), grading-due notices go to the **teacher who released the
+sitting** (`avi.mizrahi` for `7390`, `dana.cohen` for `3318`), and grade publications go to the
+**students who sat the exam** (`noa.friedman`, `yael.azulay`, `maya.levi` — all three sat §9.1's Algebra midterm). A notification addressed to someone with no stake in the event is the kind of
 thing that only shows up when a reviewer opens the screen at the defense.
 
 ---

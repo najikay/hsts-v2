@@ -69,6 +69,18 @@ public final class DataTable<T> extends VBox {
     /** How far the affordance sits from the wrapper's right edge, clear of a scrollbar. */
     private static final double AFFORDANCE_INSET = 20;
 
+    /**
+     * What a column costs on top of the words in its heading
+     * (2026-08-29, manual rounds 3-4, U-28).
+     *
+     * <p>Measured rather than guessed: between the column's width and the kicker
+     * inside it sit the header cell's insets, the padding of the {@code Label}
+     * that JavaFX wraps a column graphic in, and the room kept for a sort arrow.
+     * That came to 26px on this toolkit and this stylesheet, and a minimum set
+     * without it leaves every heading in the app 26px short of readable.
+     */
+    private static final double HEADING_SLACK = 26;
+
     private final TableView<T> table = new TableView<>();
     private final ObservableList<T> items = FXCollections.observableArrayList();
     private final FilteredList<T> filtered = new FilteredList<>(items, item -> true);
@@ -146,6 +158,7 @@ public final class DataTable<T> extends VBox {
         TableColumn<T, String> column = new TableColumn<>();
         heading(column, title);
         column.setCellValueFactory(cell -> new SimpleStringProperty(reader.apply(cell.getValue())));
+        column.setCellFactory(ignored -> textCell());
         table.getColumns().add(column);
         return this;
     }
@@ -160,19 +173,69 @@ public final class DataTable<T> extends VBox {
     }
 
     /**
+     * A text cell that keeps what it cannot show (2026-08-29, manual rounds 3-4,
+     * U-28).
+     *
+     * <p>A grid of fixed columns is the one surface in this app where an ellipsis
+     * is honest work: a question stem is as long as its author wrote it, and no
+     * column width fits every one of them. What is <b>not</b> acceptable is the
+     * text being gone — a row reading "Factor the quadratic expres…" with no way
+     * to read the rest is the defect rounds 3 and 4 reported, and widening the
+     * column only moves it to the next stem.
+     *
+     * <p>So the cell measures itself: while its text fits, nothing happens, and
+     * the moment it does not, the whole text goes on a tooltip. Every table in
+     * the app gets it, because every table goes through this class.
+     */
+    private static <S> TableCell<S, String> textCell() {
+        TableCell<S, String> cell = new TableCell<>() {
+            @Override
+            protected void updateItem(String value, boolean empty) {
+                super.updateItem(value, empty);
+                setText(empty ? null : value);
+            }
+        };
+        TextFit.keepOnHover(cell);
+        return cell;
+    }
+
+    /**
      * Puts the wave-2 kicker treatment on a column heading.
      *
      * <p>A <b>graphic</b> rather than the column's own text, and the text is
-     * cleared. Two reasons, both about not lying: JavaFX CSS has no
-     * {@code text-transform} and no {@code letter-spacing}, so the uppercase and
-     * the tracking have to be baked into a string — and a tracked string read
-     * aloud is spelled out letter by letter. {@link Kicker} sets the accessible
-     * text to the plain words, so the column heading a screen reader announces is
-     * "APPROVED" and not "A P P R O V E D".
+     * cleared: JavaFX CSS has no {@code text-transform}, so the uppercase has to
+     * be baked into a string, and {@link Kicker} sets the accessible text with it.
+     *
+     * <p>{@link Kicker#columnLabel(String)} rather than {@link Kicker#label},
+     * because a column heading is the one kicker with no width to spend on
+     * tracking — see that method for the reasoning (U-28).
      */
     private static void heading(TableColumn<?, ?> column, String title) {
         column.setText("");
-        column.setGraphic(Kicker.label(title));
+        Label kicker = Kicker.columnLabel(title);
+        column.setGraphic(kicker);
+        // 2026-08-29, manual rounds 3-4, U-28: the resize policy shares the table's
+        // width out in the ratio of the pref widths, and will happily take a column
+        // below the word naming it — which is how DIFFICULTY became three dots on a
+        // 1024px window. A minimum set from the heading's own width gives the
+        // heading first claim on the share, ahead of the ratio.
+        //
+        // Deferred to a pulse because the width is a CSS question: 11.5px bold,
+        // and none of that is resolved at construction.
+        // And where even the minimum cannot be met — eight columns sharing 449px on
+        // the question bank's narrow window — the heading falls back on the rule
+        // its own cells use: what will not fit goes on the tooltip. A column in a
+        // fixed grid is the one surface in this app whose width is not ours to
+        // spend, and that is true of the word at the top of it as well as of the
+        // rows under it.
+        TextFit.keepOnHover(kicker);
+        kicker.sceneProperty().addListener((observable, was, now) -> {
+            if (now != null) {
+                Platform.runLater(() -> column.setMinWidth(Math.ceil(
+                        TextFit.renderedWidth(kicker.getText(), kicker.getFont()))
+                        + HEADING_SLACK));
+            }
+        });
     }
 
     /**

@@ -11,6 +11,8 @@ import client.events.DirectFxThreadPoster;
 import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
+import client.ui.components.Buttons;
+import client.ui.components.StatusChip;
 import client.ui.theme.ThemeManager;
 import client.ui.theme.ThemeState;
 import common.dto.approval.ApprovalState;
@@ -441,11 +443,119 @@ class ExamListInteractionTest extends ApplicationTest {
                 .contains("Calculus final");
     }
 
+    // ===================== Round 3: weight and width ======================
+
+    /**
+     * The New exam control is secondary, and the reason is what it competes with (U-35).
+     *
+     * <p>It was a full-size accent block in the header. This screen's committing actions are
+     * Submit for approval and Revise, which sit on the version a teacher is actually looking at,
+     * and a navigation outweighing both of them is the header telling her the wrong thing is
+     * important. Nothing else about it moved: it is still a {@code MenuButton} of the courses she
+     * teaches, and {@link #newExamIsDisabledWhenSheTeachesNothing} still owns the empty case.
+     *
+     * <p>Asserted on the style classes rather than on a rendered colour, because that is where
+     * the decision lives: PRD section 4.1 styles buttons by class and never by subclass, so the
+     * class list is the design and a colour read off a node is a screenshot.
+     */
+    @Test
+    @DisplayName("⚑ U-35: New exam is a secondary, small control and not the headline action")
+    void newExamIsSecondaryAndSmall() {
+        Scene scene = openList(this::serverHasThreeExams);
+
+        MenuButton newExam = newExamControl(scene);
+        assertThat(newExam.getStyleClass())
+                .as("`button` as well as the variant: every rule in hsts.css is `.button.x`, "
+                        + "and a MenuButton's own class is `menu-button`")
+                .contains("button", Buttons.SECONDARY, Buttons.SMALL);
+        assertThat(newExam.getStyleClass())
+                .as("⚑ and NOT primary, which is the whole of U-35")
+                .doesNotContain(Buttons.PRIMARY);
+        assertThat(itemTexts(newExam))
+                .as("the offer is unchanged: the prompt, then her two courses")
+                .containsExactly(ExamListCopy.NEW_EXAM_PROMPT, "11 · Algebra", "12 · Calculus");
+        assertThat(newExam.isDisabled())
+                .as("and a teacher who teaches something can still press it")
+                .isFalse();
+    }
+
+    /**
+     * The versions panel's chips are glyphs, and the word is still readable (U-32).
+     *
+     * <p>The panel is 380px wide and 320px at its minimum, and the summary beside each chip is
+     * four clauses long, so "Pending approval" was arriving ellipsised. The fix moves the word
+     * rather than dropping it: it is the chip's tooltip and its accessible text, so a pointer
+     * and a screen reader both get it in full.
+     *
+     * <p>The tooltip is asserted through {@link StatusChip#tooltip()} rather than by hovering,
+     * for the reason this file already gives about popups: a tooltip window in a headless run is
+     * a hang rather than a failure. What is checked is that the sentence exists and says the
+     * right thing, which is the half a hover could not tell us anyway.
+     */
+    @Test
+    @DisplayName("⚑ U-32: a version's chip is one glyph carrying its whole word as a tooltip")
+    void versionChipsAreGlyphsWithTheWordKept() {
+        Scene scene = openList(this::serverHasThreeExams);
+
+        List<StatusChip> compact = chips(scene).stream()
+                .filter(StatusChip::isCompact)
+                .toList();
+
+        assertThat(compact)
+                .as("one per version card of the selected exam, and nowhere else")
+                .hasSize(3);
+        assertThat(compact).allSatisfy(chip -> {
+            assertThat(chip.tooltip())
+                    .as("a glyph with no word anywhere is unreadable to anyone who does not "
+                            + "already know the app")
+                    .isNotNull();
+            assertThat(chip.getAccessibleText())
+                    .as("⚑ the screen reader gets the same sentence the pointer does")
+                    .isEqualTo(chip.tooltip().getText());
+            assertThat(chip.lookupAll(".label"))
+                    .as("the label is REMOVED and not merely hidden: a zero-width child still "
+                            + "takes the HBox's spacing, and a chip padded asymmetrically by "
+                            + "6px reads as a fault rather than as a design")
+                    .isEmpty();
+        });
+        assertThat(compact.stream().map(chip -> chip.tooltip().getText()).toList())
+                .as("the three states of the first exam, spelled as ChipCatalog spells them")
+                .containsExactlyInAnyOrder("Draft", "Rejected", "Approved");
+    }
+
+    /**
+     * The table is deliberately not compacted (U-32).
+     *
+     * <p>It has a 180px column of its own for the state, so the word fits and the compact form
+     * would be a glyph in a column headed "Latest" with nothing beside it. Without this
+     * assertion the obvious follow-up mutation - compact everywhere, one call site - passes.
+     */
+    @Test
+    @DisplayName("⚑ U-32: the table keeps its words, because it has the column for them")
+    void theTableKeepsItsWords() {
+        Scene scene = openList(this::serverHasThreeExams);
+
+        assertThat(chips(scene).stream().filter(chip -> !chip.isCompact()).toList())
+                .as("one Latest chip per exam row")
+                .hasSize(3);
+        assertThat(labelTexts(scene))
+                .as("and their words are on screen, not in a tooltip")
+                .contains("Draft", "Pending approval", "Rejected");
+    }
+
     // ===================== Harness ========================================
 
     private void serverHasThreeExams(FakeClientConnection connection) {
         connection.respondTo(Verb.EXAM_LIST, request ->
                 Message.ok(request, new ExamList(List.of(MIDTERM, FINAL_EXAM, GEOMETRY))));
+    }
+
+    /** Every status chip on the screen, table and versions panel alike. */
+    private static List<StatusChip> chips(Scene scene) {
+        return scene.getRoot().lookupAll(".hsts-chip").stream()
+                .filter(StatusChip.class::isInstance)
+                .map(StatusChip.class::cast)
+                .toList();
     }
 
     /** Every item of a menu button, in order, so the offer can be pinned and not merely sampled. */

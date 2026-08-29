@@ -98,6 +98,26 @@ class IconsTest {
                 .isEqualTo("mdomz-warning");
     }
 
+    /**
+     * The four marks the compact exam chip is drawn from (2026-08-29, manual round 3, U-32).
+     *
+     * <p>Named as well as scanned, because what the scan proves is that each literal exists and
+     * what matters here is that the four are DIFFERENT. A compact chip drops the word, so shape
+     * is the only thing left distinguishing an approved version from a rejected one for anyone
+     * who cannot tell the green from the red; two of these resolving to one glyph would make the
+     * panel unreadable while passing every other assertion in this file.
+     */
+    @Test
+    @DisplayName("⚑ U-32: the four exam-status glyphs are four different marks")
+    void theExamStatusGlyphsAreDistinct() {
+        assertThat(List.of(Icons.CHECK, Icons.CROSS, Icons.CLOCK, Icons.EDIT))
+                .doesNotHaveDuplicates();
+        assertThat(Icons.CROSS)
+                .as("the outlined twin of CHECK; mdoal-cancel is the same mark filled in, and a "
+                        + "solid disc beside an outlined tick reads as two icon sets")
+                .isEqualTo("mdoal-highlight_off");
+    }
+
     @Test
     @DisplayName("an unknown literal still renders a spacer rather than throwing")
     void anUnknownLiteralIsStillSurvivable() {

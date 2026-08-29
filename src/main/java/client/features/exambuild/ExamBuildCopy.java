@@ -30,6 +30,17 @@ public final class ExamBuildCopy {
 
     // ===================== The screen =====================================
 
+    /**
+     * What the course line calls itself (U-30).
+     *
+     * <p>The builder never showed which course it was writing for in {@code Mode.CREATE}: the
+     * course is picked in the exam list's New exam menu and then travels as a nav parameter, so
+     * the one screen where it decides what the bank picker offers and what {@code EXAM_CREATE}
+     * carries was the one screen that never named it. A teacher who teaches four courses had no
+     * way to check she was in the right one short of opening the picker.
+     */
+    public static final String COURSE_PREFIX = "Course";
+
     /** The screen title when a new exam is being written. */
     public static final String TITLE_NEW = "New exam";
 
@@ -411,6 +422,36 @@ public final class ExamBuildCopy {
                 ? ""
                 : " · " + line.difficulty().name().toLowerCase(Locale.ENGLISH);
         return line.displayId5() + " · " + topic + difficulty;
+    }
+
+    /**
+     * The course this exam belongs to, as the header says it (2026-08-29, manual round 3, U-30).
+     *
+     * <p><b>The same "code &middot; name" shape {@link ExamListCopy#courseLabel} uses</b>, and
+     * copied rather than shared for the reason that method's own javadoc gives: that one takes a
+     * loaded {@code ExamListRow} and this one takes two strings, because in {@code Mode.CREATE}
+     * there is no exam yet and the name has to come off the sign-in payload's {@code CourseRef}.
+     * A teacher moving between her exam list and the builder reads one spelling of one course.
+     *
+     * <p>Prefixed with the word rather than left bare: the subtitle beside it is a six-digit id,
+     * and "110101 &middot; 11 &middot; Algebra 11" is three numbers in a row with nothing saying
+     * which is which.
+     *
+     * @param code the course code, which {@code ExamBuilderSession} always has
+     * @param name its name, which may be blank when the payload carries no name for it
+     * @return "Course: 11 &middot; Algebra 11", or "Course: 11" when the name is unknown
+     */
+    public static String courseLine(String code, String name) {
+        String safeCode = code == null ? "" : code.trim();
+        String safeName = name == null ? "" : name.trim();
+        if (safeCode.isEmpty() && safeName.isEmpty()) {
+            return "";
+        }
+        if (safeCode.isEmpty()) {
+            return COURSE_PREFIX + ": " + safeName;
+        }
+        return COURSE_PREFIX + ": " + safeCode
+                + (safeName.isEmpty() ? "" : " · " + safeName);
     }
 
     /**

@@ -163,6 +163,7 @@ class ExamBuildCopyTest {
                     ExamBuildCopy.questionSummary(line("11001", "Recursion",
                             Difficulty.MEDIUM, 50)),
                     ExamBuildCopy.title(ExamBuilderSession.Mode.EDIT),
+                    ExamBuildCopy.courseLine("11", "Algebra 11"),
                     ExamBuildCopy.saveButton(ExamBuilderSession.Mode.CREATE));
 
             assertThat(derived).allSatisfy(sentence ->
@@ -300,6 +301,78 @@ class ExamBuildCopyTest {
         @DisplayName("the text counter shows how far she is from the ceiling")
         void textCounter() {
             assertThat(ExamBuildCopy.textCounter(120, 4000)).isEqualTo("120 of 4000 characters.");
+        }
+    }
+
+    // ===================== The course line (U-30) =========================
+
+    /**
+     * Which course the paper is for, in the builder's header.
+     *
+     * <p>The builder had no such line at all until 2026-08-29: the course is chosen in the exam
+     * list's New exam menu and travels as a nav parameter, so the one screen that spends it -
+     * the bank picker is scoped to it, {@code EXAM_CREATE} carries it - was the one screen that
+     * never said which it was. The wording is pinned here rather than in the interaction test,
+     * because a spelling is checkable without a window.
+     */
+    @Nested
+    @DisplayName("⚑ U-30: the header's course line")
+    class CourseLine {
+
+        @Test
+        @DisplayName("names the code and the name, in the house spelling")
+        void codeAndName() {
+            assertThat(ExamBuildCopy.courseLine("11", "Algebra 11"))
+                    .isEqualTo("Course: 11 · Algebra 11");
+        }
+
+        /**
+         * The separator is the one {@code ExamListCopy.courseLabel} uses, character for
+         * character. Two spellings of one course across two screens is the defect this shares
+         * a shape with rather than a bug of its own, so it is asserted rather than assumed.
+         */
+        @Test
+        @DisplayName("⚑ spells the course exactly as the exam list spells it")
+        void matchesTheExamList() {
+            assertThat(ExamBuildCopy.courseLine("11", "Algebra 11"))
+                    .endsWith(ExamListCopy.courseOption(
+                            new common.dto.auth.CourseRef("11", "Algebra 11")));
+        }
+
+        @Test
+        @DisplayName("a course whose name the client does not know still shows its code")
+        void codeOnly() {
+            assertThat(ExamBuildCopy.courseLine("11", "")).isEqualTo("Course: 11");
+            assertThat(ExamBuildCopy.courseLine("11", null)).isEqualTo("Course: 11");
+            assertThat(ExamBuildCopy.courseLine("11", "   ")).isEqualTo("Course: 11");
+        }
+
+        @Test
+        @DisplayName("the prefix names itself, so three numbers in a row cannot be confused")
+        void carriesThePrefix() {
+            assertThat(ExamBuildCopy.courseLine("11", "Algebra 11"))
+                    .startsWith(ExamBuildCopy.COURSE_PREFIX);
+        }
+
+        /**
+         * Nothing known is an empty line rather than a dangling label.
+         *
+         * <p>The view hides the label on a blank string, so "Course:" with nothing after it is
+         * a state that must not be reachable: it would appear for the half-second between
+         * {@code build()} and the first render of a failed load.
+         */
+        @Test
+        @DisplayName("⚑ knowing nothing produces nothing, never a bare Course:")
+        void nothingKnown() {
+            assertThat(ExamBuildCopy.courseLine(null, null)).isEmpty();
+            assertThat(ExamBuildCopy.courseLine("", "")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a name with no code is still worth saying")
+        void nameOnly() {
+            assertThat(ExamBuildCopy.courseLine(null, "Algebra 11"))
+                    .isEqualTo("Course: Algebra 11");
         }
     }
 }

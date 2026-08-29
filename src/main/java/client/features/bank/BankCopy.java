@@ -427,7 +427,15 @@ public final class BankCopy {
     // ===================== Delete (E6.13, F2.5, T-2.7) ====================
 
     /** The action's label wherever it appears. */
-    public static final String DELETE = "Delete question";
+    /**
+     * 2026-08-29, manual round 3 (U-27): the detail card's three buttons share one row
+     * and "Delete question" / "Edit question" were ellipsised. The card is about one
+     * question, so the noun is already on screen and the verbs stand alone.
+     */
+    public static final String DELETE = "Delete";
+
+    /** The detail card's edit action; the editor keeps its own longer title. */
+    public static final String EDIT = "Edit";
 
     /** Title of the ordinary confirmation. */
     public static final String DELETE_CONFIRM_TITLE = "Delete this question?";

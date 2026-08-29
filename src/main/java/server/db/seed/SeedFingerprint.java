@@ -53,7 +53,7 @@ import java.util.function.Function;
  *       go up. That is a false positive in spirit and a true one in fact: this database is no
  *       longer the dataset, and "reload before you demo" is the right answer either way.</li>
  *   <li><b>Does not catch</b> a change to seeded content no probe looks at. Ten probes are not
- *       a checksum of 376 rows and this class does not pretend otherwise. It is a spot-check
+ *       a checksum of 414 rows and this class does not pretend otherwise. It is a spot-check
  *       chosen to be cheap (nine counts and one string), stable across reloads, and pointed at
  *       the things that have actually drifted.</li>
  *   <li><b>Never deletes anything, and never fails a load.</b> It warns. A guard that refused
@@ -99,10 +99,13 @@ final class SeedFingerprint {
             count("question_versions", 43),
             count("exams", 6),
             count("exam_versions", 7),
-            count("exam_executions", 4),
-            count("exam_attempts", 16),
-            count("grades", 16),
-            count("notifications", 9),
+            // U-34 (2026-08-29, manual round 3) moved four of these five: execution 5 added
+            // one sitting, four attempts and four grades, and N-GRADING-DUE-ALG one
+            // notification. attempt_answers is not probed, so its 108 -> 136 is not here.
+            count("exam_executions", 5),
+            count("exam_attempts", 20),
+            count("grades", 20),
+            count("notifications", 10),
             new Probe("dana.cohen's display name", "Dana Cohen", session -> scalar(session,
                     "select u.fullName from User u where u.username = 'dana.cohen'")));
 

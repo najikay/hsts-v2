@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §9: the four executions (E2.15).
+ * Seed §9: the five executions (E2.15).
  *
  * <h2>Why the windows are relative and what that costs</h2>
  *
@@ -21,7 +21,7 @@ import java.util.List;
  * standard pre-demo step.
  *
  * <p><b>"Relative to the load" has two meanings, and B-10 was the gap between them.</b> Executions
- * 1 and 2 are historical: a wall-clock hour on a date some days before the anchor is the right
+ * 1, 2 and 5 are historical: a wall-clock hour on a date some days before the anchor is the right
  * shape for them, and {@link SeedTimes#dayOffsetAt} is what they use. Executions 3 and 4 are the
  * two the demo needs to be <em>happening</em>, and they now resolve from the anchor <em>instant</em>
  * through {@link SeedTimes#fromNow}: execution 4 opens 30 minutes ago and closes 90 minutes out, so
@@ -29,10 +29,10 @@ import java.util.List;
  * to be "today at 14:00", which is a description of the past for any load after lunch - see
  * {@link #SCHEDULED_OPENS}.
  *
- * <h2>Executions 1 and 4 run the same exam version, deliberately</h2>
+ * <h2>Executions 1, 4 and 5 run the same exam version, deliberately</h2>
  *
- * <p>Both release exam 1 v2. That is S-2, "the same exam can be taken out of the drawer many
- * times": one exam version, two releases, separate codes, windows, participants and statistics.
+ * <p>All three release exam 1 v2. That is S-2, "the same exam can be taken out of the drawer many
+ * times": one exam version, three releases, separate codes, windows, participants and statistics.
  * It is also why {@code exam_executions} carries no participation counter columns, per §5 and
  * ADR-016: counts are derived from {@code exam_attempts} while an execution is live and frozen
  * into JSON only at close, so two executions of one version can never contaminate each other's
@@ -41,9 +41,10 @@ import java.util.List;
  * <h2>The code uniqueness rule is a service rule, not a constraint</h2>
  *
  * <p>Codes are unique among <em>non-closed</em> executions (E9, C-1). Executions 3 and 4 are the
- * only non-closed ones here and their codes differ, so the rule holds on the seed as loaded. The
- * database does not enforce it and must not: closed executions keep their codes forever, and a
- * unique index would eventually refuse a legitimate new release.
+ * only non-closed ones here and their codes differ, so the rule holds on the seed as loaded.
+ * Execution 5 is CLOSED and therefore outside the rule entirely, which is the same reason 1 and
+ * 2 are. The database does not enforce it and must not: closed executions keep their codes
+ * forever, and a unique index would eventually refuse a legitimate new release.
  *
  * <h2>created_by is a stated rule, not invention</h2>
  *
@@ -139,7 +140,15 @@ final class ExecutionsSection implements SeedSection {
                     ExecutionStatus.SCHEDULED, "michal.sharon", SCHEDULED_OPENS),
             // Live right now: the S-2 proof, and the take-exam demo's target. now-30m to now+3h.
             new SeedExecution("101101", 2, "2075", 0, 0, 0, LIVE_WINDOW_MINUTES,
-                    ExecutionStatus.LIVE, "dana.cohen", LIVE_OPENED));
+                    ExecutionStatus.LIVE, "dana.cohen", LIVE_OPENED),
+            // ⚑ U-34. Closed yesterday, nothing approved, and released by dana.cohen: the demo
+            // teacher's own awaiting-grading sitting. Her Grading screen read "Nothing to grade"
+            // on a freshly seeded database because 4821 is fully approved and 7390 is avi's, and
+            // both of those are the queue's rules working rather than a defect. Historical, so
+            // the wall-clock form, exactly as 1 and 2. No participation and no stats: freezing
+            // happens once grading is done (§9.4), and this one's has not started.
+            new SeedExecution("101101", 2, "3318", 1, 9, 0, 90,
+                    ExecutionStatus.CLOSED, "dana.cohen", null));
 
     /**
      * §9.1's frozen participation, from its own eight attempt rows.

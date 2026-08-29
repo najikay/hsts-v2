@@ -484,6 +484,13 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
         assertThat(minutesBetween(byCode.get("4821"))).as("§9: T-14d 09:00 to 11:00").isEqualTo(120);
         assertThat(minutesBetween(byCode.get("7390"))).as("§9: T-3d 10:00 to 11:30").isEqualTo(90);
         assertThat(minutesBetween(byCode.get("5164"))).as("§9: T+4h, two hours").isEqualTo(120);
+        // ⚑ U-34. Historical, like 1 and 2: a wall-clock hour and a half on yesterday's date,
+        // so the sitting is closed however late in the day the seed is loaded.
+        assertThat(minutesBetween(byCode.get("3318")))
+                .as("§9: T-1d 09:00 to 10:30 - U-34").isEqualTo(90);
+        assertThat((java.time.Instant) byCode.get("3318").get(2))
+                .as("a CLOSED sitting has to have closed, whatever hour the seed is loaded at")
+                .isBefore(ANCHOR);
 
         // Execution 4 is the S-2 proof and the take-exam demo's target: it has to straddle the
         // anchor, not merely be two hours long, or "live right now" stops being true.
@@ -516,6 +523,18 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                 .isAfter((java.time.Instant) live.get(2));
     }
 
+    /**
+     * The executions §9 tabulates per student, and the code each one wears.
+     *
+     * <p>A constant rather than a ternary repeated in three loops. It was
+     * {@code execution == 1 ? "4821" : "7390"} in all three until U-34 added a third sitting,
+     * and a ternary silently answers "7390" for every number that is not 1: the loops would
+     * have compared execution 5's rows against execution 2's and passed on the ones that
+     * happened to match. Executions 3 and 4 are absent because they have no attempts (§9.3).
+     */
+    private static final Map<Integer, String> TABULATED_SITTINGS =
+            Map.of(1, "4821", 2, "7390", 5, "3318");
+
     private static long minutesBetween(List<Object> execution) {
         return java.time.Duration.between(
                 (java.time.Instant) execution.get(1),
@@ -525,8 +544,9 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     @Test
     @DisplayName("every attempt matches the document on student, status and solving time")
     void attemptsMatch() {
-        for (int execution : List.of(1, 2)) {
-            String code = execution == 1 ? "4821" : "7390";
+        for (Map.Entry<Integer, String> sitting : TABULATED_SITTINGS.entrySet()) {
+            int execution = sitting.getKey();
+            String code = sitting.getValue();
             assertThat(rows("""
                     select u.username, cast(a.status as string), a.actualMinutes
                     from ExamAttempt a, ExamExecution x, User u
@@ -546,8 +566,9 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
         // The distinction this exists for: omer.katz reached three of seven, so four questions
         // are ABSENT from attempt_answers rather than present with a null. A loader that wrote
         // nulls would satisfy every count and destroy H12.4's fixture.
-        for (int execution : List.of(1, 2)) {
-            String code = execution == 1 ? "4821" : "7390";
+        for (Map.Entry<Integer, String> sitting : TABULATED_SITTINGS.entrySet()) {
+            int execution = sitting.getKey();
+            String code = sitting.getValue();
 
             List<List<Object>> loaded = rows("""
                     select u.username, q.displayId, aa.selected
@@ -577,8 +598,9 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     @Test
     @DisplayName("grades match the document, and only the approved execution carries finals")
     void gradesMatch() {
-        for (int execution : List.of(1, 2)) {
-            String code = execution == 1 ? "4821" : "7390";
+        for (Map.Entry<Integer, String> sitting : TABULATED_SITTINGS.entrySet()) {
+            int execution = sitting.getKey();
+            String code = sitting.getValue();
 
             assertThat(rows("""
                     select u.username, g.autoScore, g.finalScore, cast(g.status as string)
@@ -598,6 +620,105 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                             })
                             .toList());
         }
+    }
+
+    /**
+     * ⚑ <b>U-34's tripwire.</b>
+     *
+     * <p>{@code dana.cohen} opened Grading on a freshly seeded database and read "Nothing to
+     * grade". Nothing had failed: {@code 4821} is fully approved and the queue excludes what is
+     * signed off, {@code 7390} belongs to {@code avi.mizrahi} and the queue is scoped to the
+     * teacher who released the sitting. Two rules working, and the teacher the demo signs in as
+     * looking at an empty screen. {@link #gradesMatch} could not have caught it, because it
+     * compares what is loaded against the document and the document did not have the sitting
+     * either.
+     *
+     * <p>So this asks the question the demo asks: does the teacher we sign in as have work
+     * waiting? And it asks the three things that make the fixture worth having - that she
+     * released it, that none of it is approved, and that its statistics are <b>not</b> frozen,
+     * because a sitting whose numbers are already frozen is one whose grading is finished.
+     */
+    @Test
+    @DisplayName("⚑ the demo teacher has a closed sitting with nothing approved on it (U-34)")
+    void theDemoTeachersGradingQueueIsNotEmpty() {
+        List<List<Object>> sitting = rows("""
+                select cast(x.status as string), u.username, x.extraMinutes
+                from ExamExecution x, User u
+                where u.id = x.createdBy and x.code = '3318'
+                """);
+
+        assertThat(sitting).as("sitting 3318 is the awaiting-grading fixture for dana.cohen")
+                .hasSize(1);
+        assertThat(sitting.get(0)).containsExactly("CLOSED", "dana.cohen", 0);
+
+        List<List<Object>> grades = rows("""
+                select u.username, cast(g.status as string), g.finalScore, g.approvedBy,
+                       g.approvedAt, g.overrideReason, g.teacherComment
+                from Grade g, ExamAttempt a, ExamExecution x, User u
+                where a.id = g.attemptId and x.id = a.executionId and u.id = a.studentId
+                  and x.code = '3318'
+                """);
+
+        assertThat(grades).hasSize(4);
+        assertThat(grades).extracting(row -> row.get(0))
+                .as("four Algebra students, and deliberately not the demo student: her My "
+                        + "Grades holds exactly one row on a fresh seed")
+                .containsExactlyInAnyOrder("noa.friedman", "shira.dahan", "daniel.shapira",
+                        "itay.regev")
+                .doesNotContain("maya.levi");
+        assertThat(grades).allSatisfy(row -> {
+            assertThat(row.get(1)).as("AUTO is what awaiting grading means").isEqualTo("AUTO");
+            assertThat(row.subList(2, row.size()))
+                    .as("no final score, nobody approved it, no override and no comment")
+                    .containsOnlyNulls();
+        });
+
+        // S-21 and S-25: participation and statistics are frozen once, at the point grading is
+        // finished. 4821's are; this one's grading has not started, so a frozen column here
+        // would say the opposite of what the sitting is for.
+        List<String> frozen = inTx(session -> session.createNativeQuery(
+                "SELECT code FROM exam_executions WHERE stats IS NOT NULL "
+                        + "OR participation IS NOT NULL", String.class).getResultList());
+
+        assertThat(frozen)
+                .as("only the fully graded sitting carries frozen participation and statistics")
+                .containsExactly("4821");
+    }
+
+    /**
+     * The bell half of U-34: {@code avi.mizrahi} has been told his sitting is waiting since §11
+     * was written, and the queue that was empty is the one nobody was told about.
+     */
+    @Test
+    @DisplayName("⚑ the demo teacher is told her sitting is waiting, with the right count (U-34)")
+    void theDemoTeacherHasAGradingDueNotification() {
+        List<List<Object>> due = rows("""
+                select u.username, n.title, n.readAt, n.refType
+                from Notification n, User u
+                where u.id = n.userId and n.type = 'GRADING_DUE'
+                """);
+
+        assertThat(due).extracting(row -> row.get(0))
+                .as("one for each teacher with an unapproved sitting, and only those two")
+                .containsExactlyInAnyOrder("avi.mizrahi", "dana.cohen");
+
+        List<Object> hers = due.stream().filter(row -> row.get(0).equals("dana.cohen"))
+                .findFirst().orElseThrow();
+
+        // The count is §9.4's four AUTO grades, quoted in a text column the way
+        // N-EXEC-CLOSED-ALG quotes §9.1's mean. Recomputed, not read: that coupling has
+        // already bitten once, when the principal's title said 78.
+        long awaiting = inTx(session -> session.createQuery("""
+                select count(g) from Grade g, ExamAttempt a, ExamExecution x
+                where a.id = g.attemptId and x.id = a.executionId and x.code = '3318'
+                """, Long.class).getSingleResult());
+
+        assertThat(hers.get(1)).isEqualTo(awaiting + " attempts awaiting your grade approval");
+        assertThat(hers.get(2)).as("unread, so there is a badge to see").isNull();
+        assertThat(hers.get(3))
+                .as("the catalog composes a grading-due draft with no target, so neither of "
+                        + "these rows deep-links")
+                .isNull();
     }
 
     @Test

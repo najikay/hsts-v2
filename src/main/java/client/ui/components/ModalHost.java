@@ -58,6 +58,15 @@ public final class ModalHost {
         Objects.requireNonNull(dialog, "dialog");
 
         StackPane scrim = new StackPane(dialog);
+        // 2026-08-29, manual round 3: with the stage covering the owner window, a
+        // StackPane hands its child the whole area, so the card stretched to the full
+        // height of the window ("unreasonably long"). The card keeps its preferred
+        // height and sits in the middle; its width still follows the stylesheet's
+        // min/max so long explanations wrap instead of widening it.
+        StackPane.setAlignment(dialog, javafx.geometry.Pos.CENTER);
+        if (dialog instanceof javafx.scene.layout.Region region) {
+            region.setMaxHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+        }
         scrim.getStyleClass().add("hsts-scrim");
         scrim.setPadding(new Insets(MARGIN));
 

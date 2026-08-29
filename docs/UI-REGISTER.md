@@ -269,7 +269,7 @@ lead-verified, one batch commit.
 **In Naji's words:** "BIG BUG: the number of study bots isn't limited for teachers, the teacher can create and manage bots, not just one bot"
 **Restated:** PRD F12.1 is one bot per course (S-30). The server holds that structurally: `bots.course` is `UNIQUE` (V6) and `BOT_CREATE` is idempotent — a second create hands back the existing bot. So the database cannot hold two bots for a course. What the screen showed is not yet known: a teacher of two courses (`dana.cohen`) legitimately sees two bots, one per course; or the manager kept offering "Create the study bot" after a create.
 **Surface:** `client/features/bot/BotManagerView` (suspected). **Ruling:** `NEW` — the exact steps and what was on screen are needed before this is fixed or closed as design.
-**Status:** `NEW`.
+**Status:** `ANSWERED BY U-26` — manual round 3 (2026-08-29) supplied the steps: a two-course teacher was seeing one card because the screen managed one course at a time. The limit was never missing; the list was.
 
 ### U-15 · COPY · national IDs in the demo files
 **In Naji's words:** "The IDs for the students aren't in the demo file (need to be added for easier testing) - or redo the demo"
@@ -326,7 +326,7 @@ five new entries, one reopening.
 **In Naji's words:** "the manual round md for checking is horrible short, and to me doesn't look like it changed ... gimme two documents now and delete the old manual round file ... one for one machine testing, the other is for two machines, the testing MUST visit every screen and sample every situation possible ... every action we can take of every type of user ... all of the requirements from the pdf ... we wanna test adding new stuff from the client side"
 **Restated:** the file on disk at the time was v3 (d77bf3c, sixteen sections, the 2-minute exam, the coverage map) and the notes quote v2's headings, so a stale copy was read; the ask is taken as written anyway: two documents, per-role action inventories, creation from the client instead of reseeding, the PDF's requirements as the floor.
 **Fix:** `docs/MANUAL_TEST_ONE_MACHINE.md` + `docs/MANUAL_TEST_TWO_MACHINES.md`; `MANUAL_TEST_ONE_MACHINE.md` deleted.
-**Status:** `IN WORK`.
+**Status:** `DONE` — the two files landed in 3ad08db and were rewritten walkthrough-first under U-23 (6da1a49).
 
 ---
 ## Closed entries
@@ -342,4 +342,73 @@ five new entries, one reopening.
 **In Naji's words:** "we want these files to ALSO contain a walk-through with a guide, passwords, usernames, ids, what to do exactly to check everything, with [ ] to fill with X for things we checked, something human friendly not just machine friendly"
 **Fix:** both files rewritten walkthrough-first: who to be, what to click, what to see, a box per step, credentials and ids inline every time; the inventories, situations, interaction matrix and requirement map moved to appendices as the backstop.
 **Status:** `DONE`.
+
+## Manual round 3 (2026-08-29) — the teacher's basics, `docs/manual-round-3-notes.txt`
+
+### U-24 · COSMETIC · every modal card is "unreasonably long, not centered"
+**In Naji's words:** "the modal card doesn't look nice it's unreasonably long not centered" · "same issue with the logout modal being way too long for no reason, looks like you did it for all modals"
+**Restated:** U-11's fix sized the modal stage to the owner window; the scrim is a `StackPane`, which hands its child the whole area, so the card stretched to the window's full height.
+**Fix:** `ModalHost` centres the card and pins its height to its preferred height; width still follows the stylesheet's min/max so long text wraps.
+**Status:** `DONE` — pending eyes.
+
+### U-25 · FUNCTIONAL · "the login server thing didn't get fixed" (the unusual-server warning on a new build)
+**In Naji's words:** "my theory is that it's not terminal related but simply the first time we open it just has this modal opening since it considers it new since it's a new build"
+**Restated:** the theory is right and is U-22, committed in 6da1a49 after that round was run: the server id lived in `target\` and was reborn on every clean build. After pulling 6da1a49 it warns at most once more (the id moves to the project root), then never on a rebuild.
+**Status:** `DONE` in 6da1a49 — pending eyes on the build after the pull.
+
+### U-26 · FUNCTIONAL · the Study Bot screen looks like a teacher gets one bot in total
+**In Naji's words:** "the teacher's study bot screen shows one bot, I teach two courses" · "I want a list of bots to manage"
+**Restated:** U-14 asked which of two things was on screen; manual round 3 answered it. `BotManagerView` managed **one** course's bot and took the course from a nav parameter, falling back to `courses().get(0)`. So `dana.cohen` (Algebra 11, Calculus 12) opened the screen, saw a single card, and read the product as one bot per teacher. The rule she was reading against is real and unchanged: **one study bot per course** (PRD F12.1, S-30), held structurally by `UNIQUE(course)` in V6 and by an idempotent `BOT_CREATE`. Nothing was wrong with the data; the screen never showed her the second bot.
+**Surface:** `client/features/bot/BotManagerView`, with `BotManagerListSession` + `BotCourseSummary` new beside it and copy in `BotCopy`.
+**Ruling (lead, 2026-08-29):** keep one bot per course; make the manager a **LIST**. Master and detail in `ExamListView`'s shape: a card per taught course on the left carrying the course code and name, the bot's name or "No study bot yet", an Active / Inactive chip, its source count and a **Manage** button (or **Create the study bot** for a course without one); the selected course's existing single-bot page on the right. `BotCopy.LIST_SUBTITLE` — *"One study bot per course. Co-teachers share it."* — states the rule in words on the screen that now shows more than one bot.
+**Wire:** none. The list reads `BOT_MANAGER_GET` **per taught course** on show; every fact a card needs is already on `BotManagerPage`, and a teacher has two or three courses. Recorded as **A2 (considered and not taken)** in `docs/contracts/BOT_WIRE_CONTRACT.md` so the next reader sees the decision rather than re-opening it. The `PARAM_COURSE` deep link (co-teacher notification, the analytics Back) now selects that card.
+**Isolation:** one `BotManagerSession` per course and no page shared between them, so a create or a toggle addressed to one course has nothing through which to reach another. Asserted both ways: `BotManagerSessionTest$TheListOfBots.creatingOnOneCourseLeavesTheOtherAlone` and `BotInteractionTest.aWriteOnOneCourseNeverMovesAnother`.
+**Status:** `DONE` — pending Naji's on-screen verification: sign in as `dana.cohen`, open Study Bot, expect two cards.
+
+### U-27 · COPY · bank card buttons cut off
+**In Naji's words:** "the buttons on that card aren't showing the full text ... version history stays as is, edit question becomes edit, delete question becomes delete"
+**Fix:** exactly that; and the general rule below.
+**Status:** `DONE` — pending eyes.
+
+### U-28 · GENERAL · no button may show cut-off text
+**In Naji's words:** "avoid cutoff text in buttons, we need a solution for it"
+**Fix, in two layers.** (1) Every button made through `Buttons` has its minimum width pinned to its text; `TextFit` does the same for the controls made elsewhere (hyperlinks, toggles, pickers) and puts a full-text tooltip on the one shape that cannot be sized for its content, a table cell. (2) **`TruncatedTextGuardTest`** boots the app once per role, walks every route that role registers (with sensible params, the take-exam confirmation included), at 1200x760 and 1024x700, and fails on any visible control whose text does not fit; its first run listed **115** truncations across the bank, results, exams, dashboards, approvals, the take-exam links, the bot chat, the data browser and reports, all fixed at the component or layout layer (`DataTable` headings get first claim on width and cells carry their text on a tooltip; stat-card rows wrap; the dashboard grid re-flows to the window; the take-exam card widened). A role gaining a route the guard does not visit fails the guard.
+**Two design calls made under it, open to reversal:** table column headings lost the faked letter-tracking (uppercase kept) because tracking cost ~40% of a heading's width in a place the width is not ours to spend; and a table cell whose full text sits on its own tooltip counts as readable, because eight bank columns beside a 420px detail pane cannot show a 47-character stem at any width (that layout itself is U-36).
+**Status:** `DONE` — the guard is part of the ordinary build — pending eyes across screens.
+
+### U-29 · COSMETIC · the New exam menu is unreadable (dark on dark, white on white)
+**Fix:** menu and context-menu items styled from the theme tokens in both modes. Wave 3 agent H.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-30 · FLOW · the builder should show which course the exam is for
+**Fix:** the course (code and name) in the builder's header. Agent H.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-31 · FLOW · Create exam and Save draft should return to the Exams list
+**Fix:** both navigate back to Exams on success, with the saved exam selected. Agent H.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-32 · COSMETIC · version chips on the versions panel are cut to three dots
+**In Naji's words:** "a check mark for approved, X for rejected and another suitable symbol for pending is better than full words that get cut off, especially since the table has the full words with colors"
+**Fix:** compact icon chips on the version cards (✓ approved, ✗ rejected, ● pending, ○ draft) with the word in the tooltip; the table keeps the words. Agent H.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-33 · COSMETIC · bot source rows look pressable and only jitter
+**Fix:** the hover/press treatment removed from rows that carry no action; Edit and Remove untouched. Agent H.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-34 · FUNCTIONAL/SEED · the grading screen is empty for the demo teacher
+**In Naji's words:** "grading screen still empty, looks like a real bug or unseeded, either way I want it fixed"
+**Restated:** correct for the data: Dana's only closed sitting (4821) is fully approved and 7390 is Avi's, so her queue is legitimately "Nothing to grade". That makes the demo teacher's grading screen empty on day one, which is the problem.
+**Ruling:** seed a fifth execution, Algebra Midterm v2 sat yesterday by four students, closed, grades AUTO and unapproved, so Dana's queue and "Awaiting grading" card are populated on load. Wave 3 agent G.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-35 · COSMETIC · the New exam button is too big
+**Fix:** secondary size and style in the header. Agent H.
+**Status:** `DONE` — built, suites green, pending eyes.
+
+### U-36 · COSMETIC · the question bank's eight columns beside a fixed detail pane
+**Found by:** the truncation guard's first run (2026-08-29): at 1024x700 the bank's eight columns share 449px next to the 420px detail pane, so long stems can only be read from the cell tooltip.
+**Ruling:** logged, not taken now: candidates are a collapsible detail pane, fewer default columns (hide Written / Version behind a column chooser), or a wider minimum window. Naji's call on the next round.
+**Status:** `NEW`.
 

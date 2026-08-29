@@ -1,0 +1,26 @@
+issue 1: the login server thing didn't get fixed, screenshot "1" has the issue, first this screen should appear in the first place, I asked you to fix it but you didn't, secondly the modal card doesn't look nice it's unreasonably long not centered and pretty, I took everything down and opened another time, started the server from terminal, and everything worked, my theory is that it's not terminal related but simply the first time we open it just has this modal opening since it considers it new since it's a new build, and in fact technically it's a new network.
+
+issue 2: study bot issue wasn't fixed, the teacher is supposed to be able to create new bots, manage a list of bots, not just one bot, while now in the study bot there's only one, what if a teacher has more that one course? refer to the requirements in the pdf, this is a big issue that I asked you to fix before as well
+
+issue 3: question bank, the table looks nice, when it gets pressed it shows a card with relevant info, the buttons on that card aren't showing the full text which they show, I suggest that version history stays as is, edit question becomes edit, delete question becomes delete, this way the space is enough and you don't have to do the cutoff text in buttons
+
+GENERAL ISSUE: avoid cutoff text in buttons, we need a solution for it
+
+issue 4: new exam button opens a list of dark text with dark background, very hard to read by humans, change it with something with a better contrast so it becomes readable (same in light mode but white on white instead)
+
+issue 5: inside the new exam window I found 2 things, the subject for the exam should still be visible from inside the new exam thing, like the subject should be somewhere
+
+issue 6: after finishing to create a new exam, the screen should lead back to the main exams screen not stay on the same one, same with save draft
+
+issue 7: on the my exams, when pressing on exam, the version history opens up on the side, same issue as buttons, the words are cut off, for me having one symbol say for example a check mark for approved, X for rejected and another suitable symbol for pending is better than full words that get off, espically since the table has the full words with colors so they make sense (most of them are not even cutoff they're just 3 dots)
+
+issue 8: study bots are pressable like buttons but the topics in it just jitters and it doesn't do anything, a little weird of a behavior, we need to get rid of it (the edit and delete work nicely keep as is)
+
+issue 9: same issue on the long card modal from earlier I don't like it, make it a little more centered
+
+issue 10: grading screen still empty, looks like a real bug or unseeded, either way I want it fixed it it's an issue, seeded if it's just missing data
+
+issue 11: my exams -> new exam button make it a little smaller
+
+note: other than that good job on most of the work, this is the basic teacher features that need fixing so far 0 interactions tested between teacher and other users, and no other users were tested, fix this while I check the basic student stuff
+

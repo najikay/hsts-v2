@@ -15,6 +15,7 @@ import common.dto.authoring.ExamListRow;
 import common.dto.authoring.ExamVersionRow;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
@@ -26,6 +27,7 @@ import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -165,9 +167,18 @@ public final class ExamListView extends AbstractScreen {
         Label heading = new Label(ExamListCopy.versionSummary(version));
         heading.getStyleClass().add("body");
         heading.setWrapText(true);
+        // Wraps rather than pushing the chip off the card: a Label's minimum width is its text
+        // until it is allowed to wrap, and this one is four clauses long (U-28).
+        heading.setMinWidth(0);
+        HBox.setHgrow(heading, Priority.ALWAYS);
 
+        // ⚑ 2026-08-29, manual round 3, U-32. The compact chip, not the wide one. This panel
+        // is 320px at its narrowest and the heading beside it is a four-clause summary, so
+        // "Pending approval" arrived as "Pending a...". The word is not lost: it is the chip's
+        // tooltip and its accessible text, and the TABLE, which has a column of its own for it,
+        // keeps the word on screen.
         HBox top = new HBox(10, heading, Buttons.spacer(),
-                StatusChip.examStatus(version.state().name()));
+                StatusChip.examStatusIcon(version.state().name()));
         top.setAlignment(Pos.CENTER_LEFT);
 
         VBox card = new VBox(8, top);
@@ -184,8 +195,15 @@ public final class ExamListView extends AbstractScreen {
             card.getChildren().addAll(reasonHeading, reason);
         }
 
-        HBox actions = new HBox(8, Buttons.spacer());
-        actions.setAlignment(Pos.CENTER_LEFT);
+        // ⚑ 2026-08-29, manual round 3, U-28. A FlowPane rather than an HBox with a spacer:
+        // this panel is 320px at its narrowest and the row can carry three buttons, one of
+        // which is "Submit for approval". An HBox shrinks its children when it runs out of
+        // room, which is exactly how a button ends up ellipsised; a FlowPane puts the third
+        // one on a second line instead and every label stays whole. Trailing-aligned, so a
+        // single button sits where every other card in this client puts one.
+        FlowPane actions = new FlowPane(8, 8);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        actions.setRowValignment(VPos.CENTER);
         // Every version opens, and which of two things that means is the BUILDER's to decide
         // from the state the server answers with: a draft opens for editing, anything else opens
         // read-only. This screen deliberately does not pass that decision along - it has an
@@ -389,11 +407,17 @@ public final class ExamListView extends AbstractScreen {
      */
     private Node buildNewExamBox() {
         MenuButton newExam = new MenuButton(ExamListCopy.NEW_EXAM);
-        // "button" as well as "primary": the stylesheet's rules are all `.button.primary`, and a
-        // MenuButton's default class is `menu-button`, so `primary` alone matches nothing and the
-        // headline action renders as default chrome. Checked against hsts.css rather than
-        // assumed. No graphic, because Buttons.primary carries none anywhere in this client.
-        newExam.getStyleClass().addAll("button", Buttons.PRIMARY, "new-exam");
+        // "button" as well as the variant: the stylesheet's rules are all `.button.<variant>`,
+        // and a MenuButton's default class is `menu-button`, so the variant alone matches
+        // nothing and the control renders as default chrome. Checked against hsts.css rather
+        // than assumed. No graphic, because the Buttons factories carry none anywhere here.
+        //
+        // ⚑ 2026-08-29, manual round 3, U-35. SECONDARY and SMALL, not PRIMARY. This screen's
+        // committing actions are Submit for approval and Revise, which sit on the version a
+        // teacher is looking at; a full-size accent block in the header outweighed both of them
+        // for what is a navigation. It stays a MenuButton of her taught courses, and it stays
+        // disabled-with-a-reason for a coordinator who teaches none - only its weight moved.
+        newExam.getStyleClass().addAll("button", Buttons.SECONDARY, Buttons.SMALL, "new-exam");
 
         List<CourseRef> courses = coursesOfSignedInUser();
         if (courses.isEmpty()) {

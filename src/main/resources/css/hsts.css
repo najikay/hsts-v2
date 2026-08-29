@@ -280,6 +280,75 @@
 .button.block { -fx-max-width: Infinity; }
 
 /* =====================================================================
+   4b. MENUS — a MenuButton's dropdown and the navbar profile menu
+       (2026-08-29, manual round 3, U-29)
+
+   A ContextMenu is a popup with a Scene of its own, and JavaFX resolves its
+   CSS through PopupControl.getStyleableParent(), which is the OWNER node. So
+   the Exams screen's "New exam" items were matching `.button.primary .label`
+   through the MenuButton they hang off and painting their text in
+   -hsts-on-accent: #ffffff on a white menu in light mode, #0d1117 on #1c2129
+   in dark. The menu is not part of the button's fill and must not wear its ink.
+
+   That same parent chain is why this is written ONCE against the tokens and
+   not twice with a `.root.dark` block: the popup inherits the owner's `.dark`
+   root class through it, so -hsts-raised / -hsts-text already carry both
+   palettes. It also keeps the house rule StylesheetParseTest enforces — dark
+   redefines tokens, never components.
+
+   The block sits after section 4 on purpose. `.context-menu .menu-item .label`
+   and `.button.primary .label` are both three-class selectors, so the tie is
+   broken by order in the file and the later rule has to be this one.
+   ===================================================================== */
+
+.context-menu {
+    -fx-background-color: -hsts-raised;
+    -fx-background-radius: 8px;
+    -fx-border-color: -hsts-border;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+    -fx-padding: 4px;
+}
+
+.menu-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6px;
+    -fx-padding: 6px 12px;
+}
+.menu-item .label,
+.context-menu .menu-item .label {
+    -fx-text-fill: -hsts-text;
+    -fx-font-weight: normal;
+}
+
+/* Focused and hovered are one treatment: the keyboard and the pointer are
+   pointing at the same row and a menu that highlights them differently makes
+   the reader work out which of the two is about to happen. */
+.menu-item:focused,
+.menu-item:hover {
+    -fx-background-color: -hsts-accent-soft;
+}
+.context-menu .menu-item:focused .label,
+.context-menu .menu-item:hover .label {
+    -fx-text-fill: -hsts-accent;
+}
+
+/* The prompt line above the courses is a disabled item, so it must stay
+   READABLE while being obviously not a choice: muted ink at full opacity,
+   rather than the stock dimming that would leave the only instruction on the
+   menu the faintest thing on it. */
+.menu-item:disabled {
+    -fx-opacity: 1;
+}
+.context-menu .menu-item:disabled .label {
+    -fx-text-fill: -hsts-muted;
+}
+
+.context-menu .separator .line {
+    -fx-border-color: -hsts-border transparent transparent transparent;
+}
+
+/* =====================================================================
    5. STATUS CHIPS + ROLE BADGES  (E4.15)
    ===================================================================== */
 
@@ -314,6 +383,24 @@
 
 .hsts-chip.large { -fx-padding: 5px 14px; -fx-font-size: 13px; }
 .hsts-chip.large .label { -fx-font-size: 13px; }
+
+/* COMPACT: the same chip as one glyph, for a panel too narrow for the word
+   (2026-08-29, manual round 3, U-32). Square padding and a circular ground, so
+   a column of them lines up; the icon takes the tone's ink, which is what keeps
+   an approved version the same green whichever form of the chip is drawn. */
+.hsts-chip.compact {
+    -fx-padding: 4px;
+    -fx-min-width: 24px;
+    -fx-min-height: 24px;
+    -fx-alignment: center;
+}
+.hsts-chip .chip-icon         { -fx-fill: -hsts-muted; }
+.hsts-chip.neutral .chip-icon { -fx-fill: -hsts-muted; }
+.hsts-chip.info .chip-icon    { -fx-fill: -hsts-accent; }
+.hsts-chip.ok .chip-icon      { -fx-fill: -hsts-ok; }
+.hsts-chip.warn .chip-icon    { -fx-fill: -hsts-warn; }
+.hsts-chip.danger .chip-icon  { -fx-fill: -hsts-danger; }
+.hsts-chip.live .chip-icon    { -fx-fill: #ffffff; }
 
 /* Role badge — same pill geometry, role-fixed colours so a role reads
    identically on every screen it appears on. */
@@ -1299,6 +1386,19 @@
 /* Provisional until the server confirms it (E16.13). */
 .chat-bubble.pending { -fx-opacity: 0.6; }
 
+/* ---- U-26: the bot manager's course list (2026-08-29, manual round 3) ----
+   One card per taught course, and the whole card is the hit target, so it has
+   to look like one: the same pointer and hover answer .hsts-dashboard-card
+   uses. The selected card keeps the accent border rather than only a hover
+   one, because master-detail is unreadable if nothing says which master row
+   the detail belongs to. */
+.bot-course-card { -fx-cursor: hand; }
+.bot-course-card:hover { -fx-border-color: -hsts-accent; }
+.bot-course-card.selected {
+    -fx-border-color: -hsts-accent;
+    -fx-border-width: 2px;
+}
+
 .typing-indicator { -fx-padding: 4px 20px 8px 20px; }
 .typing-dot { -fx-fill: -hsts-muted; }
 
@@ -1330,7 +1430,13 @@
     -fx-border-radius: 10px;
     -fx-border-width: 1px;
 }
-.source-row:hover, .history-row:hover { -fx-border-color: -hsts-accent; }
+/* ⚑ 2026-08-29, manual round 3, U-33. `.source-row` was in this rule and is
+   not any more. A source row carries no action of its own - its two actions are
+   the Edit and Remove buttons sitting on it - so an accent border that arrives
+   under the pointer was promising a press that never came. A history row is
+   genuinely openable and keeps the treatment. */
+.history-row:hover { -fx-border-color: -hsts-accent; }
+.source-row { -fx-cursor: default; }
 
 .source-title, .history-preview, .frequent-question { -fx-font-weight: bold; }
 .source-meta, .history-meta, .frequent-count, .chart-caption {
@@ -1658,8 +1764,13 @@
 
 /* Wider than E14's cards: the hints here name arithmetic ("weighted by
    participants", "pooled population sigma") rather than a unit, and a hint
-   that wraps to three lines is a hint nobody finishes reading. */
-.reports-stat-card { -fx-min-width: 140px; }
+   that wraps to three lines is a hint nobody finishes reading.
+
+   2026-08-29, manual rounds 3-4, U-28: the floor moved to ReportsView, where
+   it is the card's own content. 140px was a ceiling as well as a floor — an
+   author rule outranks a value set in code, so a card needing 190px for
+   "7 of 8 (87.5%)" could never ask for it, and the value ended in dots. No
+   rule here now; .hsts-card.compact still supplies the padding. */
 
 /* The row the chart is drawing. An accent bar rather than a fill, so the
    selection reads at a glance without competing with the numbers in the row,
@@ -2049,3 +2160,12 @@
     -fx-font-weight: bold;
     -fx-text-fill: -hsts-text;
 }
+
+/* =====================================================================
+   EXAM BUILDER — the course line  (2026-08-29, manual round 3, U-30)
+
+   Which course the paper is for, stated in the header in both modes. Muted
+   and bold rather than accented: it is a fact she checks, not an action, and
+   an accent-coloured line under an h1 reads as a link.
+   ===================================================================== */
+.exam-builder-course { -fx-text-fill: -hsts-muted; -fx-font-weight: bold; }

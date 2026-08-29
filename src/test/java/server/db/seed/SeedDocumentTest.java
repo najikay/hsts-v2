@@ -49,7 +49,10 @@ class SeedDocumentTest {
         assertThat(document.exams()).hasSize(6);
         assertThat(document.examTexts()).hasSize(6);
         assertThat(document.grades(1)).hasSize(8);
-        assertThat(document.notifications()).hasSize(9);
+        assertThat(document.grades(2)).hasSize(8);
+        // §9.4, added 2026-08-29 with U-34: dana.cohen's own awaiting-grading sitting.
+        assertThat(document.grades(5)).hasSize(4);
+        assertThat(document.notifications()).hasSize(10);
     }
 
     @Test
@@ -289,23 +292,66 @@ class SeedDocumentTest {
     // ------------------------------------------------- sections 9 and 10
 
     @Test
-    @DisplayName("the four executions parse, including which exam version each releases")
+    @DisplayName("the five executions parse, including which exam version each releases")
     void executionsParse() {
         List<SeedDocument.ExecutionRow> executions = real().executions();
 
-        assertThat(executions).hasSize(4);
+        assertThat(executions).hasSize(5);
         assertThat(executions).extracting(SeedDocument.ExecutionRow::code)
-                .containsExactly("4821", "7390", "5164", "2075");
+                .containsExactly("4821", "7390", "5164", "2075", "3318");
         assertThat(executions).extracting(SeedDocument.ExecutionRow::status)
-                .containsExactly("CLOSED", "CLOSED", "SCHEDULED", "LIVE");
+                .containsExactly("CLOSED", "CLOSED", "SCHEDULED", "LIVE", "CLOSED");
 
-        // Executions 1 and 4 release the SAME exam version. That is S-2, and it is why
-        // exam_executions carries no participation counters: two releases of one version must
+        // Executions 1, 4 and 5 release the SAME exam version. That is S-2, and it is why
+        // exam_executions carries no participation counters: three releases of one version must
         // not contaminate each other's numbers.
         assertThat(executions.get(0).exam()).isEqualTo(1);
         assertThat(executions.get(0).examVersion()).isEqualTo(2);
         assertThat(executions.get(3).exam()).isEqualTo(1);
         assertThat(executions.get(3).examVersion()).isEqualTo(2);
+        assertThat(executions.get(4).exam()).isEqualTo(1);
+        assertThat(executions.get(4).examVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("⚑ §9.4 parses as its own sitting, not as a second reading of §9.2 (U-34)")
+    void executionFiveParsesFromItsOwnSection() {
+        // grades(int) and selections(int) used to send every number that was not 1 to §9.2, so
+        // a third sitting would have been read as the second one's rows and compared against
+        // the wrong database rows. The heading is chosen by number now, and an execution the
+        // document does not tabulate fails rather than defaulting.
+        List<SeedDocument.GradeRow> awaiting = real().grades(5);
+
+        assertThat(awaiting).extracting(SeedDocument.GradeRow::student)
+                .as("four Algebra students, and deliberately not the demo student")
+                .containsExactly("noa.friedman", "shira.dahan", "daniel.shapira", "itay.regev")
+                .doesNotContain("maya.levi");
+        assertThat(awaiting).extracting(SeedDocument.GradeRow::auto)
+                .containsExactly(85, 75, 60, 45);
+        assertThat(awaiting).allSatisfy(row -> {
+            assertThat(row.finalScore()).as("nothing here is approved").isNull();
+            assertThat(row.attemptStatus()).isEqualTo("SUBMITTED");
+        });
+
+        List<SeedDocument.SelectionRow> selections = real().selections(5);
+
+        assertThat(selections).as("four students, seven questions, nobody timed out").hasSize(28);
+        assertThat(selections).allMatch(SeedDocument.SelectionRow::answered);
+        assertThat(selections.stream()
+                .filter(row -> row.student().equals("noa.friedman"))
+                .map(SeedDocument.SelectionRow::selected)
+                .toList())
+                .containsExactly(1, 2, 1, 2, 1, 2, 3);
+    }
+
+    @Test
+    @DisplayName("an execution with no per-student section fails rather than reading another's")
+    void anUntabulatedExecutionFails() {
+        // Executions 3 and 4 have no attempts at all (§9.3), so asking for their grades is a
+        // caller's mistake and must say so. It used to answer §9.2's eight rows.
+        assertThatThrownBy(() -> real().grades(3))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("execution 3 has no per-student section");
     }
 
     @Test

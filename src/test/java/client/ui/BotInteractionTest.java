@@ -7,15 +7,18 @@ import client.core.Routes;
 import client.core.ScreenManager;
 import client.features.bot.BotChatView;
 import client.features.bot.BotCopy;
+import client.features.bot.BotManagerView;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
+import common.dto.bot.BotActiveRequest;
 import common.dto.bot.BotActivityPoint;
 import common.dto.bot.BotAnalytics;
 import common.dto.bot.BotAnswer;
+import common.dto.bot.BotCourseRequest;
 import common.dto.bot.BotManagerPage;
 import common.dto.bot.BotProfile;
 import common.dto.bot.BotSessionRow;
@@ -31,6 +34,7 @@ import common.protocol.Message;
 import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
@@ -45,6 +49,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -96,6 +101,27 @@ class BotInteractionTest extends ApplicationTest {
             new BotProfile(9L, "22", "Databases 22", "Databases study bot", true),
             List.of(new BotSourceRow(5L, BotSourceKind.PDF, "Week 3 handout",
                     "Michal Sharon", NOW, 1, 4200)));
+
+    /**
+     * Dana as the seed actually has her: two taught courses.
+     *
+     * <p>⚑ U-26. Every manager fixture in this file gave her one course, which is exactly why
+     * nothing here caught the screen showing one bot behind a nav parameter: with one course
+     * that behaviour is correct, and with two it is a screen a teacher reads as "I get one bot".
+     */
+    private static final LoginResult DANA_TWO_COURSES = new LoginResult(1001, "dana.cohen",
+            "Dana Cohen", Role.TEACHER, List.of(new CourseRef("11", "Algebra 11"),
+                    new CourseRef("12", "Calculus 12")), 0);
+
+    private static final BotManagerPage ALGEBRA_PAGE = BotManagerPage.of(
+            new BotProfile(11L, "11", "Algebra 11", "Algebra study bot", true),
+            List.of(new BotSourceRow(21L, BotSourceKind.PDF, "Week 1 handout",
+                    "Dana Cohen", NOW, 1, 4200)));
+
+    private static final BotManagerPage CALCULUS_PAGE = BotManagerPage.of(
+            new BotProfile(12L, "12", "Calculus 12", "Calculus study bot", true),
+            List.of(new BotSourceRow(31L, BotSourceKind.TEXT, "Chain rule notes",
+                    "Dana Cohen", NOW, 1, 90, "The derivative of the outer times the inner.")));
 
     @BeforeAll
     static void headless() {
@@ -298,6 +324,116 @@ class BotInteractionTest extends ApplicationTest {
         assertThat(view.lockBanner().message()).contains("Michal Sharon");
     }
 
+    // ===================== The list of bots (U-26) =======================
+
+    @Test
+    @DisplayName("⚑ U-26: a teacher of two courses sees two cards, one per course")
+    void theManagerListsOneBotPerTaughtCourse() {
+        ScreenManager manager = signIn(DANA_TWO_COURSES,
+                connection -> managerPages(connection, Map.of("11", ALGEBRA_PAGE)));
+        BotManagerView view = openManager(manager, null);
+
+        assertThat(view.courseCardsBox().getChildren())
+                .as("both taught courses, which is what the report said was missing")
+                .hasSize(2);
+
+        Set<String> texts = labelTexts(manager.scene());
+        assertThat(texts).contains("11 · Algebra 11", "12 · Calculus 12");
+        assertThat(texts)
+                .as("the bot she has, and the one she has not made yet")
+                .contains("Algebra study bot", BotCopy.NO_BOT_YET);
+        assertThat(texts)
+                .as("the rule is stated on the screen that now shows more than one bot (S-30)")
+                .contains(BotCopy.LIST_SUBTITLE);
+        assertThat(texts)
+                .as("the card carries the material count, so she can see which bot is empty")
+                .contains("1 source");
+
+        assertThat(buttonsIn(view.courseCardsBox().getChildren().get(0)))
+                .as("a course with a bot is managed")
+                .contains(BotCopy.MANAGE);
+        assertThat(buttonsIn(view.courseCardsBox().getChildren().get(1)))
+                .as("a course without one is offered the create, on its own card")
+                .contains(BotCopy.CREATE_BOT);
+    }
+
+    @Test
+    @DisplayName("⚑ U-26: clicking a card opens that course's bot on the right")
+    void selectingACardLoadsThatCoursesBot() {
+        ScreenManager manager = signIn(DANA_TWO_COURSES, connection ->
+                managerPages(connection, Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE)));
+        BotManagerView view = openManager(manager, null);
+
+        assertThat(view.selectedCourseCode())
+                .as("the first taught course, so nothing costs a click that did not before")
+                .isEqualTo("11");
+        assertThat(labelTexts(manager.scene())).contains("Week 1 handout");
+
+        clickOn(view.courseCardsBox().getChildren().get(1));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(view.selectedCourseCode()).isEqualTo("12");
+        Set<String> texts = labelTexts(manager.scene());
+        assertThat(texts)
+                .as("the Calculus bot's own sources, read for that course")
+                .contains("Chain rule notes");
+        assertThat(texts)
+                .as("and not the Algebra ones, which belong to the card she left")
+                .doesNotContain("Week 1 handout");
+    }
+
+    @Test
+    @DisplayName("⚑ U-26: the deep link selects the course it names, not the first one")
+    void theDeepLinkSelectsTheRightCard() {
+        ScreenManager manager = signIn(DANA_TWO_COURSES, connection ->
+                managerPages(connection, Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE)));
+
+        // What the co-teacher source notification and the analytics screen's Back both send.
+        BotManagerView view = openManager(manager, "12");
+
+        assertThat(view.selectedCourseCode()).isEqualTo("12");
+        assertThat(labelTexts(manager.scene()))
+                .as("she lands on the bot the notification was about")
+                .contains("Chain rule notes");
+        assertThat(view.courseCardsBox().getChildren())
+                .as("with the rest of her bots beside it rather than hidden behind it")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("⚑ U-26: switching one course's bot off leaves the other course alone")
+    void aWriteOnOneCourseNeverMovesAnother() {
+        ScreenManager manager = signIn(DANA_TWO_COURSES, connection -> {
+            managerPages(connection, Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE));
+            connection.respondTo(Verb.BOT_ACTIVE_SET, request -> Message.ok(request,
+                    BotManagerPage.of(new BotProfile(11L, "11", "Algebra 11",
+                                    "Algebra study bot",
+                                    ((BotActiveRequest) request.getPayload()).active()),
+                            ALGEBRA_PAGE.sources())));
+        });
+        BotManagerView view = openManager(manager, "11");
+        assertThat(view.activeToggle().isSelected()).isTrue();
+
+        clickOn(view.activeToggle());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        BotActiveRequest sent = (BotActiveRequest) lastSent(manager).getPayload();
+        assertThat(sent.courseCode())
+                .as("every teacher verb is addressed by course code (contract §2)")
+                .isEqualTo("11");
+        assertThat(sent.active()).isFalse();
+
+        assertThat(labelsIn(view.courseCardsBox().getChildren().get(0)))
+                .as("the card she acted on follows the page the server sent back")
+                .contains(BotCopy.INACTIVE_CHIP);
+        assertThat(labelsIn(view.courseCardsBox().getChildren().get(1)))
+                .as("and the sibling course, which holds its own page, has not moved. "
+                        + "The same isolation for BOT_CREATE is asserted in "
+                        + "BotManagerSessionTest, whose naming dialog is modal and so is "
+                        + "kept off the robot (house precedent, ExecutionMonitorInteractionTest)")
+                .contains(BotCopy.ACTIVE_CHIP, "Calculus study bot", "1 source");
+    }
+
     // ===================== History (E16.14) ==============================
 
     @Test
@@ -394,6 +530,46 @@ class BotInteractionTest extends ApplicationTest {
         return manager;
     }
 
+    /**
+     * Navigates to the bot manager and returns the built screen.
+     *
+     * @param courseCode the deep link's course, or {@code null} for a plain rail click
+     */
+    private BotManagerView openManager(ScreenManager manager, String courseCode) {
+        interact(() -> manager.navigator().navigate(Routes.BOT_MANAGER.id(),
+                courseCode == null
+                        ? NavParams.empty()
+                        : NavParams.of("courseCode", courseCode)));
+        WaitForAsyncUtils.waitForFxEvents();
+        return (BotManagerView) manager.screens().get(Routes.BOT_MANAGER.id());
+    }
+
+    /** Answers each course's BOT_MANAGER_GET with its own page, as the server does. */
+    private static void managerPages(FakeClientConnection connection,
+                                     Map<String, BotManagerPage> pages) {
+        connection.respondTo(Verb.BOT_MANAGER_GET, request -> Message.ok(request,
+                pages.getOrDefault(((BotCourseRequest) request.getPayload()).courseCode(),
+                        BotManagerPage.none())));
+    }
+
+    /** @return the label texts inside one node, for an assertion scoped to a single card. */
+    private static Set<String> labelsIn(Node node) {
+        return node.lookupAll(".label").stream()
+                .filter(Label.class::isInstance)
+                .map(child -> ((Label) child).getText())
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    /** @return the button labels inside one node; a Button's text is not a Label. */
+    private static Set<String> buttonsIn(Node node) {
+        return node.lookupAll(".button").stream()
+                .filter(Button.class::isInstance)
+                .map(child -> ((Button) child).getText())
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
     /** Navigates to the chat and returns the built screen. */
     private BotChatView openChat(ScreenManager manager) {
         interact(() -> manager.navigator().navigate(Routes.BOT_CHAT.id(),
@@ -413,5 +589,59 @@ class BotInteractionTest extends ApplicationTest {
                 .map(node -> ((Label) node).getText())
                 .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * A source row is not dressed as a control ⚑ (2026-08-29, manual round 3, U-33).
+     *
+     * <p>The manual round found rows that looked pressable and "jittered" when pressed. Both
+     * halves were real: {@code .source-row} carried the accent hover border that
+     * {@code .history-row} has, and {@code .history-row} is genuinely openable while this one is
+     * not - a source's actions are the Edit and Remove buttons sitting on it. What a teacher got
+     * for taking the offer was the lock banner sliding in and straight back out as the acquire
+     * was granted, because taking an advisory lock has no visible outcome of its own.
+     *
+     * <p>What this test can see is the cursor, which the row now pins to {@code DEFAULT}: a
+     * pointing hand over something that does nothing is the same promise in another form. The
+     * hover tint is a {@code :hover} rule and therefore a fact about the stylesheet, checked in
+     * {@code StylesheetParseTest.aSourceRowIsNotPressable}; asserting it here would mean reading
+     * a rendered pixel.
+     *
+     * <p>The row's own handler is deliberately still there and
+     * {@link #managerShowsTheLockBanner} still drives it: it is what surfaces a colleague's hold
+     * on a PDF row, which has no Edit button whose own {@code openLockFor} could run. It is
+     * bookkeeping, and U-33 is about no longer advertising it as an action.
+     */
+    @Test
+    @DisplayName("⚑ U-33: a source row carries no pressable affordance, only its two buttons")
+    void aSourceRowIsNotDressedAsAControl() {
+        ScreenManager manager = signIn(DANA, connection ->
+                connection.replyOk(Verb.BOT_MANAGER_GET, MANAGER_PAGE));
+
+        interact(() -> manager.navigator().navigate(Routes.BOT_MANAGER.id(),
+                NavParams.of("courseCode", "22")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        client.features.bot.BotManagerView view =
+                (client.features.bot.BotManagerView) manager.screens()
+                        .get(Routes.BOT_MANAGER.id());
+        assertThat(labelTexts(manager.scene()))
+                .as("the row is really on screen before anything is claimed about it")
+                .contains("Week 3 handout");
+
+        Node row = view.sourcesBox().getChildren().get(0);
+        assertThat(row.getStyleClass())
+                .as("still the shared row shape; only the pressable treatment went")
+                .contains("source-row");
+        assertThat(row.getCursor())
+                .as("⚑ the pointer is not a hand: a hand over a row whose only actions are its "
+                        + "two buttons promises a press that never arrives")
+                .isEqualTo(javafx.scene.Cursor.DEFAULT);
+        assertThat(row.lookupAll(".button").stream()
+                .filter(javafx.scene.control.Button.class::isInstance)
+                .map(node -> ((javafx.scene.control.Button) node).getText())
+                .collect(Collectors.toSet()))
+                .as("and its actions are exactly the two buttons, untouched by U-33")
+                .contains(BotCopy.REMOVE);
     }
 }

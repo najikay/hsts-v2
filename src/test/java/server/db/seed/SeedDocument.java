@@ -443,7 +443,7 @@ public final class SeedDocument {
     }
 
     /**
-     * §9's four executions.
+     * §9's five executions.
      *
      * <p>The window column is deliberately <b>not</b> parsed. Windows are relative to load time,
      * so an assertion on the resolved instants would have to re-derive them from the anchor,
@@ -481,9 +481,36 @@ public final class SeedDocument {
     }
 
     /**
+     * The heading holding one execution's per-student tables.
+     *
+     * <p>A method rather than a ternary in two places, because there are three of them now and a
+     * chain of {@code execution == 1 ? … : …} silently sends every unknown number to §9.2. An
+     * execution this document does not tabulate has to fail loudly: the callers loop over a list
+     * of numbers, and a typo there would otherwise compare the wrong sitting's rows and pass.
+     *
+     * @param execution the execution number as §9's table writes it
+     * @param sub       {@code ""} for the grades table, {@code ".1"} for the selection grid
+     * @return the markdown heading prefix to read
+     */
+    private static String executionHeading(int execution, String sub) {
+        String section = switch (execution) {
+            case 1 -> "9.1";
+            case 2 -> "9.2";
+            // ⚑ U-34. Execution 5 is dana.cohen's awaiting-grading sitting, and it is numbered
+            // 9.4 because 9.3 was already taken by the two sittings with nothing pre-seeded.
+            case 5 -> "9.4";
+            default -> throw new IllegalStateException("SEED_CONTENT.md: execution " + execution
+                    + " has no per-student section. §9 tabulates executions 1, 2 and 5; 3 and 4 "
+                    + "have no attempts at all (§9.3).");
+        };
+        return (sub.isEmpty() ? "### " : "#### ") + section + sub;
+    }
+
+    /**
      * Per-student grades for one execution.
      *
-     * @param execution 1 for §9.1's closed and approved set, 2 for §9.2's awaiting approval
+     * @param execution 1 for §9.1's closed and approved set, 2 for §9.2's awaiting approval,
+     *                  5 for §9.4's
      * @return one row per student
      */
     /**
@@ -552,10 +579,11 @@ public final class SeedDocument {
     }
 
     public List<GradeRow> grades(int execution) {
-        String heading = execution == 1 ? "### 9.1" : "### 9.2";
+        String heading = executionHeading(execution, "");
         // §9.1 carries a note column and §9.2 does not, which is why the widths differ and why
         // the width check is worth having: reading one with the other's shape would silently
-        // take the wrong cell for every field after the third.
+        // take the wrong cell for every field after the third. §9.4 is written to §9.2's five
+        // columns deliberately: it is the same state, so it is the same table.
         int columns = execution == 1 ? 6 : 5;
 
         return map(rows(heading, columns), cells -> new GradeRow(
@@ -572,11 +600,11 @@ public final class SeedDocument {
      * <p>The header row names the questions, so a column's meaning comes from the document
      * rather than from a constant here. A dash yields {@code answered = false}.
      *
-     * @param execution 1 for §9.1.1, 2 for §9.2.1
+     * @param execution 1 for §9.1.1, 2 for §9.2.1, 5 for §9.4.1
      * @return one row per (student, question) cell
      */
     public List<SelectionRow> selections(int execution) {
-        String heading = execution == 1 ? "#### 9.1.1" : "#### 9.2.1";
+        String heading = executionHeading(execution, ".1");
         // Each of these sections holds two tables: the answer key first, then the selection
         // grid. Picked by shape rather than by position, so adding a third table above it
         // cannot silently change which one is read.

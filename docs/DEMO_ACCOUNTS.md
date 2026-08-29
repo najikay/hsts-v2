@@ -34,7 +34,7 @@ two-command block, PowerShell:
 java -cp target\hsts-server.jar server.db.seed.SeedMain --reseed
 ```
 
-A successful reseed answers with the per-table breakdown and a total (376 rows as of B-25;
+A successful reseed answers with the per-table breakdown and a total (414 rows as of U-34;
 the exact number moves when the dataset does — the breakdown mattering more than the total).
 
 A plain load, the default and what first boot offers, only inserts rows that are missing. It is
@@ -108,7 +108,7 @@ The five above are the ones the demo script names. The complete seeded roster
 | Username | Name | Role | Note |
 |---|---|---|---|
 | `principal.avia` | Avia Shalev | PRINCIPAL | school-wide read-only (S-7) |
-| `dana.cohen` | Dana Cohen | TEACHER | Algebra 11 + Calculus 12; Calculus solo |
+| `dana.cohen` | Dana Cohen | TEACHER | Algebra 11 + Calculus 12; Calculus solo. Sitting `3318` is hers and is **awaiting grading**, so her Grading queue has work in it on a fresh seed (seed §9.4, added under U-34) |
 | `rina.barak` | Rina Barak | TEACHER → wire COORDINATOR | the PURE coordinator: Mathematics 10, teaches nothing |
 | `avi.mizrahi` | Avi Mizrahi | TEACHER | Java 21 co-teacher; the grading-demo teacher |
 | `tamar.shani` | Tamar Shani | TEACHER | Java 21 co-teacher (the two-teachers-one-course case) |

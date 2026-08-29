@@ -1,7 +1,10 @@
 package client.features.exambuild;
 
 import client.core.FxTestHarness;
+import client.core.NavEntry;
 import client.core.NavParams;
+import client.core.NavigationEvent;
+import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
@@ -663,6 +666,148 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         assertThat(visibleButtonsNamed(scene, ExamBuildCopy.RETRY))
                 .as("the copy promised a retry; now there is one")
                 .hasSize(1);
+    }
+
+    // ===================== Round 3: the header and the way out ============
+
+    /**
+     * The builder says which course the paper is for (U-30).
+     *
+     * <p>It never did. The course is picked in the exam list's New exam menu and then travels as
+     * a nav parameter, so the one screen that spends it - the bank picker is scoped to it,
+     * {@code EXAM_CREATE} carries it - was the one screen that never named it. A teacher with
+     * four courses had no way to check she was in the right one short of opening the picker.
+     */
+    @Test
+    @DisplayName("⚑ U-30: an open draft names its course in the header")
+    void editNamesItsCourse() {
+        Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
+
+        assertThat(visibleLabelTexts(scene))
+                .as("the code and the name, in the spelling the exam list uses")
+                .contains(ExamBuildCopy.courseLine("11", "Algebra"));
+    }
+
+    /**
+     * And so does a new exam, which is the half that needed the sign-in payload ⚑.
+     *
+     * <p>{@code ExamBuilderSession} carries a course NAME only for a version it has loaded:
+     * {@code openNew} takes the code as given and blanks the name. So in {@code Mode.CREATE} the
+     * word "Algebra" can only have come from {@code LoginResult.courses()}, resolved against the
+     * code the navigation carried. That is the whole claim, and asserting the code alone would
+     * pass without it.
+     */
+    @Test
+    @DisplayName("⚑ U-30: a new exam names its course, resolved from the sign-in payload")
+    void newExamNamesItsCourse() {
+        Scene scene = openBuilder(null, 0);
+
+        assertThat(visibleLabelTexts(scene))
+                .as("the session holds no name in CREATE, so this one came off the payload")
+                .contains(ExamBuildCopy.courseLine("11", "Algebra"));
+        assertThat(visibleLabelTexts(scene)).contains(ExamBuildCopy.TITLE_NEW);
+    }
+
+    /**
+     * A save that lands takes her back to the list, with the saved exam selected (U-31).
+     *
+     * <p>Saving used to leave her exactly where she was: a toast reading "Saved." over a screen
+     * that looked identical before and after. The list is where a saved exam lives.
+     *
+     * <p><b>Asserted on the navigation rather than on a rendered list.</b> This file drives the
+     * builder directly and never boots the shell, so what is checkable here is that the screen
+     * asks for the right destination with the right parameter; that the exam list then selects
+     * on it is {@code ExamListInteractionTest.deepLinkOpensTheOwningExam}, which drives the same
+     * parameter from the other side.
+     *
+     * <p>The navigation hangs off {@code saveNotice}, which {@code settleSave} sets on a
+     * successful answer and nowhere else, so it is mode-independent by construction: EDIT is
+     * exercised here because CREATE cannot press the button until its paper reaches 100 points.
+     */
+    @Test
+    @DisplayName("⚑ U-31: a landed save leaves for the exam list, carrying the saved version")
+    void savingReturnsToTheList() {
+        Scene scene = openBuilderWith(connection -> {
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+            connection.respondTo(Verb.EXAM_VERSION_SAVE, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+        }, VERSION_ID);
+
+        List<NavigationEvent> navigations = registerTheExamList();
+
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.SAVE_BUTTON).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(navigations).as("the act landed: something navigated").hasSize(1);
+        NavEntry target = navigations.get(0).to();
+        assertThat(target.routeId())
+                .as("the exam list, named rather than remembered: a back() would land on "
+                        + "whatever she came from, which for a notification is the dashboard")
+                .isEqualTo(Routes.EXAMS.id());
+        assertThat(target.params().getLong("examVersionId", 0))
+                .as("⚑ and the version the server just wrote, which is the parameter "
+                        + "ExamListView.onShow already reads")
+                .isEqualTo(VERSION_ID);
+    }
+
+    /**
+     * A refused save keeps her on the builder, with the paper the refusal is about (U-31).
+     *
+     * <p>The other half of the rule, and the one worth a test of its own: navigating away from a
+     * failure would take the teacher off the only screen where the sentence means anything and
+     * leave the unsaved paper behind.
+     */
+    @Test
+    @DisplayName("⚑ U-31: a refused save stays put, message and paper intact")
+    void aRefusedSaveStaysOnTheBuilder() {
+        Scene scene = openBuilderWith(connection -> {
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT)));
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+            connection.replyError(Verb.EXAM_VERSION_SAVE,
+                    common.protocol.ErrorCode.CONFLICT, "Somebody else saved this first.");
+        }, VERSION_ID);
+
+        List<NavigationEvent> navigations = registerTheExamList();
+
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.SAVE_BUTTON).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(navigations)
+                .as("nothing navigated, because nothing was saved")
+                .isEmpty();
+        assertThat(visibleLabelTexts(scene))
+                .as("and she is still looking at the paper the refusal is about")
+                .contains(ExamBuildCopy.PAPER_TITLE);
+    }
+
+    /**
+     * Registers the exam list so a navigation to it can complete, and records what arrives.
+     *
+     * <p>A stub screen, exactly as the exam list's own interaction test stubs the builder: the
+     * claim under test is which destination is asked for and with what, not what that screen
+     * then renders.
+     *
+     * @return the list the navigator appends to, empty until something navigates
+     */
+    private List<NavigationEvent> registerTheExamList() {
+        ScreenManager manager = ScreenManager.getInstance();
+        manager.navigator().register(Routes.EXAMS);
+        manager.screens().register(Routes.EXAMS.id(), StubScreen::new);
+
+        List<NavigationEvent> navigations = new java.util.ArrayList<>();
+        manager.navigator().addListener(navigations::add);
+        return navigations;
+    }
+
+    /** Stands in for the exam list so a navigation can complete without booting it. */
+    private static final class StubScreen extends client.ui.screen.AbstractScreen {
+        @Override
+        protected javafx.scene.Parent build() {
+            return new javafx.scene.layout.VBox();
+        }
     }
 
     // ===================== Harness ========================================

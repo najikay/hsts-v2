@@ -32,7 +32,8 @@ the screen named, no fixing. Paste the file back when you stop.
 | Principal, read-only | `principal.avia` | — |
 
 Seeded facts you will meet: exam code **`2075`** is a live Algebra sitting; **`5164`** is
-scheduled for later today; **`4821`** and **`7390`** are closed. Algebra questions **11003,
+scheduled for later today; **`4821`**, **`7390`** and **`3318`** are closed (`3318` is Dana's
+sitting that is still awaiting grading). Algebra questions **11003,
 11004, 11006, 11008** belong to no exam (you may delete them); the others are in exams.
 
 The walk takes about three and a half hours. The only real wait is a 2-minute exam you create
@@ -56,15 +57,15 @@ java -jar target\hsts-server.jar
       console press **Load demo data if missing** once. On a database that already has the
       seed it answers UNCHANGED. Never press **Reload demo data** during a walk — the walk
       creates its own data and later rounds build on it.
-      *(One exception, once: right after pulling the 2026-08-29 seed change, press Reload
-      demo data one time so Maya's grade carries its new teacher's note.)*
+      *(One exception, once: right after pulling the 2026-08-29 seed changes, press Reload
+      demo data one time so Maya's grade carries its teacher's note and Dana's sitting
+      `3318` awaiting grading exists. The total then reads 414 rows.)*
 - [ ] 0.3 Open a second PowerShell and start a client: `java -jar target\hsts-client.jar`.
       Start more clients the same way whenever a step says "second window".
-- [ ] 0.4 **If the client warns that the server "now identifies itself as … but this
-      computer connected to … before":** that is expected on a dev machine right after
-      `clean package` (the server's id file lived in `target\` and was rebuilt with it —
-      U-22, being fixed). Read the warning, choose to continue, and it re-pins. On the
-      packaged jars this never happens. Write it down if it appears **without** a rebuild.
+- [ ] 0.4 **The client must not warn about the server "now identifying itself as …"** on a
+      rebuild any more (U-22: the id now lives in the project root, which a clean does not
+      touch). The first launch after pulling that fix may warn one last time; choose to
+      continue and it re-pins. Any warning after that, with no rebuild, is a note.
 
 ---
 
@@ -127,8 +128,8 @@ java -jar target\hsts-server.jar
       / `14`). Ids: ______ ______ ______
 - [ ] 2.9 Select your first new question → **Edit** → change the stem to end with `?!` →
       **Save as a new version** → Version history shows v2.
-- [ ] 2.10 Select **11005** → **Delete question** → a dialog titled "This question is in use"
-      **names the exams** it sits in → **Close**. Select **11004** → Delete question →
+- [ ] 2.10 Select **11005** → **Delete** → a dialog titled "This question is in use"
+      **names the exams** it sits in → **Close**. Select **11004** → **Delete** →
       "Delete this question?" → **Delete** → it disappears.
 - [ ] 2.11 Switch the course picker to Calculus 12: a different list. There is no Java in her
       picker (she does not teach it).
@@ -232,8 +233,11 @@ java -jar target\hsts-server.jar
 ## Part 4 — Grade and publish (15 min)
 
 **Dana's window: Grading** (rail)
-- [ ] 4.1 "Waiting for you" lists Round 3 Quick Check; open it: two rows with their **Auto**
-      scores (rows, not a loading skeleton).
+- [ ] 4.1 "Waiting for you" lists Round 3 Quick Check **and the seeded sitting `3318`**
+      (Midterm: Algebra, sat yesterday by four students, awaiting grading); open Round 3:
+      two rows with their **Auto** scores (rows, not a loading skeleton). Open `3318`: four
+      rows (Noa 85, Shira 75, Daniel 60, Itay 45). Leave `3318` unapproved for now; it is
+      the demo's grading act.
 - [ ] 4.2 Select Maya → **Change score…**: score `101` → refused; empty reason → refused;
       score `40`, reason `Method credit`, comment `Well tried under time pressure` → save →
       the row shows the adjusted marker.
@@ -281,8 +285,9 @@ java -jar target\hsts-server.jar
       She closes.
 - [ ] 6.3 Avi opens 21003 again and **signs out** while it is open. Tamar's badge clears.
       Sign Avi back in.
-- [ ] 6.4 Avi: **Study Bot** (rail) → Java 21: the bot's name, the toggle **Students can use
-      this bot**, Information sources (5). **Add text** → paste a paragraph about Java
+- [ ] 6.4 Avi: **Study Bot** (rail) → the left column lists one card per course he teaches →
+      the **Java 21** card → **Manage**. On the right: the bot's name, the toggle **Students
+      can use this bot**, Information sources (5). **Add text** → paste a paragraph about Java
       collections → saved and listed. **Add a file** → a small PDF → "Reading that file on
       the server" → listed. Add a Word file → listed. Rename any text file to `.pdf` and add
       it → a sentence explains it could not be read.
@@ -292,9 +297,13 @@ java -jar target\hsts-server.jar
 - [ ] 6.6 Avi: switch **Students can use this bot** off. (Part 7 checks the student side.)
 - [ ] 6.7 Avi: **Bot activity**: Questions asked, Busiest day, Asked most often, the 30-day
       chart. **No student name anywhere.** Navbar Back.
-- [ ] 6.8 Dana's window: Study Bot → two bots (Algebra, Calculus), one per course; **Create
-      the study bot** appears only for a course with none. **If you can make a second bot for
-      one course, write the exact clicks (U-14).**
+- [ ] 6.8 Dana's window: Study Bot → the left column lists **two cards**, Algebra 11 and
+      Calculus 12, one per course she teaches (U-26). Each card shows the bot's name or **No
+      study bot yet**, an **Active** / **Inactive** chip and its source count; the header says
+      **One study bot per course. Co-teachers share it.** **Create the study bot** appears
+      only on a card with no bot, **Manage** on the others. Click each card in turn: the right
+      pane follows, sources and all. **If you can make a second bot for one course, write the
+      exact clicks (U-14).**
 
 ---
 
@@ -402,7 +411,7 @@ conversations, New conversation, integrity notice Continue and notify / Not now)
 **Teacher:** Dashboard (Sittings in progress, Today and next, Scheduled ahead, Awaiting
 grading, Class average, Your exams, each with a link) · Question Bank (course, topic,
 difficulty, search, Clear filters, sortable columns, Editing column, detail pane, Version
-history / Hide history, Edit, Delete question, Add question) · Question editor (stem, four
+history / Hide history, Edit, Delete, Add question) · Question editor (stem, four
 answers with the correct radio, Topic, Difficulty, Choose image / remove, Add question / Save
 as a new version, Cancel with Leave without saving?, lock banner, stale and gone dialogs) ·
 Exams (rows, version chips, reason cards, Edit, New exam menu) · Exam builder (details,
@@ -413,9 +422,9 @@ counters, Monitor, Cancel release, Close early, Release an exam dialog with pick
 Generate for me / Opens / Closes / Release it, Read this code out with Copy code) · Live
 Monitor (chooser, counts, rows, attention text, bot flag, Add time spinner) · Grading (queue,
 table, Select all, Approve selected, Change score… with reason and comment) · Results (exam
-rail, execution picker, histogram / table, stat cards, print) · Study Bot manager (course
-picker, Create the study bot, active toggle, sources, Add a file, Add text, Edit, Remove, Bot
-activity) · Bot activity.
+rail, execution picker, histogram / table, stat cards, print) · Study Bot manager (the course
+list, Manage, Create the study bot, active toggle, sources, Add a file, Add text, Edit,
+Remove, Bot activity) · Bot activity.
 
 **Coordinator:** the teacher's plus Approvals (queue, "You wrote this one", preview with Teacher
 only and Answer key panels, Approve, Send back with reason, Keep looking).

@@ -35,4 +35,29 @@ public final class Kicker {
         label.setAccessibleText(KickerText.plain(text));
         return label;
     }
+
+    /**
+     * The same kicker for a table column heading: uppercase, 11.5px, faint —
+     * and <b>untracked</b> (2026-08-29, manual rounds 3-4, U-28).
+     *
+     * <p>Tracking costs about 40% of a heading's width, and a table column is the
+     * one place in the app where that width is not the designer's to spend: the
+     * columns share out whatever the table was given, and eight of them on a
+     * 1024px window left "D I F F I C U L T Y" rendering as "D I F F…". Every
+     * other kicker in the app — the cards, the panels — keeps its tracking,
+     * because nothing is competing with it for the room.
+     *
+     * <p>The accessible text is set here too, and it is the same string: an
+     * untracked kicker is already the plain words, which is the small bonus of
+     * this form.
+     *
+     * @param text the copy constant, in ordinary sentence case
+     * @return a label for a column heading
+     */
+    public static Label columnLabel(String text) {
+        Label label = new Label(KickerText.plain(text));
+        label.getStyleClass().add(STYLE_CLASS);
+        label.setAccessibleText(KickerText.plain(text));
+        return label;
+    }
 }
