@@ -250,10 +250,34 @@ public class ServerMain {
                     .getCodeSource().getLocation().toURI());
             Path parent = java.nio.file.Files.isRegularFile(codeSource)
                     ? codeSource.getParent() : Paths.get("");
-            return parent == null ? Paths.get("") : parent;
+            return configDirectoryFor(parent == null ? Paths.get("") : parent);
         } catch (Exception ignored) {
             return Paths.get("");
         }
+    }
+
+    /**
+     * The directory the server keeps its identity in, given where its jar sits.
+     *
+     * <p>Beside the jar, which is the deliverable's rule: the two jars and their
+     * properties travel together and the id beside them survives every restart.
+     * <b>Except under a Maven {@code target} directory</b> (2026-08-29, manual round 2,
+     * U-22): on a dev machine the jar is {@code target/hsts-server.jar} and
+     * {@code clean package} empties {@code target} twice a day, so the id was reborn on
+     * every rebuild and every client that had pinned the old one warned that the server
+     * "now identifies itself as" someone else. The tester read that as a network problem;
+     * it was the build. Under {@code target} the id lives one level up, in the project
+     * root, which a clean does not touch.
+     *
+     * @param jarDirectory the directory holding the running jar (or the working directory)
+     * @return where {@code server-id.properties} belongs
+     */
+    static Path configDirectoryFor(Path jarDirectory) {
+        Path name = jarDirectory.getFileName();
+        if (name != null && "target".equals(name.toString()) && jarDirectory.getParent() != null) {
+            return jarDirectory.getParent();
+        }
+        return jarDirectory;
     }
 
     /** Prints the sentence, then the trace, then leaves with a failure code. */

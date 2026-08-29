@@ -1,296 +1,490 @@
-# HSTS — manual test, one machine (everything a person can do, every role, every screen)
+# HSTS — manual test, one machine
 
-This is the complete single-machine test. Its companion, `MANUAL_TEST_TWO_MACHINES.md`, holds
-everything that needs a second computer or a real network and is Omar's. Together they replace
-`MANUAL_ROUND.md`.
+**A guided walkthrough for a person.** Every step tells you who to be, what to click, what you
+should see, and gives you a box to put an X in. Usernames, passwords, ID numbers and codes are
+written where you need them, every time. The appendices at the end (the per-screen control
+inventory, the situations list, the role-interaction matrix, the requirement map) are the
+"nothing forgotten" backstop; the walkthrough is what you actually run.
 
-**Six parts.** A: how to run it. B: the **action inventory** — every screen of every role,
-every control on it, what it must do (the "every button" list; walk it screen by screen).
-C: the **ordered walk** — a story that creates everything from the client (questions, exams,
-approvals, releases, sittings, grades, bot sources, notifications) so nothing depends on the
-seed beyond the accounts, and no step waits more than the two-minute exam it creates. D: the
-**situations catalogue** — every refusal, edge and failure the product has words for, each
-provoked once. E: the **requirement coverage map** — every id in the course PDF (as mapped in
-`TRACEABILITY.md`) named with the step that exercises it. The PDF is the floor; B and D are the
-rest. F: the **interactions between roles**, every pair seen from both sides.
+Two-machine and network checks are in `MANUAL_TEST_TWO_MACHINES.md` (Omar's).
 
-**No reseeding.** The seed is loaded once on a fresh database (Part A). The walk creates its own
-data on top and later rounds keep building on it; reseeding is only for wiping a machine before
-the demo (`DEMO_DAY.md`).
+**How to use this file.** Copy it to `docs/manual-round-N-notes.md`, work through it, put `X`
+in the boxes that passed, and write what you saw under any box you could not tick. Your words,
+the screen named, no fixing. Paste the file back when you stop.
 
-**Notes.** One line per observation, your words, the screen named, into
-`docs/manual-round-N-notes.txt`. No fixing, no re-testing, no severity; paste it over.
+| Round | Date | Got to | Stopped because |
+|---|---|---|---|
+| 1 | 2026-08-28 | student flow, teacher side, bank, grading | 18 findings, 4 blockers |
+| 2 | 2026-08-29 | (v2 file) | 7 notes, 1 blocker (login recovery) |
+| 3 | | | |
 
-| Round | Date | Got to | Stopped because | Notes file |
-|---|---|---|---|---|
-| 1 | 2026-08-28 | student flow, teacher side, bank, grading | 18 findings, 4 blockers | `manual-round-1-notes.txt` |
-| 2 | 2026-08-29 | (v2 document) | 7 notes, 1 blocker (login recovery) | `manual-round-2-notes.txt` |
-| 3 | | | | `manual-round-3-notes.txt` |
+**Passwords: `demo123` for every account.**
+
+| Who | Username | ID number (for the exam identity step) |
+|---|---|---|
+| Student, the demo one (Algebra 11, Java 21, Databases 22) | `maya.levi` | `374301851` |
+| Student, not in Algebra (Calculus 12, Java 21) | `noam.peretz` | `385612098` |
+| Student, Algebra, the one who timed out in the seed | `omer.katz` | `361489206` |
+| Teacher of Algebra 11 and Calculus 12 | `dana.cohen` | — |
+| Java 21 co-teachers | `avi.mizrahi`, `tamar.shani` | — |
+| Teacher of Databases 22 **and** coordinator of Computer Science | `michal.sharon` | — |
+| Coordinator of Mathematics, teaches nothing | `rina.barak` | — |
+| Principal, read-only | `principal.avia` | — |
+
+Seeded facts you will meet: exam code **`2075`** is a live Algebra sitting; **`5164`** is
+scheduled for later today; **`4821`** and **`7390`** are closed. Algebra questions **11003,
+11004, 11006, 11008** belong to no exam (you may delete them); the others are in exams.
+
+The walk takes about three and a half hours. The only real wait is a 2-minute exam you create
+yourself in Part 3. Nothing else waits on anything.
 
 ---
 
-## Part A — Running it
+## Part 0 — Start everything (10 min)
+
+In PowerShell, in `C:\dev\hsts-v2`:
 
 ```
 git pull
 .\mvnw -DskipTests clean package
 java -jar target\hsts-server.jar
 ```
-On a **fresh** database only (first run ever, or after `DEMO_DAY.md`'s wipe): press **Load demo
-data if missing** on the console once. Never **Reload demo data** during a walk.
 
-Start one client per account you want open at the same time: `java -jar target\hsts-client.jar`
-in another terminal (or double-click the jar). One session per account (F1.3); switching
-accounts inside a window means Sign out first.
-
-**Accounts (password `demo123`):**
-
-| Username | Role | National ID |
-|---|---|---|
-| `maya.levi` | student: Algebra 11, Java 21, Databases 22 | `374301851` |
-| `noam.peretz` | student: Calculus 12, Java 21 (not Algebra) | `385612098` |
-| `omer.katz` | student (Algebra), the seeded TIMED_OUT attempt | `361489206` |
-| `noa.friedman`, `itay.regev`, `shira.dahan`, `yael.azulay`, `daniel.shapira`, `lior.gabay`, `tal.harari`, `roni.malka`, `eitan.solomon` | more students, for multi-student sittings | in `UsersSection.java` |
-| `dana.cohen` | teacher: Algebra 11, Calculus 12 | — |
-| `avi.mizrahi`, `tamar.shani` | Java 21 co-teachers | — |
-| `michal.sharon` | teaches Databases 22 **and** coordinates Computer Science 20 | — |
-| `rina.barak` | coordinates Mathematics 10, teaches nothing | — |
-| `principal.avia` | principal, read-only | — |
-
-Seeded facts the walk leans on: executions `2075` (live, Algebra Midterm), `5164` (scheduled),
-`4821`/`7390` (closed); Algebra questions **11003, 11004, 11006, 11008 are in no exam** (deletable),
-the rest are referenced; Calculus exam `101201` is PENDING for Rina.
+- [ ] 0.1 The terminal prints the Flyway lines and a "listening" line, and the **server
+      console window** opens.
+- [ ] 0.2 **Only if this is a fresh database** (first ever run, or after a wipe): on the
+      console press **Load demo data if missing** once. On a database that already has the
+      seed it answers UNCHANGED. Never press **Reload demo data** during a walk — the walk
+      creates its own data and later rounds build on it.
+      *(One exception, once: right after pulling the 2026-08-29 seed change, press Reload
+      demo data one time so Maya's grade carries its new teacher's note.)*
+- [ ] 0.3 Open a second PowerShell and start a client: `java -jar target\hsts-client.jar`.
+      Start more clients the same way whenever a step says "second window".
+- [ ] 0.4 **If the client warns that the server "now identifies itself as … but this
+      computer connected to … before":** that is expected on a dev machine right after
+      `clean package` (the server's id file lived in `target\` and was rebuilt with it —
+      U-22, being fixed). Read the warning, choose to continue, and it re-pins. On the
+      packaged jars this never happens. Write it down if it appears **without** a rebuild.
 
 ---
 
-## Part B — The action inventory (every screen, every control)
+## Part 1 — Before signing in (10 min)
 
-Walk each screen top to bottom and press everything. "Expected" is what the product promises;
-anything else is a note. Requirement ids in brackets.
-
-### B0. Server console (window on the server)
-| Control | Expected |
-|---|---|
-| Address line + candidate picker | your LAN IPv4; other adapters listed; picking one changes the address shown [F13.2] |
-| Fingerprint line | present, stable across restarts [F13.3] |
-| DB status | green; red with a sentence if MySQL is down [F13.1] |
-| Connected clients | counts live as clients connect and quit [F13.1] |
-| Log tail: Pause / Copy / Clear | pause stops scrolling (buffer keeps filling), copy puts the tail on the clipboard, clear empties the pane [F13.1] |
-| Load demo data if missing | UNCHANGED on a seeded DB; inserts on an empty one [NFR-17, F14.2] |
-| Reload demo data | asks first; Cancel does nothing [NFR-17] |
-| Health panel | listener up, DB up, uptime [F13.1] |
-
-### B1. Before sign-in (any client)
-| Screen / control | Expected |
-|---|---|
-| Connect: discovery | finds the server in ~2 s; picker shows name, address, fingerprint; pinned server auto-connects next time [F13.4, F1.5] |
-| Connect: change server / manual form | address + port fields, Connect enabled only when valid; wrong address → a sentence, no class name; **Back to the server list**; **Look for servers again** [F1.5, U-4, U-5] |
-| Login: username + password + Sign in | wrong password → one generic sentence; 5 failures → 30 s lockout sentence even with the right password [F1.1, S-38] |
-| Login: status row | Connected to &lt;server&gt; · change server; when the socket drops: Disconnected, "Not connected", Sign in disabled, **Reconnect** [U-6, U-20] |
-| Login: Reconnect | leads to the connect screen; a successful reconnect returns to Login enabled [U-17: write the exact clicks if it does not] |
-| Login: theme | the profile/theme controls, if shown pre-login, follow the saved preference |
-
-### B2. Shell (every signed-in role)
-| Control | Expected |
-|---|---|
-| Rail items | exactly the role's set (below); collapse/expand with tooltips when collapsed [F1.2] |
-| Breadcrumbs | parent · current on drill-ins [U-8] |
-| Navbar Back | on every non-rail screen; goes back in history, else to the parent, else home; absent on rail screens [U-8] |
-| Bell + badge | badge = unread count at sign-in; panel lists rows with icon and relative time; click-through; mark one read; **Mark all read**; "Nothing yet" when empty [F11.2] |
-| Toasts | transient, dismiss on their own, never block [F11.3] |
-| Profile menu | Light / Dark / System radios (System says what it resolved to); **Sign out** [F1.4] |
-| Reconnect banner | on a socket drop mid-session: banner in words with Retry; disappears on reconnect |
-| Window resize | three sizes on every screen; nothing overlaps or clips [NFR-21] |
-
-Rails: **student** Dashboard, Take Exam, My Grades, Study Bot, Settings · **teacher** Dashboard,
-Question Bank, Exams, Releases, Live Monitor, Grading, Results, Study Bot, Settings ·
-**coordinator** teacher's + Approvals · **principal** Dashboard, Data, Reports, Settings.
-
-### B3. Student screens
-**Dashboard** — "Your courses" cards (each names its bot) · "Take an exam" code card: Enter with an empty/short/long code → "Codes are 4 letters or digits."; a valid code → Take Exam in confirmation mode · next-exam hint when a release is scheduled [F6.1, U-10].
-**Take Exam** — code step: field, hint, Continue (enabled only on 4 alphanumerics), **Back to my dashboard** [U-19] · confirmation mood: read-only code, "Confirm your exam", "Confirm and continue", **Use a different code** [U-10] · identity step: exam summary (name, minutes, questions, window note when the window cuts the sitting short, B-14), ID field, Start exam, **Back** to the code step [U-19] · handed-in dead end: sentence + Back to my dashboard [F6.7] · paper: header (name, course, instructions), countdown chip (amber at 25 %, red at 5 min), progress bar + "Answered n of m", save indicator (All changes saved / Saving / Not saved yet, retrying), question chips (answered state, jump), question card (stem, image, four options, one selectable), Previous / Next, Hand in → dialog with the answer grid (chips jump and close the dialog), remaining time, unanswered note, **Keep working** / **Hand in** [F6.2, F6.3, F6.9] · Submitted screen: handed-in time, minutes, summary, single **Back to my dashboard** [F6.10] · Time is up takeover: no confirmation, same summary, single button [F6.4].
-**My Grades** — hero: term average ring (fill centred on the track, ends where the number says), count line, next exam · cards: course, Passed / Below the pass mark chip, exam name, **Teacher: name** [U-18], score, approved date, teacher's note [U-18], "Reviewed by your teacher" when adjusted, **Open paper →** · empty slot card when nothing is graded [F9.1, F8.4].
-**Checked exam** (drill-in) — title, Teacher: name, attempt status + minutes, "Your teacher's note", per question: your answer / correct answer / Correct · Wrong · Not answered, points; print layout toggle → **Exit print view**; navbar Back [F9.1, S-36, U-8].
-**Study Bot** — Course picker (enrolled courses only), header names the course, ask box + Send (empty refused), "The bot is thinking" indicator, bubbles, out-of-scope sentence, too-fast sentence, inactive sentence, not-enrolled sentence, locked sentence with the box still usable (B-47), integrity notice **Continue and notify** / **Not now** once per attempt, **Past conversations**, **New conversation** [F12.4, F12.5, F12.7, C-4].
-**Bot history** — list with times, **Reopen** → the transcript continues in the chat; navbar Back [F12.10].
-**Settings** — Light / Dark / System, accent palettes, **Reset to defaults**; every open window follows instantly.
-
-### B4. Teacher screens
-**Dashboard** — Sittings in progress (code, closes, minutes left, submitted count, "More students are in the monitor") · Today and next · Scheduled ahead · Awaiting grading · Class average (Passed / "Marking is not finished yet") · Your exams; every card's link opens the right screen.
-**Question Bank** — course picker (taught courses only), topic, difficulty, search, **Clear filters**, count label, every column sortable, **Editing** column badges another teacher's editor live · detail pane: stem, answers with Correct, topic, difficulty, version, illustration (Loading → image / "No illustration"), **Version history** / **Hide history**, **Edit**, **Delete question** (blocked dialog names the exams; otherwise confirm Delete / Keep it) · **Add question** [F2.1–F2.6, F10.0].
-**Question editor** (drill-in) — Question text, four answers with the correct radio, Topic (free text, suggestions), Difficulty, Illustration: **Choose image** / remove, **Add question** / **Save as a new version**, **Cancel** → "Leave without saving?" Discard them / Keep editing, "Unsaved changes" marker, lock banner when someone else holds it, "Somebody else edited this question" → Close the editor (stale), "That question is no longer there"; navbar Back [F2.1, F2.3, F10.2, F10.3].
-**Exams** — rows with version chips DRAFT / PENDING_APPROVAL / APPROVED / REJECTED, click selects (no "Open" hint), versions panel with the rejection reason on the card, **Edit** on a version, **New exam** menu of taught courses (disabled with the reason for a coordinator who teaches nothing) [F3.5, F3.6, F4.2].
-**Exam builder** (drill-in) — Exam details: name, "How long students get" (1..480), Student instructions / Teacher notes tabs · Questions on this paper: per-row Points, Move up / Move down / Remove, "The bank has a newer version" badge with **Use the newer version** · **Choose questions** tab: **Add from the bank** picker (search by id/text/topic, Add, "Already on this exam", Done) · **Compose automatically** tab: rows "Anywhere in this course" / **Add a topic**, counts by Easy/Medium/Hard/Any, **Compose the exam** (infeasible → the shortfall report, nothing created) · sum-to-100 indicator, **Create exam** / **Save draft**, "Saved.", Submit for approval, lock banner when another author holds it; navbar Back [F3.1–F3.4, C-2].
-**Releases** — rows with Scheduled / Live / Closed chips and live counters, per-row **Monitor**, **Cancel release** (scheduled only) → Cancel it / Keep it, **Close early** (live only) → Close it now / Keep it running · **Release an exam** dialog: Approved exam picker, Exam code (Generate for me / typed, 4 alphanumerics), Opens / Closes, complaint line, Release it / Cancel → "Read this code out" with **Copy code** / Done [F5.1–F5.5].
-**Live Monitor** — sitting chooser (or "Pick a sitting to watch" → Open Releases), counts Started / Handed in / Timed out, per-student rows with status and remaining time, "Her exam window last lost focus at …" attention count, "Opened another course's study bot at …" flag, **Add time** spinner (1..480, default 15) + button [F7.1, F7.1b, F7.2].
-**Grading** — "Waiting for you" list, execution header with progress and closed time, table Student / Auto / Score / State / adjusted marker, Select all, **Approve selected**, **Change score…** dialog (score 0..100, "Reason for the record" required, "Comment the student will read") [F8.1–F8.3].
-**Results** — exam rail (exams she wrote, including others' executions), execution picker, histogram / table toggle, stat cards (mean, median, σ, min, max, pass rate ≥ 55, deciles), table with attempt status and minutes, print layout → Exit print view; empty states "Not run yet" / "Nobody sat this one" / "Nothing marked yet" / "Grading is not finished" [F8.5, F9.2].
-**Study Bot (manager)** — course picker (taught courses), "This course has no study bot" + **Create the study bot** (name dialog) when none, otherwise: bot name, **Students can use this bot** toggle, Information sources list with kind and holder badge, **Add a file** (PDF / Word; "Reading that file on the server"; a bad file → a sentence), **Add text**, per source **Edit** (text only; lock banner if held) / **Remove** → Remove it / Keep it, **Bot activity** link [F12.1–F12.4, F10.4].
-**Bot activity** (drill-in) — Questions asked, Busiest day, Asked most often, Questions over the last 30 days, "Nobody has used this bot yet"; no student named anywhere; navbar Back [F12.11].
-
-### B5. Coordinator screens (in addition to the teacher's)
-**Dashboard** — "Waiting for you" approvals card, "Teachers submitting".
-**Approvals** — queue for her subject (or "You do not coordinate a subject"), "You wrote this one" badge, open → **Exam preview**: banner, the paper as a student sees it, "Teacher only" panel, "Answer key" panel, metadata, **Approve** → "Approve this exam?" Approve / Keep looking, **Send back** → reason required → Send back / Keep looking, self-approval note when it is hers; footer Back to approvals; navbar Back [F4.1–F4.3].
-
-### B6. Principal screens
-**Dashboard** — school-wide read-only cards.
-**Data** — segments Questions / Exams / Results, filter "Filter by name, code or course", course picker "All courses", "too many questions" hint on wide filters, tables paginate; **no** control that writes [F9.3, S-7].
-**Reports** — subject picker, By teacher / By course / By student, stat cards, "Closed sittings" table, the median-band hint, print layout + exit [F9.4, S-37].
+- [ ] 1.1 The client found the server on its own and landed on **Login** showing
+      "Connected to &lt;server name&gt; · change server".
+- [ ] 1.2 Click **change server**. Type address `10.0.0.1` port `5555`, click **Connect**:
+      a plain-English sentence ("Nothing is listening…" / "did not answer") — no Java class
+      name, no brackets.
+- [ ] 1.3 Click **Back to the server list** → the list is back. Click **Look for servers
+      again** → it re-finds the server. Pick it → Login.
+- [ ] 1.4 Username `maya.levi`, password `wrong`, **Sign in** — one generic sentence. Repeat
+      four more times (five wrong in total). Now the **right** password `demo123` → refused
+      with the too-many-attempts sentence. Wait 30 seconds → `demo123` works. **Sign out**
+      (profile menu, top right).
+- [ ] 1.5 Back on Login: **stop the server** (Ctrl+C in its terminal). Within a few seconds
+      the chip reads **Disconnected**, the label "Not connected", **Sign in is greyed out**,
+      and a **Reconnect** link appears.
+- [ ] 1.6 Start the server again (`java -jar target\hsts-server.jar`). Click **Reconnect** →
+      the connect screen finds it → Login shows Connected → sign in as `dana.cohen` /
+      `demo123` **in this same window** — it works. *(U-17: this is the one that needed a
+      new window before.)*
 
 ---
 
-## Part C — The ordered walk (creates everything from the client)
+## Part 2 — Dana, the teacher: bank and exam (40 min) — `dana.cohen` / `demo123`
 
-Time ≈ 3 h 30 m. The only wait is the 2-minute exam. Steps are numbered for the coverage map.
+**Dashboard**
+- [ ] 2.1 Cards: **Sittings in progress** (2075 with its code, closing time, minutes left),
+      **Today and next** (5164), **Awaiting grading**, **Class average**, **Your exams**.
+      Click every card's link; each opens the right screen; the navbar **Back** (top left)
+      returns.
+- [ ] 2.2 The rail reads Dashboard, Question Bank, Exams, Releases, Live Monitor, Grading,
+      Results, Study Bot, Settings — no Approvals. Every icon is drawn. Click the collapse
+      button at the top of the rail; icons keep tooltips; expand again.
 
-### C1. Console and connection (10 min)
-1. Server from a terminal; console items per B0. *(F13.1, F13.2, F13.3, F14.1)*
-2. Client: discovery → Login; change server → manual form → wrong address → sentence; Back to the server list; Look for servers again; back on Login. *(F13.4, F1.5)*
-3. Wrong password ×5, right password refused, 30 s, works. *(F1.1)*
-4. Stop the server → Login shows Disconnected, Sign in disabled, Reconnect. Start the server. **Reconnect** → connect screen → Login enabled → sign in works in the **same window**. If not, write every click in order (U-17). *(U-6, U-17)*
+**Question Bank** (rail)
+- [ ] 2.3 Course picker shows only Algebra 11 and Calculus 12. Pick Algebra 11. Set topic
+      `Quadratic functions`, difficulty `Easy`, then type `roots` in the search box: the list
+      narrows at each step and the count label follows. Click **Clear filters**.
+- [ ] 2.4 Click each column header twice: the sort flips both ways. The table fills the
+      whole width; the question column is the widest.
+- [ ] 2.5 Click question **11005**. The detail pane shows the stem, four answers with one
+      marked **Correct**, topic, difficulty, version, and the illustration (a loading state,
+      then the picture). Click **Version history** → v1 and v2 with different stems; **Hide
+      history**.
+- [ ] 2.6 Click **Add question**. Leave everything empty and try **Add question** — refused.
+      Type stem `Round 3: what is 7 × 8?`, answers `56`, `56`, `54`, `64` (two the same),
+      mark the first correct → refused (answers must differ). Change the second to `48`,
+      unmark all → refused (one must be correct). Mark `56`. Topic: type `Round 3`
+      (a brand-new topic). Difficulty Easy. **Choose image** → any PNG on your machine →
+      "Illustration attached"; remove it; attach it again.
+- [ ] 2.7 Click **Cancel** → "Leave without saving?" → **Keep editing**. Now **Add question**.
+      The list shows the new question with a five-digit id starting `11` that you did not
+      type. Write the id here: ______
+- [ ] 2.8 Add three more the same way, topic `Round 3`: an Easy one (`Round 3: 9 + 6`,
+      answers `15` ✓ / `14` / `16` / `13`), a Medium one (`Round 3: solve 2x = 10`, `5` ✓ /
+      `10` / `2` / `20`), a Hard one (`Round 3: solve x² = 49, x > 0`, `7` ✓ / `-7` / `49`
+      / `14`). Ids: ______ ______ ______
+- [ ] 2.9 Select your first new question → **Edit** → change the stem to end with `?!` →
+      **Save as a new version** → Version history shows v2.
+- [ ] 2.10 Select **11005** → **Delete question** → a dialog titled "This question is in use"
+      **names the exams** it sits in → **Close**. Select **11004** → Delete question →
+      "Delete this question?" → **Delete** → it disappears.
+- [ ] 2.11 Switch the course picker to Calculus 12: a different list. There is no Java in her
+      picker (she does not teach it).
 
-### C2. Dana authors (35 min) — `dana.cohen`, window 1
-5. Dashboard cards per B4; every link and Back. *(F1.2, NFR-21)*
-6. Question Bank: every filter, sort, Clear filters; detail of 11005 with image and history (v1/v2). *(F2.4, F2.3)*
-7. **Create four questions** in Algebra 11, topic `Round 3` (a new topic typed in): two EASY, one MEDIUM with an image, one HARD; refusals on the way: empty stem, duplicate answers, no correct marked. Ids allocated `110xx`, read-only. *(F2.1, F2.2, C-7, C-8, S-8, S-13)*
-8. Edit one of them (stem + swap two answers) → Save as a new version → history v2. *(F2.3, C-2)*
-9. Delete 11005 → blocked naming the exams; delete 11004 → gone. *(F2.5)*
-10. Exams: chips per B4; Algebra Midterm v1's rejection reason on its card. *(F3.6, F4.2)*
-11. **New exam** → Algebra 11 → `Round 3 Quick Check`: duration `2`, both texts; manual: add your four questions, points 40/20/20/**10** → sum 90 blocks; 40/20/20/20 → allowed; Move up/down; Remove one and re-add it; the "newer version" badge on the edited question → Use the newer version. *(F3.1, F3.2, S-11, S-12, C-2)*
-12. Compose automatically: 20 HARD `Round 3` → shortfall report, nothing created; 2 EASY `Round 3` → composes; discard, keep the manual paper. *(F3.3)*
-13. Save draft → id `1011xx`; Submit for approval → PENDING. *(F3.4, S-10, S-14)*
-14. Duration refusals: `0` and `481` refused; empty name refused; a paper with no questions cannot be submitted. *(F3.1)*
-15. Edit Algebra Midterm v2 → the builder makes v3; save draft; leave it. *(F3.5)*
-
-### C3. Rina decides (12 min) — `rina.barak`, window 2
-16. Bell: APPROVAL_REQUESTED for Round 3 Quick Check; dashboard "Waiting for you". *(F11.1)*
-17. Approvals: queue lists it and `101201`; open Round 3: student view, Teacher only, Answer key. *(F4.1)*
-18. Send back with an empty reason → refused; `Swap Q3 and Q4.` → sent back. Dana's window: APPROVAL_REJECTED push; reason on the card. *(F4.2)*
-19. Dana: edit → v2 (Move Q4 above Q3), Submit. Rina: the queue shows v2 only; her bell has APPROVAL_SUPERSEDED for v1. Approve v2; approve `101201`. Dana's bell: APPROVAL_APPROVED; the chip flipped live. *(F4.2, F3.6, NFR-18)*
-
-### C4. Dana releases (10 min) — window 1
-20. Releases per B4; **Release an exam**: picker offers only approved versions. *(F5.1)*
-21. Window refusals: closes before opens; opens > 5 min in the past; window under a minute. Code refusals: 3 chars, 5 chars, symbols. Generate for me → 4 chars. *(F5.2, F5.3, C-1)*
-22. Release Round 3 v2, code `R3QC`, Opens now, Closes now + 6 min → Read this code out → Copy code → Done → row Live. *(F5.3, S-17)*
-23. Release Algebra Midterm v2 again, Opens now + 20 min → Scheduled; students' bells: RELEASE_OPENING_SOON (within the 30-min horizon); **Cancel release** → gone; a live row has no Cancel, only Close early. *(F5.5, S-2, F11.1)*
-
-### C5. Three students sit it (12 min) — windows 2, 3, 4
-24. `maya.levi`: dashboard card `R3QC` → confirmation → Back to my dashboard → card again → Confirm and continue → identity: **Back** returns to the code step, then forward again; Noam's ID refused; own ID → the paper; **answer one**; do not submit. *(F6.1, F6.2, U-19, S-18)*
-25. `omer.katz` (`361489206`): same code; answer all; Hand in → dialog: Keep working once, then Hand in → Submitted screen. Re-enter `R3QC` → "already handed in". *(F6.9, F6.10, F6.7)*
-26. `noam.peretz`: `R3QC` → not enrolled. *(S-5, S-15)*
-27. Dana: Live Monitor → Round 3: rows Maya Started / Omer Handed in, counts 2/1/0; alt-tab away from Maya's window 2 s → attention text on her row, nothing on hers; **Add time 1** → Maya's Time Extended moment + TIME_EXTENDED in her bell. *(F7.2, F7.1b, F7.1, S-20)*
-28. Wait: amber, red, **Time is up** on Maya's window; monitor row Timed out; counts frozen 2/1/1; Releases row Closed when the window ends; Dana's bell GRADING_DUE. *(F6.4, F6.5, F7.3, S-21, F11.1)*
-
-### C6. Grade and publish (15 min)
-29. Dana: Grading → Round 3: two rows with auto scores (rows render, never a skeleton). Change score on Maya: empty reason refused, score 101 refused; `Method credit` + comment `Well tried`, 40 → adjusted marker. Select all → Approve selected. *(F8.1, F8.2, F8.3, S-22, S-23, C-3)*
-30. Maya's and Omer's windows: GRADE_PUBLISHED without a refresh; My Grades cards show **Teacher: Dana Cohen** and the note; Open paper → the checked exam with per-question marks; print → Exit print view; the justification appears nowhere. *(F8.4, F9.1, S-24, S-36, U-18)*
-31. Dana: Results → Round 3: histogram/table, stat cards; dashboard Class average updated; Results also lists `4821`'s omer TIMED_OUT 75 min. *(F8.5, F9.2, S-25, S-35, C-5)*
-32. Dana: Grading → `2075` too (later, after C8 closes it).
-
-### C7. Second teacher, locks, bot manager (20 min) — `avi.mizrahi` w1, `tamar.shani` w2
-33. Avi edits 21003 → Tamar's bank badges "Editing … Avi Mizrahi" live; her open is read-only; Avi closes → clears; Avi reopens and **signs out** → clears. *(F2.6, F10.0–F10.2, F1.4)*
-34. Avi: Study Bot manager, Java 21: **Add text** (a paragraph), **Add a file** PDF, Word, and a renamed garbage `.pdf` → sentence; Edit the text source (Tamar opening it meanwhile → lock banner); Remove one; Tamar's bell: BOT_SOURCE_CHANGED per change. Toggle **Students can use this bot** off. *(F12.1–F12.4, F10.4, S-28, S-29)*
-35. Bot activity: no student name anywhere. Dana's manager shows two bots (Algebra, Calculus), Create only where none exists. **If a second bot for one course can be made, write the clicks (U-14).** *(F12.11, S-30, S-6)*
-
-### C8. Maya and the bot, C-4, close early (18 min) — lead on the call for the live keys
-36. Maya: Java bot → inactive sentence; Avi flips it on → same screen answers. *(F12.4, S-31)*
-37. Databases bot: a course question → thinking indicator → answer; off-topic → refusal; empty → refused; three fast → too fast; history → Reopen → continue. *(F12.5, F12.7, F12.9, F12.10, S-32, S-33)*
-38. Maya sits `2075`; Algebra bot → locked, box usable; Databases bot → integrity notice once → Continue and notify → answered; Dana's bell INTEGRITY_ALERT; monitor row flagged. *(F6.8, C-4)*
-39. Dana: Releases → `2075` → **Close early** → Maya's Time Up; counts frozen; grading queue gains it; approve its grades; Maya's bell. Maya's Algebra bot answers again (B-47). *(F5.5, F6.4, F8.4)*
-
-### C9. Dual hat and the principal (18 min)
-40. `michal.sharon`: rail has Study Bot and Approvals; New exam → Databases 22 `Self check` (5 min, three questions), submit; Approvals shows it with "You wrote this one"; Approve → allowed, note shown. *(F4.3, F1.2)*
-41. `principal.avia`: Data segments + filters, no writing control; Reports: each dimension for each subject; Round 3's numbers match step 31; print + exit. *(F9.3, F9.4, S-7, S-26, C-5)*
-
-### C10. Shell, settings, sessions (10 min)
-42. Settings: modes, palettes, Reset; profile menu; rail collapse; breadcrumbs; resize on three screens. *(NFR-21)*
-43. F1.3: second client as `dana.cohen` refused; sign the first out → succeeds. *(F1.3, NFR-16)*
-44. Every failure today was a sentence; every wait showed progress; no refresh button anywhere. *(NFR-18, NFR-21, S-44)*
+**Exams** (rail)
+- [ ] 2.12 Rows: Midterm: Algebra (v1 REJECTED, v2 APPROVED), Quiz: Inequalities (DRAFT),
+      Midterm: Calculus (PENDING). Hovering a row shows **no** "Open" hint; clicking selects
+      it and fills the versions panel on the right. Midterm: Algebra v1's card shows its
+      rejection reason.
+- [ ] 2.13 Click **New exam** → **Algebra 11**. The builder opens (navbar Back present).
+- [ ] 2.14 Exam details: name `Round 3 Quick Check`; **How long students get** `2` (the hint
+      says 1 to 480); Student instructions tab: `Two minutes. Answer what you can.`; Teacher
+      notes tab: `Round-3 timing check.`
+- [ ] 2.15 **Choose questions** tab → **Add from the bank** → search `Round 3` → **Add** all
+      four → **Done**. Points 40 / 20 / 20 / **10**: the sum reads 90 and **Create exam is
+      disabled**. Change the last to 20 → enabled. Click **Move up** on the last row and
+      **Move down** on the first; **Remove** one and add it back. The edited question shows
+      "The bank has a newer version" → **Use the newer version**.
+- [ ] 2.16 **Compose automatically** tab: **Add a topic** `Round 3`, Hard `20` → **Compose
+      the exam** → a report naming the shortfall, **nothing created**. Change to Easy `2` →
+      composes. Go back to Choose questions and keep your manual paper.
+- [ ] 2.17 **Create exam** → "Saved." and the Exams list shows `Round 3 Quick Check` with a
+      six-digit id starting `1011` and a DRAFT chip. Id: ______
+- [ ] 2.18 Open it again: change duration to `0` → refused; `481` → refused; empty the name
+      → refused; back to `2`. **Submit for approval** → the chip reads PENDING_APPROVAL.
+- [ ] 2.19 Select Midterm: Algebra → **Edit** on v2 → the builder says it is making a new
+      version (v3); **Save draft**; the list shows v2 still APPROVED and v3 DRAFT. Leave v3.
 
 ---
 
-## Part D — Situations catalogue (each provoked once)
+## Part 3 — Rina decides, Dana releases, students sit it (35 min)
 
-| Area | Situation | Expected |
-|---|---|---|
-| Login | wrong password / locked out / server down / dead-socket recovery / duplicate session | generic sentence · lockout sentence · disabled with Reconnect · recovers in place · refused |
-| Codes | malformed, unknown, not open yet (`5164`), closed (`4821`), not enrolled, already handed in | the six sentences, each on the code field or the identity field as appropriate |
-| Identity | empty ID, another student's ID | required sentence · mismatch sentence, no attempt started |
-| Paper | change an answer repeatedly; reconnect banner (server restart mid-attempt); autosave failure indicator | one write per question after the pause; banner then resume with answers; "Not saved yet, retrying" |
-| Bank | duplicate answers, no correct, empty stem, delete referenced, delete free, edit while locked, stale save | refusal sentences · blocked dialog naming exams · soft delete · read-only banner · "Somebody else edited" |
-| Builder | Σ ≠ 100, duration 0 / 481, empty name, no questions, infeasible auto-compose, edit an approved version | blocked · refused · refused · cannot submit · shortfall report, nothing created · new version |
-| Approvals | reject without reason; approve own (dual hat); resubmit while pending | refused · allowed with note · superseded notice |
-| Releases | window rules, code rules, cancel scheduled, close live, cancel live (absent), monitor a closed one | complaints · 4 alphanumerics · gone · Time Up for students · no such control · frozen counts |
-| Monitor | extend by 1 and by 480, attention, C-4 flag | students' clocks grow; counts stay derived |
-| Grading | score 101 / -1, empty reason, approve twice | refused · refused · idempotent |
-| Bot | empty, too long, too fast, inactive, not enrolled, locked, cross-course notice, provider down (unplug internet) | sentences; provider down → the friendly S-32 sentence, never a stack trace |
-| Notifications | all ten types arrive live: APPROVAL_REQUESTED / APPROVED / REJECTED / SUPERSEDED, GRADE_PUBLISHED, TIME_EXTENDED, BOT_SOURCE_CHANGED, RELEASE_OPENING_SOON, INTEGRITY_ALERT, GRADING_DUE | each seen once in Part C |
-| Print | results, checked exam, reports | chrome gone, Exit print view present |
-| Theme | light / dark / system, each palette | every window follows |
-| Sessions | sign out with an editor open; close the window with an attempt open | locks released; the attempt continues on the server and resumes on re-entry |
+**Second window: `rina.barak` / `demo123`** (keep Dana's window open)
+- [ ] 3.1 The bell shows a badge; open it: **APPROVAL_REQUESTED** for Round 3 Quick Check.
+      Dashboard card "Waiting for you" counts it.
+- [ ] 3.2 Rail **Approvals**: the queue lists Round 3 Quick Check and Midterm: Calculus. Open
+      Round 3: the paper as a student sees it, the "Teacher only" panel with Dana's note,
+      the "Answer key" panel.
+- [ ] 3.3 Click **Send back** with an empty reason → refused. Reason `Swap the last two
+      questions.` → **Send back**.
+
+**Dana's window**
+- [ ] 3.4 Her bell: **APPROVAL_REJECTED**; Exams → Round 3's card shows the reason and the
+      chip REJECTED. **Edit** → the builder opens v2 → move the last row up → **Save draft** →
+      **Submit for approval**.
+
+**Rina's window**
+- [ ] 3.5 The queue shows Round 3 **v2** only; her bell has **APPROVAL_SUPERSEDED** for v1.
+      Open v2 → **Approve** → "Approve this exam?" → **Approve**. Also open Midterm:
+      Calculus → Approve. Queue: "Nothing waiting".
+- [ ] 3.6 Dana's window, without touching it: bell **APPROVAL_APPROVED**, and the Exams chip
+      is already APPROVED.
+
+**Dana's window: Releases** (rail)
+- [ ] 3.7 Rows: 5164 Scheduled, 2075 Live with participant counters, 4821 and 7390 Closed.
+- [ ] 3.8 **Release an exam**. The "Approved exam" picker offers only approved versions
+      (Round 3 v2, Midterm: Algebra v2, Midterm: Calculus v1).
+- [ ] 3.9 Pick Round 3 v2. Exam code: type `R3Q` → refused (four characters); `R3Q!` → refused;
+      click **Generate for me** → four letters/digits appear; overwrite with `R3QC`. Set
+      Closes **before** Opens → a complaint appears; set Opens now and Closes now + 6 minutes.
+      **Release it** → "Read this code out" → **Copy code** → **Done**. The row is **Live**.
+- [ ] 3.10 **Release an exam** again: Midterm: Algebra v2, Opens now + 20 minutes, Closes
+      + 40 → **Scheduled**. On the row click **Cancel release** → "Cancel this release?" →
+      **Cancel it** → gone. (A Live row has **Close early**, never Cancel.)
+
+**Second window: sign Rina out, sign in `maya.levi` / `demo123`**
+- [ ] 3.11 Dashboard: "Your courses" lists three; in the **Take an exam** card type `R3QC` →
+      **Enter** → the Take Exam screen opens as **"Confirm your exam"** with the code shown
+      read-only and **Confirm and continue** already enabled. Click **Back to my dashboard**;
+      do it again; this time **Confirm and continue**.
+- [ ] 3.12 "Confirm it is you": the summary says Round 3 Quick Check, 2 minutes, 4 questions.
+      Click **Back** → you are on the code step with the code still there → forward again.
+      ID `385612098` (Noam's) → refused on the field, no clock. ID `374301851` → the paper.
+- [ ] 3.13 The countdown is running. Click one answer on question 1 → the indicator shows
+      **Saving** then **All changes saved**; the chip for question 1 changes. Use **Next** /
+      **Previous** and the chips. **Do not hand in.**
+
+**Third window: `omer.katz` / `demo123`, ID `361489206`**
+- [ ] 3.14 Take Exam → `R3QC` → Continue → ID → the paper. Answer all four. **Hand in** → the
+      dialog shows the answer grid, the remaining time and the note about unanswered
+      questions → **Keep working** once → **Hand in** again → **Hand in** → the **Handed in**
+      screen: time, minutes, summary, one button **Back to my dashboard**. Enter `R3QC`
+      again → "already handed in".
+
+**Dana's window: Live Monitor** (rail)
+- [ ] 3.15 Pick Round 3 Quick Check: Maya **Started** with a countdown, Omer **Handed in**;
+      counts Started 2 / Handed in 1 / Timed out 0.
+- [ ] 3.16 Click on Maya's window, then on another window for two seconds, then back: the
+      monitor row shows "Her exam window last lost focus at …"; Maya's screen shows nothing.
+- [ ] 3.17 Set the spinner to **1** and click **Add time**: on Maya's screen the countdown
+      chip flashes, "+1:00" floats up, a toast names Dana Cohen; her bell has
+      **TIME_EXTENDED**.
+- [ ] 3.18 Wait. The chip turns amber, then red, then at zero Maya's screen is taken over by
+      **Time is up** — no confirmation, the summary, one button. The monitor row reads
+      **Timed out**; counts 2 / 1 / 1. Dana's bell: **GRADING_DUE**. Within a few minutes
+      the Releases row is **Closed**.
+- [ ] 3.19 Maya: **Back to my dashboard**. Enter `R3QC` → "already handed in".
 
 ---
 
-## Part F — Interactions between roles (every pair, seen from both sides)
+## Part 4 — Grade and publish (15 min)
 
-Every row is one person doing something and **another role seeing the effect without a
-refresh**, in two windows open at the same time. Part C exercises each once; this table is the
-checklist that says who watches what, so none is assumed. Tick the row only when the consumer's
-window changed **by itself**.
+**Dana's window: Grading** (rail)
+- [ ] 4.1 "Waiting for you" lists Round 3 Quick Check; open it: two rows with their **Auto**
+      scores (rows, not a loading skeleton).
+- [ ] 4.2 Select Maya → **Change score…**: score `101` → refused; empty reason → refused;
+      score `40`, reason `Method credit`, comment `Well tried under time pressure` → save →
+      the row shows the adjusted marker.
+- [ ] 4.3 **Select all** → **Approve selected**.
+- [ ] 4.4 **Results** (rail) → Round 3 → the sitting: toggle histogram / table; stat cards
+      (mean, median, σ, min, max, pass rate at ≥ 55, deciles); the table has attempt status
+      and minutes. Print layout on → chrome disappears → **Exit print view**.
+- [ ] 4.5 Results also lists Midterm: Algebra → 4821: `omer.katz` Timed out, 75 minutes.
+- [ ] 4.6 Dashboard → **Class average** now shows Round 3's mean.
 
-| # | Producer (window 1) does | Consumer (window 2) must see, live | Where | Step |
-|---|---|---|---|---|
-| F1 | Teacher submits an exam for approval | Coordinator: bell APPROVAL_REQUESTED, dashboard "Waiting for you" +1, queue row | Approvals | 16–17 |
-| F2 | Coordinator sends it back with a reason | Author: bell APPROVAL_REJECTED, the reason on the version card, chip REJECTED | Exams | 18 |
-| F3 | Author resubmits a new version | Coordinator: queue shows only the new version, bell APPROVAL_SUPERSEDED | Approvals | 19 |
-| F4 | Coordinator approves | Author: bell APPROVAL_APPROVED, chip APPROVED, Releases now offers it | Exams, Releases | 19–20 |
-| F5 | Teacher schedules a release ≤ 30 min ahead | Every enrolled student: bell RELEASE_OPENING_SOON, dashboard next-exam hint | Student dashboard | 23 |
-| F6 | Teacher hands out a code (orally) | Student enters it; the code is nowhere on any student screen | Take Exam | 22, 24 |
-| F7 | Student enters her ID | Teacher's monitor: the row appears Started with a countdown; dashboard "Sittings in progress" counts her | Live Monitor, dashboard | 24, 27 |
-| F8 | Student saves answers | Monitor: her row stays live; on a reconnect the answers are there | Live Monitor | 24 |
-| F9 | Teacher adds time | Student: chip flash, "+n:00", toast naming the teacher, bell TIME_EXTENDED; the monitor's close time agrees | both | 27 |
-| F10 | Student alt-tabs away 2 s | Monitor: attention text and count on her row; **nothing** on hers | Live Monitor | 27 |
-| F11 | Student opens another course's bot mid-exam and continues | Teacher: bell INTEGRITY_ALERT naming her; monitor row flag "Opened another course's study bot at …" | both | 38 |
-| F12 | Student hands in | Monitor: row Handed in, counts move; dashboard "Submitted" count | Live Monitor | 25 |
-| F13 | Time runs out for a student | Student: Time Up takeover; monitor row Timed out; counts frozen; teacher's bell GRADING_DUE | both | 28 |
-| F14 | Teacher closes a sitting early | Every live student: Time Up; Releases row Closed; grading queue gains it | both | 39 |
-| F15 | Teacher approves grades | Student: bell GRADE_PUBLISHED, My Grades gains the card (teacher's name + note), checked exam openable; **before** approval the student sees nothing | My Grades | 29–30 |
-| F16 | Teacher overrides a score with a justification | Student sees the new score, the "Reviewed by your teacher" marker and the comment; **never** the justification | My Grades | 29–30 |
-| F17 | Teacher A opens a question editor | Teacher B (same course): "Editing … A" badge on the row, read-only on open; clears when A closes, saves, signs out or drops | Question Bank | 33 |
-| F18 | Teacher A edits an exam version | Teacher B / coordinator opening it: lock banner, read-only | Exam builder / preview | 15 (+ two windows) |
-| F19 | Teacher A changes a bot source | Co-teacher B: bell BOT_SOURCE_CHANGED per change; the list updates | Bot manager | 34 |
-| F20 | Teacher A holds a source editor | Co-teacher B opening it: lock banner | Bot manager | 34 |
-| F21 | Teacher toggles the bot inactive / active | Student: the inactive sentence, then answers again on the same screen | Study Bot | 36 |
-| F22 | Teacher creates a bot for a course that has none | A second teacher of that course sees the same bot, not a Create button | Bot manager | 35 |
-| F23 | Students use the bot | Teacher's Bot activity: totals and frequent questions rise; no names | Bot activity | 35, 37 |
-| F24 | Coordinator who also teaches submits her own exam | Her own queue shows it badged "You wrote this one"; approval allowed and noted | Approvals | 40 |
-| F25 | Teacher marks a sitting | Principal's Data → Results and Reports read the stored statistics; nothing on the principal's screens can change them | Data, Reports | 41 |
-| F26 | Any user signs in twice | The second sign-in is refused until the first signs out or drops | Login | 43 |
-| F27 | Any user signs out holding a lock or mid-attempt | The lock clears for others; the attempt continues on the server and resumes on re-entry | bank / Take Exam | 33, D |
-| F28 | Another teacher runs an execution of an exam Dana wrote | Dana's Results lists that sitting too (she wrote it); the executing teacher grades it | Results, Grading | 31 (Algebra Midterm `4821` / `2075`) |
-
-Run F17–F20 with the two windows side by side and watch the badge appear and clear; run F7–F14
-with the student's window and the monitor side by side. A row that needed a refresh, a
-re-navigation or a sign-out/in to show its effect is a note (NFR-18).
+**Maya's window, untouched since 3.19**
+- [ ] 4.7 The bell badge went up on its own: **GRADE_PUBLISHED**. **My Grades** shows a new
+      card: course, Passed / Below the pass mark, `Round 3 Quick Check`, **Teacher: Dana
+      Cohen**, the score 40, the date, **"Reviewed by your teacher"**, and the note "Well
+      tried under time pressure". The justification "Method credit" appears **nowhere**.
+- [ ] 4.8 **Open paper →**: "Teacher: Dana Cohen" under the title, attempt status Timed out
+      with the minutes, "Your teacher's note", and every question with your answer / the
+      correct answer / Correct · Wrong · Not answered and points. Print layout → **Exit print
+      view**. Navbar **Back** → My Grades.
+- [ ] 4.9 Her Midterm: Algebra card (seeded) also shows Teacher: Dana Cohen and a note.
+- [ ] 4.10 The term-average ring: the filled arc sits exactly on the grey track and ends where
+      the number says.
+- [ ] 4.11 Bell panel: click one row → it opens My Grades; **Mark all read** → badge gone.
+- [ ] 4.12 Omer's window: same push; his card and paper.
 
 ---
 
-## Part E — Requirement coverage map (id → step)
+## Part 5 — Michal, the dual hat (8 min) — `michal.sharon` / `demo123`
 
-F1.1 3 · F1.2 5, 40 · F1.3 43 · F1.4 33 · F1.5 2, 4 · F2.1 7 · F2.2 7 · F2.3 6, 8 · F2.4 6 ·
-F2.5 9 · F2.6 33 · F3.1 11, 14, 40 · F3.2 11 · F3.3 12 · F3.4 13 · F3.5 15 · F3.6 10, 19 ·
-F4.1 17 · F4.2 18–19 · F4.3 40 · F5.1 20 · F5.2 21 · F5.3 21–22 · F5.4 20, 28 · F5.5 23, 39 ·
-F6.1 24, 26 · F6.2 24, 28 · F6.3 24 (+ two-machine 6) · F6.4 28, 39 · F6.5 28 · F6.6 structural
-(`CorrectnessLeakGuardTest`) · F6.7 25 · F6.8 38 · F6.9 25 · F6.10 25 · F7.1 27 · F7.1b 27 ·
-F7.2 27 · F7.3 28, 39 · F8.1 29 · F8.2 29 · F8.3 29 · F8.4 30 · F8.5 31 · F9.1 30 · F9.2 31 ·
-F9.3 41 · F9.4 41 · F10.0 33 · F10.1 33 · F10.2 33 · F10.3 structural (server-tested) · F10.4 34 ·
-F11.1 16, 18, 19, 23, 27, 28, 38 · F11.2 B2 · F11.3 27 · F12.1 34–35 · F12.2 34 · F12.3 34 ·
-F12.4 34, 36 · F12.5 37 · F12.6 (keys: server.properties only) · F12.7 37 · F12.8 structural
-(`BotIsolationGuardTest`) · F12.9 37 · F12.10 37 · F12.11 35 · F13.1 1 · F13.2 1 · F13.3 1 ·
-F13.4 2 · F14.1 1 · F14.2 Part A · S-1..S-4 seed · S-5 26 · S-6 35 · S-7 41 · S-8 7 · S-10 13 ·
-S-11 11 · S-12 11 · S-13 7 · S-14 13 · S-15 26, D · S-16 21 · S-17 22 · S-18 24 · S-19 28 ·
-S-20 27 · S-21 28 · S-22 29 · S-23 29–30 · S-24 30 · S-25 31 · S-26 41 · S-27..S-29 34 · S-30 35 ·
-S-31 36 · S-32 37 · S-33 37 · S-34 35 · S-35 31 · S-36 30 · S-37 41 · S-38 3 · S-44 44 ·
-C-1 21 · C-2 8, 11, 15 · C-3 29 · C-4 38 · C-5 31, 41 · C-7/C-8 7 · NFR-16 43 · NFR-17 Part A ·
-NFR-18 19, 30 · NFR-21 5, 42, 44. The network ids (S-40, S-42, NFR-15, F13.x across machines,
-F6.3 by cable) live in the two-machine document.
+- [ ] 5.1 Her rail has **Study Bot** (teacher) and **Approvals** (coordinator).
+- [ ] 5.2 Exams → **New exam** → Databases 22 → name `Self check`, 5 minutes, add three
+      questions from the bank at 40 / 30 / 30 → **Create exam** → **Submit for approval**.
+- [ ] 5.3 Approvals: the queue shows Self check with the badge **"You wrote this one"**. Open
+      → the self-approval note → **Approve** → allowed.
+
+---
+
+## Part 6 — Avi and Tamar: locks and the bot manager (20 min)
+
+**Window 1: `avi.mizrahi` / `demo123` · Window 2: `tamar.shani` / `demo123`**
+- [ ] 6.1 Avi: Question Bank → Java 21 → select **21003** → **Edit** (leave it open). Tamar:
+      Question Bank → Java 21 → the 21003 row shows **"Editing … Avi Mizrahi"**; she opens it
+      → read-only with a lock banner.
+- [ ] 6.2 Avi: **Cancel** (close the editor). Tamar's badge clears by itself; she can Edit.
+      She closes.
+- [ ] 6.3 Avi opens 21003 again and **signs out** while it is open. Tamar's badge clears.
+      Sign Avi back in.
+- [ ] 6.4 Avi: **Study Bot** (rail) → Java 21: the bot's name, the toggle **Students can use
+      this bot**, Information sources (5). **Add text** → paste a paragraph about Java
+      collections → saved and listed. **Add a file** → a small PDF → "Reading that file on
+      the server" → listed. Add a Word file → listed. Rename any text file to `.pdf` and add
+      it → a sentence explains it could not be read.
+- [ ] 6.5 Avi: **Edit** on the text source (leave it open). Tamar: Study Bot → Java 21 →
+      Edit the same source → lock banner. Avi saves. Tamar's bell: **BOT_SOURCE_CHANGED** for
+      each change so far. Avi: **Remove** one source → "Remove this source?" → **Remove it**.
+- [ ] 6.6 Avi: switch **Students can use this bot** off. (Part 7 checks the student side.)
+- [ ] 6.7 Avi: **Bot activity**: Questions asked, Busiest day, Asked most often, the 30-day
+      chart. **No student name anywhere.** Navbar Back.
+- [ ] 6.8 Dana's window: Study Bot → two bots (Algebra, Calculus), one per course; **Create
+      the study bot** appears only for a course with none. **If you can make a second bot for
+      one course, write the exact clicks (U-14).**
+
+---
+
+## Part 7 — Maya and the bot, C-4, close early (18 min) — call the lead first (live keys)
+
+**Maya's window**
+- [ ] 7.1 **Study Bot** (rail): the Course picker offers Algebra 11, Java 21, Databases 22.
+- [ ] 7.2 Pick Java 21 → ask anything → the bot-is-off sentence (Avi switched it off). Avi
+      switches it on. Ask again on the same screen → answered.
+- [ ] 7.3 Pick Databases 22 → `What does a LEFT JOIN return when there is no match?` → "The
+      bot is thinking", then a grounded answer. `Who won the 2022 World Cup?` → the polite
+      out-of-scope sentence. Send an empty question → refused. Send three questions within a
+      few seconds → the "too fast" sentence.
+- [ ] 7.4 **Past conversations** → both are listed with times → **Reopen** one → continue it
+      with one more question. **New conversation**.
+- [ ] 7.5 Take Exam → `2075` → Continue → ID `374301851` → the seeded Algebra paper. Answer
+      one. Leave it open.
+- [ ] 7.6 Study Bot → **Algebra 11** → ask → the locked sentence naming the exam, and the box
+      is **still usable**. Pick **Databases 22** → ask → "You are taking an exam" notice →
+      **Continue and notify** → answered; ask again → no second notice.
+- [ ] 7.7 Dana's window: bell **INTEGRITY_ALERT** naming Maya; Live Monitor → 2075 → Maya's
+      row shows "Opened another course's study bot at …".
+- [ ] 7.8 Dana: **Releases** → 2075 → **Close early** → "Close it now". Maya's window: **Time
+      is up**. Releases row Closed; counts frozen; Grading gets 2075 (**GRADING_DUE**).
+- [ ] 7.9 Maya: Study Bot → Algebra 11 → ask on the same screen → answered (the lock ended
+      with the exam).
+- [ ] 7.10 Dana: Grading → 2075 → approve Maya's row. Maya's bell.
+
+---
+
+## Part 8 — Refusals with the other students (8 min)
+
+**Second window: `noam.peretz` / `demo123`**
+- [ ] 8.1 Take Exam: `2075` → "not enrolled" on the code field. `5164` → "not open yet".
+      `ZZZZ` → "unknown code". `12` → "Codes are 4 letters or digits."
+- [ ] 8.2 His dashboard lists Calculus 12 and Java 21 only.
+
+**`omer.katz`**
+- [ ] 8.3 My Grades → Midterm: Algebra (seeded) → Open paper: **Timed out**, four questions
+      **Not answered**, Teacher: Dana Cohen, his note.
+
+---
+
+## Part 9 — The principal (12 min) — `principal.avia` / `demo123`
+
+- [ ] 9.1 Rail: Dashboard, Data, Reports, Settings. Nothing on any screen adds, edits,
+      deletes or approves.
+- [ ] 9.2 **Data**: segments **Questions / Exams / Results**; type `Round 3` in the filter;
+      pick a course; clear. The Questions segment with no filter shows the "too many" hint
+      and pages.
+- [ ] 9.3 **Reports**: pick Mathematics; **By teacher**, **By course**, **By student** in turn;
+      the cards and the "Closed sittings" table include Round 3 Quick Check with the numbers
+      from 4.4. Print layout → exit. Repeat for Computer Science.
+
+---
+
+## Part 10 — Settings, shell, sessions (10 min) — any account
+
+- [ ] 10.1 **Settings**: Light, Dark, System (it says what it resolved to); each accent
+      palette; every open window follows at once; **Reset to defaults**.
+- [ ] 10.2 Profile menu (top right): the theme radios and **Sign out**.
+- [ ] 10.3 Resize the window small and large on three different screens: nothing overlaps.
+- [ ] 10.4 With `dana.cohen` signed in, start another client and sign in as `dana.cohen` →
+      refused with the already-signed-in sentence. Sign the first out → the second succeeds.
+- [ ] 10.5 Looking back over the whole walk: every refusal was a sentence, never a code;
+      every wait showed a working state; no refresh button exists anywhere.
+
+---
+
+## After the walk
+
+Paste this file back with the X's and your notes. Every note becomes a numbered register entry
+with a ruling; the ticked steps flip the matching acceptance cases to passed on screen.
+
+---
+---
+
+# Appendices — the "nothing forgotten" backstop
+
+## Appendix A — Every screen and every control, per role
+
+Walk each screen top to bottom and press everything not already pressed above.
+
+**Server console:** address + candidate picker (LAN IPv4, other adapters listed) · fingerprint
+line · DB status · connected clients (live) · log tail Pause / Copy / Clear · Load demo data if
+missing (UNCHANGED when seeded) · Reload demo data (asks first) · health panel.
+
+**Connect / Login:** discovery picker (name, address, fingerprint; pin remembered) · change
+server → address, port, Connect, Back to the server list, Look for servers again · username,
+password, Sign in · status row (Connected · change server / Disconnected · Reconnect).
+
+**Shell, every role:** rail (collapse/expand, tooltips) · breadcrumbs · navbar Back on every
+non-rail screen · bell (badge, rows with icon and time, click-through, mark one, Mark all read,
+"Nothing yet") · toasts · profile menu (theme radios, Sign out) · reconnect banner with Retry.
+
+**Student:** Dashboard (Your courses; Take an exam card with Enter) · Take Exam (code step with
+Back to my dashboard; confirmation with Use a different code; identity step with Back; the
+paper: countdown, progress, save indicator, chips, options, Previous / Next, Hand in dialog
+with grid, Keep working / Hand in; Handed in and Time is up screens with one button) · My
+Grades (ring, next exam, cards with Teacher / note / Reviewed marker / Open paper) · Checked
+exam (print toggle, Exit print view) · Study Bot (Course picker, ask box, Send, thinking, Past
+conversations, New conversation, integrity notice Continue and notify / Not now) · Bot history
+(Reopen) · Settings.
+
+**Teacher:** Dashboard (Sittings in progress, Today and next, Scheduled ahead, Awaiting
+grading, Class average, Your exams, each with a link) · Question Bank (course, topic,
+difficulty, search, Clear filters, sortable columns, Editing column, detail pane, Version
+history / Hide history, Edit, Delete question, Add question) · Question editor (stem, four
+answers with the correct radio, Topic, Difficulty, Choose image / remove, Add question / Save
+as a new version, Cancel with Leave without saving?, lock banner, stale and gone dialogs) ·
+Exams (rows, version chips, reason cards, Edit, New exam menu) · Exam builder (details,
+duration, two text tabs, Choose questions with Add from the bank / search / Add / Done,
+Points, Move up / down, Remove, newer-version badge, Compose automatically with Add a topic /
+counts / Compose the exam, Create exam / Save draft, Submit for approval) · Releases (chips,
+counters, Monitor, Cancel release, Close early, Release an exam dialog with picker / code /
+Generate for me / Opens / Closes / Release it, Read this code out with Copy code) · Live
+Monitor (chooser, counts, rows, attention text, bot flag, Add time spinner) · Grading (queue,
+table, Select all, Approve selected, Change score… with reason and comment) · Results (exam
+rail, execution picker, histogram / table, stat cards, print) · Study Bot manager (course
+picker, Create the study bot, active toggle, sources, Add a file, Add text, Edit, Remove, Bot
+activity) · Bot activity.
+
+**Coordinator:** the teacher's plus Approvals (queue, "You wrote this one", preview with Teacher
+only and Answer key panels, Approve, Send back with reason, Keep looking).
+
+**Principal:** Dashboard · Data (Questions / Exams / Results, filter, course) · Reports
+(subject, By teacher / By course / By student, cards, Closed sittings, print).
+
+## Appendix B — Situations, each provoked once
+
+Login: wrong password; lockout; server down; recovery in place; duplicate session · Codes:
+malformed, unknown, not open, closed, not enrolled, already handed in · Identity: empty, someone
+else's · Paper: repeated answer changes; server restart mid-attempt (banner, resume); autosave
+retry indicator · Bank: duplicate answers, none correct, empty stem, delete referenced, delete
+free, edit while locked, stale save · Builder: sum ≠ 100, duration 0 / 481, empty name, no
+questions, infeasible auto-compose, edit an approved version · Approvals: reject without
+reason, approve own, resubmit while pending · Releases: window rules, code rules, cancel
+scheduled, close live · Monitor: extend 1 and 480 · Grading: score out of range, empty reason,
+approve twice · Bot: empty, too long, too fast, inactive, not enrolled, locked, cross-course
+notice, provider unreachable (unplug the internet → the friendly sentence) · Notifications: all
+ten types seen live · Print: results, checked exam, reports · Theme: every mode and palette ·
+Sessions: sign out with an editor open; close a window mid-attempt and re-enter.
+
+## Appendix C — Interactions between roles (tick only when the other window changed by itself)
+
+| # | One person does | The other role sees, live | Step |
+|---|---|---|---|
+| 1 | Teacher submits an exam | Coordinator: bell, dashboard count, queue row | 3.1 |
+| 2 | Coordinator sends it back | Author: bell, reason on the card, chip | 3.4 |
+| 3 | Author resubmits | Coordinator: only the new version, SUPERSEDED bell | 3.5 |
+| 4 | Coordinator approves | Author: bell, chip, Releases offers it | 3.6–3.8 |
+| 5 | Teacher schedules ≤ 30 min ahead | Students: RELEASE_OPENING_SOON | 3.10 |
+| 6 | Teacher reads out a code | Student enters it; it shows on no student screen | 3.9, 3.11 |
+| 7 | Student enters her ID | Monitor row Started; dashboard counts her | 3.12, 3.15 |
+| 8 | Teacher adds time | Student's chip, floater, toast, bell | 3.17 |
+| 9 | Student loses window focus | Monitor attention text; nothing on hers | 3.16 |
+| 10 | Student uses another course's bot mid-exam | Teacher's INTEGRITY_ALERT; monitor flag | 7.6–7.7 |
+| 11 | Student hands in | Monitor Handed in; counts | 3.14–3.15 |
+| 12 | Time runs out | Student Time is up; monitor Timed out; GRADING_DUE | 3.18 |
+| 13 | Teacher closes early | Students Time is up; row Closed; grading queue | 7.8 |
+| 14 | Teacher approves grades | Student's bell, card with teacher and note; nothing before | 4.3, 4.7 |
+| 15 | Teacher overrides with a reason | Student sees score, marker, comment; never the reason | 4.2, 4.7 |
+| 16 | Teacher A opens a question editor | Teacher B: badge, read-only; clears on close/sign-out | 6.1–6.3 |
+| 17 | Teacher A edits a bot source | Co-teacher: bell per change; lock banner while open | 6.5 |
+| 18 | Teacher toggles the bot | Student: off sentence, then answers again | 6.6, 7.2 |
+| 19 | Students use the bot | Teacher's activity screen rises; no names | 6.7, 7.3 |
+| 20 | Dual-hat coordinator submits her own exam | Her queue badges it; approval allowed and noted | 5.2–5.3 |
+| 21 | Teacher marks a sitting | Principal's Data and Reports read it; cannot change it | 9.2–9.3 |
+| 22 | A user signs in twice | Second refused until the first leaves | 10.4 |
+| 23 | A user signs out holding a lock | The lock clears for others | 6.3 |
+| 24 | Another teacher runs an exam Dana wrote | Dana's Results lists that sitting | 4.5 |
+
+## Appendix D — Requirement coverage (course PDF ids → step)
+
+F1.1 1.4 · F1.2 2.2, 5.1, 8.2 · F1.3 10.4 · F1.4 6.3 · F1.5 1.1–1.3, 1.5–1.6 · F2.1 2.6–2.8 ·
+F2.2 2.7 · F2.3 2.5, 2.9 · F2.4 2.3–2.5 · F2.5 2.10 · F2.6 6.1 · F3.1 2.14–2.18, 5.2 · F3.2 2.15 ·
+F3.3 2.16 · F3.4 2.17 · F3.5 2.19 · F3.6 2.12, 3.6 · F4.1 3.2 · F4.2 3.3–3.5 · F4.3 5.3 ·
+F5.1 3.8 · F5.2 3.9 · F5.3 3.9 · F5.4 3.7, 3.18 · F5.5 3.10, 7.8 · F6.1 3.11–3.12, 8.1 ·
+F6.2 3.13, 3.18 · F6.3 3.13 (+ two-machine) · F6.4 3.18, 7.8 · F6.5 3.18 · F6.6 structural ·
+F6.7 3.14, 3.19 · F6.8 7.6 · F6.9 3.14 · F6.10 3.14 · F7.1 3.17 · F7.1b 3.16 · F7.2 3.15 ·
+F7.3 3.18, 7.8 · F8.1 4.1 · F8.2 4.3 · F8.3 4.2 · F8.4 4.7 · F8.5 4.4 · F9.1 4.7–4.8 · F9.2 4.4–4.5 ·
+F9.3 9.1–9.2 · F9.4 9.3 · F10.0 6.1 · F10.1 6.2–6.3 · F10.2 6.1 · F10.3 structural · F10.4 6.5 ·
+F11.1 3.1, 3.4, 3.5, 3.10, 3.17, 3.18, 7.7 · F11.2 4.11 · F11.3 3.17 · F12.1 6.4, 6.8 · F12.2 6.4 ·
+F12.3 6.5 · F12.4 6.6, 7.2 · F12.5 7.3 · F12.6 (server.properties only) · F12.7 7.3 ·
+F12.8 structural · F12.9 7.4 · F12.10 7.4 · F12.11 6.7 · F13.1 0.1–0.2 · F13.2 console ·
+F13.3 0.4 · F13.4 1.1–1.3 · F14.1 0.1, 0.3 · F14.2 0.2 · S-5 2.11, 8.1 · S-6 6.8 · S-7 9.1 ·
+S-8 2.7 · S-10 2.17 · S-11 2.15 · S-12 2.14 · S-13 2.8 · S-14 2.18 · S-15 8.1 · S-16 3.9 ·
+S-17 3.9 · S-18 3.12 · S-19 3.18, 4.5 · S-20 3.17 · S-21 3.18 · S-22 4.2 · S-23 4.2, 4.7 ·
+S-24 4.7 · S-25 4.4 · S-26 9.3 · S-27..S-29 6.4 · S-30 6.8 · S-31 7.2 · S-32 7.3 · S-33 7.4 ·
+S-34 6.7 · S-35 4.5 · S-36 4.8 · S-37 9.3 · S-38 1.4 · S-44 10.5 · C-1 3.9 · C-2 2.9, 2.19, 3.4 ·
+C-3 4.3 · C-4 7.6 · C-5 9.3 · C-7/C-8 2.6 · NFR-16 10.4 · NFR-17 0.2 · NFR-18 3.6, 4.6, 4.7 ·
+NFR-21 2.1, 10.1, 10.5. Network ids (S-40, S-42, NFR-15, F13.x across machines, F6.3 by cable)
+are in the two-machine file. F6.6, F10.3 and F12.8 are structural and covered by guard tests.

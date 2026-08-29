@@ -332,3 +332,14 @@ five new entries, one reopening.
 ## Closed entries
 
 *(none yet — an entry closes when Naji has seen it fixed on screen)*
+### U-22 · FUNCTIONAL · the client warns of an "unusual server" after every rebuild
+**In Naji's words:** "for some reason when I open the client it's showing me that I'm connecting to an unusual server, which I think isn't true but not sure"
+**Restated:** the server's identity (`server-id.properties`) is kept beside the jar, which on a dev machine is `target\`; `clean package` empties `target\`, so every rebuild gave the server a new fingerprint and every client that had pinned the old one showed the mismatch warning ("now identifies itself as … but this computer connected to … before"). The warning was honest; the cause was the build.
+**Surface:** `ServerMain.configDirectory`. **Fix:** under a directory named `target` the id lives one level up (the project root), which a clean does not touch; the deliverable's beside-the-jar rule is unchanged. `ServerConfigDirectoryTest`.
+**Status:** `DONE` — pending eyes: rebuild twice, no warning the second time.
+
+### U-23 · FLOW · the manual files must be a human walkthrough, not an inventory
+**In Naji's words:** "we want these files to ALSO contain a walk-through with a guide, passwords, usernames, ids, what to do exactly to check everything, with [ ] to fill with X for things we checked, something human friendly not just machine friendly"
+**Fix:** both files rewritten walkthrough-first: who to be, what to click, what to see, a box per step, credentials and ids inline every time; the inventories, situations, interaction matrix and requirement map moved to appendices as the backstop.
+**Status:** `DONE`.
+
