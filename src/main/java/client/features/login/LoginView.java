@@ -93,6 +93,10 @@ public final class LoginView extends AbstractScreen {
 
     @Override
     protected Parent build() {
+        // The dispatcher is captured once, here, and this screen is cached for the life of
+        // the process ⚑. That is safe because a reconnect rebinds the dispatcher rather than
+        // replacing it (2026-08-29, manual round 2, U-17: it used to replace it, and this
+        // form went on writing to a socket the restarted server had already dropped).
         session = new LoginSession(dispatcher(), onFxThread())
                 .capsLockProbe(LoginView::probeCapsLock)
                 .onChange(this::render);

@@ -439,14 +439,14 @@ exactly. `extra_minutes = 0`.
 
 | student | attempt status | solving time (S-19) | auto | final | note |
 |---|---|---|---|---|---|
-| 15 lior.gabay | SUBMITTED | 45 min | 100 | 100 | all seven correct |
+| 15 lior.gabay | SUBMITTED | 45 min | 100 | 100 | all seven correct; teacher comment below |
 | 7 noa.friedman | SUBMITTED | 52 min | 90 | 90 | |
 | 9 shira.dahan | SUBMITTED | 61 min | 85 | 85 | |
 | 14 daniel.shapira | SUBMITTED | 58 min | 75 | 75 | |
 | 8 itay.regev | SUBMITTED | 68 min | 70 | 70 | |
-| 11 maya.levi | SUBMITTED | 70 min | 60 | 60 | |
+| 11 maya.levi | SUBMITTED | 70 min | 60 | 60 | teacher comment below |
 | 13 yael.azulay | SUBMITTED | 73 min | 45 | **55** | **Manual override**, see below — the only fail turned into a pass |
-| 10 omer.katz | **TIMED_OUT** | 75 min | 45 | 45 | Auto-submitted at expiry with four questions never reached — the S-19 "did not make it in time" row, and the one genuine fail |
+| 10 omer.katz | **TIMED_OUT** | 75 min | 45 | 45 | Auto-submitted at expiry with four questions never reached — the S-19 "did not make it in time" row, and the one genuine fail; teacher comment below |
 
 > **Every auto score above is reachable by this exam.** Exam 1 v2 is six 15-point questions plus
 > one worth 10, so the only totals auto-grading can produce are
@@ -461,6 +461,29 @@ exactly. `extra_minutes = 0`.
   are deliberately different people.
 - Reason: `Question 11011 has a correct solution with a sign error on the last line, so partial credit was given.`
 - Teacher comment to the student (S-22): `A clear improvement on inequalities. Worth revising the domain of definition.`
+
+**Teacher comments to the student (S-22)** ⚑ (added 2026-08-29, manual round 2):
+
+Four of these eight approved grades carry a comment and four do not, and both halves are
+deliberate. Until this round the dataset held **one** comment, `yael.azulay`'s above, and it
+rides the override — so the only way to see a note was to open the one grade a teacher had
+changed by hand, and `maya.levi`, the account `DEMO_DAY.md` §2.3 signs in as, opened her
+Algebra midterm to a card whose note line rendered as nothing. The three below are comments
+**without** an override, which is also the point: S-22 is not a consequence of S-23.
+
+| student | teacher comment |
+|---|---|
+| 15 lior.gabay | `Full marks with time to spare, so the harder practice set is the natural next step.` |
+| 11 maya.levi | `Solid on the basics, and the harder inequality questions are where to put the next round of practice.` |
+| 10 omer.katz | `Everything reached was correct, so pacing rather than the algebra is what to work on.` |
+
+`yael.azulay`'s is the fourth and is written once, under the override above, because that is
+where it is stored from. The four without a comment are `noa.friedman`, `shira.dahan`,
+`daniel.shapira` and `itay.regev`: **an empty note is a state the card has to render too**, and
+a sitting where every grade carries a comment demonstrates only half of what a student can open.
+
+**§9.2 stays comment-free.** Nothing in execution 2 is approved, so S-24 means no student can
+read any of it; a comment on a grade nobody can open would contradict the fixture it lives in.
 
 **Frozen `participation` JSON:** `{"started": 8, "finished": 7, "timed_out": 1}`
 
@@ -797,6 +820,22 @@ itself would have written on approval. Three things about it are deliberate:
   idempotency key is recipient + type + title and a third "Your grade for … is available" to a
   third student would be fine, but a repeat of either sentence to the same person would collapse
   the composite. This is the constraint the section warns about above, met rather than tripped.
+
+**`N-GRADE-MAYA` keeps the catalog's words now that `maya.levi` has a comment** (2026-08-29,
+manual round 2). §9.1 gives her a teacher comment this round, and `N-GRADE-YAEL`'s title reads
+"Your grade is available, including a teacher's comment", so the tidy-looking move is to say the
+same on hers. **It is not made.** Her title and body are `NotificationCatalog.gradePublished`
+*verbatim*, and that sentence carries no comment clause whether the approval it followed had one
+or not: `GradeApprovalService` composes the same words either way. Adding the clause would give
+the seed a notification the product cannot produce, which is the one property this row exists to
+have and the one `SeedLoadedDbContract` asserts on it in as many words. The comment is read where
+the product puts it, on the grade.
+
+`N-GRADE-YAEL`'s clause is seed-only copy written before the catalog had that sentence. It stays:
+its title is half the idempotency key, and rewording it would orphan the row on the next load. It
+is the string to revisit if the product ever composes a comment-aware body, and it is the reason
+`noa.friedman`, whose title makes no such promise, is one of the four §9.1 grades deliberately
+left without a comment.
 
 **Row count: 375 → 376.** One row in `notifications` (8 → 9) and nothing else moves.
 

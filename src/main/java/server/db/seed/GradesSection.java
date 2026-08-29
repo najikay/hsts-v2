@@ -32,6 +32,22 @@ import java.util.List;
  * <p>The reason is not decoration either: T-8.3 requires a change to carry an explanation, and
  * the seeded text is the one a reviewer will read on the grade-review screen.
  *
+ * <h2>Four of the eight approved grades carry a comment, and four do not</h2>
+ *
+ * <p>Added 2026-08-29 (manual round 2). Until then the only {@code teacher_comment} in the
+ * dataset was {@code yael.azulay}'s, which rides the override, so the demo student
+ * {@code maya.levi} opened her Algebra midterm and saw the note line render as nothing: S-22 was
+ * present in the schema, on the wire and on both screens, and absent from the one grade a
+ * reviewer actually opens. Three comments without an override now sit beside it
+ * ({@code lior.gabay}, {@code maya.levi}, {@code omer.katz}), which also separates the two
+ * things that used to be welded together here: a comment is not a consequence of a change of
+ * score. The other four stay empty on purpose, because "no note from the teacher" is a state
+ * the card has to render too and one sitting has to show both.
+ *
+ * <p>Execution 2 stays comment-free. Nothing there is approved, and S-24 means no student can
+ * read any of it; a comment on a grade nobody can open would be a row that contradicts the
+ * fixture it lives in.
+ *
  * <h2>Who approves, and why it is not the coordinator</h2>
  *
  * <p>§9's rules table names the <b>executing teacher</b>, {@code dana.cohen}, who released the
@@ -52,12 +68,20 @@ final class GradesSection implements SeedSection {
 
     private static final List<Sitting> SITTINGS = List.of(
             new Sitting("4821", true, "dana.cohen", List.of(
-                    new SeedGrade("lior.gabay", 100, null, null, null),
+                    // Three comments without an override, added 2026-08-29 (manual round 2).
+                    // Transcribed from §9.1's comment table, not composed here.
+                    new SeedGrade("lior.gabay", 100, null, null,
+                            "Full marks with time to spare, so the harder practice set is the "
+                                    + "natural next step."),
                     new SeedGrade("noa.friedman", 90, null, null, null),
                     new SeedGrade("shira.dahan", 85, null, null, null),
                     new SeedGrade("daniel.shapira", 75, null, null, null),
                     new SeedGrade("itay.regev", 70, null, null, null),
-                    new SeedGrade("maya.levi", 60, null, null, null),
+                    // The demo student (DEMO_DAY §2.3): hers is the grade a reviewer opens, and
+                    // without a comment on it the checked form's note line renders as nothing.
+                    new SeedGrade("maya.levi", 60, null, null,
+                            "Solid on the basics, and the harder inequality questions are where "
+                                    + "to put the next round of practice."),
                     // The one override in the seed. 45 fails, 55 passes: this row is what
                     // moves the frozen pass rate from 6/8 to 7/8.
                     new SeedGrade("yael.azulay", 45, 55,
@@ -69,7 +93,9 @@ final class GradesSection implements SeedSection {
                             // the only record that they differed.
                             "Question 11011 has a correct solution with a sign error on the last line, so partial credit was given.",
                             "A clear improvement on inequalities. Worth revising the domain of definition."),
-                    new SeedGrade("omer.katz", 45, null, null, null))),
+                    new SeedGrade("omer.katz", 45, null, null,
+                            "Everything reached was correct, so pacing rather than the algebra "
+                                    + "is what to work on."))),
 
             new Sitting("7390", false, null, List.of(
                     new SeedGrade("maya.levi", 100, null, null, null),

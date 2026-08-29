@@ -83,6 +83,10 @@ class SeedDocumentTest {
         document.notifications().forEach(row -> stored.add(row.title()));
         stored.add(document.manualOverride().reason());
         stored.add(document.manualOverride().teacherComment());
+        // §9.1's three standalone comments, added 2026-08-29 with manual round 2. Every one of
+        // them is a column value a student reads, so they belong in this sweep the way the
+        // override's two strings do.
+        document.teacherComments().forEach(row -> stored.add(row.comment()));
 
         // B-13. The document used to write these with em dashes and the loader stored the
         // house-rule form, so followsHouseRule was built to accept a comma, a period or a colon
@@ -319,6 +323,25 @@ class SeedDocumentTest {
         // §9.1's are approved and every one carries a final score.
         assertThat(real().grades(1)).allSatisfy(row ->
                 assertThat(row.finalScore()).isNotNull());
+    }
+
+    @Test
+    @DisplayName("§9.1's comment table parses, and the demo student is in it")
+    void teacherCommentsParse() {
+        // The grades table is read by position and this one is read by header shape, which is
+        // the only reason a second two-column table can sit in §9.1 beside the frozen stats
+        // without either being mistaken for the other.
+        List<SeedDocument.CommentRow> comments = real().teacherComments();
+
+        assertThat(comments).hasSize(3);
+        assertThat(comments).extracting(SeedDocument.CommentRow::student)
+                .as("the standalone three; yael.azulay's rides the override and is not here")
+                .containsExactly("lior.gabay", "maya.levi", "omer.katz")
+                .doesNotContain("yael.azulay");
+        // maya.levi is DEMO_DAY §2.3's sign-in account: her grade is the one a reviewer opens,
+        // and it was the empty note line that started this round.
+        assertThat(comments).allSatisfy(row ->
+                assertThat(row.comment()).doesNotContain("`").endsWith("."));
     }
 
     @Test

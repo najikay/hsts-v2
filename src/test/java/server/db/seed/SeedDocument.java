@@ -216,6 +216,19 @@ public final class SeedDocument {
      */
     public record OverrideRow(String reason, String teacherComment) { }
 
+    /**
+     * One row of §9.1's teacher-comment table, added 2026-08-29 with manual round 2.
+     *
+     * <p>{@code yael.azulay}'s comment is <b>not</b> here: it is written once, under the
+     * override bullets, and reaches this class through {@link #manualOverride()}. Two places
+     * for one sentence is how §9.1's reason drifted from the loader's under B-13, so the
+     * document keeps each string in exactly one place and the contract joins them.
+     *
+     * @param student the username the document's "11 maya.levi" reference resolves to
+     * @param comment the sentence the student reads on her own grade (S-22)
+     */
+    public record CommentRow(String student, String comment) { }
+
     /** §10's bot table. */
     public record BotRow(int number, String course, String name, boolean active) { }
 
@@ -504,6 +517,38 @@ public final class SeedDocument {
         }
         throw new IllegalStateException("§9.1 has no line starting with \"" + prefix
                 + "\". If the bullet was reworded, this parser changes in the same commit.");
+    }
+
+    /**
+     * §9.1's teacher comments, the free text a student reads on her own grade (S-22).
+     *
+     * <p>Picked out of §9.1 by <b>header shape</b> rather than by position, for the reason
+     * §9.1.1's grid is: the section holds three tables now (grades, comments, frozen stats) and
+     * "the second one" is a fact about today's layout, not about the document.
+     *
+     * <p>The list is deliberately partial and the contract that reads it says so: it is the
+     * comments that stand on their own, without an override. The fourth, {@code yael.azulay}'s,
+     * comes from {@link #manualOverride()}.
+     *
+     * @return one row per commented grade in execution 1, in document order
+     */
+    public List<CommentRow> teacherComments() {
+        List<String[]> table = tables(section("### 9.1"), "### 9.1").stream()
+                .filter(candidate -> candidate.get(0).length == 2
+                        && headerNames(candidate.get(0), "comment"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("SEED_CONTENT.md: §9.1 has no "
+                        + "two-column table whose header names a comment. The comments a student "
+                        + "reads are stored strings, so the document has to write them somewhere "
+                        + "a test can compare."));
+
+        return map(table.subList(1, table.size()), cells -> {
+            String comment = plain(cells[1]);
+            require(!comment.isEmpty(), "§9.1's comment table has an empty comment for "
+                    + cells[0] + ". An empty cell means the grade carries no comment, which is "
+                    + "written by leaving the student out of this table, not by an empty row.");
+            return new CommentRow(reference(cells[0]), comment);
+        });
     }
 
     public List<GradeRow> grades(int execution) {

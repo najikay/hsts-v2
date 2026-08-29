@@ -73,6 +73,55 @@ class ConnectWiringTest {
         }
 
         @Test
+        @DisplayName("a second connection rebinds the dispatcher instead of replacing it")
+        void reconnectingKeepsTheDispatcher() {
+            // ⚑ U-17, 2026-08-29, manual round 2. Screens capture the dispatcher when
+            // they are built and they are built once, so the second connection has to
+            // arrive through the object they are already holding.
+            ConnectWiring.Wiring first = ConnectWiring.forEndpoint(ENDPOINT, eventBus);
+
+            ConnectWiring.Wiring second = ConnectWiring.forEndpoint(
+                    new ServerEndpoint("10.0.0.9", 5555), eventBus, first.dispatcher());
+
+            assertThat(second.dispatcher())
+                    .as("the same correlator, so a cached screen is not left behind")
+                    .isSameAs(first.dispatcher());
+            assertThat(second.client())
+                    .as("but a new client: a client cannot be re-pointed")
+                    .isNotSameAs(first.client());
+            assertThat(second.client().getHost()).isEqualTo("10.0.0.9");
+        }
+
+        @Test
+        @DisplayName("the rebound dispatcher sends on the new connection and still feeds the bus")
+        void theReboundDispatcherUsesTheNewConnection() {
+            FakeClientConnection firstSocket = new FakeClientConnection("first", 5555);
+            FakeClientConnection secondSocket = new FakeClientConnection("second", 5555);
+
+            ConnectWiring.Wiring first =
+                    ConnectWiring.attach(firstSocket, ENDPOINT, eventBus, null);
+            ConnectWiring.Wiring second =
+                    ConnectWiring.attach(secondSocket, ENDPOINT, eventBus, first.dispatcher());
+
+            assertThat(second.dispatcher()).isSameAs(first.dispatcher());
+
+            second.dispatcher().send(Verb.LOGIN, null);
+            assertThat(secondSocket.sentMessages()).hasSize(1);
+            assertThat(firstSocket.sentMessages()).isEmpty();
+
+            // And the inbound half was re-registered too, in both directions.
+            secondSocket.pushToClient(Verb.PUSH_NOTIFICATION, "hello");
+            assertThat(collector.pushes).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a connection is required to attach one")
+        void attachNeedsAConnection() {
+            assertThatNullPointerException()
+                    .isThrownBy(() -> ConnectWiring.attach(null, ENDPOINT, eventBus, null));
+        }
+
+        @Test
         @DisplayName("an endpoint is required")
         void theEndpointIsRequired() {
             assertThatNullPointerException()

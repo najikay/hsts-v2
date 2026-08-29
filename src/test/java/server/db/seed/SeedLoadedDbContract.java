@@ -647,6 +647,37 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
     }
 
     @Test
+    @DisplayName("the commented grades are the document's four, and no other grade carries one")
+    void teacherCommentsMatch() {
+        // Added 2026-08-29 with manual round 2, and it asserts the set as well as the strings.
+        // The set is the half that matters: one comment used to be the whole of S-22 in this
+        // dataset, and it rode the override, so "a student can read a note from her teacher"
+        // was demonstrable only on the single grade a teacher had changed by hand. Three
+        // comments now stand without an override and four grades deliberately carry none, and
+        // both facts are what containsExactlyInAnyOrder pins. A fifth comment appearing on any
+        // grade, or maya.levi's going missing again, fails here rather than on the day.
+        //
+        // Exact equality rather than followsHouseRule: the document writes the stored form, and
+        // SeedDocumentTest.storedValuesCarryNoEmDash reads teacherComments() so a dash in the
+        // document fails there, in the place that can say why.
+        List<List<Object>> expected = new ArrayList<>();
+        DOCUMENT.teacherComments().forEach(row ->
+                expected.add(List.of(row.student(), "4821", row.comment())));
+        // The fourth is written once, under §9.1's override bullets, and stored on the same
+        // sitting as the other three.
+        expected.add(List.of("yael.azulay", "4821", DOCUMENT.manualOverride().teacherComment()));
+
+        assertThat(rows("""
+                select u.username, x.code, g.teacherComment
+                from Grade g, ExamAttempt a, ExamExecution x, User u
+                where a.id = g.attemptId and x.id = a.executionId and u.id = a.studentId
+                  and g.teacherComment is not null
+                """))
+                .as("every stored teacher comment, with the sitting it belongs to")
+                .containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
     @DisplayName("bots match the document, and the inactive one has no sessions")
     void botsMatch() {
         assertThat(rows("select b.courseCode, b.active from Bot b"))

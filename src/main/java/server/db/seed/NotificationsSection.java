@@ -145,6 +145,13 @@ final class NotificationsSection implements SeedSection {
                     "Sitting finished: 8 students, average 72.5", null, null, false, 13),
             // ⚑ B-25. maya.levi is DEMO_DAY §2.3's sign-in account and had no bell at all.
             // The catalog's own words, and the first seeded row that deep-links.
+            //
+            // Left exactly as it is on 2026-08-29, when §9.1 gave her a teacher comment.
+            // yael.azulay's title says "including a teacher's comment" and this one does not,
+            // which looks like drift and is not: NotificationCatalog.gradePublished composes
+            // this sentence with no comment clause in it, so a seeded row that added one would
+            // stop being what a live approval writes. yael's clause is seed-only copy older
+            // than that catalog method.
             new Note("maya.levi", NotificationType.GRADE_PUBLISHED,
                     "Your grade is ready",
                     "Your grade for Midterm: Algebra has been published.",

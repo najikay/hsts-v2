@@ -38,6 +38,19 @@ import java.util.concurrent.TimeUnit;
  * ever complete it once. Futures complete on whichever thread delivered the
  * outcome — the FX-thread hop belongs to {@code client.events.FxThreadPoster}
  * (ARCHITECTURE §6: exactly one crossing point).
+ *
+ * <p><b>Lifetime ⚑.</b> A dispatcher is a long-lived facade: a screen captures
+ * it once, when it is built, and a built screen is cached for the life of the
+ * process. The socket underneath it is not long-lived at all — the server can be
+ * restarted and the user can point the client somewhere else. So the connection
+ * is a swappable field, and {@link #rebind(IClientConnection)} is the only way
+ * to change it. Replacing the dispatcher instead of rebinding it strands every
+ * screen that already holds the old one.
+ *
+ * <p>2026-08-29, manual round 2, U-17. That is exactly what happened: the server
+ * was restarted, the connect screen built a second dispatcher, and the cached
+ * login screen went on writing to the first one's dead socket while the status
+ * row, which reads the connection fresh, said Connected.
  */
 public class RequestDispatcher {
 
@@ -58,7 +71,9 @@ public class RequestDispatcher {
         void schedule(Runnable task, Duration delay);
     }
 
-    private final IClientConnection connection;
+    /** The socket in use right now; swapped by {@link #rebind(IClientConnection)}. */
+    private volatile IClientConnection connection;
+
     private final Duration defaultTimeout;
     private final TimeoutScheduler scheduler;
     private final Map<String, CompletableFuture<Message>> pending = new ConcurrentHashMap<>();
@@ -173,6 +188,36 @@ public class RequestDispatcher {
     }
 
     // ===================== Lifecycle =====================================
+
+    /**
+     * Points this dispatcher at a different socket, keeping the dispatcher
+     * itself (E4.5 ⚑ U-17, 2026-08-29, manual round 2).
+     *
+     * <p>Called on every reconnect. Everything a screen holds survives: the push
+     * listener stays registered, so notifications keep arriving, and the request
+     * ids keep counting up from where they were, so a late answer from the old
+     * socket cannot be mistaken for an answer to a new request.
+     *
+     * <p>What does not survive is the in-flight work. Those requests went out on
+     * a socket nobody is reading any more, so they are failed here rather than
+     * left to time out ten seconds later: the screen waiting on one gets its
+     * error while the user is still looking at the screen that asked.
+     *
+     * @param next the connection to send on from now on
+     * @return how many in-flight requests were failed by the swap
+     */
+    public int rebind(IClientConnection next) {
+        Objects.requireNonNull(next, "next");
+        if (next == this.connection) {
+            return 0; // Re-wiring the same socket: nothing in flight is stale.
+        }
+        int failed = failAllPending(new java.io.IOException(
+                "The connection this request was sent on was replaced"));
+        this.connection = next;
+        log.info("Dispatcher rebound to {}:{}; {} in-flight request(s) failed by the swap",
+                next.getHost(), next.getPort(), failed);
+        return failed;
+    }
 
     /**
      * Fails every in-flight request - called when the socket drops so screens

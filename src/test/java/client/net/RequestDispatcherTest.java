@@ -359,6 +359,115 @@ class RequestDispatcherTest {
         }
     }
 
+    /**
+     * The reconnect contract (⚑ U-17, 2026-08-29, manual round 2).
+     *
+     * <p>The screens hold this object for the life of the process, so a new
+     * socket has to arrive through it rather than around it. These tests are the
+     * difference between the two: everything the screens depend on survives the
+     * swap, and only the work that was already on the dead wire does not.
+     */
+    @Nested
+    @DisplayName("rebinding to a new connection")
+    class Rebinding {
+
+        private FakeClientConnection replacement;
+
+        @BeforeEach
+        void secondConnection() {
+            replacement = new FakeClientConnection("second-host", 6666);
+        }
+
+        @Test
+        @DisplayName("in-flight requests fail with the replacement as their cause")
+        void rebindFailsPendingRequests() {
+            CompletableFuture<Message> first = dispatcher.send(Verb.BANK_LIST, null);
+            CompletableFuture<Message> second = dispatcher.send(Verb.QUESTION_UPDATE, null);
+
+            int failed = dispatcher.rebind(replacement);
+
+            assertThat(failed).isEqualTo(2);
+            assertThat(first).isCompletedExceptionally();
+            assertThat(second).isCompletedExceptionally();
+            assertThatThrownBy(first::get)
+                    .as("the screen is told why, not left to a ten-second timeout")
+                    .hasCauseInstanceOf(IOException.class)
+                    .hasMessageContaining("replaced");
+            assertThat(dispatcher.pendingCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("the next request goes out on the new connection, not the old one")
+        void sendsOnTheNewConnection() {
+            dispatcher.rebind(replacement);
+
+            dispatcher.send(Verb.LOGIN, null);
+
+            assertThat(replacement.sentMessages())
+                    .as("this is U-17: the login went down the dead socket")
+                    .hasSize(1);
+            assertThat(replacement.lastSent().getVerb()).isEqualTo(Verb.LOGIN);
+            assertThat(connection.sentMessages()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a response from the new connection still completes its future")
+        void correlatesAcrossTheSwap() throws Exception {
+            dispatcher.rebind(replacement);
+            replacement.setServerMessageHandler(dispatcher::dispatchIncoming);
+            replacement.replyOk(Verb.LOGIN, "welcome");
+
+            CompletableFuture<Message> future = dispatcher.send(Verb.LOGIN, null);
+
+            assertThat(future).isCompleted();
+            assertThat(future.get().getStatus()).isEqualTo(Status.OK);
+            assertThat(future.get().getPayload()).isEqualTo("welcome");
+        }
+
+        @Test
+        @DisplayName("the push listener survives: pushes from the new connection still arrive")
+        void keepsThePushListener() {
+            List<Message> pushes = new ArrayList<>();
+            dispatcher.setPushListener(pushes::add);
+
+            dispatcher.rebind(replacement);
+            replacement.setServerMessageHandler(dispatcher::dispatchIncoming);
+            replacement.pushToClient(Verb.PUSH_NOTIFICATION, "hello again");
+
+            assertThat(pushes).hasSize(1);
+            assertThat(pushes.get(0).getVerb()).isEqualTo(Verb.PUSH_NOTIFICATION);
+        }
+
+        @Test
+        @DisplayName("request ids keep counting, so a late answer from the old socket cannot match")
+        void requestIdsDoNotRestart() {
+            dispatcher.send(Verb.BANK_LIST, null);
+            String beforeSwap = connection.lastSent().getRequestId();
+
+            dispatcher.rebind(replacement);
+            dispatcher.send(Verb.BANK_LIST, null);
+
+            assertThat(replacement.lastSent().getRequestId()).isNotEqualTo(beforeSwap);
+        }
+
+        @Test
+        @DisplayName("rebinding to the same connection changes nothing")
+        void rebindingTheSameConnectionIsANoOp() {
+            CompletableFuture<Message> pending = dispatcher.send(Verb.BANK_LIST, null);
+
+            assertThat(dispatcher.rebind(connection)).isZero();
+
+            assertThat(pending).isNotCompleted();
+            assertThat(dispatcher.pendingCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a null connection is refused")
+        void nullIsRefused() {
+            assertThatNullPointerException().isThrownBy(() -> dispatcher.rebind(null));
+        }
+    }
+
     @Test
     @DisplayName("thread-safety smoke: 8 threads × 25 requests all correlate correctly")
     void concurrentSendersAllGetTheirOwnAnswer() throws Exception {

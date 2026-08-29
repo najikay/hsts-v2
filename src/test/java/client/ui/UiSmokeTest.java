@@ -5,7 +5,9 @@ import client.core.ClientApp;
 import client.core.FxTestHarness;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.core.ServerEndpoint;
 import client.events.ConnectionLostEvent;
+import client.features.connect.ConnectWiring;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -196,6 +198,81 @@ class UiSmokeTest extends ApplicationTest {
         clickOn(linkNamed(manager.scene(), "Reconnect"));
         WaitForAsyncUtils.waitForFxEvents();
         assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.CONNECT.id());
+    }
+
+    @Test
+    @DisplayName("\u26a1 signing in after a reconnect goes down the new socket (U-17)")
+    void loginUsesTheConnectionItReconnectedOn() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+        LoginResult dana = new LoginResult(1001, "dana.cohen", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")));
+
+        // The first server. She reaches Login, which is built here and cached from now on:
+        // LoginSession captures the dispatcher that exists at build time.
+        FakeClientConnection first = new FakeClientConnection("demo-server", 5555);
+        interact(() -> {
+            connectThrough(manager, first);
+            first.replyOk(Verb.LOGIN, dana);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        int builtOnce = manager.screens().builtCount();
+
+        // 2026-08-29, manual round 2: the server is stopped and restarted, and she
+        // reconnects from the connect screen. A restart is a brand-new socket.
+        FakeClientConnection second = new FakeClientConnection("demo-server", 5555);
+        interact(() -> {
+            first.disconnect();
+            manager.navigator().replace(Routes.CONNECT.id());
+            connectThrough(manager, second);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.screens().builtCount())
+                .as("the login screen is the cached one, which is the whole point")
+                .isEqualTo(builtOnce);
+        assertThat(labelTexts(manager.scene()))
+                .as("the status row reads the live connection and says so")
+                .contains("Connected");
+
+        signIn(manager.scene(), "dana.cohen", "demo123");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // The defect: the row said Connected while LOGIN went down the dead first socket,
+        // so sign-in answered "could not reach the server" until the window was restarted.
+        assertThat(sentVerbs(second))
+                .as("the credentials go to the server she is actually connected to")
+                .contains(Verb.LOGIN);
+        assertThat(sentVerbs(first))
+                .as("and never to the one that was stopped")
+                .doesNotContain(Verb.LOGIN);
+    }
+
+    /**
+     * Connects {@code connection} the way {@code ConnectView} does: through
+     * {@link ConnectWiring}, so the reconnect decision under test is the
+     * production one and not a rehearsal of it.
+     */
+    private void connectThrough(ScreenManager manager, FakeClientConnection connection) {
+        try {
+            connection.connect();
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+        connection.replyOk(Verb.LOGOUT, null);
+        ConnectWiring.Wiring wiring = ConnectWiring.attach(connection,
+                new ServerEndpoint(connection.getHost(), connection.getPort()),
+                manager.eventBus(), manager.getDispatcher());
+        manager.setClient(wiring.client());
+        manager.setDispatcher(wiring.dispatcher());
+    }
+
+    private static List<Verb> sentVerbs(FakeClientConnection connection) {
+        return connection.sentMessages().stream()
+                .map(common.protocol.Message::getVerb)
+                .collect(Collectors.toList());
     }
 
     @Test

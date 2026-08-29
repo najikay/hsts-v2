@@ -32,6 +32,17 @@ import java.util.function.Consumer;
  * {@link ConnectionLostEvent} goes on the bus for the shell's reconnect banner.
  * Doing this in one place is what stops the two from ever disagreeing about
  * whether the connection is up.
+ *
+ * <p><b>The client is new every time; the dispatcher is not ⚑.</b> Pass the
+ * dispatcher the app already holds and it is
+ * {@linkplain RequestDispatcher#rebind rebound} to the new socket and handed
+ * back — the same instance, so every screen built against it keeps working.
+ * Only the very first connection of a process creates one.
+ *
+ * <p>2026-08-29, manual round 2, U-17. Before that, a second connection built a
+ * second dispatcher, and the cached login screen went on sending down the first
+ * one's dead socket: the status row said Connected and Sign in answered "could
+ * not reach the server" until the window was restarted.
  */
 public final class ConnectWiring {
 
@@ -67,22 +78,92 @@ public final class ConnectWiring {
      * simply go nowhere. {@code endpoint} stays a hard requirement: there is no
      * sensible client without one.
      *
+     * <p>This is the <b>first</b> connection of a process: it creates a
+     * dispatcher. Every later one must go through
+     * {@link #forEndpoint(ServerEndpoint, ClientEventBus, RequestDispatcher)}
+     * and hand over the dispatcher the app already has, or it strands the
+     * screens holding it (⚑ U-17).
+     *
      * @param eventBus where pushes and connection-lost events are published;
      *                 {@code null} means the app is being torn down
      * @return the wired pair; the connection is <b>not</b> open yet — the caller
      *         opens it off the FX thread and reports the outcome
      */
     public static Wiring forEndpoint(ServerEndpoint endpoint, ClientEventBus eventBus) {
+        return forEndpoint(endpoint, eventBus, null);
+    }
+
+    /**
+     * Creates and wires a client for {@code endpoint}, reusing the dispatcher
+     * the app already has (E4.5 ⚑ U-17).
+     *
+     * <p>This is the overload every reconnect goes through. The client is always
+     * new — it is bound to a host and a port and cannot be re-pointed — but the
+     * dispatcher is the app's one long-lived correlator, and the screens holding
+     * it must not be left behind. Pass {@code null} only for the first
+     * connection of the process, when there is nothing to keep.
+     *
+     * @param existing the dispatcher to rebind, or {@code null} to create one
+     * @return the wired pair; {@code dispatcher()} is {@code existing} whenever
+     *         one was supplied
+     */
+    public static Wiring forEndpoint(ServerEndpoint endpoint, ClientEventBus eventBus,
+                                     RequestDispatcher existing) {
         Objects.requireNonNull(endpoint, "endpoint");
 
-        ClientEventBus bus = eventBus;
-        if (bus == null) {
-            LOG.warn("Wiring {} with no event bus: the app was torn down while this "
-                    + "connection was being prepared. Events from it go nowhere.",
-                    endpoint.display());
-            bus = detachedBus();
+        ClientEventBus bus = busFor(endpoint, eventBus);
+        HSTSClient client = new HSTSClient(endpoint.host(), endpoint.port());
+        Wiring wiring = attach(client, endpoint, bus, existing);
+
+        // Re-registered against the dispatcher that is live now, which after a
+        // rebind is the same object as before: the handler must fail the futures
+        // the screens are actually waiting on.
+        client.setConnectionLostHandler(
+                connectionLostHandler(endpoint, bus, wiring.dispatcher()));
+        return wiring;
+    }
+
+    /**
+     * The half of the wiring that does not care where the connection came from:
+     * bind the dispatcher to it, in both directions.
+     *
+     * <p>Separate from {@link #forEndpoint} so a test can drive the real
+     * reconnect decision with a {@link client.net.FakeClientConnection} instead
+     * of a socket. The connection-lost handler is not registered here because it
+     * is not on {@link IClientConnection} — it belongs to the real client, and
+     * {@code forEndpoint} adds it there.
+     *
+     * @param existing the dispatcher to rebind, or {@code null} to create one
+     * @return the wired pair
+     */
+    public static Wiring attach(IClientConnection client, ServerEndpoint endpoint,
+                                ClientEventBus eventBus, RequestDispatcher existing) {
+        Objects.requireNonNull(client, "client");
+        Objects.requireNonNull(endpoint, "endpoint");
+        ClientEventBus bus = busFor(endpoint, eventBus);
+
+        RequestDispatcher dispatcher;
+        if (existing == null) {
+            dispatcher = new RequestDispatcher(client);
+        } else {
+            existing.rebind(client);
+            dispatcher = existing;
         }
-        return wire(endpoint, bus);
+
+        dispatcher.setPushListener(new PushEventBridge(bus));
+        client.setServerMessageHandler(dispatcher::dispatchIncoming);
+        return new Wiring(client, dispatcher);
+    }
+
+    /** The given bus, or the detached stand-in described on {@link #forEndpoint}. */
+    private static ClientEventBus busFor(ServerEndpoint endpoint, ClientEventBus eventBus) {
+        if (eventBus != null) {
+            return eventBus;
+        }
+        LOG.warn("Wiring {} with no event bus: the app was torn down while this "
+                + "connection was being prepared. Events from it go nowhere.",
+                endpoint.display());
+        return detachedBus();
     }
 
     /**
@@ -91,17 +172,6 @@ public final class ConnectWiring {
      */
     private static ClientEventBus detachedBus() {
         return new ClientEventBus(ClientEventBus.newBus(), Runnable::run);
-    }
-
-    private static Wiring wire(ServerEndpoint endpoint, ClientEventBus eventBus) {
-        HSTSClient client = new HSTSClient(endpoint.host(), endpoint.port());
-
-        RequestDispatcher dispatcher = new RequestDispatcher(client);
-        dispatcher.setPushListener(new PushEventBridge(eventBus));
-        client.setServerMessageHandler(dispatcher::dispatchIncoming);
-        client.setConnectionLostHandler(connectionLostHandler(endpoint, eventBus, dispatcher));
-
-        return new Wiring(client, dispatcher);
     }
 
     /**

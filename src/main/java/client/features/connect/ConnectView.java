@@ -364,7 +364,11 @@ public final class ConnectView extends AbstractScreen {
         hideError();
 
         ScreenManager manager = ScreenManager.getInstance();
-        ConnectWiring.Wiring wiring = ConnectWiring.forEndpoint(endpoint, manager.eventBus());
+        // The dispatcher we already have goes in and the same one comes back out,
+        // rebound to the new socket ⚑ U-17: screens built on an earlier connection
+        // (Login above all) hold that instance for the life of the process.
+        ConnectWiring.Wiring wiring = ConnectWiring.forEndpoint(
+                endpoint, manager.eventBus(), manager.getDispatcher());
         manager.setClient(wiring.client());
         manager.setDispatcher(wiring.dispatcher());
 
