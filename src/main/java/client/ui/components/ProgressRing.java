@@ -2,7 +2,7 @@ package client.ui.components;
 
 import client.ui.components.logic.RingGeometry;
 import javafx.scene.control.Label;
-import javafx.scene.layout.StackPane;
+import javafx.scene.layout.Pane;
 import javafx.scene.shape.Arc;
 import javafx.scene.shape.ArcType;
 import javafx.scene.shape.StrokeLineCap;
@@ -25,7 +25,7 @@ import javafx.scene.shape.StrokeLineCap;
  * overhang, the label — is {@link RingGeometry}, which is unit tested. This
  * class positions nodes.
  */
-public final class ProgressRing extends StackPane {
+public final class ProgressRing extends Pane {
 
     /** The approved diameter, in px. */
     public static final double DIAMETER = 84;
@@ -54,6 +54,13 @@ public final class ProgressRing extends StackPane {
         fill.getStyleClass().add("ring-fill");
 
         centre.getStyleClass().add("ring-value");
+        // 2026-08-29, manual round 2: this used to be a StackPane, which centres each
+        // child by its OWN bounds. A full circle and a partial arc have different bounds,
+        // so the fill was centred on itself and drifted off the track as the score
+        // changed: the "off-centre filling" the tester saw. A Pane lays nothing out, the
+        // arcs sit on one explicit centre, and only the label is centred by hand.
+        centre.layoutXProperty().bind(widthProperty().subtract(centre.widthProperty()).divide(2));
+        centre.layoutYProperty().bind(heightProperty().subtract(centre.heightProperty()).divide(2));
 
         getChildren().addAll(track, fill, centre);
         set(score);
@@ -74,7 +81,7 @@ public final class ProgressRing extends StackPane {
     }
 
     private static Arc arc(double radius) {
-        Arc arc = new Arc(0, 0, radius, radius, RingGeometry.START_ANGLE, 0);
+        Arc arc = new Arc(DIAMETER / 2, DIAMETER / 2, radius, radius, RingGeometry.START_ANGLE, 0);
         arc.setType(ArcType.OPEN);
         arc.setStrokeWidth(STROKE);
         arc.setStrokeLineCap(StrokeLineCap.ROUND);

@@ -29,6 +29,7 @@ Roles: **Student**, **Teacher**, **Coordinator** (subject coordinator — also a
 - **F1.3** [T-16] A user cannot be logged in twice concurrently. Second login attempt → clear error naming no details ("This account is already signed in elsewhere"). On disconnect (socket drop), the session is freed immediately.
 - **F1.4** [X] Logout; auto-cleanup of held edit locks and in-progress state on logout/disconnect.
 - **F1.5** [T-15] Client has a connect screen before login: discovery picker (F13.4) + manual host/port entry **always available, pre-filled from defaults** (`client.properties` → last successful server → localhost:5555), last server remembered + auto-connect, pinned-fingerprint warning on change. Discovery failing never blocks connecting.
+  - *Amended 2026-08-29 (manual round 2, lead's ruling):* the login screen reflects the connection live. When the socket drops it shows Disconnected, disables Sign in and offers a **Reconnect** link to the connect screen; it never lets a sign-in be attempted against a dead socket.
 
 ### F2 — Question bank
 - **F2.1** [T-2.1] Teacher adds a question **only for courses she teaches** (S-5): text, 4 non-empty pairwise-distinct answers, exactly one marked correct (radio-select, C-8), illustration (optional image upload), topic, difficulty (Easy/Medium/Hard).

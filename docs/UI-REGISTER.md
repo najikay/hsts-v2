@@ -204,7 +204,7 @@ unreachable address and read that one.
 
 ## Manual round 1 (2026-08-28) — Naji's notes, `docs/manual-round-1-notes.txt`
 
-The first full walk with `MANUAL_ROUND.md`. It stopped short on blockers, which is what a
+The first full walk with `MANUAL_TEST_ONE_MACHINE.md`. It stopped short on blockers, which is what a
 first walk is for. Every line of the notes file is an entry below; the two that were
 already registered elsewhere are cross-referenced rather than duplicated (bot locked after
 early close = **B-47**, fixed; national IDs = M-2/B-40, extended here as U-15). Waves: **A**
@@ -280,11 +280,52 @@ lead-verified, one batch commit.
 ### U-16 · FLOW · a better, time-aware manual testing document
 **In Naji's words:** "NEED A BETTER MORE ORGANIZED AND TIME AWARE MANUAL TESTING DOCUMENT"
 **Restated:** the first walk stalled on blockers with no way to see what was still worth doing; the doc needs minute budgets per section, blockers first, and a round tracker.
-**Surface:** `docs/MANUAL_ROUND.md`. **Ruling:** rewrite as v2 after the wave lands, so its expectations describe the fixed build.
-**Status:** `DONE` — MANUAL_ROUND.md v2 (time plan, round tracker, re-verdict block first, bot before the exam).
+**Surface:** `docs/MANUAL_TEST_ONE_MACHINE.md`. **Ruling:** rewrite as v2 after the wave lands, so its expectations describe the fixed build.
+**Status:** `DONE` — MANUAL_TEST_ONE_MACHINE.md v2 (time plan, round tracker, re-verdict block first, bot before the exam).
 
 ---
 
+## Manual round 2 (2026-08-29) — Naji's notes, `docs/manual-round-2-notes.txt`
+
+Run against 19a2ab1 + d77bf3c. "Overall seeing a big improvement" and "gj on the go back";
+five new entries, one reopening.
+
+### U-7 · reopened · the ring's fill is off-centre, not just long
+**In Naji's words:** "the average card has a semi filled circle that represents the grade average, the filling of the circle's borders is off center, needs urgent way to fix or a replacement"
+**Restated:** round 1's fix trimmed the cap overhang; the visible defect was a different one. `ProgressRing` was a `StackPane`, which centres each child by its own bounds: a full-circle track and a partial arc have different bounds, so the fill was centred on itself and drifted off the track as the score changed.
+**Fix:** `ProgressRing` is a `Pane`; both arcs sit on one explicit centre (`DIAMETER / 2`), only the label is centred by hand.
+**Status:** `DONE` — pending eyes.
+
+### U-17 · FUNCTIONAL · login stays stuck on "could not reach the server" after the server comes back
+**In Naji's words:** "after disconnecting the server, and reconnecting the sign in still show that could not reach the server error and doesn't allow a sign-in, had to open a new client window for it to work"
+**Restated:** the loss is now detected (U-6). The recovery path is Reconnect → connect screen → back to Login; something in that path left the screen on the connect refusal with sign-in disabled until a fresh client was started. The exact sequence decides the fix (was Reconnect pressed while the server was still starting? did the connect screen's "Look for servers again" get used?).
+**Surface:** `LoginView` / `ConnectView` / `ConnectWiring`. **Ruling:** `NEW` — needs the clicks in order; candidate fix is a Reconnect that retries the pinned server directly and re-arms on success.
+**Status:** `NEW`.
+
+### U-18 · FUNCTIONAL · the grade cards show neither the teacher's name nor the teacher's note
+**In Naji's words:** "the cards show: a grade, name of the exam, a number on top that, a date below the grade, and a passed status in the corner, clean UI, however, no teacher name and no teacher comment"
+**Restated:** `StudentGradeRow.teacherComment` is on the wire (A3) and the card never rendered it; the teacher's name is not on that wire at all.
+**Surface:** `MyGradesView` card; GRADING wire amendment **A7** (`StudentGradeRow.teacherName`, releasing teacher, as A6). **Ruling:** fix — wave 2 agent D2.
+**Status:** `IN WORK`.
+
+### U-19 · FLOW · Back on the take-exam sub-steps
+**In Naji's words:** "on the confirm it is you, on the take exam child screens I want a go back button also, not just the confirm it is you, I thing all child screens should have it probably"
+**Restated:** Take Exam is a rail route, so the shell's navbar Back (U-8) does not appear there; its sub-steps (code / confirmation, identity, handed-in) have no way back of their own.
+**Surface:** `ExamEntrySession` (`backToCode`), `ExamEntryView` (Back on the identity step, Back to my dashboard on the code step and the dead end). The Time Up / Submitted takeovers keep their single button by design (F6.4). **Ruling:** fix — wave 2 agent C2.
+**Status:** `IN WORK`.
+
+### U-20 · COPY · the login screen's behaviour with the server down is the wanted one; docs must say so
+**In Naji's words:** "when the server is down it shows disconnected and doesn't enable sign in, which I like better than the old 1.2 just make sure to update the docs to match it (manual round and other requirements docs)"
+**Fix:** PRD F1.5 carries a dated note; the manual documents describe the disabled sign-in and the Reconnect link as the expected state.
+**Status:** `DONE`.
+
+### U-21 · FLOW · the manual round document, redone as two
+**In Naji's words:** "the manual round md for checking is horrible short, and to me doesn't look like it changed ... gimme two documents now and delete the old manual round file ... one for one machine testing, the other is for two machines, the testing MUST visit every screen and sample every situation possible ... every action we can take of every type of user ... all of the requirements from the pdf ... we wanna test adding new stuff from the client side"
+**Restated:** the file on disk at the time was v3 (d77bf3c, sixteen sections, the 2-minute exam, the coverage map) and the notes quote v2's headings, so a stale copy was read; the ask is taken as written anyway: two documents, per-role action inventories, creation from the client instead of reseeding, the PDF's requirements as the floor.
+**Fix:** `docs/MANUAL_TEST_ONE_MACHINE.md` + `docs/MANUAL_TEST_TWO_MACHINES.md`; `MANUAL_TEST_ONE_MACHINE.md` deleted.
+**Status:** `IN WORK`.
+
+---
 ## Closed entries
 
 *(none yet — an entry closes when Naji has seen it fixed on screen)*
