@@ -50,6 +50,9 @@ class ResultsServiceTest {
     private static final long MAYA = 11;
     private static final long YAEL = 13;
     private static final String MAYA_NAME = "מאיה לוי";
+    /** The seeded releasing teacher of the Algebra execution (SEED_CONTENT §9: 2 dana.cohen). */
+    private static final long DANA = 2;
+    private static final String DANA_NAME = "Dana Cohen";
 
     @Mock
     private Session session;
@@ -71,6 +74,13 @@ class ResultsServiceTest {
 
     private void stubStudent(long id, String name) {
         User user = new User("maya.levi", "$2a$12$hash", name, UserRole.STUDENT, "374301851");
+        setField(user, "id", id);
+        lenient().when(users.findById(session, id)).thenReturn(Optional.of(user));
+    }
+
+    /** The releasing teacher A7 names, through the same repository the student is named by. */
+    private void stubTeacher(long id, String name) {
+        User user = new User("dana.cohen", "$2a$12$hash", name, UserRole.TEACHER, "203458761");
         setField(user, "id", id);
         lenient().when(users.findById(session, id)).thenReturn(Optional.of(user));
     }
@@ -136,8 +146,8 @@ class ResultsServiceTest {
             when(grades.findApprovedForStudent(session, MAYA))
                     .thenReturn(List.of(approved(1, 71, null, null), approved(2, 88, null, null)));
             when(grades.findExamLabels(any(), any())).thenReturn(Map.of(
-                    1L, new GradeExamLabel(1, "Java midterm", "01"),
-                    2L, new GradeExamLabel(2, "Databases final", "02")));
+                    1L, new GradeExamLabel(1, "Java midterm", "01", DANA),
+                    2L, new GradeExamLabel(2, "Databases final", "02", DANA)));
 
             MyGrades result = service.myGrades(session, MAYA);
 
@@ -168,7 +178,7 @@ class ResultsServiceTest {
             when(grades.findApprovedForStudent(session, MAYA))
                     .thenReturn(List.of(approved(1, 71, null, null), approved(2, 88, null, null)));
             when(grades.findExamLabels(any(), any()))
-                    .thenReturn(Map.of(1L, new GradeExamLabel(1, "Java midterm", "01")));
+                    .thenReturn(Map.of(1L, new GradeExamLabel(1, "Java midterm", "01", DANA)));
 
             MyGrades result = service.myGrades(session, MAYA);
 
@@ -177,6 +187,77 @@ class ResultsServiceTest {
             // is worse than a missing one.
             assertThat(result.grades().get(1).examName()).isNull();
             assertThat(result.grades().get(1).courseCode()).isNull();
+        }
+
+        @Test
+        @DisplayName("A7 — each row names the teacher who released the sitting")
+        void rowsCarryTheReleasingTeacher() {
+            stubStudent(MAYA, MAYA_NAME);
+            stubTeacher(DANA, DANA_NAME);
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null)));
+            when(grades.findExamLabels(any(), any())).thenReturn(Map.of(
+                    1L, new GradeExamLabel(1, "Algebra midterm", "11", DANA)));
+
+            MyGrades result = service.myGrades(session, MAYA);
+
+            // exam_executions.created_by, the definition A6 gave the checked form, so the card
+            // and the paper it opens name one person (SEED_CONTENT §9: execution 1 is dana.cohen).
+            assertThat(result.grades().get(0).teacherName()).isEqualTo(DANA_NAME);
+        }
+
+        @Test
+        @DisplayName("A7 — a term set by one teacher is one name lookup, not one per grade")
+        void theTeacherIsLookedUpOncePerTeacher() {
+            stubStudent(MAYA, MAYA_NAME);
+            stubTeacher(DANA, DANA_NAME);
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null), approved(2, 88, null, null),
+                            approved(3, 64, null, null)));
+            when(grades.findExamLabels(any(), any())).thenReturn(Map.of(
+                    1L, new GradeExamLabel(1, "Algebra midterm", "11", DANA),
+                    2L, new GradeExamLabel(2, "Algebra final", "11", DANA),
+                    3L, new GradeExamLabel(3, "Geometry midterm", "11", DANA)));
+
+            MyGrades result = service.myGrades(session, MAYA);
+
+            assertThat(result.grades()).extracting(row -> row.teacherName())
+                    .containsOnly(DANA_NAME);
+            // Memoised: the read that labels the list stays one read, and naming its teacher
+            // does not turn it back into one per row.
+            verify(users, org.mockito.Mockito.times(1)).findById(session, DANA);
+        }
+
+        @Test
+        @DisplayName("A7 — an unresolvable teacher is empty on the wire, never null")
+        void anUnresolvableTeacherIsEmptyRatherThanNull() {
+            stubStudent(MAYA, MAYA_NAME);
+            when(users.findById(session, DANA)).thenReturn(Optional.empty());
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null)));
+            when(grades.findExamLabels(any(), any())).thenReturn(Map.of(
+                    1L, new GradeExamLabel(1, "Algebra midterm", "11", DANA)));
+
+            MyGrades result = service.myGrades(session, MAYA);
+
+            // One absence for the screen to test, and the word "null" cannot reach a card.
+            assertThat(result.grades().get(0).teacherName()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("A7 — an unlabelled row has no teacher either, and asks for none")
+        void anUnlabelledRowAsksForNoTeacher() {
+            stubStudent(MAYA, MAYA_NAME);
+            when(grades.findApprovedForStudent(session, MAYA))
+                    .thenReturn(List.of(approved(1, 71, null, null)));
+
+            MyGrades result = service.myGrades(session, MAYA);
+
+            // No label means no execution resolved, so there is nobody to name and nothing to
+            // read. A name borrowed from anywhere else would be another exam's teacher.
+            assertThat(result.grades().get(0).teacherName()).isEmpty();
+            verify(users, org.mockito.Mockito.times(1)).findById(session, MAYA);
+            verify(users, org.mockito.Mockito.never()).findById(session, DANA);
         }
 
         @Test

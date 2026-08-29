@@ -107,13 +107,14 @@ class TeacherResultsSessionTest {
         return new StudentGradeRow(id, 2000 + id, name, auto, finalScore,
                 finalScore == null ? auto : finalScore, GradeState.APPROVED,
                 finalScore == null ? null : "ניתן ניקוד חלקי.", null, CLOSED,
-                null, null, AttemptState.SUBMITTED, 55);
+                // A7 leaves the teacher's name empty on her own results table.
+                null, null, "", AttemptState.SUBMITTED, 55);
     }
 
     /** A paper the server handed in at the bell, as the results wire now carries it (B-16). */
     private static StudentGradeRow timedOutRow(long id, String name, int auto) {
         return new StudentGradeRow(id, 2000 + id, name, auto, null, auto, GradeState.APPROVED,
-                null, null, CLOSED, null, null, AttemptState.TIMED_OUT, 90);
+                null, null, CLOSED, null, null, "", AttemptState.TIMED_OUT, 90);
     }
 
     private void serverHasEverything() {

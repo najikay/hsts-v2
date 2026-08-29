@@ -2004,6 +2004,17 @@
     -fx-font-weight: bold;
     -fx-text-fill: -hsts-text;
 }
+/* A7: the two lines that say who set the exam and what she wrote about the
+   paper — the teacher under the exam name, the note under the score. Both are
+   the card's quiet register, and neither is clipped or capped: a teacher's
+   sentence to one student is not a cell, and a card that grows a line taller
+   than its neighbours is a better answer than one that ends her in the middle
+   of a word. The grid's rows size to the tallest card, which is what they are
+   for.
+   The teacher's line needs no rule of its own beyond `small muted`, which is
+   already the register the marked paper prints the same name in. */
+.grade-card .grade-note { -fx-line-spacing: 1px; }
+
 /* The link line is the hover affordance: quiet until the pointer is on the
    card, so a grid of twelve cards is not a grid of twelve links. */
 .grade-card .card-link        { -fx-opacity: 0; }

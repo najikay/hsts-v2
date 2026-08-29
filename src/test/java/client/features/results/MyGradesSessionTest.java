@@ -314,7 +314,7 @@ class MyGradesSessionTest {
         private static StudentGradeRow scored(long id, int score, String courseCode) {
             return new StudentGradeRow(id, 11, "Maya Levi", score, score, score,
                     GradeState.APPROVED, null, null, Instant.parse("2026-08-06T09:00:00Z"),
-                    "Algebra midterm", courseCode);
+                    "Algebra midterm", courseCode, "Dana Cohen");
         }
 
         @Test

@@ -110,6 +110,11 @@ public final class GradeRepository {
      * <p>Carries no scores and no correctness — see {@link GradeExamLabel} — so it is safe on
      * the student path it exists for.
      *
+     * <p>A7 added {@code ex.createdBy} to the select. The execution was already one of the five
+     * joins, so the teacher a student's card names costs a column here rather than a read of its
+     * own — the rule this repository follows everywhere: one read for the list, never one per
+     * row.
+     *
      * <p>Consumers: E13.3's {@code MY_GRADES_GET} and E13.4's {@code CHECKED_FORM_GET}.
      *
      * @param session  the current session
@@ -122,7 +127,8 @@ public final class GradeRepository {
             return Map.of();
         }
         List<GradeExamLabel> labels = session.createQuery("""
-                        select new server.db.projections.GradeExamLabel(g.id, v.name, e.courseCode)
+                        select new server.db.projections.GradeExamLabel(g.id, v.name, e.courseCode,
+                                                                       ex.createdBy)
                         from Grade g, ExamAttempt a, ExamExecution ex, ExamVersion v, Exam e
                         where g.id in (:ids)
                           and a.id = g.attemptId

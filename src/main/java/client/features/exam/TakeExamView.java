@@ -79,6 +79,7 @@ public final class TakeExamView extends AbstractScreen {
 
         model.onChange(this::refreshForm);
         done.onLeave(this::leave);
+        entryView.onLeave(this::leaveEntry);
 
         banner.setOnRetry(() -> attempt.resume().thenRun(banner::hide));
         content.setCenter(entryView);
@@ -241,6 +242,22 @@ public final class TakeExamView extends AbstractScreen {
         attempt.stop();
         entry.reset();
         content.setCenter(entryView);
+        navigator().reset(Routes.HOME_STUDENT.id());
+    }
+
+    /**
+     * Leaving from the entry steps, before any attempt exists ⚑ (2026-08-29, manual round 2).
+     *
+     * <p>{@link #leave()}'s shape minus the two lines that are about an attempt. Nothing has
+     * been started here, so there is no session to stop and no focus watch to detach: this is
+     * the difference the split into two steps buys (S-18), and pretending otherwise would put
+     * an {@code attempt.stop()} on a code screen for a reader to wonder about.
+     *
+     * <p>The entry state is still cleared before the navigation, so the code she abandoned does
+     * not sit in the session waiting for the next arrival to inherit it.
+     */
+    private void leaveEntry() {
+        entry.reset();
         navigator().reset(Routes.HOME_STUDENT.id());
     }
 

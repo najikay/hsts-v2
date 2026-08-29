@@ -67,6 +67,17 @@ public final class ExamCopy {
     /** The way out of the confirmation, for the card that was pressed by mistake. */
     public static final String DIFFERENT_CODE = "Use a different code";
 
+    /**
+     * What the identity step's back control returns to, named in its tooltip ⚑.
+     *
+     * <p>2026-08-29, manual round 2, lead's ruling: every child step of Take Exam owes a way
+     * back, and this one is the only step that has somewhere to go back <em>to</em> rather
+     * than out of. The control itself reads {@code BackLink.LABEL}, which is the one word the
+     * convention allows; this is the destination the tooltip names, so it is discoverable
+     * without the label promising it.
+     */
+    public static final String BACK_TO_CODE_TARGET = "the code step";
+
     /** Heading of the identity screen. */
     public static final String ID_TITLE = "Confirm it is you";
 
@@ -143,7 +154,13 @@ public final class ExamCopy {
     public static final String SUBMITTED_SUBTITLE =
             "Your answers are with your teacher. You will be told when the grade is ready.";
 
-    /** The single action on both ending screens. */
+    /**
+     * The way off this screen entirely: the single action on both ending screens, and, since
+     * 2026-08-29 (manual round 2), the way out of the code step and the handed-in dead end.
+     *
+     * <p>One sentence for all four, because it is one destination and a second wording would
+     * only make the reader wonder what the difference was.
+     */
     public static final String BACK_TO_DASHBOARD = "Back to my dashboard";
 
     /** Shown if a student navigates back to a finished exam (the route guard, E10.14). */

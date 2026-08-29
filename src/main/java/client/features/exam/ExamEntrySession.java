@@ -307,6 +307,40 @@ public final class ExamEntrySession {
         return applied;
     }
 
+    /**
+     * Hands the code step back from the identity step, unstarted ⚑.
+     *
+     * <p>2026-08-29, manual round 2, lead's ruling: "Confirm it is you" had no way back. Take
+     * Exam is a rail route, so the shell draws no back control over it, and the only exits from
+     * the identity step were forward into the exam or out of the application. A student who
+     * joined the wrong sitting had to start her own clock to escape it.
+     *
+     * <p>Nothing is sent. {@code EXAM_JOIN} answered a header and nothing else; there is no
+     * attempt yet, and this is exactly why the flow is split in two (S-18). So going back is
+     * local state and the server never learns it happened.
+     *
+     * <p>The header and the ID go, because both belong to the join she is undoing. The code and
+     * its mood stay, because she is going back to the step she came from and not to a blank one:
+     * an arrival from the dashboard card lands on its confirmation again, and a typed code is
+     * still in the field ready to be corrected rather than retyped.
+     *
+     * <p>Ignored while a request is in flight. The press would otherwise land on the identity
+     * step and the answer would land on the code step behind it, which is how a student ends up
+     * on the paper she just backed out of.
+     */
+    public void backToCode() {
+        if (busy) {
+            // The guard is also why nothing here sets busy: it is already false.
+            return;
+        }
+        phase = EntryPhase.CODE;
+        header = null;
+        nationalId = "";
+        idTouched = false;
+        idState = ValidationState.pristine();
+        onChange.run();
+    }
+
     /** Applies a form answer from either {@code ATTEMPT_START} or {@code ATTEMPT_RESUME}. */
     private void applyForm(Message response, Throwable failure, boolean resuming) {
         if (failure != null) {

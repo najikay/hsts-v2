@@ -57,7 +57,7 @@ class CheckedFormSessionTest {
         return new CheckedForm(
                 new StudentGradeRow(gradeId, 11, "מאיה לוי", 71, 71, 71, GradeState.APPROVED,
                         null, null, Instant.parse("2026-08-20T09:00:00Z"),
-                        "Algebra midterm", "11"),
+                        "Algebra midterm", "11", "Dana Cohen"),
                 "Algebra midterm", "11", "Dana Cohen", AttemptState.SUBMITTED, 70,
                 List.of(new AnswerReviewRow(1, "11001", "q", "a", "b", "c", "d",
                         15, (byte) 1, (byte) 1, true, 15)));

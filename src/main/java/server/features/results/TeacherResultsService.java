@@ -268,8 +268,10 @@ public final class TeacherResultsService {
                 row.overrideReason(), row.teacherComment(), row.approvedAt(),
                 // v1.1's labels stay null here: ExecutionResults already carries the exam and
                 // the course once for the whole table, and repeating them per row would be the
-                // same two strings thirty times over.
-                null, null,
+                // same two strings thirty times over. A7's teacher name is empty for the same
+                // reason, plus one of its own: this path reads through TeacherResultsStore and
+                // holds no UserRepository, and the teacher reading this table is the teacher.
+                null, null, "",
                 // ⚑ B-16. The projection had read actualMinutes since E14 and this mapper
                 // dropped it on the floor - the one field with no reader anywhere on the path.
                 // It and the attempt's status now travel, and the table has a column for each.

@@ -12,6 +12,7 @@ import server.db.repos.GradeRepository;
 import server.db.repos.UserRepository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -80,23 +81,60 @@ public class ResultsService {
         }
         Map<Long, GradeExamLabel> labels = grades.findExamLabels(session, gradeIds);
 
+        // A7: the third label is a person. One lookup per distinct teacher, memoised, because a
+        // term's grades are a handful of exams set by two or three people.
+        Map<Long, String> teacherNames = new HashMap<>();
+
         List<StudentGradeRow> rows = new ArrayList<>(approved.size());
         for (Grade grade : approved) {
-            rows.add(label(toRow(grade, studentId, studentName), labels.get(grade.getId())));
+            GradeExamLabel exam = labels.get(grade.getId());
+            rows.add(label(toRow(grade, studentId, studentName), exam,
+                    teacherName(session, exam, teacherNames)));
         }
         return new MyGrades(rows);
     }
 
     /**
-     * Applies an exam label to a row, if one resolved.
+     * Applies the exam labels to a row, if one resolved.
      *
      * <p>An unlabelled row keeps its nulls rather than borrowing a neighbour's exam name or
      * inventing a placeholder. A grade whose joins do not resolve is a data problem worth
      * seeing as a blank, not one worth papering over with the wrong exam's name on a
-     * student's transcript.
+     * student's transcript. The teacher's name travels with them for the same reason it is a
+     * label at all: it is read off the same execution, and a name from anywhere else would be
+     * a name from another exam.
      */
-    private static StudentGradeRow label(StudentGradeRow row, GradeExamLabel exam) {
-        return exam == null ? row : row.withExam(exam.examName(), exam.courseCode());
+    private static StudentGradeRow label(StudentGradeRow row, GradeExamLabel exam,
+                                         String teacherName) {
+        return exam == null ? row : row.withExam(exam.examName(), exam.courseCode(), teacherName);
+    }
+
+    /**
+     * The name of the teacher who released the sitting this grade belongs to (A7, 2026-08-29).
+     *
+     * <p>{@code GradeExamLabel.teacherId} is {@code exam_executions.created_by}, the same
+     * definition A6 gave the checked form, so the card and the paper it opens name the same
+     * person. The lookup is the one {@link #myGrades} uses for the student's own name —
+     * {@code findById(...).map(User::getFullName)} — because one way to turn a user id into a
+     * display name is what keeps two screens from spelling one teacher differently.
+     *
+     * <p>Empty rather than a placeholder when the row has gone, and empty for an unlabelled
+     * grade: the wire says "unresolvable" and the card omits the line. A transcript is not the
+     * place to explain a missing join.
+     *
+     * @param session the current session
+     * @param exam    the row's labels, or {@code null} when its joins did not resolve
+     * @param cache   names already looked up in this call, so a term of grades from one teacher
+     *                is one read rather than one per grade
+     * @return the teacher's full name, or {@code ""}
+     */
+    private String teacherName(Session session, GradeExamLabel exam, Map<Long, String> cache) {
+        if (exam == null) {
+            return "";
+        }
+        return cache.computeIfAbsent(exam.teacherId(), id -> users.findById(session, id)
+                .map(User::getFullName)
+                .orElse(""));
     }
 
     /**

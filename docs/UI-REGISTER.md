@@ -299,20 +299,22 @@ five new entries, one reopening.
 ### U-17 · FUNCTIONAL · login stays stuck on "could not reach the server" after the server comes back
 **In Naji's words:** "after disconnecting the server, and reconnecting the sign in still show that could not reach the server error and doesn't allow a sign-in, had to open a new client window for it to work"
 **Restated:** the loss is now detected (U-6). The recovery path is Reconnect → connect screen → back to Login; something in that path left the screen on the connect refusal with sign-in disabled until a fresh client was started. The exact sequence decides the fix (was Reconnect pressed while the server was still starting? did the connect screen's "Look for servers again" get used?).
-**Surface:** `LoginView` / `ConnectView` / `ConnectWiring`. **Ruling:** `NEW` — needs the clicks in order; candidate fix is a Reconnect that retries the pinned server directly and re-arms on success.
-**Status:** `NEW`.
+**Surface:** `LoginView` / `ConnectView` / `ConnectWiring` / `RequestDispatcher`. **The clicks (Naji, round 2 follow-up):** server down → manual reconnect → the status said Connected (true, the server was up) → Sign in still refused; same with auto-reconnect; all before login.
+**Diagnosis:** screens are cached and built once (`ScreenCache`), and `LoginView` builds its `LoginSession` over the `RequestDispatcher` it holds at build time, which wraps one fixed socket. A reconnect through the connect screen creates a **new** client and a **new** dispatcher and gives them to the manager; the cached login screen keeps the dead dispatcher. The status row reads the client fresh from the manager (Connected, true) and Sign in sends LOGIN down the dead socket (refused, also true). Every cached screen carries the same trap after any reconnect on that path.
+**Ruling:** fix at the seam — `RequestDispatcher` becomes rebindable (`rebind(IClientConnection)`: pending requests failed, push listener kept), `ConnectWiring` rebinds the manager's existing dispatcher on reconnect instead of replacing it, and the login screen re-reads its state on show. Wave 2 agent E.
+**Status:** `IN WORK`.
 
 ### U-18 · FUNCTIONAL · the grade cards show neither the teacher's name nor the teacher's note
 **In Naji's words:** "the cards show: a grade, name of the exam, a number on top that, a date below the grade, and a passed status in the corner, clean UI, however, no teacher name and no teacher comment"
 **Restated:** `StudentGradeRow.teacherComment` is on the wire (A3) and the card never rendered it; the teacher's name is not on that wire at all.
 **Surface:** `MyGradesView` card; GRADING wire amendment **A7** (`StudentGradeRow.teacherName`, releasing teacher, as A6). **Ruling:** fix — wave 2 agent D2.
-**Status:** `IN WORK`.
+**Status:** `DONE` — verify green (6688) — pending eyes.
 
 ### U-19 · FLOW · Back on the take-exam sub-steps
 **In Naji's words:** "on the confirm it is you, on the take exam child screens I want a go back button also, not just the confirm it is you, I thing all child screens should have it probably"
 **Restated:** Take Exam is a rail route, so the shell's navbar Back (U-8) does not appear there; its sub-steps (code / confirmation, identity, handed-in) have no way back of their own.
 **Surface:** `ExamEntrySession` (`backToCode`), `ExamEntryView` (Back on the identity step, Back to my dashboard on the code step and the dead end). The Time Up / Submitted takeovers keep their single button by design (F6.4). **Ruling:** fix — wave 2 agent C2.
-**Status:** `IN WORK`.
+**Status:** `DONE` — verify green (6688) — pending eyes.
 
 ### U-20 · COPY · the login screen's behaviour with the server down is the wanted one; docs must say so
 **In Naji's words:** "when the server is down it shows disconnected and doesn't enable sign in, which I like better than the old 1.2 just make sure to update the docs to match it (manual round and other requirements docs)"

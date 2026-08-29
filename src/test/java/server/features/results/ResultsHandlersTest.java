@@ -70,7 +70,8 @@ class ResultsHandlersTest {
 
     private static MyGrades oneGrade() {
         return new MyGrades(List.of(new StudentGradeRow(900, STUDENT_ID, "מאיה לוי", 71, null, 71,
-                GradeState.APPROVED, null, "well done", null, "Java midterm", "01")));
+                GradeState.APPROVED, null, "well done", null, "Java midterm", "01",
+                "Dana Cohen")));
     }
 
     @Test
@@ -173,7 +174,8 @@ class ResultsHandlersTest {
     void servesTheCheckedForm() {
         CheckedForm form = new CheckedForm(
                 new StudentGradeRow(900, STUDENT_ID, "מאיה לוי", 71, 71, 71,
-                        GradeState.APPROVED, null, null, null, "Algebra midterm", "11"),
+                        GradeState.APPROVED, null, null, null, "Algebra midterm", "11",
+                        "Dana Cohen"),
                 "Algebra midterm", "11", "Dana Cohen", AttemptState.SUBMITTED, 70, List.of());
         when(checkedForms.checkedForm(session, STUDENT_ID, 900)).thenReturn(Optional.of(form));
 

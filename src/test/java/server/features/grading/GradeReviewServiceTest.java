@@ -146,6 +146,13 @@ class GradeReviewServiceTest {
                 .thenReturn(Optional.of(student()));
     }
 
+    private static User releasingTeacher() {
+        User user = new User("dana.cohen", "hash", "Dana Cohen",
+                server.db.entities.UserRole.TEACHER, "203458761");
+        setId(user, TEACHER_ID);
+        return user;
+    }
+
     private static User student() {
         User user = new User("maya.levi", "hash", "מאיה לוי",
                 server.db.entities.UserRole.STUDENT, "312345678");
@@ -431,6 +438,35 @@ class GradeReviewServiceTest {
 
             assertThat(review.grade().studentName()).isEqualTo("(unknown student)");
             assertThat(review.answers()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("A7 — names the releasing teacher too, from the execution already resolved")
+        void namesTheReleasingTeacher() {
+            givenThePaper();
+            lenient().when(users.findById(session, TEACHER_ID))
+                    .thenReturn(Optional.of(releasingTeacher()));
+
+            GradeReview review =
+                    service.review(session, service.contextOf(session, GRADE_ID).orElseThrow());
+
+            // exam_executions.created_by, which ExecutionContext carries as executingTeacherId.
+            // Nothing new is read to get it: the context is what the gates already resolved.
+            assertThat(review.grade().teacherName()).isEqualTo("Dana Cohen");
+        }
+
+        @Test
+        @DisplayName("A7 — and leaves it empty, not '(unknown teacher)', when it will not resolve")
+        void anUnresolvableTeacherIsEmpty() {
+            givenThePaper();
+
+            GradeReview review =
+                    service.review(session, service.contextOf(session, GRADE_ID).orElseThrow());
+
+            // The student's placeholder is read by a teacher hunting a missing row; this one is
+            // read by a screen that omits the line, so an absence says more than a word.
+            assertThat(review.grade().teacherName()).isEmpty();
+            assertThat(review.grade().studentName()).isEqualTo("מאיה לוי");
         }
     }
 

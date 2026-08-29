@@ -147,6 +147,9 @@ public class CheckedFormService {
         String studentName = users.findById(session, studentId)
                 .map(User::getFullName)
                 .orElse("");
+        // A7: the same name the form's own header line uses, resolved once and put on both, so
+        // the row a student's list shows and the paper she opens cannot name two people.
+        String teacherName = teacherName(session, execution);
 
         StudentGradeRow header = new StudentGradeRow(
                 grade.getId(),
@@ -161,13 +164,14 @@ public class CheckedFormService {
                 grade.getTeacherComment(),
                 grade.getApprovedAt(),
                 execution.examName(),
-                execution.courseCode());
+                execution.courseCode(),
+                teacherName);
 
         List<AnswerReviewRow> answers = reviews.answers(session,
                 new GradeReviewService.ReviewContext(grade, attempt, execution));
 
         return new CheckedForm(header, execution.examName(), execution.courseCode(),
-                teacherName(session, execution), wireState(attempt.status()),
+                teacherName, wireState(attempt.status()),
                 attempt.actualMinutes(), answers);
     }
 

@@ -61,6 +61,47 @@ class GradingDtoTest {
         }
 
         @Test
+        @DisplayName("A7 — a grade row's teacher name is never null, empty when unresolvable")
+        void studentGradeRowNormalisesItsTeacherName() {
+            // Null in, empty out: one absence for a screen to test rather than two, and the
+            // word "null" cannot reach a card. Same treatment CheckedForm.teacherName gets.
+            StudentGradeRow explicitNull = new StudentGradeRow(1L, 2L, "Maya Levi", 70, null, 70,
+                    GradeState.APPROVED, null, null, APPROVED_AT, "Midterm", "11", null);
+            assertThat(explicitNull.teacherName()).isEmpty();
+
+            // The no-label constructor says "no labels", and a teacher is one of the labels.
+            StudentGradeRow unlabelled = new StudentGradeRow(1L, 2L, "Maya Levi", 70, null, 70,
+                    GradeState.AUTO, null, null, null);
+            assertThat(unlabelled.teacherName()).isEmpty();
+
+            StudentGradeRow named = new StudentGradeRow(1L, 2L, "Maya Levi", 70, null, 70,
+                    GradeState.APPROVED, null, null, APPROVED_AT, "Midterm", "11", "Dana Cohen");
+            assertThat(named.teacherName()).isEqualTo("Dana Cohen");
+        }
+
+        @Test
+        @DisplayName("A7 — the copiers carry the teacher and the attempt through, not around")
+        void studentGradeRowCopiersCarryEverything() {
+            StudentGradeRow teacherSide = new StudentGradeRow(1L, 2L, "Maya Levi", 70, 80, 80,
+                    GradeState.APPROVED, "audit text", "Well done", APPROVED_AT, "Midterm", "11",
+                    "Dana Cohen", AttemptState.TIMED_OUT, 43);
+
+            StudentGradeRow stripped = teacherSide.withoutJustification();
+
+            // Only the justification goes. A copier that quietly dropped the rest would be the
+            // shape A5 and A7 both exist to close: a field on the wire that no screen receives.
+            assertThat(stripped.overrideReason()).isNull();
+            assertThat(stripped.teacherName()).isEqualTo("Dana Cohen");
+            assertThat(stripped.attemptStatus()).isEqualTo(AttemptState.TIMED_OUT);
+            assertThat(stripped.actualMinutes()).isEqualTo(43);
+
+            StudentGradeRow relabelled = teacherSide.withExam("Algebra", "11", "Avi Mizrahi");
+            assertThat(relabelled.examName()).isEqualTo("Algebra");
+            assertThat(relabelled.teacherName()).isEqualTo("Avi Mizrahi");
+            assertThat(relabelled.attemptStatus()).isEqualTo(AttemptState.TIMED_OUT);
+        }
+
+        @Test
         @DisplayName("an answer row needs a display id and a question text")
         void answerReviewRowRequiresItsText() {
             assertThatNullPointerException()

@@ -126,7 +126,7 @@ class GradingHandlersTest {
     private static StudentGradeRow publishedRow(long gradeId, long studentId) {
         return new StudentGradeRow(gradeId, studentId, "Maya Levi", 60, null, 60,
                 GradeState.APPROVED, null, null, Instant.parse("2026-06-01T10:00:00Z"),
-                "Midterm: Algebra", "11");
+                "Midterm: Algebra", "11", "");
     }
 
     private static GradeReviewService.ReviewContext contextOwnedBy(long teacherId) {

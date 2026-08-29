@@ -61,8 +61,8 @@ import java.util.List;
  *
  * <h2>What a student is shown, and what she is not</h2>
  *
- * <p>Exam, course, grade, approval date and the teacher's note. An adjusted grade carries a
- * marker saying a teacher reviewed it — and never the justification, which the wire strips
+ * <p>Exam, course, teacher, grade, approval date and the teacher's note. An adjusted grade
+ * carries a marker saying a teacher reviewed it — and never the justification, which the wire strips
  * structurally before it reaches this tier (S-23). The distinction is the whole reason
  * {@link MyGradesCopy} is a separate file from {@link ResultsCopy}: the same row, two
  * audiences, two vocabularies.
@@ -267,13 +267,26 @@ public final class MyGradesView extends AbstractScreen {
         HBox footer = new HBox(8, date, Buttons.spacer(), open);
         footer.setAlignment(Pos.CENTER_LEFT);
 
-        VBox card = new VBox(8, top, name, score);
+        VBox card = new VBox(8, top, name);
+
+        // A7: whose exam this was, directly under its name and above the number, in the same
+        // muted line the marked paper uses. Left out entirely when the server could not resolve
+        // a name — a label with nothing after it reads as data that failed to load.
+        addLine(card, MyGradesCopy.teacherLine(row), "grade-teacher");
+
+        card.getChildren().add(score);
         if (MyGradesCopy.wasAdjusted(row)) {
             Label adjusted = new Label(MyGradesCopy.ADJUSTED_MARKER);
             adjusted.getStyleClass().addAll("small", "muted");
             adjusted.setWrapText(true);
             card.getChildren().add(adjusted);
         }
+
+        // A3's comment finally on the list it was always on the wire for. Under the score,
+        // because it is about the score, and wrapped rather than clipped: a teacher's sentence
+        // to one student is not a cell that can be allowed to end in the middle of a word.
+        addLine(card, MyGradesCopy.noteLine(row), "grade-note");
+
         card.getChildren().addAll(Buttons.spacer(), footer);
         card.getStyleClass().addAll("hsts-card", "grade-card");
         card.setOnMouseClicked(event -> navigator().navigate(Routes.CHECKED_FORM.id(),
@@ -281,6 +294,24 @@ public final class MyGradesView extends AbstractScreen {
         card.setAccessibleText(MyGradesCopy.rowDescription(row, ZONE));
         Animations.liftOnHover(card);
         return card;
+    }
+
+    /**
+     * Appends one muted line to a card, or nothing at all (A7).
+     *
+     * <p>A helper rather than two copies of four lines, because the two lines it draws follow
+     * exactly the same rule — {@link MyGradesCopy} answers {@code null} for "there is nothing to
+     * say", and the card's answer to that is a card without the line rather than a line without
+     * a value.
+     */
+    private static void addLine(VBox card, String text, String styleClass) {
+        if (text == null) {
+            return;
+        }
+        Label line = new Label(text);
+        line.getStyleClass().addAll("small", "muted", styleClass);
+        line.setWrapText(true);
+        card.getChildren().add(line);
     }
 
     /**

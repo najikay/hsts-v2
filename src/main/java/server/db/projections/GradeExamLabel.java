@@ -13,9 +13,16 @@ package server.db.projections;
  * anybody else's grade — which is why it is safe on the student path that motivated it, and
  * why it needs none of {@code CorrectnessLeakGuardTest}'s sanctioned suffixes.
  *
+ * <p><b>{@code teacherId} (A7, 2026-08-29).</b> The third label the student's screens print is
+ * a person, and the execution this already joins is where the id lives — so it is a column on a
+ * read that was happening anyway, not a read of its own. An <b>id</b> rather than a name,
+ * because names come from {@code UserRepository.findById} everywhere else in the product and a
+ * second way to spell a person is a second way for two screens to disagree about one.
+ *
  * @param gradeId    the {@code grades} row this labels
  * @param examName   the exam's name, as its author wrote it
  * @param courseCode the 2-character course code
+ * @param teacherId  {@code exam_executions.created_by} — who released the sitting (A7)
  */
-public record GradeExamLabel(long gradeId, String examName, String courseCode) {
+public record GradeExamLabel(long gradeId, String examName, String courseCode, long teacherId) {
 }

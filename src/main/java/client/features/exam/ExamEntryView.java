@@ -1,5 +1,6 @@
 package client.features.exam;
 
+import client.ui.components.BackLink;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.Icons;
@@ -26,6 +27,19 @@ import java.util.Objects;
  * is a fade rather than a screen change. The exam summary between them is the point of the
  * split: a student confirms she is about to sit <i>Algebra Midterm, 45 minutes, 20
  * questions</i> before the sentence that starts her clock.
+ *
+ * <h2>Every step has a way out ⚑</h2>
+ *
+ * <p>2026-08-29, manual round 2, lead's ruling. Take Exam is a rail route, so the shell draws
+ * no back control over it, and its three cards are steps of one screen rather than routes:
+ * F-7 reaches none of them. Each one had exactly one door, forward, and the identity step's
+ * door started a clock.
+ *
+ * <p>So each card now carries the exit that suits it. The identity step goes <b>back</b> a
+ * step, which is a {@link BackLink} because that is what a within-screen back is everywhere
+ * else in the product. The code step and the handed-in dead end have no step behind them, so
+ * they <b>leave</b>, through {@link #onLeave(Runnable)} — this class has no navigator and
+ * should not grow one, so the destination stays the screen's business.
  */
 public final class ExamEntryView extends StackPane {
 
@@ -41,6 +55,13 @@ public final class ExamEntryView extends StackPane {
     private final Label codeSubtitle = new Label(ExamCopy.CODE_SUBTITLE);
     /** The way out of the confirming variant; hidden on the ordinary code step. */
     private final Hyperlink differentCode = new Hyperlink(ExamCopy.DIFFERENT_CODE);
+    /** The way off the screen from the code step, in both of its moods. */
+    private final Hyperlink leaveFromCode = new Hyperlink(ExamCopy.BACK_TO_DASHBOARD);
+    /** The same way out of the dead end, which had none at all. */
+    private final Hyperlink leaveFromBlocked = new Hyperlink(ExamCopy.BACK_TO_DASHBOARD);
+    /** The way back a step from the identity step; nothing has been started to abandon. */
+    private final Button backToCode =
+            BackLink.action(ExamCopy.BACK_TO_CODE_TARGET, this::goBackToCode);
     private final Button startButton = Buttons.primary(ExamCopy.START_BUTTON);
     private final Label summaryTitle = new Label();
     private final Label summaryMeta = new Label();
@@ -51,6 +72,8 @@ public final class ExamEntryView extends StackPane {
     private final VBox codeCard;
     private final VBox identityCard;
     private final VBox blockedCard;
+
+    private Runnable onLeave = () -> { };
 
     /** @param session the entry state machine this renders */
     public ExamEntryView(ExamEntrySession session) {
@@ -72,6 +95,11 @@ public final class ExamEntryView extends StackPane {
         differentCode.getStyleClass().add("small");
         differentCode.setOnAction(e -> session.useDifferentCode());
 
+        leaveFromCode.getStyleClass().add("small");
+        leaveFromCode.setOnAction(e -> onLeave.run());
+        leaveFromBlocked.getStyleClass().add("small");
+        leaveFromBlocked.setOnAction(e -> onLeave.run());
+
         codeCard = codeCard();
         identityCard = identityCard();
         blockedCard = blockedCard();
@@ -79,6 +107,26 @@ public final class ExamEntryView extends StackPane {
         getChildren().addAll(codeCard, identityCard, blockedCard);
         session.onChange(this::refresh);
         refresh();
+    }
+
+    /**
+     * Registers what leaving this screen does ⚑.
+     *
+     * <p>This class is FX-only and holds no navigator, which is the shape the rest of the
+     * feature has: {@code ExamDoneView} says the same thing with the same method name and
+     * {@code TakeExamView} answers both. Reaching for a navigator here would give the renderer
+     * a second job and give the screen a second place to guard the way out of an exam.
+     *
+     * @param listener what to do when she asks to leave; never {@code null}
+     */
+    public void onLeave(Runnable listener) {
+        this.onLeave = Objects.requireNonNull(listener, "listener");
+    }
+
+    /** Sends the identity step back a step, and puts the focus where she now has to act. */
+    private void goBackToCode() {
+        session.backToCode();
+        focusCurrentField();
     }
 
     /**
@@ -194,7 +242,9 @@ public final class ExamEntryView extends StackPane {
         codeSubtitle.getStyleClass().addAll("body", "muted");
         codeSubtitle.setWrapText(true);
 
-        HBox actions = new HBox(12, differentCode, Buttons.spacer(), continueButton);
+        // Leaving comes first and stays put, so the one control that is on this card in both
+        // moods does not move when the other one appears beside it.
+        HBox actions = new HBox(12, leaveFromCode, differentCode, Buttons.spacer(), continueButton);
         actions.setAlignment(Pos.CENTER_RIGHT);
 
         VBox card = new VBox(16, codeTitle, codeSubtitle, codeField, actions);
@@ -215,6 +265,11 @@ public final class ExamEntryView extends StackPane {
 
         VBox card = card(ExamCopy.ID_TITLE, ExamCopy.ID_SUBTITLE, idField, startButton);
         card.getChildren().add(1, summary);
+        // Top-left, above the title: the place F-7 puts every back control. In its own row
+        // because a VBox would otherwise stretch it the width of the card.
+        HBox backRow = new HBox(backToCode);
+        backRow.setAlignment(Pos.CENTER_LEFT);
+        card.getChildren().add(0, backRow);
         return card;
     }
 
@@ -224,8 +279,10 @@ public final class ExamEntryView extends StackPane {
         blockedText.getStyleClass().addAll("body", "muted");
         blockedText.setWrapText(true);
 
+        // F6.7 explains this dead end but, until manual round 2, left the reader standing in
+        // it: an explanation with no door is still a dead end.
         VBox card = new VBox(12, Icons.of(Icons.CHECK, Icons.SIZE_LARGE, "exam-entry-icon"),
-                title, blockedText);
+                title, blockedText, leaveFromBlocked);
         card.getStyleClass().addAll("hsts-card", "exam-entry-card");
         card.setAlignment(Pos.CENTER);
         card.setMaxWidth(460);

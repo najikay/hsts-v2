@@ -293,6 +293,9 @@ abstract class ExecutionRepositoryContract extends RepositoryTestBase {
         assertThat(labels.get(ids.get(0)).examName()).isEqualTo("מבחן");
         assertThat(labels.get(ids.get(0)).courseCode()).isEqualTo(COURSE_ALGEBRA);
         assertThat(labels.get(ids.get(1)).gradeId()).isEqualTo(ids.get(1));
+        // A7: the releasing teacher, exam_executions.created_by, read off a join this query
+        // was already making rather than through a read of its own.
+        assertThat(labels.get(ids.get(0)).teacherId()).isEqualTo(danaId);
     }
 
     @Test

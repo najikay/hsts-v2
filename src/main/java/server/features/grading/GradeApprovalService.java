@@ -248,6 +248,12 @@ public class GradeApprovalService {
      * is teacher and audit material and never reaches a student — {@code MyGrades} and
      * {@code CheckedForm} strip it structurally in their compact constructors, and a bare
      * push has no container to strip it, so it is simply never put on.
+     *
+     * <p>{@code teacherName} (A7) is passed as {@code ""}, and nothing is lost by it: the client
+     * treats {@code PUSH_GRADE_PUBLISHED} as a signal and re-reads {@code MY_GRADES_GET}
+     * ({@code MyGradesSession.onGradePublished}), so the row that reaches a card is always the
+     * one {@code ResultsService} assembled with a name on it. Resolving it here would mean a
+     * {@code UserRepository} this class does not hold, for a string no screen reads.
      */
     private List<StudentGradeRow> publishedRows(Session session, List<Published> published) {
         if (published.isEmpty()) {
@@ -276,7 +282,7 @@ public class GradeApprovalService {
             rows.add(new StudentGradeRow(row.gradeId(), row.studentId(), row.studentName(),
                     row.autoScore(), row.finalScore(), row.effectiveScore(), GradeState.APPROVED,
                     null, row.teacherComment(), row.approvedAt(),
-                    entry.execution().examName(), entry.execution().courseCode()));
+                    entry.execution().examName(), entry.execution().courseCode(), ""));
         }
         return rows;
     }

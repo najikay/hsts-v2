@@ -58,6 +58,9 @@ open dashboard; the notification is the durable record.
   `CHECKED_FORM_GET`) where every row is a different exam and T-9.1 needs the label; left null
   on the teacher paths, where `ExecutionGradingSummary` already carries them once per execution.
   The previous 10-component constructor is retained for teacher-path callers.
+  **A5 (2026-08-26):** `attemptStatus` and `actualMinutes` appended last. **A7 (2026-08-29):**
+  `teacherName` added after `courseCode`, and the retained 12-component constructor became a
+  13-component one that carries it. The record's current shape is printed under A7 below.
 - `GradeReviewRequest(long gradeId)`
 - `GradeReview(StudentGradeRow grade, List<AnswerReviewRow> answers)` — teacher-only view.
 - `AnswerReviewRow(int ordinal, String displayId, String questionText, String answer1, String
@@ -300,6 +303,94 @@ reads as a second title.
 **Nothing about the checked form's gates changes.** The name is assembled after all three have
 passed, from the execution the gates themselves resolved, and it reaches nobody a marked paper
 does not already reach.
+
+### A7 — `StudentGradeRow` v1.3: `teacherName` (E13.3 / T-9.1, added 2026-08-29, lead's manual round 2)
+
+**What was missing.** A6 put a teacher's name on the marked paper. The screen that leads to it
+still had none. The lead's second manual round, against the student's My Grades cards: *"the
+cards show a grade, name of the exam, a number on top, a date below the grade, and a passed
+status in the corner, clean UI, however, no teacher name and no teacher comment."*
+
+Two absences with two different causes, which is why they are one amendment and not two:
+
+- **The comment was already on the wire and had no reader.** `teacherComment` has been a
+  component of this record since v1, A3 built the verb that writes one, `MyGradesCopy` has had
+  `COLUMN_COMMENT` and `NO_COMMENT` since E13.3 — and the wave-2 card grid that replaced the
+  table dropped the column and never replaced it with a line. **B-3's shape again, and the
+  third time this contract has met it**: a field written, carried and rendered nowhere. It
+  needed no wire change at all. It needed a `Label`.
+- **The teacher's name was nowhere.** A shape fact, not a null: the record had fourteen
+  components and none of them was a teacher, so no amount of client work could have put a name
+  on that card. That is this amendment.
+
+**The record, with the component after `courseCode`:**
+
+```
+StudentGradeRow(long gradeId, long studentId, String studentName, int autoScore,
+                Integer finalScore, int effectiveScore, GradeState state, String overrideReason,
+                String teacherComment, Instant approvedAt, String examName, String courseCode,
+                String teacherName, AttemptState attemptStatus, Integer actualMinutes)
+```
+
+- **Which teacher.** The **releasing** one: `exam_executions.created_by`, **the same definition
+  A6 uses**, so a card and the paper it opens name the same person and one execution has one
+  answer. On the seed (§9) executions 1 and 4 are `2 dana.cohen`, execution 2 is
+  `4 avi.mizrahi`, execution 3 is `6 michal.sharon`. Deliberately not `grades.approved_by`, on
+  A6's reasoning unchanged: an approval by a colleague would change the name under an exam title
+  without anything about the paper having changed.
+- **Never null, empty when unresolvable.** The compact constructor normalises null to `""`, as
+  `CheckedForm`'s does. One absence to test rather than two, and the word "null" cannot reach a
+  card. The client drops the line rather than drawing a label with nothing after it — the rule
+  the teacher's note already follows, and the rule A6 wrote down.
+- **Placed after `courseCode` rather than appended last**, unlike A3 and A5 and exactly like A6,
+  for A6's reason: it is a **header label**, and it belongs with the two labels the student's
+  screens print one under the other. Both jars ship from one build, so nothing is bought by
+  putting a label at the end of a record, and a call site that misses the change fails to
+  compile on the arity rather than silently passing a course code as a teacher's name.
+- **The retained label constructor carries it.** A1 kept a 10-component constructor and A5 kept a
+  12-component one, each on the stated ground that a path cannot start carrying a new fact
+  "without somebody deliberately changing the call". Applied here that argument runs the other
+  way: the 12-component constructor is the one **every student path uses**, so leaving it alone
+  would have defaulted a blank onto the one screen this amendment exists for. It becomes a
+  **13-component constructor ending in `teacherName`**, and `withExam` takes three labels rather
+  than two with no two-argument overload beside it. The 10-component no-label constructor is
+  retained unchanged and passes `""`: a row with no exam label is read under a header that
+  already says whose execution it is.
+- `serialVersionUID` goes **3 → 4**, on this record's own precedent at A5 and `CheckedForm`'s at
+  A6. Stated plainly for the reason A3 and A6 state it: this is the one place "additive" is not
+  literally true of the bytes. Client and server ship as one pair of jars from one build, and
+  there is no deployment in which one is upgraded without the other.
+
+**Where it is populated, and where it is `""`.** The rule is *resolve it wherever the execution
+is already loaded and a `UserRepository` is already held; never buy a new dependency for it*:
+
+| Builder | Path | Name |
+|---|---|---|
+| `ResultsService.myGrades` | `MY_GRADES_GET` | **resolved.** `GradeExamLabel` gains `teacherId` (`ex.createdBy`) — a column on the five-join read that was already labelling the list, not a read of its own — and the service turns it into a name with the same `users.findById(…).map(User::getFullName)` lookup that names the student two lines above, memoised per distinct teacher |
+| `CheckedFormService.assemble` | `CHECKED_FORM_GET` | **resolved.** The name A6 already resolves for the form's own header now goes on the header row too, from one lookup, so the two cannot disagree |
+| `GradeReviewService.teacherRow` | `GRADE_REVIEW_GET`, `GRADE_OVERRIDE` | **resolved.** The execution is in the `ReviewContext` and this class already holds the `UserRepository`; it costs one lookup and it keeps one record from meaning different things on different paths |
+| `GradingQueueService.toWire` | `GRADING_EXECUTION_GET` | `""` — no `UserRepository` here, and the only teacher in that room is the one reading the table |
+| `TeacherResultsService.toWire` | `RESULTS_EXECUTION_GET` | `""` — reads through `TeacherResultsStore`, holds no `UserRepository`, same screen and same reason |
+| `GradeApprovalService.publishedRows` | `PUSH_GRADE_PUBLISHED` | `""`, **and nothing is lost by it**: the client treats the push as a signal and re-reads `MY_GRADES_GET` (`MyGradesSession.onGradePublished`), so the row that reaches a card is always the one `ResultsService` assembled with a name on it |
+
+**Client side.** Two lines on the card, both under the exam name, both dropped when blank:
+`"Teacher: Dana Cohen"` above the score and `"Teacher's note: …"` below it, in the muted small
+register the marked paper prints the same two facts in. The label word is carried on both — a
+bare name under a title reads as a second title, and an unlabelled sentence under a score reads
+as the exam's words as often as the teacher's. `MyGradesCopy` **borrows
+`CheckedFormCopy.TEACHER_PREFIX` rather than declaring a second one**: a student who clicks from
+the card to the paper must read the same words about the same person, and two constants are the
+first place two screens start disagreeing. Borrowing across those two files is safe in a way
+borrowing from `ResultsCopy` would not be — that one is the teacher's vocabulary, and the two
+files are separate precisely so a convenient reuse cannot put teacher wording in front of a
+student. The note is **wrapped and neither clipped nor capped**: a teacher's sentence to one
+student is not a table cell, and a card a line taller than its neighbours is a better answer than
+one that ends her in the middle of a word.
+
+**Nothing else moved.** No verb, no gate, no error code. `overrideReason` is still stripped
+structurally by both student containers, and A7 adds nothing a student could not already be
+told: the teacher's name reaches her on the paper this card opens, and the note was written for
+her.
 
 ## What is deliberately absent
 

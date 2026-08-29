@@ -40,9 +40,18 @@ class MyGradesCopyTest {
 
     private static StudentGradeRow row(int autoScore, Integer finalScore, String comment,
                                        Instant approvedAt, String examName, String courseCode) {
+        // A7's name empty by default, which is what the server sends when it cannot resolve
+        // one. The tests that are about the teacher's line name her explicitly.
+        return row(autoScore, finalScore, comment, approvedAt, examName, courseCode, "");
+    }
+
+    private static StudentGradeRow row(int autoScore, Integer finalScore, String comment,
+                                       Instant approvedAt, String examName, String courseCode,
+                                       String teacherName) {
         int effective = finalScore != null ? finalScore : autoScore;
         return new StudentGradeRow(900, 11, "מאיה לוי", autoScore, finalScore, effective,
-                GradeState.APPROVED, null, comment, approvedAt, examName, courseCode);
+                GradeState.APPROVED, null, comment, approvedAt, examName, courseCode,
+                teacherName);
     }
 
     private static StudentGradeRow plainRow() {
@@ -141,7 +150,7 @@ class MyGradesCopyTest {
         String secret = "teacher-only audit text";
         StudentGradeRow leaky = new StudentGradeRow(900, 11, "מאיה לוי", 45, 55, 55,
                 GradeState.APPROVED, secret, "שיפור ניכר", Instant.parse("2026-08-20T09:00:00Z"),
-                "Algebra midterm", "11");
+                "Algebra midterm", "11", "Dana Cohen");
 
         assertThat(MyGradesCopy.score(leaky)).doesNotContain(secret);
         assertThat(MyGradesCopy.comment(leaky)).doesNotContain(secret);
@@ -244,6 +253,82 @@ class MyGradesCopyTest {
         }
     }
 
+    // ===================== A7: the two card lines =========================
+
+    @Nested
+    @DisplayName("The card's teacher line (A7)")
+    class TeacherLine {
+
+        @Test
+        @DisplayName("names the teacher, with the label word the marked paper uses")
+        void namesTheTeacher() {
+            StudentGradeRow row = row(71, 71, null, Instant.parse("2026-08-20T09:00:00Z"),
+                    "Algebra midterm", "11", "Dana Cohen");
+
+            assertThat(MyGradesCopy.teacherLine(row)).isEqualTo("Teacher: Dana Cohen");
+        }
+
+        @Test
+        @DisplayName("is the checked form's own constant, not a second spelling of it")
+        void borrowsTheOneConstant() {
+            StudentGradeRow row = row(71, 71, null, Instant.parse("2026-08-20T09:00:00Z"),
+                    "Algebra midterm", "11", "Dana Cohen");
+
+            // A student clicking from the card to the paper must read the same words about the
+            // same person. Two constants are the first place two screens start disagreeing.
+            assertThat(MyGradesCopy.teacherLine(row))
+                    .startsWith(CheckedFormCopy.TEACHER_PREFIX);
+        }
+
+        @Test
+        @DisplayName("is null, so the card leaves it out, when the server resolved no name")
+        void isNullWhenBlank() {
+            // The wire never sends null (A7 normalises), but blank means unresolvable, and a
+            // label with nothing after it reads as data that failed to load.
+            assertThat(MyGradesCopy.teacherLine(plainRow())).isNull();
+
+            StudentGradeRow spaces = row(71, 71, null, Instant.parse("2026-08-20T09:00:00Z"),
+                    "Algebra midterm", "11", "   ");
+            assertThat(MyGradesCopy.teacherLine(spaces)).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("The card's note line (A7)")
+    class NoteLine {
+
+        @Test
+        @DisplayName("labels the note with the words the table's column used")
+        void labelsTheNote() {
+            StudentGradeRow withNote = row(51, 55, "שיפור ניכר באי-שוויונות",
+                    Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11");
+
+            assertThat(MyGradesCopy.noteLine(withNote))
+                    .isEqualTo("Teacher's note: שיפור ניכר באי-שוויונות")
+                    .startsWith(MyGradesCopy.COLUMN_COMMENT);
+        }
+
+        @Test
+        @DisplayName("is null rather than a dash when she wrote nothing, or only spaces")
+        void isNullWhenBlank() {
+            // Deliberately not comment()'s em dash: a table column has a width to hold and a
+            // card has none, so the honest rendering of "no note" on a card is no line.
+            assertThat(MyGradesCopy.noteLine(plainRow())).isNull();
+            assertThat(MyGradesCopy.comment(plainRow())).isEqualTo(MyGradesCopy.NO_COMMENT);
+
+            StudentGradeRow whitespace = row(71, 71, "   ",
+                    Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11");
+            assertThat(MyGradesCopy.noteLine(whitespace)).isNull();
+        }
+
+        @Test
+        @DisplayName("carries no em dash, on the rule every user-visible string follows")
+        void carriesNoEmDash() {
+            assertThat(MyGradesCopy.NOTE_PREFIX).doesNotContain("—");
+            assertThat(CheckedFormCopy.TEACHER_PREFIX).doesNotContain("—");
+        }
+    }
+
     // ===================== Accessibility ==================================
 
     @Test
@@ -252,6 +337,19 @@ class MyGradesCopyTest {
         String spoken = MyGradesCopy.rowDescription(plainRow(), JERUSALEM);
 
         assertThat(spoken).isEqualTo("Algebra midterm, 71 / 100, approved 20 Aug 2026");
+    }
+
+    @Test
+    @DisplayName("A7 — and speaks the two lines it draws, when it draws them")
+    void rowDescriptionSpeaksTheTeacherAndTheNote() {
+        StudentGradeRow full = row(71, 71, "Strong work on the inequalities.",
+                Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11", "Dana Cohen");
+
+        // A card that shows a listener's teacher and her teacher's note only to a pair of eyes
+        // would be A7's own omission, one tier further in.
+        assertThat(MyGradesCopy.rowDescription(full, JERUSALEM)).isEqualTo(
+                "Algebra midterm, Teacher: Dana Cohen, 71 / 100, approved 20 Aug 2026, "
+                        + "Teacher's note: Strong work on the inequalities.");
     }
 
     @Test

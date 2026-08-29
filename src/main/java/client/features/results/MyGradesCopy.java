@@ -73,6 +73,15 @@ public final class MyGradesCopy {
     /** Shown in the comment column when the teacher wrote nothing. */
     public static final String NO_COMMENT = "—";
 
+    /**
+     * What the teacher's note is labelled with on a card (A7, 2026-08-29).
+     *
+     * <p>Derived from {@link #COLUMN_COMMENT} rather than written out again: the table column
+     * and the card line are the same fact under the same words, and two spellings of "Teacher's
+     * note" would be two things to keep in step for no gain.
+     */
+    public static final String NOTE_PREFIX = COLUMN_COMMENT + ": ";
+
     /** The style class the screen's root carries, for the stylesheet and for tests. */
     public static final String STYLE_CLASS = "my-grades";
 
@@ -212,6 +221,52 @@ public final class MyGradesCopy {
     }
 
     /**
+     * The teacher who set and released this exam, as a card line (A7, 2026-08-29).
+     *
+     * <p>The label word is {@link CheckedFormCopy#TEACHER_PREFIX} itself and not a copy of it.
+     * The card and the marked paper it opens are two views of one grade, and a student who
+     * clicks through must read the same words about the same person; a second constant is a
+     * second thing to change and the first place two screens start disagreeing. Borrowing it
+     * across two student-facing catalogues is safe in a way borrowing from {@link ResultsCopy}
+     * would not be — that one is the teacher's, and this file exists because the two audiences
+     * must not share wording.
+     *
+     * <p>Null when the server could not resolve a name, which it reports as an empty string
+     * (never null — the wire normalises it, A7). The card then leaves the line out entirely
+     * rather than drawing a label with nothing after it: a colon with a blank after it reads as
+     * data that failed to load.
+     *
+     * @param row a loaded row
+     * @return for example {@code "Teacher: Dana Cohen"}, or {@code null} when there is no name
+     */
+    public static String teacherLine(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        String name = blankToNull(row.teacherName());
+        return name == null ? null : CheckedFormCopy.TEACHER_PREFIX + name;
+    }
+
+    /**
+     * The teacher's note, as a card line (A7, 2026-08-29).
+     *
+     * <p>Labelled rather than quoted. A sentence in quotation marks under a score reads as the
+     * exam's own words as often as the teacher's, and the label is what makes it hers — the
+     * same reason {@link CheckedFormCopy#TEACHER_NOTE} is a heading on the marked paper.
+     *
+     * <p>Null and not {@link #NO_COMMENT} when she wrote nothing, unlike {@link #comment}. The
+     * em dash is a table's answer, where a column has to hold its width and a blank cell would
+     * read as a load failure; a card has no column to keep, so the honest rendering of "no note"
+     * is no line.
+     *
+     * @param row a loaded row
+     * @return for example {@code "Teacher's note: Strong improvement."}, or {@code null}
+     */
+    public static String noteLine(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        String comment = blankToNull(row.teacherComment());
+        return comment == null ? null : NOTE_PREFIX + comment;
+    }
+
+    /**
      * Whether this row should carry the adjusted marker.
      *
      * <p>Deliberately <b>not</b> "has a final score". Approving a grade sets {@code finalScore}
@@ -250,6 +305,10 @@ public final class MyGradesCopy {
      * assembling it. NFR accessibility is not a stretch goal on the one screen whose entire
      * content is a number about the person reading it.
      *
+     * <p>A7's two lines are spoken when they are drawn and left out when they are not, in the
+     * order the card draws them. A card that shows a listener's teacher and her teacher's note
+     * only to a pair of eyes would be the same omission A7 exists to close, one tier further in.
+     *
      * @param row  a loaded row
      * @param zone the zone to render the date in
      * @return one sentence describing the row
@@ -257,13 +316,21 @@ public final class MyGradesCopy {
     public static String rowDescription(StudentGradeRow row, ZoneId zone) {
         Objects.requireNonNull(row, "row");
         StringBuilder text = new StringBuilder()
-                .append(examName(row))
-                .append(", ")
+                .append(examName(row));
+        String teacher = teacherLine(row);
+        if (teacher != null) {
+            text.append(", ").append(teacher);
+        }
+        text.append(", ")
                 .append(score(row))
                 .append(", approved ")
                 .append(approvedOn(row, zone));
         if (wasAdjusted(row)) {
             text.append(", ").append(ADJUSTED_MARKER.toLowerCase(Locale.ENGLISH));
+        }
+        String note = noteLine(row);
+        if (note != null) {
+            text.append(", ").append(note);
         }
         return text.toString();
     }

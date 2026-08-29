@@ -333,6 +333,47 @@ class ExamEntrySessionTest {
             assertThat(started).isEmpty();
             assertThat(session.idState().message()).isEqualTo(ExamCopy.OFFLINE);
         }
+
+        @Test
+        @DisplayName("\u26a1 Back hands the code step back, and sends nothing (manual round 2)")
+        void backReturnsToTheCodeStep() {
+            session.setNationalId("374301851");
+
+            session.backToCode();
+
+            assertThat(session.phase()).isEqualTo(EntryPhase.CODE);
+            assertThat(session.header())
+                    .as("the header belonged to the join she is undoing")
+                    .isEmpty();
+            assertThat(session.nationalId()).isEmpty();
+            assertThat(session.idState().isPristine())
+                    .as("an ID she never submitted is not a wrong ID")
+                    .isTrue();
+            assertThat(session.code())
+                    .as("she lands on the step she came from, not on a blank one")
+                    .isEqualTo("4B7Q");
+            assertThat(connection.sentCount())
+                    .as("EXAM_JOIN answered a header; there is no attempt to abandon")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("Back is ignored while the start is in flight")
+        void backIsIgnoredWhileBusy() {
+            // Nothing answers ATTEMPT_START here, so the request stays in flight and the
+            // session stays busy: the exact window the guard exists for.
+            session.setNationalId("374301851");
+            session.start();
+            assertThat(session.isBusy()).isTrue();
+
+            session.backToCode();
+
+            assertThat(session.phase())
+                    .as("otherwise the answer lands on the code step and puts her on the paper "
+                            + "she just backed out of")
+                    .isEqualTo(EntryPhase.IDENTITY);
+            assertThat(session.nationalId()).isEqualTo("374301851");
+        }
     }
 
     @Nested
@@ -396,6 +437,23 @@ class ExamEntrySessionTest {
             assertThat(session.codeState().isPristine())
                     .as("a field she was handed and rejected is empty, not wrong")
                     .isTrue();
+        }
+
+        @Test
+        @DisplayName("\u26a1 Back from the identity step lands on the confirmation she arrived on")
+        void backKeepsTheConfirmation() {
+            connection.replyOk(Verb.EXAM_JOIN, HEADER);
+            session.prefill("4B7Q");
+            session.submitCode().join();
+            assertThat(session.phase()).isEqualTo(EntryPhase.IDENTITY);
+
+            session.backToCode();
+
+            // Emptying it would ask her to retype a code she never typed in the first place.
+            assertThat(session.phase()).isEqualTo(EntryPhase.CODE);
+            assertThat(session.isConfirming()).isTrue();
+            assertThat(session.code()).isEqualTo("4B7Q");
+            assertThat(session.canContinue()).isTrue();
         }
 
         @Test

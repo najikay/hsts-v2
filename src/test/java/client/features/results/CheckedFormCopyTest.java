@@ -39,7 +39,7 @@ class CheckedFormCopyTest {
         return new CheckedForm(
                 new StudentGradeRow(900, 11, "מאיה לוי", 71, 71, 71, GradeState.APPROVED,
                         null, comment, Instant.parse("2026-08-20T09:00:00Z"),
-                        "Algebra midterm", "11"),
+                        "Algebra midterm", "11", teacherName),
                 "Algebra midterm", "11", teacherName, state, minutes, List.of());
     }
 
@@ -195,7 +195,8 @@ class CheckedFormCopyTest {
         CheckedForm leaky = new CheckedForm(
                 new StudentGradeRow(900, 11, "מאיה לוי", 45, 55, 55, GradeState.APPROVED,
                         "teacher-only audit text", "well done",
-                        Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11"),
+                        Instant.parse("2026-08-20T09:00:00Z"), "Algebra midterm", "11",
+                        "Dana Cohen"),
                 "Algebra midterm", "11", "Dana Cohen", AttemptState.SUBMITTED, 45, List.of());
 
         assertThat(leaky.grade().overrideReason()).isNull();

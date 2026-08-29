@@ -232,6 +232,30 @@ class DtoSerializationTest {
     }
 
     @Test
+    @DisplayName("A7 — a student row's teacher name survives the wire, and null arrives empty")
+    void studentGradeRowTeacherNameRoundTrips() throws Exception {
+        StudentGradeRow named = new StudentGradeRow(9L, 2001L, "מאיה לוי", 72, null, 72,
+                GradeState.APPROVED, null, "Well done", APPROVED_AT, "Algebra midterm", "11",
+                "Dana Cohen");
+
+        StudentGradeRow restored = roundTrip(named);
+
+        assertThat(restored).isEqualTo(named);
+        assertThat(restored.teacherName()).isEqualTo("Dana Cohen");
+
+        // A record is deserialized through its canonical constructor, so the normalisation runs
+        // again on arrival. Asserted rather than assumed: it is the reason a client can test one
+        // absence instead of two no matter which side built the row.
+        StudentGradeRow unresolved = new StudentGradeRow(9L, 2001L, "מאיה לוי", 72, null, 72,
+                GradeState.APPROVED, null, null, APPROVED_AT, "Algebra midterm", "11", null);
+        assertThat(roundTrip(unresolved).teacherName()).isEmpty();
+
+        // And it reaches a student through the container that strips the justification.
+        MyGrades mine = roundTrip(new MyGrades(List.of(named)));
+        assertThat(mine.grades().get(0).teacherName()).isEqualTo("Dana Cohen");
+    }
+
+    @Test
     @DisplayName("an un-overridden, unapproved row keeps all four of its nulls")
     void studentGradeRowKeepsItsNulls() throws Exception {
         StudentGradeRow restored = roundTrip(autoRow());

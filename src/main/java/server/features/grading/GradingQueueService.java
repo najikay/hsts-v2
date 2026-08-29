@@ -180,6 +180,10 @@ public class GradingQueueService {
      * justification is what she wrote (S-23). {@code examName} and {@code courseCode} are left
      * null: v1.1 populates them student-side only, and here the summary above the table already
      * says which exam this is, once, for every row.
+     *
+     * <p>{@code teacherName} is empty for the same reason and one more: this class holds no
+     * {@code UserRepository}, and A7 is not worth a new dependency on a screen where the only
+     * teacher in the room is the one reading it (A7, 2026-08-29).
      */
     private static StudentGradeRow toWire(StudentResultRow row) {
         return new StudentGradeRow(

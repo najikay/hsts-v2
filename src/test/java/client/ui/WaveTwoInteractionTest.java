@@ -7,6 +7,7 @@ import client.core.ScreenManager;
 import client.events.PushEventBridge;
 import client.features.home.DashboardCopy;
 import client.features.login.ShellBoot;
+import client.features.results.CheckedFormCopy;
 import client.features.results.MyGradesCopy;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -90,7 +91,8 @@ class WaveTwoInteractionTest extends ApplicationTest {
             new MonitorCounts(8, 3, 0), List.of());
 
     private static final StudentGradeRow GRADE = new StudentGradeRow(1, 1010, "Maya Levi",
-            71, 71, 71, GradeState.APPROVED, null, null, NOW, "Algebra midterm", "11");
+            71, 71, 71, GradeState.APPROVED, null, "Strong work on the inequalities.", NOW,
+            "Algebra midterm", "11", "Dana Cohen");
 
     private static final NotificationDto UNREAD = new NotificationDto(1L,
             NotificationType.GRADE_PUBLISHED, "Your grade was published",
@@ -310,6 +312,48 @@ class WaveTwoInteractionTest extends ApplicationTest {
 
         assertThat(manager.navigator().currentRouteId())
                 .isEqualTo(Routes.CHECKED_FORM.id());
+    }
+
+    @Test
+    @DisplayName("A7 — a card names the teacher and carries her note")
+    void aCardNamesTheTeacherAndCarriesHerNote() {
+        ScreenManager manager = signIn(MAYA, this::studentData);
+        interact(() -> manager.navigator().navigate(Routes.MY_GRADES.id()));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // The lead's manual round found both missing from these cards: the note had been on the
+        // wire since v1 with nothing rendering it, and the name was not on the wire at all.
+        List<String> lines = cardLines(manager);
+        assertThat(lines).contains("Teacher: Dana Cohen");
+        assertThat(lines).contains("Teacher's note: Strong work on the inequalities.");
+    }
+
+    @Test
+    @DisplayName("A7 — and draws neither line when the server sent neither fact")
+    void aCardWithoutEitherFactDrawsNeitherLine() {
+        ScreenManager manager = signIn(MAYA, connection -> {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(
+                    new StudentGradeRow(1, 1010, "Maya Levi", 71, 71, 71, GradeState.APPROVED,
+                            null, null, NOW, "Algebra midterm", "11", ""))));
+            connection.replyOk(Verb.NOTIFICATIONS_GET, new NotificationsPage(List.of(), 0));
+        });
+        interact(() -> manager.navigator().navigate(Routes.MY_GRADES.id()));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // Hidden, not blank: a label with nothing after it reads as data that failed to load.
+        assertThat(cardLines(manager))
+                .noneMatch(line -> line.startsWith(CheckedFormCopy.TEACHER_PREFIX)
+                        || line.startsWith(MyGradesCopy.NOTE_PREFIX));
+    }
+
+    /** Every label on the first grade card, in the order the card stacks them. */
+    private static List<String> cardLines(ScreenManager manager) {
+        Node card = manager.scene().getRoot().lookup(".grade-card");
+        assertThat(card).as("a grade card").isNotNull();
+        return card.lookupAll(".label").stream()
+                .filter(Label.class::isInstance)
+                .map(node -> ((Label) node).getText())
+                .toList();
     }
 
     @Test

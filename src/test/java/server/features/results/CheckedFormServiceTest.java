@@ -304,6 +304,20 @@ class CheckedFormServiceTest {
             // a placeholder onto it either. The client drops the line.
             assertThat(form.teacherName()).isEmpty();
         }
+
+        @Test
+        @DisplayName("A7 — the header row carries the same name, from the same one lookup")
+        void theHeaderRowCarriesItToo() {
+            givenEverythingPasses();
+
+            CheckedForm form = service.checkedForm(session, MAYA, GRADE_ID).orElseThrow();
+
+            // The row is what My Grades lists and what this screen headers. Resolving the name
+            // twice would be two chances for one paper to disagree with itself about a person.
+            assertThat(form.grade().teacherName()).isEqualTo("Dana Cohen");
+            assertThat(form.grade().teacherName()).isEqualTo(form.teacherName());
+            verify(users, org.mockito.Mockito.times(1)).findById(session, DANA);
+        }
     }
 
     // ===================== The three gates ================================

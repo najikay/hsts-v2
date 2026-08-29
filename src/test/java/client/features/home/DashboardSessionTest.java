@@ -97,7 +97,8 @@ class DashboardSessionTest {
 
     private static StudentGradeRow grade(long id, int score, Instant approvedAt) {
         return new StudentGradeRow(id, 11, "Noa Friedman", score, score, score,
-                GradeState.APPROVED, null, null, approvedAt, "Algebra midterm", "11");
+                GradeState.APPROVED, null, null, approvedAt, "Algebra midterm", "11",
+                "Dana Cohen");
     }
 
     // ===================== Teacher =======================================

@@ -9,6 +9,7 @@ import client.events.PushEventBridge;
 import client.features.exam.ExamCopy;
 import client.features.home.StudentHomeSession;
 import client.features.login.ShellBoot;
+import client.ui.components.BackLink;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.auth.CourseRef;
@@ -205,6 +206,55 @@ class TakeExamInteractionTest extends ApplicationTest {
         assertThat(buttonNamed(scene, ExamCopy.CODE_BUTTON).isDisabled())
                 .as("nothing typed yet, so nothing to send")
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("\u26a1 Back on Confirm it is you returns to the code step, code intact")
+    void backLeavesTheIdentityStep() {
+        ScreenManager manager = signIn();
+        openTakeExam(manager);
+
+        typeInto(manager.scene(), 0, "4B7Q");
+        clickOn(buttonNamed(manager.scene(), ExamCopy.CODE_BUTTON));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(labelTexts(manager.scene())).contains(ExamCopy.ID_TITLE);
+
+        // 2026-08-29, manual round 2: this screen is a rail route, so the shell draws no back
+        // control over it. Before this, the only way off the identity step was to start the
+        // clock.
+        clickOn(buttonNamed(manager.scene(), BackLink.LABEL));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Scene scene = manager.scene();
+        assertThat(onScreen(scene.getRoot().lookup(".exam-summary")))
+                .as("the identity card is behind her, not merely retitled")
+                .isFalse();
+        assertThat(labelTexts(scene)).contains(ExamCopy.CODE_TITLE);
+
+        TextField code = visibleTextFields(scene).get(0);
+        assertThat(code.getText())
+                .as("the code she typed is still there, ready to be corrected not retyped")
+                .isEqualTo("4B7Q");
+        assertThat(buttonNamed(scene, ExamCopy.CODE_BUTTON).isDisabled())
+                .as("and Continue is live, so the way forward is one click")
+                .isFalse();
+        assertThat(manager.navigator().currentRouteId())
+                .as("a step back, not a navigation")
+                .isEqualTo(Routes.TAKE_EXAM.id());
+    }
+
+    @Test
+    @DisplayName("\u26a1 Back to my dashboard leaves the code step, which had no exit at all")
+    void backToDashboardLeavesTheCodeStep() {
+        ScreenManager manager = signIn();
+        openTakeExam(manager);
+
+        clickOn(linkNamed(manager.scene(), ExamCopy.BACK_TO_DASHBOARD));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.navigator().currentRouteId())
+                .as("nothing was started, so leaving is just leaving")
+                .isEqualTo(Routes.HOME_STUDENT.id());
     }
 
     @Test

@@ -140,6 +140,11 @@ public class GradeReviewService {
      * student paths only, because a teacher reading one execution already has them once in the
      * {@code ExecutionGradingSummary} above the table and does not need them per row.
      *
+     * <p>{@code teacherName} is carried even so (A7). It costs nothing here — the execution is
+     * already resolved and this class already holds the {@code UserRepository} that names the
+     * student two lines below — and a row that knows who released its sitting is one fewer
+     * place where the same record means different things on different paths.
+     *
      * @param session the current session
      * @param context the resolved grade
      * @return the row, justification included — this is the teacher wire
@@ -150,6 +155,12 @@ public class GradeReviewService {
         String studentName = users.findById(session, context.attempt().studentId())
                 .map(User::getFullName)
                 .orElse("(unknown student)");
+        // A7. Empty rather than "(unknown teacher)": the student's placeholder is read by a
+        // teacher looking for a missing row, and this one is read by a screen that omits the
+        // line, so an absence is worth more than a word here.
+        String teacherName = users.findById(session, context.execution().executingTeacherId())
+                .map(User::getFullName)
+                .orElse("");
 
         return new StudentGradeRow(
                 grade.getId(),
@@ -161,7 +172,10 @@ public class GradeReviewService {
                 grade.getStatus() == GradeStatus.APPROVED ? GradeState.APPROVED : GradeState.AUTO,
                 grade.getOverrideReason(),
                 grade.getTeacherComment(),
-                grade.getApprovedAt());
+                grade.getApprovedAt(),
+                null,
+                null,
+                teacherName);
     }
 
     /**
