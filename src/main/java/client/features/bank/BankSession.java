@@ -937,6 +937,21 @@ public final class BankSession {
      * @return one entry per version, or empty when no history is loaded
      */
     public List<HistoryEntry> historyEntries() {
+        return timeline(history);
+    }
+
+    /**
+     * The same pairing, as a function of one payload (2026-08-30, live session, U-44).
+     *
+     * <p>Static so the principal's {@code DataQuestionSession} can build the same timeline from
+     * the same {@code QUESTION_VERSIONS} answer without owning a bank session, which carries a
+     * page, two filters, an image and a delete. Two copies of "pair each version with the one
+     * before it" is two chances to pair it with the one after.
+     *
+     * @param history the answer to {@code QUESTION_VERSIONS}, or {@code null}
+     * @return one entry per version, newest first; empty when there is nothing to draw
+     */
+    public static List<HistoryEntry> timeline(VersionHistory history) {
         if (history == null || history.versions().isEmpty()) {
             return List.of();
         }

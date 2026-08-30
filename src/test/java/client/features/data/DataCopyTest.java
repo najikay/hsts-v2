@@ -221,9 +221,9 @@ class DataCopyTest {
         @DisplayName("an exam says how many versions it has, and says it only when it has more")
         void examVersions() {
             DataExamRow once = new DataExamRow("101201", "בוחן", "12", "חדו\"א", "רינה ברק", 1,
-                    SPRING);
+                    SPRING, 1201L);
             DataExamRow thrice = new DataExamRow("101101", "מבחן", "11", "אלגברה", "דנה כהן", 3,
-                    SUMMER);
+                    SUMMER, 1103L);
 
             assertThat(DataCopy.examVersions(once)).isEqualTo("v1");
             assertThat(DataCopy.examVersions(thrice)).isEqualTo("v3 of 3");

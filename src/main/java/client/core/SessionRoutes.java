@@ -8,6 +8,9 @@ import client.features.bot.BotAnalyticsView;
 import client.features.bot.BotChatView;
 import client.features.bot.BotHistoryView;
 import client.features.bot.BotManagerView;
+import client.features.data.DataExamView;
+import client.features.data.DataQuestionView;
+import client.features.data.DataSittingView;
 import client.features.data.DataView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exam.TakeExamView;
@@ -166,6 +169,18 @@ public final class SessionRoutes {
             // gated on her role and none of them able to change a row. Between this and the
             // line above, every route she has is a read, which is S-7 expressed as a list.
             routes.add(Routes.DATA);
+            // The three screens a Data row opens (U-44, the lead's ruling of 2026-08-30).
+            // Registered with the browser rather than on the rail, for the reason the exam
+            // preview and the checked form are: each is a view of ONE thing, and a rail item
+            // that needed a question, an exam or a sitting chosen first would be a dead end.
+            // They add one verb to this role and no more: QUESTION_GET and QUESTION_VERSIONS
+            // have admitted her since E6, DATA_RESULTS_GET is the list's own verb re-read, and
+            // EXAM_PREVIEW_GET admits her since APPROVAL amendment A1 of 2026-08-30. Every one
+            // of the four is a read, so the line below this block still holds: every route she
+            // has is a read, which is S-7 expressed as a list.
+            routes.add(Routes.DATA_QUESTION);
+            routes.add(Routes.DATA_EXAM);
+            routes.add(Routes.DATA_RESULTS);
         }
         return List.copyOf(routes);
     }
@@ -263,6 +278,15 @@ public final class SessionRoutes {
         }
         if (Routes.DATA.id().equals(route.id())) {
             return DataView::new;
+        }
+        if (Routes.DATA_QUESTION.id().equals(route.id())) {
+            return DataQuestionView::new;
+        }
+        if (Routes.DATA_EXAM.id().equals(route.id())) {
+            return DataExamView::new;
+        }
+        if (Routes.DATA_RESULTS.id().equals(route.id())) {
+            return DataSittingView::new;
         }
         return homeBuilder(role);
     }

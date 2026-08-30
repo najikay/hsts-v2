@@ -32,9 +32,13 @@ the screen named, no fixing. Paste the file back when you stop.
 | Principal, read-only | `principal.avia` | — |
 
 Seeded facts you will meet: exam code **`2075`** is a live Algebra sitting; **`5164`** is
-scheduled for later today; **`4821`**, **`7390`** and **`3318`** are closed (`3318` is Dana's
-sitting that is still awaiting grading). Algebra questions **11003,
-11004, 11006, 11008** belong to no exam (you may delete them); the others are in exams.
+scheduled for later today; **`4821`**, **`7390`**, **`3318`**, **`6120`** and **`7745`** are
+closed (`3318` is Dana's sitting that is still awaiting grading; `6120` and `7745` are the two
+fully graded sittings U-43 added so the reports screen has more than one row to compare).
+Algebra questions **11003, 11004, 11006, 11008** belong to no exam (you may delete them); the
+others are in exams. The school now has **seven** courses: Algebra 11, Calculus 12, Java 21,
+Databases 22 and, since U-42, Biology 31, Chemistry 41 and Physics 51, each with one teacher who
+also coordinates her own subject.
 
 The walk takes about three and a half hours. The only real wait is a 2-minute exam you create
 yourself in Part 3. Nothing else waits on anything.
@@ -57,9 +61,12 @@ java -jar target\hsts-server.jar
       console press **Load demo data if missing** once. On a database that already has the
       seed it answers UNCHANGED. Never press **Reload demo data** during a walk — the walk
       creates its own data and later rounds build on it.
-      *(One exception, once: right after pulling the 2026-08-29 seed changes, press Reload
-      demo data one time so Maya's grade carries its teacher's note and Dana's sitting
-      `3318` awaiting grading exists. The total then reads 414 rows.)*
+      *(One exception, once: right after pulling the 2026-08-30 seed changes, press Reload
+      demo data one time so Maya's grade carries its teacher's note, Dana's sitting `3318`
+      awaiting grading exists, the three new subjects are there and the two frozen sittings
+      `6120` and `7745` exist. The total then reads 581 rows. A plain load inserts the missing
+      rows but cannot refresh the windows, and the console will warn that the database does not
+      look like this build's dataset until the reload is done.)*
 - [ ] 0.3 Open a second PowerShell and start a client: `java -jar target\hsts-client.jar`.
       Start more clients the same way whenever a step says "second window".
 - [ ] 0.4 **The client must not warn about the server "now identifying itself as …"** on a

@@ -9,6 +9,9 @@ import client.core.ScreenManager;
 import client.core.SessionRoutes;
 import client.events.PushEventBridge;
 import client.features.bank.QuestionEditorView;
+import client.features.data.DataExamView;
+import client.features.data.DataQuestionView;
+import client.features.data.DataSittingView;
 import client.features.bot.BotChatView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exambuild.ExamBuilderView;
@@ -32,6 +35,9 @@ import common.dto.authoring.ExamVersionRow;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
+import common.dto.bank.QuestionDetail;
+import common.dto.bank.QuestionVersionDetail;
+import common.dto.bank.VersionHistory;
 import common.dto.bot.BotActivityPoint;
 import common.dto.bot.BotAnalytics;
 import common.dto.bot.BotManagerPage;
@@ -230,7 +236,16 @@ class TruncatedTextGuardTest extends ApplicationTest {
                 new Stop(Routes.HOME_PRINCIPAL.id(), NavParams.empty()),
                 new Stop(Routes.SETTINGS.id(), NavParams.empty()),
                 new Stop(Routes.REPORTS.id(), NavParams.empty()),
-                new Stop(Routes.DATA.id(), NavParams.empty())));
+                new Stop(Routes.DATA.id(), NavParams.empty()),
+                // The three screens her Data rows open (U-44, 2026-08-30). Each carries the
+                // parameter its row carries, because a detail screen visited with an empty bag
+                // renders its "could not be opened" panel and would exempt itself from the walk.
+                new Stop(Routes.DATA_QUESTION.id(),
+                        NavParams.of(DataQuestionView.PARAM_QUESTION, "11001")),
+                new Stop(Routes.DATA_EXAM.id(),
+                        NavParams.of(DataExamView.PARAM_EXAM_VERSION, VERSION)),
+                new Stop(Routes.DATA_RESULTS.id(),
+                        NavParams.of(DataSittingView.PARAM_EXECUTION, EXECUTION))));
     }
 
     // ===================== The walk =======================================
@@ -409,9 +424,21 @@ class TruncatedTextGuardTest extends ApplicationTest {
     private void principalServer(FakeClientConnection connection) {
         commonServer(connection);
         connection.replyOk(Verb.BANK_LIST, bankPage());
+        // U-44's three detail screens. QUESTION_GET / QUESTION_VERSIONS have admitted her since
+        // E6; EXAM_PREVIEW_GET since APPROVAL amendment A1.
+        connection.replyOk(Verb.QUESTION_GET, principalQuestion());
+        connection.replyOk(Verb.QUESTION_VERSIONS, new VersionHistory("11001",
+                List.of(principalVersion(2), principalVersion(1))));
+        connection.replyOk(Verb.EXAM_PREVIEW_GET, new ExamPreview(pendingApproval(),
+                "Answer every question. Calculators are not allowed.",
+                List.of(previewQuestion(1), previewQuestion(2)),
+                new TeacherOnlyBlock("Mark question 2 generously; it was covered late.",
+                        "Dana Cohen",
+                        List.of(new PreviewAnswerRow(901, 1, (byte) 2),
+                                new PreviewAnswerRow(902, 2, (byte) 2)))));
         connection.replyOk(Verb.DATA_EXAMS_GET, new DataExams(List.of(
                 new DataExamRow("101101", "Algebra midterm", "11", "Algebra 11", "Dana Cohen",
-                        2, NOW))));
+                        2, NOW, VERSION))));
         connection.replyOk(Verb.DATA_RESULTS_GET, new DataResults(List.of(reportRow())));
         connection.respondTo(Verb.REPORT_SUBJECTS_GET, request -> {
             ReportDimension dimension =
@@ -544,6 +571,21 @@ class TruncatedTextGuardTest extends ApplicationTest {
     private static ApprovalRow pendingApproval() {
         return new ApprovalRow(CALCULUS_V1, "101201", "Calculus Midterm", "12", "Calculus 12",
                 1, "Dana Cohen", NOW, 2, 60, ApprovalState.PENDING, "", false, 0);
+    }
+
+    /** The principal's question detail (U-44): a stem long enough to be worth measuring. */
+    private static QuestionDetail principalQuestion() {
+        return new QuestionDetail("11001", "11", "Algebra 11", 2, 2,
+                "What are the roots of x squared minus 5x plus 6?",
+                List.of("1 and 6", "2 and 3", "minus 2 and minus 3", "0 and 5"), 2,
+                "Equations", Difficulty.EASY, false, "Dana Cohen", NOW);
+    }
+
+    private static QuestionVersionDetail principalVersion(int versionNo) {
+        return new QuestionVersionDetail(versionNo,
+                "What are the roots of x squared minus 5x plus 6?",
+                List.of("1 and 6", "2 and 3", "minus 2 and minus 3", "0 and 5"), 2,
+                "Equations", Difficulty.EASY, false, "Dana Cohen", NOW);
     }
 
     private static ExamQuestion previewQuestion(int ordinal) {

@@ -6,7 +6,6 @@ import client.ui.components.Buttons;
 import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
-import client.ui.components.StatusChip;
 import client.ui.components.WarnConfirm;
 import client.ui.screen.AbstractScreen;
 import common.dto.auth.CourseRef;
@@ -403,59 +402,16 @@ public final class BankView extends AbstractScreen {
         renderHistory();
     }
 
+    /**
+     * The detail pane: the shared read-only rendering, then this screen's own actions row.
+     *
+     * <p>Everything above the actions row moved to {@link QuestionDetailPane} on 2026-08-30
+     * (live session, U-44), when the principal's Data browser gained a question detail of its
+     * own. The two screens draw one question and differ only in what follows it, which is why
+     * the shared part draws no control at all and the difference is what each caller appends.
+     */
     private List<Node> detailNodes(QuestionDetail detail) {
-        List<Node> nodes = new ArrayList<>();
-
-        Label id = new Label("#" + detail.displayId5());
-        id.getStyleClass().addAll("h2", "bank-detail-id");
-        Label course = new Label(detail.courseName());
-        course.getStyleClass().addAll("small", "muted");
-        Label version = new Label(BankCopy.versionLine(detail));
-        version.getStyleClass().addAll("small", "muted", "bank-version-line");
-        nodes.add(new VBox(2, id, course, version));
-
-        Label text = new Label(detail.text());
-        text.setWrapText(true);
-        text.getStyleClass().add("bank-question-text");
-        nodes.add(text);
-
-        Label answersHeading = new Label(BankCopy.ANSWERS_HEADING);
-        answersHeading.getStyleClass().addAll("small", "muted");
-        nodes.add(answersHeading);
-
-        VBox answers = new VBox(6);
-        answers.getStyleClass().add("bank-answers");
-        List<String> options = detail.answers();
-        for (int i = 0; i < options.size(); i++) {
-            int oneBased = i + 1;
-            Label label = new Label(BankCopy.answerLabel(oneBased));
-            label.getStyleClass().addAll("small", "muted");
-            Label value = new Label(options.get(i));
-            value.setWrapText(true);
-            HBox line = new HBox(8, label, value);
-            line.getStyleClass().add("bank-answer");
-            if (oneBased == detail.correctAnswer()) {
-                Label mark = new Label(BankCopy.CORRECT_MARK);
-                mark.getStyleClass().addAll("small", "bank-answer-correct");
-                line.getChildren().add(mark);
-                line.getStyleClass().add("correct");
-            }
-            answers.getChildren().add(line);
-        }
-        nodes.add(answers);
-
-        HBox facts = new HBox(10, new Label(BankCopy.topic(detail.topic())),
-                StatusChip.difficulty(detail.difficulty().name()));
-        facts.setAlignment(Pos.CENTER_LEFT);
-        facts.getStyleClass().add("bank-facts");
-        nodes.add(facts);
-
-        nodes.add(imageNode(detail));
-
-        Label author = new Label(BankCopy.writtenBy(detail));
-        author.getStyleClass().addAll("small", "muted");
-        author.setWrapText(true);
-        nodes.add(author);
+        List<Node> nodes = new ArrayList<>(QuestionDetailPane.readOnly(detail, imageNode(detail)));
 
         historyToggle.setText(session.isHistoryOpen()
                 ? BankCopy.HISTORY_CLOSE : BankCopy.HISTORY_OPEN);
@@ -549,17 +505,7 @@ public final class BankView extends AbstractScreen {
             historyBody.getChildren().add(label);
             return;
         }
-        for (BankSession.HistoryEntry entry : session.historyEntries()) {
-            Label headline = new Label(entry.headline());
-            headline.getStyleClass().add(entry.isCurrent() ? "bank-history-current"
-                    : "bank-history-past");
-            Label changes = new Label(entry.changes());
-            changes.getStyleClass().addAll("small", "muted");
-            changes.setWrapText(true);
-            VBox row = new VBox(2, headline, changes);
-            row.getStyleClass().add("bank-history-entry");
-            historyBody.getChildren().add(row);
-        }
+        historyBody.getChildren().addAll(QuestionDetailPane.history(session.historyEntries()));
     }
 
     // ===================== Delete (E6.13) =================================

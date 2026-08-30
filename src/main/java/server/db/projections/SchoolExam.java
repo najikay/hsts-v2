@@ -27,6 +27,13 @@ import java.time.Instant;
  * @param authorName    the display name of the teacher who wrote it
  * @param versions      the most recent version number, which is also how many versions exist
  * @param lastVersionAt when that version was written, UTC
+ * @param latestVersionId the primary key of that most recent version (2026-08-30, live session,
+ *                      U-44). The one field on this projection that is not something a reader
+ *                      sees: it is what the principal's Exams row is opened <em>by</em>, because
+ *                      {@code EXAM_PREVIEW_GET} is addressed by version and a catalogue that
+ *                      could list an exam but not open it would be a row with nothing behind it.
+ *                      The same join BANK's {@code latestVersionId} amendment made for the
+ *                      builder's picker, for the same reason
  */
 public record SchoolExam(String displayId,
                          String courseCode,
@@ -34,5 +41,6 @@ public record SchoolExam(String displayId,
                          String examName,
                          String authorName,
                          int versions,
-                         Instant lastVersionAt) {
+                         Instant lastVersionAt,
+                         long latestVersionId) {
 }

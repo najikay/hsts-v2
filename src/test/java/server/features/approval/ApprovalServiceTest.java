@@ -73,6 +73,12 @@ class ApprovalServiceTest {
     /** exam 6, 202201 v1 PENDING, written by Michal, awaiting Michal herself (F4.3). */
     private static final long DATABASES_V1 = 61L;
 
+    /** The principal: coordinates nothing, teaches nothing, authored nothing (seed section 8). */
+    private static final long AVIA = 1L;
+
+    /** A student, for the negative half of amendment A1's role gate. */
+    private static final long MAYA = 2001L;
+
     @Mock
     private ConnectionToClient connection;
 
@@ -270,6 +276,75 @@ class ApprovalServiceTest {
                             request(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(CALCULUS_V1))))
                     .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN))
                     .withMessageContaining(SUBJECT_MATH);
+        }
+
+        @Test
+        @DisplayName("⚑ the principal may read any exam in the school, and coordinates none")
+        void thePrincipalReadsEverything() {
+            // APPROVAL amendment A1 (2026-08-30, live session, U-44). AVIA holds no
+            // coordinators row and authored nothing: under the pre-amendment guard she was the
+            // third role the licence refused, exactly as MICHAL still is on the case above.
+            Message response = service.preview(caller(AVIA, Role.PRINCIPAL),
+                    request(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(CALCULUS_V1)));
+
+            assertThat(response.isOk()).isTrue();
+            ExamPreview preview = (ExamPreview) response.getPayload();
+            assertThat(preview.questions()).hasSize(2);
+            assertThat(preview.teacherOnly().correctOptionOf(901))
+                    .as("she sees the key, on QuestionDetail's licence of 2026-08-21: the "
+                            + "correctness boundary is students, and she is not one")
+                    .isEqualTo(2);
+            assertThat(preview.summary().selfAuthored())
+                    .as("she wrote nothing, so F4.3's badge is not hers")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("⚑ a student is refused by the role gate, before anything is read")
+        void aStudentIsRefused() {
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.preview(caller(MAYA, Role.STUDENT),
+                            request(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(CALCULUS_V1))))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("⚑ a student is refused for a version that does not exist either")
+        void aStudentLearnsNothingFromAnUnknownId() {
+            // The role gate runs before the payload is examined, so a student walking version
+            // ids gets one answer for every id and learns which exist from none of them (P-5).
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.preview(caller(MAYA, Role.STUDENT),
+                            request(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(9_999L))))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("the principal still gets NOT_FOUND for a version that does not exist")
+        void thePrincipalIsNotAnOracleEither() {
+            Message response = service.preview(caller(AVIA, Role.PRINCIPAL),
+                    request(Verb.EXAM_PREVIEW_GET, new ExamPreviewRequest(9_999L)));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+            assertThat(response.errorMessage()).isEqualTo(ApprovalMessages.VERSION_UNKNOWN);
+        }
+
+        @Test
+        @DisplayName("⚑ and she reaches no verb here that writes (S-7)")
+        void sheHasNoDecisionToMake() {
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.approve(caller(AVIA, Role.PRINCIPAL),
+                            request(Verb.EXAM_APPROVE, new ExamApproveRequest(CALCULUS_V1, 0))))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.reject(caller(AVIA, Role.PRINCIPAL),
+                            request(Verb.EXAM_REJECT, new ExamRejectRequest(CALCULUS_V1,
+                                    "Please add the missing diagram to question two.", 0))))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+            assertThatExceptionOfType(AuthorizationException.class)
+                    .isThrownBy(() -> service.queue(caller(AVIA, Role.PRINCIPAL),
+                            request(Verb.APPROVALS_QUEUE_GET, null)))
+                    .satisfies(e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN));
         }
 
         @Test

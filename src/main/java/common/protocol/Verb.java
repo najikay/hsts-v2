@@ -892,12 +892,19 @@ public enum Verb {
     // the {@code coordinators} table — {@code requireCoordinatorOf}, never
     // whoever the payload says (P-5). "One coordinator per subject" is the
     // primary key of that table, so the scoping question has exactly one answer.
-    // One exception, deliberate: {@link #EXAM_PREVIEW_GET} also admits the
-    // version's own AUTHOR as a plain teacher, because a rejection reason is only
-    // actionable if she can re-read the exam it names (F4.2). Corrected
-    // 2026-08-21; the contract was always right. There were two until 2026-08-25,
-    // when MY_APPROVALS_GET — any teacher's read of her own submissions, scoped
-    // to the caller in the query itself — retired into {@link #EXAM_LIST}.
+    // Two exceptions, both deliberate, both on {@link #EXAM_PREVIEW_GET} and both
+    // read-only. It admits the version's own AUTHOR as a plain teacher, because a
+    // rejection reason is only actionable if she can re-read the exam it names
+    // (F4.2) — corrected 2026-08-21; the contract was always right. And since
+    // 2026-08-30 (live session, U-44, APPROVAL amendment A1) it admits the
+    // PRINCIPAL, school-wide and with no scope check, because F9.3 gives her a
+    // read of the data as entered and E15.2's catalogue row had nothing behind
+    // it. She reaches this verb and no other in this group: the two decisions
+    // stay requireRole(COORDINATOR), so S-7 — zero mutating verbs for that role —
+    // is still a property of the role lists rather than of a screen.
+    // There were two verbs fewer until 2026-08-25, when MY_APPROVALS_GET — any
+    // teacher's read of her own submissions, scoped to the caller in the query
+    // itself — retired into {@link #EXAM_LIST}.
     //
     // Two rules bind the group. The two decisions are optimistic-locked
     // compare-and-sets on {@code exam_versions.lock_version} AND guarded on
@@ -919,14 +926,25 @@ public enum Verb {
 
     /**
      * One exam version opened for review (F4.1 ⚑ — the v1 fix).
-     * Caller: the subject's coordinator, or the version's own author. Request
-     * payload: {@code ExamPreviewRequest}; response: {@code ExamPreview}.
+     * Caller: the subject's coordinator, the version's own author, or the
+     * principal. Request payload: {@code ExamPreviewRequest}; response:
+     * {@code ExamPreview}.
      *
      * <p>The response carries the paper as {@code List<ExamQuestion>} — the
      * <b>student's</b> wire type, from the same no-correctness projection a real
      * attempt is built from — plus a fenced {@code TeacherOnlyBlock} holding the
      * teacher notes, the author's name and the answer key. Two audiences in one
      * message, with the wall between them visible in the types.
+     *
+     * <p>The <b>principal reads it whole</b>, unscoped (APPROVAL amendment A1,
+     * 2026-08-30, live session, U-44): F9.3 gives her the school's data as
+     * entered, her data browser lists every exam already, and a catalogue row
+     * that cannot be opened is a name without a document. She receives the same
+     * payload every other staff reader does — one preview record rather than a
+     * second keyless projection — on the same reasoning {@link #QUESTION_GET}'s
+     * ruling of 2026-08-21 gave: the correctness boundary in this product is
+     * students, and she is not one. Her limit is that the two decisions beside
+     * this verb do not accept her role at all.
      */
     EXAM_PREVIEW_GET,
 
@@ -1072,8 +1090,10 @@ public enum Verb {
      * Caller: principal. Request payload: {@code null}; response:
      * {@code DataExams}. Ordered by display id, unpaginated (PRD section 6). Each
      * row carries the exam's identity, its course, its author's name and its
-     * latest version; it carries no questions, no answer key, no instructions and
-     * no approval status.
+     * latest version - number AND id, the id since REPORTS amendment A2
+     * (2026-08-30, live session, U-44), which is what lets the browser OPEN a row
+     * through {@link #EXAM_PREVIEW_GET}. It carries no questions, no answer key,
+     * no instructions and no approval status.
      */
     DATA_EXAMS_GET,
 

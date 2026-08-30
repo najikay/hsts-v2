@@ -76,9 +76,9 @@ class DataSessionTest {
             question("12001", "12", "חדו\"א", "Evaluate the limit", null, Difficulty.HARD);
 
     private static final DataExamRow EXAM_ALGEBRA = new DataExamRow("101101",
-            "מבחן אמצע: אלגברה", "11", "אלגברה", "דנה כהן", 2, SUMMER);
+            "מבחן אמצע: אלגברה", "11", "אלגברה", "דנה כהן", 2, SUMMER, 1102L);
     private static final DataExamRow EXAM_CALCULUS = new DataExamRow("101201",
-            "בוחן: גבולות", "12", "חדו\"א", "רינה ברק", 1, SPRING);
+            "בוחן: גבולות", "12", "חדו\"א", "רינה ברק", 1, SPRING, 1201L);
 
     /** SEED_CONTENT section 9.1's frozen record. */
     private static ResultStatistics seeded() {

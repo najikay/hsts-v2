@@ -103,12 +103,26 @@ final class InMemoryReportStore implements ReportStore, ReportData {
      */
     InMemoryReportStore exam(String displayId, String courseCode, String examName,
                              String authorName, int versions, Instant lastVersionAt) {
+        return exam(displayId, courseCode, examName, authorName, versions, lastVersionAt,
+                Long.parseLong(displayId));
+    }
+
+    /**
+     * The same, naming the latest version's id (2026-08-30, live session, U-44).
+     *
+     * <p>The convenience above derives one from the display id, because most cases do not care
+     * which id it is and only that the row carries one it can be opened by. A case about the
+     * opening itself names it.
+     */
+    InMemoryReportStore exam(String displayId, String courseCode, String examName,
+                             String authorName, int versions, Instant lastVersionAt,
+                             long latestVersionId) {
         CourseSummary course = courses.get(courseCode);
         if (course == null) {
             throw new IllegalStateException("Seed the course before its exams: " + courseCode);
         }
         examCatalogue.put(displayId, new SchoolExam(displayId, courseCode, course.name(),
-                examName, authorName, versions, lastVersionAt));
+                examName, authorName, versions, lastVersionAt, latestVersionId));
         return this;
     }
 

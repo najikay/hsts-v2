@@ -240,8 +240,8 @@ abstract class SeedLoaderContract extends RepositoryTestBase {
                 .load(SeedMode.RESEED, Confirmation.preApproved());
 
         assertThat(summary.outcome()).isEqualTo(SeedOutcome.RESEEDED);
-        assertThat(summary.rowsByTable()).containsEntry("users", 18);
-        assertThat(summary.rowsByTable()).containsEntry("questions", 40);
+        assertThat(summary.rowsByTable()).containsEntry("users", 21);
+        assertThat(summary.rowsByTable()).containsEntry("questions", 58);
     }
 
     private SeedLoader loader(SeedSection... sections) {

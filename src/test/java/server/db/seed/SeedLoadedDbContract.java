@@ -343,7 +343,7 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
 
         List<SeedDocument.ExamVersionStatusRow> expected = DOCUMENT.examVersionStatuses();
         assertThat(expected).as("the document must state a status for every exam version")
-                .hasSize(7);
+                .hasSize(8);
 
         assertThat(rows("""
                 select e.displayId, ev.versionNo, cast(ev.status as string)
@@ -419,7 +419,7 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                 where q.id = qv.questionId and u.id = qv.createdBy
                 """);
 
-        assertThat(loaded).hasSize(43);
+        assertThat(loaded).hasSize(61);
 
         loaded.forEach(row -> {
             String displayId = (String) row.get(0);
@@ -533,7 +533,16 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
      * happened to match. Executions 3 and 4 are absent because they have no attempts (§9.3).
      */
     private static final Map<Integer, String> TABULATED_SITTINGS =
-            Map.of(1, "4821", 2, "7390", 5, "3318");
+            Map.of(1, "4821", 2, "7390", 5, "3318", 6, "6120", 7, "7745");
+
+    /**
+     * The sittings whose grades are APPROVED rather than AUTO, by execution number.
+     *
+     * <p>A set rather than {@code execution == 1 ? "APPROVED" : "AUTO"}, which was true while
+     * exactly one sitting was approved and would have quietly expected AUTO on both U-43
+     * sittings - where every grade is approved and every one carries a final score.
+     */
+    private static final java.util.Set<Integer> APPROVED_SITTINGS = java.util.Set.of(1, 6, 7);
 
     private static long minutesBetween(List<Object> execution) {
         return java.time.Duration.between(
@@ -593,6 +602,14 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                 .count();
         assertThat(absent).as("the document must still record four unreached questions")
                 .isEqualTo(4);
+
+        // And nowhere else: omer.katz on 4821 is the seed's only attempt that distinguishes
+        // "never answered" from "answered wrongly", which is what makes it H12.4's fixture.
+        for (int execution : List.of(2, 5, 6, 7)) {
+            assertThat(DOCUMENT.selections(execution))
+                    .as("execution %d has no absent rows: nobody timed out", execution)
+                    .allMatch(SeedDocument.SelectionRow::answered);
+        }
     }
 
     @Test
@@ -615,7 +632,8 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                                 values.add(row.student());
                                 values.add(row.auto());
                                 values.add(row.finalScore());
-                                values.add(execution == 1 ? "APPROVED" : "AUTO");
+                                values.add(APPROVED_SITTINGS.contains(execution)
+                                        ? "APPROVED" : "AUTO");
                                 return java.util.Collections.unmodifiableList(values);
                             })
                             .toList());
@@ -681,8 +699,11 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                         + "OR participation IS NOT NULL", String.class).getResultList());
 
         assertThat(frozen)
-                .as("only the fully graded sitting carries frozen participation and statistics")
-                .containsExactly("4821");
+                .as("only fully graded sittings carry frozen participation and statistics; "
+                        + "3318's grading has not started, so a frozen column here would say "
+                        + "the opposite of what the sitting is for")
+                .containsExactlyInAnyOrder("4821", "6120", "7745")
+                .doesNotContain("3318", "7390", "5164", "2075");
     }
 
     /**
@@ -719,6 +740,96 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
                 .as("the catalog composes a grading-due draft with no target, so neither of "
                         + "these rows deep-links")
                 .isNull();
+    }
+
+    /**
+     * The reports half of U-43: the dataset now holds three sittings a report can compare, and
+     * they are on three different teachers and three different courses.
+     *
+     * <p>E15 reads only sittings that are CLOSED <b>and</b> carry frozen statistics. That was one
+     * sitting until 2026-08-30, so the principal's three dimensions had one row between them and
+     * the screen could not demonstrate a comparison - nor show that the exclusion rule was doing
+     * anything, because there was nothing on the other side of it. This asserts what the fixture
+     * is for rather than only that its rows exist: three reportable sittings, three authors,
+     * three courses, and at least one student who sat all three so BY_STUDENT has a genuine
+     * multi-row answer.
+     */
+    @Test
+    @DisplayName("⚑ the reportable sittings span three teachers, three courses and one student (U-43)")
+    void theFrozenSittingsGiveEveryReportDimensionSomethingToCompare() {
+        List<List<Object>> reportable = rows("""
+                select x.code, author.username, e.courseCode
+                from ExamExecution x, ExamVersion ev, Exam e, User author
+                where ev.id = x.examVersionId and e.id = ev.examId and author.id = e.authorId
+                  and x.stats is not null
+                """);
+
+        assertThat(reportable).hasSize(3);
+        assertThat(reportable).extracting(row -> row.get(0))
+                .containsExactlyInAnyOrder("4821", "6120", "7745");
+        assertThat(reportable).extracting(row -> row.get(1))
+                .as("BY_TEACHER is authorship, so three authors is three subjects with data")
+                .containsExactlyInAnyOrder("dana.cohen", "avi.mizrahi", "galit.stern");
+        assertThat(reportable).extracting(row -> row.get(2))
+                .as("BY_COURSE: Algebra, Java and Biology")
+                .containsExactlyInAnyOrder("11", "21", "31");
+
+        // BY_STUDENT is the dimension that actually gets a multi-row comparison out of this,
+        // and it is the reason the two new rosters overlap 4821's rather than avoiding it.
+        List<List<Object>> perStudent = rows("""
+                select u.username, count(x)
+                from ExamAttempt a, ExamExecution x, User u
+                where x.id = a.executionId and u.id = a.studentId and x.stats is not null
+                group by u.username
+                """);
+
+        assertThat(perStudent).filteredOn(row -> ((Number) row.get(1)).intValue() == 3)
+                .extracting(row -> row.get(0))
+                .as("two students sat all three, in three different courses")
+                .containsExactlyInAnyOrder("noa.friedman", "omer.katz");
+        assertThat(perStudent).filteredOn(row -> ((Number) row.get(1)).intValue() >= 2)
+                .as("five students have something to compare; the other seven are the "
+                        + "single-row state the reports copy explains")
+                .hasSize(5);
+
+        // maya.levi is on exactly one of them, which is 4821, and that is load-bearing: her My
+        // Grades holds exactly one row on a fresh seed and cases 8.2, 9.1 and 17.3 read it.
+        assertThat(perStudent).filteredOn(row -> row.get(0).equals("maya.levi"))
+                .singleElement()
+                .satisfies(row -> assertThat(((Number) row.get(1)).intValue()).isEqualTo(1));
+    }
+
+    /**
+     * ⚑ U-43's second approver. Until this round {@code dana.cohen} was the only value in
+     * {@code grades.approved_by} anywhere in the dataset, so a query that had accidentally
+     * hardcoded her would have passed everything.
+     */
+    @Test
+    @DisplayName("⚑ every approved grade was approved by the teacher who released its sitting (U-43)")
+    void approversAreTheReleasingTeachers() {
+        List<List<Object>> approved = rows("""
+                select distinct x.code, approver.username, releaser.username
+                from Grade g, ExamAttempt a, ExamExecution x, User approver, User releaser
+                where a.id = g.attemptId and x.id = a.executionId
+                  and approver.id = g.approvedBy and releaser.id = x.createdBy
+                """);
+
+        assertThat(approved).extracting(row -> row.get(0))
+                .containsExactlyInAnyOrder("4821", "6120", "7745");
+        assertThat(approved).allSatisfy(row -> assertThat(row.get(1))
+                .as("sitting %s: the coordinator approves exams, the teacher approves grades "
+                        + "(T-8.2)", row.get(0))
+                .isEqualTo(row.get(2)));
+        assertThat(approved).extracting(row -> row.get(1))
+                .containsExactlyInAnyOrder("dana.cohen", "avi.mizrahi", "galit.stern");
+
+        // And nothing outside those three carries an approver at all.
+        long unapproved = inTx(session -> session.createQuery(
+                        "select count(g) from Grade g where g.approvedBy is null", Long.class)
+                .getSingleResult());
+        assertThat(unapproved)
+                .as("the two awaiting-grading sittings, 7390's eight and 3318's four")
+                .isEqualTo(12);
     }
 
     @Test

@@ -223,6 +223,30 @@ class ReportsCopyTest {
     class CopyRules {
 
         @Test
+        @DisplayName("a one-row report says why it is one row, and what would change that")
+        void theSingleRowHintExplainsItself() {
+            // The fourth state of this screen and the one it had no words for until 2026-08-30
+            // (U-43). A report with a single sitting shows real cards, a chart and a table with
+            // one line, and the whole layout then describes a comparison the reader cannot make.
+            // On the seeded dataset that is seven of the twelve students in BY_STUDENT and every
+            // subject in BY_TEACHER and BY_COURSE, so it is the common case rather than an edge.
+            assertThat(ReportsCopy.comparisonHint(ReportSummary.across(List.of(row()))))
+                    .isEqualTo(ReportsCopy.SINGLE_ROW_HINT);
+
+            // Two rows is a comparison, so the sentence goes away rather than being reworded.
+            assertThat(ReportsCopy.comparisonHint(twoSittings())).isEmpty();
+            // And an empty report already has a panel saying why: two answers to one question
+            // is what NO_EXECUTIONS exists to prevent.
+            assertThat(ReportsCopy.comparisonHint(ReportSummary.EMPTY)).isEmpty();
+
+            // Same rule as every other empty state here: it names what would make it go away,
+            // and it agrees with NO_EXECUTIONS on what qualifies a sitting.
+            assertThat(ReportsCopy.SINGLE_ROW_HINT)
+                    .contains("approve more sittings")
+                    .doesNotContain("\u2014");
+        }
+
+        @Test
         @DisplayName("every empty state says what would make it go away")
         void emptyStatesExplain() {
             List<ReportsCopy.EmptyPanel> panels = List.of(ReportsCopy.NOTHING_PICKED,
@@ -245,7 +269,7 @@ class ReportsCopyTest {
             List<String> everySentence = List.of(ReportsCopy.TITLE, ReportsCopy.SUBTITLE,
                     ReportsCopy.SUBJECTS_FAILED, ReportsCopy.REPORT_FAILED,
                     ReportsCopy.ROWS_TABLE_TITLE, ReportsCopy.SCOPE_HINT,
-                    ReportsCopy.MEDIAN_BAND_HINT,
+                    ReportsCopy.MEDIAN_BAND_HINT, ReportsCopy.SINGLE_ROW_HINT,
                     ReportsCopy.NOTHING_PICKED.title(), ReportsCopy.NOTHING_PICKED.hint(),
                     ReportsCopy.NO_SUBJECTS.title(), ReportsCopy.NO_SUBJECTS.hint(),
                     ReportsCopy.NO_EXECUTIONS.title(), ReportsCopy.NO_EXECUTIONS.hint());

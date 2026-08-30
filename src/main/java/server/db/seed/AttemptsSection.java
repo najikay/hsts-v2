@@ -11,8 +11,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Seed §9.1, §9.1.1, §9.2, §9.2.1, §9.4 and §9.4.1: twenty attempts and their saved answers
- * (E2.15).
+ * Seed §9.1 to §9.6.1: thirty-one attempts and their saved answers (E2.15).
+ *
+ * <h2>⚑ U-43: two fully graded sittings</h2>
+ *
+ * <p>2026-08-30, live session. {@code 6120} is exam 4 released a week before {@code 7390}, six of
+ * its eight Java students; {@code 7745} is the Biology paper, five of its six students. Both are
+ * closed, approved and frozen (§9.5, §9.6), and both leave {@code maya.levi} out for the reason
+ * §9.4 leaves her out of {@code 3318}, only harder: her My Grades holds <b>exactly one row</b> on
+ * a freshly seeded database, which cases 8.2, 9.1 and 17.3 all read, and these two sittings are
+ * approved <em>in the seed</em>, so putting her on one would change that count on load with
+ * nobody having pressed anything.
  *
  * <h2>A dash means no row, not a null selection</h2>
  *
@@ -66,10 +75,29 @@ final class AttemptsSection implements SeedSection {
             List.of("11001", "11002", "11005", "11007", "11009", "11010", "11011");
     private static final List<Integer> EXECUTION_1_VERSIONS = List.of(1, 1, 1, 1, 1, 1, 1);
 
-    /** §9.2.1: exam 4 v1's seven questions. */
+    /**
+     * §9.2.1: exam 4 v1's seven questions.
+     *
+     * <p>Execution 6 uses this same list, because it releases the same exam version (§9.5.1) -
+     * the same reason executions 1 and 5 share {@link #EXECUTION_1_QUESTIONS}.
+     */
     private static final List<String> EXECUTION_2_QUESTIONS =
             List.of("21001", "21002", "21005", "21006", "21009", "21010", "21011");
     private static final List<Integer> EXECUTION_2_VERSIONS = List.of(1, 1, 1, 1, 1, 1, 1);
+
+    /**
+     * §9.6.1: exam 7 v1's five questions, in the order {@code ExamsSection} composes them ⚑
+     * (U-43).
+     *
+     * <p><b>Five, not seven, and the order is easy-easy-medium-medium-hard rather than the bank's
+     * display-id order.</b> {@code attempt_answers} rows are matched to the paper by question
+     * version id, so this list has to be the exam version's composition and not the bank's
+     * sorting: 31001, 31004, 31002, 31005, 31003 is what §8.1 lists, and it is what the points
+     * 15, 15, 20, 20, 30 line up against.
+     */
+    private static final List<String> EXECUTION_7_QUESTIONS =
+            List.of("31001", "31004", "31002", "31005", "31003");
+    private static final List<Integer> EXECUTION_7_VERSIONS = List.of(1, 1, 1, 1, 1);
 
     private static final List<Sitting> SITTINGS = List.of(
             new Sitting("4821", EXECUTION_1_QUESTIONS, EXECUTION_1_VERSIONS, List.of(
@@ -121,7 +149,42 @@ final class AttemptsSection implements SeedSection {
                     new Paper("daniel.shapira", 63, AttemptStatus.SUBMITTED,
                             List.of(3, 2, 1, 1, 1, 2, 1)),
                     new Paper("itay.regev", 71, AttemptStatus.SUBMITTED,
-                            List.of(1, 4, 1, 3, 3, 1, 2)))));
+                            List.of(1, 4, 1, 3, 3, 1, 2)))),
+
+            // ⚑ U-43, §9.5.1. Exam 4 v1 again, a week before 7390, so the same question list and
+            // the same key. Six Java students, deliberately not maya.levi and not
+            // daniel.shapira, so the roster is visibly unlike 7390's eight. Nobody timed out, so
+            // every one of the forty-two cells is a row. No row here repeats the same student's
+            // row in §9.2.1, and all six of them sat that paper too.
+            new Sitting("6120", EXECUTION_2_QUESTIONS, EXECUTION_2_VERSIONS, List.of(
+                    new Paper("eitan.solomon", 38, AttemptStatus.SUBMITTED,
+                            List.of(1, 2, 1, 2, 2, 3, 1)),
+                    new Paper("noa.friedman", 44, AttemptStatus.SUBMITTED,
+                            List.of(1, 2, 1, 2, 1, 1, 4)),
+                    new Paper("roni.malka", 47, AttemptStatus.SUBMITTED,
+                            List.of(1, 1, 1, 1, 2, 1, 4)),
+                    new Paper("itay.regev", 51, AttemptStatus.SUBMITTED,
+                            List.of(2, 2, 2, 2, 1, 3, 1)),
+                    new Paper("noam.peretz", 42, AttemptStatus.SUBMITTED,
+                            List.of(1, 3, 3, 3, 2, 2, 4)),
+                    new Paper("omer.katz", 52, AttemptStatus.SUBMITTED,
+                            List.of(2, 1, 1, 1, 1, 3, 2)))),
+
+            // ⚑ U-43, §9.6.1. The Biology paper: five questions, five students, twenty-five
+            // rows. Its points are 15, 15, 20, 20, 30, so the totals these selections produce
+            // (100, 80, 70, 55, 50) include two - 80 and 50 - that no 6x15 + 10 paper in this
+            // dataset can reach at all.
+            new Sitting("7745", EXECUTION_7_QUESTIONS, EXECUTION_7_VERSIONS, List.of(
+                    new Paper("tal.harari", 31, AttemptStatus.SUBMITTED,
+                            List.of(1, 4, 2, 1, 3)),
+                    new Paper("lior.gabay", 36, AttemptStatus.SUBMITTED,
+                            List.of(1, 4, 2, 3, 3)),
+                    new Paper("noa.friedman", 38, AttemptStatus.SUBMITTED,
+                            List.of(1, 4, 2, 1, 1)),
+                    new Paper("shira.dahan", 41, AttemptStatus.SUBMITTED,
+                            List.of(1, 1, 2, 1, 2)),
+                    new Paper("omer.katz", 44, AttemptStatus.SUBMITTED,
+                            List.of(2, 1, 2, 4, 3)))));
 
     /** Minutes between one student starting and the next, so starts are not identical. */
     private static final int STAGGER_MINUTES = 1;

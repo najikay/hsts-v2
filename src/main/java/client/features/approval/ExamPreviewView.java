@@ -10,7 +10,6 @@ import client.ui.screen.AbstractScreen;
 import common.dto.approval.ApprovalRow;
 import common.dto.approval.ExamPreview;
 import common.dto.approval.TeacherOnlyBlock;
-import common.dto.exam.ExamQuestion;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
@@ -151,67 +150,19 @@ public final class ExamPreviewView extends AbstractScreen {
     /**
      * Draws the paper with the student's own card component (F4.1 ⚑).
      *
-     * <p>One card per question, read-only, and then the answer key marked on the option it
-     * belongs to. The marking is a style class on a card that has no idea what it means: the
-     * key arrives as an argument from the preview's teacher-only block, never off the
-     * question, because {@code ExamQuestion} has nowhere to hold one.
+     * <p>Both halves moved to {@link ExamPaperPane} on 2026-08-30 (live session, U-44), when the
+     * principal's Data browser gained an exam detail of its own. The reasoning is E8's own: this
+     * screen's argument is that there is no second renderer, so a copy of it made for the second
+     * reader would be the drift the argument rules out. What this screen still owns is the
+     * footer under it, which is the entire difference between the two.
      */
     private void renderPaper(ExamPreview preview) {
-        paper.getChildren().clear();
-        if (preview.hasStudentText()) {
-            paper.getChildren().add(instructions(preview));
-        }
-        if (preview.questions().isEmpty()) {
-            Label empty = new Label(ApprovalCopy.NO_QUESTIONS);
-            empty.getStyleClass().addAll("body", "muted");
-            empty.setWrapText(true);
-            paper.getChildren().add(empty);
-            return;
-        }
-        for (ExamQuestion question : preview.questions()) {
-            QuestionCardView card = new QuestionCardView(question, preview.questionCount()).readOnly();
-            card.markCorrect(session.correctOptionFor(question));
-            paper.getChildren().add(card);
-        }
-    }
-
-    private VBox instructions(ExamPreview preview) {
-        Label title = new Label("Instructions");
-        title.getStyleClass().add("h3");
-        Label text = new Label(preview.studentText());
-        text.getStyleClass().add("body");
-        text.setWrapText(true);
-        VBox block = new VBox(6, title, text);
-        block.getStyleClass().addAll("hsts-card", "exam-instructions");
-        return block;
+        ExamPaperPane.renderPaper(paper, preview, session::correctOptionFor);
     }
 
     /** Everything a student never sees, in its own pane so it can never look like the paper. */
     private void renderTeacherPanel(TeacherOnlyBlock teacherOnly) {
-        Label title = new Label(ApprovalCopy.TEACHER_PANEL_TITLE);
-        title.getStyleClass().add("h3");
-
-        Label author = new Label("Written by " + teacherOnly.authorName());
-        author.getStyleClass().addAll("small", "muted");
-
-        Label notes = new Label(teacherOnly.hasTeacherText()
-                ? teacherOnly.teacherText()
-                : ApprovalCopy.NO_TEACHER_NOTES);
-        notes.getStyleClass().addAll("body", teacherOnly.hasTeacherText() ? "strong" : "muted");
-        notes.setWrapText(true);
-
-        Label keyTitle = new Label(ApprovalCopy.ANSWER_KEY_TITLE);
-        keyTitle.getStyleClass().add("h3");
-
-        VBox key = new VBox(4);
-        key.getStyleClass().add("answer-key-list");
-        teacherOnly.answerKey().forEach(row -> {
-            Label line = new Label(row.label());
-            line.getStyleClass().addAll("small", "mono", "answer-key-row");
-            key.getChildren().add(line);
-        });
-
-        teacherPanel.getChildren().setAll(title, author, notes, keyTitle, key);
+        ExamPaperPane.renderTeacherOnly(teacherPanel, teacherOnly);
     }
 
     // ===================== The two decisions =============================

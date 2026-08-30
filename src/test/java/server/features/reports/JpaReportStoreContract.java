@@ -323,6 +323,27 @@ abstract class JpaReportStoreContract extends RepositoryTestBase {
     }
 
     @Test
+    @DisplayName("⚑ the row carries the LATEST version's id, which is what opens it (A2)")
+    void catalogueCarriesTheLatestVersionId() {
+        // REPORTS amendment A2 (2026-08-30, live session, U-44). Without it the principal's
+        // catalogue could list an exam and not open it: EXAM_PREVIEW_GET is addressed by
+        // version, and this row carried a display id and a version NUMBER only.
+        long examId = newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן אמצע");
+        newVersion(examId, 2, "מבחן אמצע: אלגברה", SUMMER);
+        long expected = inTx(session -> session.createQuery(
+                        "select v.id from ExamVersion v where v.examId = :examId "
+                                + "and v.versionNo = 2", Long.class)
+                .setParameter("examId", examId)
+                .getSingleResult());
+
+        SchoolExam exam = store().inTx(ReportData::allExams).get(0);
+
+        assertThat(exam.latestVersionId())
+                .as("the id off the same row the name and the date come from, not v1's")
+                .isEqualTo(expected);
+    }
+
+    @Test
     @DisplayName("an exam that was never released is in the catalogue all the same")
     void catalogueKeepsUnreleasedExams() {
         newExam(COURSE_ALGEBRA, (byte) 1, danaId, "מבחן שלא שוחרר");

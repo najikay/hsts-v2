@@ -1,7 +1,7 @@
 # Seed content (E2.15 / E2.16) — the demo dataset
 
 > **This document is machine-read.** `SeedDocument` (`src/test/java`) parses the tables in
-> sections 3–9.4.1 and two build-failing tests consume the parsed view. Reformatting a table is a
+> sections 3–9.6.1 and two build-failing tests consume the parsed view. Reformatting a table is a
 > contract change: update the parser expectations in the same commit, or the build goes red by
 > design.
 
@@ -18,7 +18,7 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 |---|---|---|
 | `national_id` is **UNIQUE and NOT NULL** | ARCHITECTURE §5 (E2 PR1 review) | Every user below has a distinct one — teachers and the principal included |
 | `users.role` is `ENUM('STUDENT','TEACHER','PRINCIPAL')` | `V1__core.sql` | **There is no COORDINATOR role.** A coordinator is a TEACHER plus a `coordinators` row |
-| One coordinator per subject | `coordinators` PK is `subject_code` alone (S-1) | Exactly 2 coordinator rows, one per subject |
+| One coordinator per subject | `coordinators` PK is `subject_code` alone (S-1) | Exactly 5 coordinator rows, one per subject |
 | Exactly one correct answer, answers pairwise distinct | C-8 / ADR-016 | Every question below |
 | Points sum to 100 per exam version | §5 (service rule, not DDL) | Checked per exam below |
 | Passwords BCrypt-hashed | PRD §5 | Plaintext here is **demo-only**; the loader hashes at insert |
@@ -68,6 +68,16 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 |---|---|
 | `10` | Mathematics |
 | `20` | Computer science |
+| `30` | Biology |
+| `40` | Chemistry |
+| `50` | Physics |
+
+> **Three subjects added 2026-08-30 (live session, U-42).** The dataset had two subjects and
+> four courses, which is enough to prove every rule and not enough to look like a school: a
+> picker with two entries reads as a fixture on every screen that offers one, and the reports
+> screen in particular compares across a list the principal can exhaust at a glance. Biology,
+> Chemistry and Physics are one course each, one teacher each and one coordinator each, so the
+> breadth costs three rows per table and changes no rule anywhere.
 
 ## 2. Courses (seeded, read-only — S-3)
 
@@ -77,12 +87,20 @@ acceptance tests, `DEMO_ACCOUNTS.md` and the demo script all reference them by n
 | `12` | `10` | Calculus |
 | `21` | `20` | Object oriented programming in Java |
 | `22` | `20` | Databases |
+| `31` | `30` | Biology |
+| `41` | `40` | Chemistry |
+| `51` | `50` | Physics |
 
-## 3. Users (18 — 1 principal, 5 teachers, 12 students)
+`code2` is the subject's first digit plus a serial within the subject (ARCHITECTURE §5, and the
+four rows above it): Mathematics 10 holds 11 and 12, Computer science 20 holds 21 and 22, so
+Biology 30 holds 31, Chemistry 40 holds 41 and Physics 50 holds 51. The three new subjects hold
+one course each, which the convention allows and the existing four do not happen to show.
+
+## 3. Users (21 — 1 principal, 8 teachers, 12 students)
 
 **The five usernames marked ★ are fixed by `docs/DEMO_ACCOUNTS.md`** and are mirrored here
 verbatim, per that file's own rule: the E5 fixture directory is replaced by the seeded DB in
-E2 PR3, "the usernames stay (the seed mirrors them)". The other 13 are mine.
+E2 PR3, "the usernames stay (the seed mirrors them)". The other 16 are mine.
 
 `full_name` is **English throughout** — "Dana Cohen", "Avi Mizrahi", "Maya Levi". Same people,
 same usernames as `DEMO_ACCOUNTS.md`, and now the same spelling as well.
@@ -128,6 +146,16 @@ when the fixture is replaced.
 | 16 | `tal.harari` | Tal Harari | STUDENT | `425097185` | |
 | 17 | `roni.malka` | Roni Malka | STUDENT | `436712400` | |
 | 18 | `eitan.solomon` | Eitan Solomon | STUDENT | `448521062` | |
+| 19 | `galit.stern` | Galit Stern | TEACHER | `451936272` | ⚑ U-42 |
+| 20 | `orly.navon` | Orly Navon | TEACHER | `460748155` | ⚑ U-42 |
+| 21 | `sivan.adler` | Sivan Adler | TEACHER | `471603944` | ⚑ U-42 |
+
+> **Three teachers added 2026-08-30 (live session, U-42).** One per new subject, and each of
+> them teaches her subject's only course **and** coordinates that subject: rows 19, 20 and 21 are
+> three more of `michal.sharon`'s dual-hat shape (§5). Their national ids continue the
+> synthetic ascending series and are checksum-valid Israeli ids like every other one here; their
+> password is the same `demo123`, hashed per user by the loader. Names are English, as §3 has
+> required since B-19.
 
 > **No stored COORDINATOR role.** `users.role` is `ENUM('STUDENT','TEACHER','PRINCIPAL')`.
 > `DEMO_ACCOUNTS.md` lists `rina.barak` as COORDINATOR because that is the **wire** role:
@@ -144,6 +172,9 @@ when the fixture is replaced.
 | `21` Java | 4 avi.mizrahi | |
 | `21` Java | 5 tamar.shani | co-teacher on Java (PRD §5) |
 | `22` Databases | 6 michal.sharon | |
+| `31` Biology | 19 galit.stern | ⚑ U-42, and she coordinates subject 30 as well |
+| `41` Chemistry | 20 orly.navon | ⚑ U-42, and she coordinates subject 40 as well |
+| `51` Physics | 21 sivan.adler | ⚑ U-42, and she coordinates subject 50 as well |
 
 Coverage: every course has at least one teacher (S-1), **Java has two**, and `dana.cohen`
 teaches two courses alone (Algebra and Calculus). See deviation 3 in the PR report — PRD §5 describes
@@ -151,12 +182,22 @@ teaches two courses alone (Algebra and Calculus). See deviation 3 in the PR repo
 course. The richer shape is defensible on S-1 ("one or more teachers") but it is a
 divergence from PRD §5 as written, not an accident.
 
-## 5. Coordinators (`coordinators`) — 2 rows, one per subject
+**The three U-42 courses are singly taught** and stay that way. Java is the only co-taught course
+in the seed, and it has to stay the only one: §7's authorship rule resolves a second version to
+the co-teacher, and that clause is proven by the fact that it fires on exactly one row
+(`21003` v2). A second co-taught course would give the clause two rows and cost nothing, but it
+would also mean two places to keep the "exactly one" assertion honest, so the new courses have
+one teacher each and no second question version at all.
+
+## 5. Coordinators (`coordinators`) — 5 rows, one per subject
 
 | subject_code | teacher | coordinates courses |
 |---|---|---|
 | `10` Mathematics | 3 rina.barak | 11 Algebra, 12 Calculus |
 | `20` Computer science | 6 michal.sharon | 21 Java, 22 Databases |
+| `30` Biology | 19 galit.stern | 31 Biology |
+| `40` Chemistry | 20 orly.navon | 41 Chemistry |
+| `50` Physics | 21 sivan.adler | 51 Physics |
 
 `rina.barak` coordinates Mathematics (10) and teaches nothing (pure coordinator, decided 2026-08-20), so she approves
 `dana.cohen`'s Algebra and Calculus exams. That is the intended demo shape: **the approver is
@@ -165,35 +206,60 @@ a peer teacher, not an administrator** (S-1).
 `michal.sharon` teaches Databases (22) and coordinates Computer Science (20), so she approves
 the Java exams written by `avi.mizrahi` and `tamar.shani`.
 
-## 6. Enrollments (`enrollments`) — each student in 2–3 courses
+**The three U-42 coordinators are the dual-hat shape, taken to its limit, and that has one
+consequence worth stating rather than discovering.** Each of `galit.stern`, `orly.navon` and
+`sivan.adler` is the only teacher in her subject and its coordinator, so **she is the approver of
+her own exams**. The Biology exam in §8 is APPROVED and she is the only person who could have
+approved it. Nothing forbids that: the `coordinators` PK is the subject alone, and S-1 asks for a
+coordinator per subject, not for a second teacher to exist. It is recorded here because the
+approval *story* the demo tells is deliberately the opposite one, and it must keep being told on
+Mathematics and Computer Science: `rina.barak` approves what `dana.cohen` wrote and
+`michal.sharon` approves what `avi.mizrahi` and `tamar.shani` wrote, which is where every
+approval and rejection fixture in §8.2 lives. The three new subjects are breadth for the pickers
+and the reports, not a second approval demo, and giving each of them a second teacher purely so
+the approver could differ would have added three users nothing else in the dataset uses.
+
+## 6. Enrollments (`enrollments`) — each student in 3–5 courses
 
 | student | courses | |
 |---|---|---|
-| 7 noa.friedman | 11, 21 | |
-| 8 itay.regev | 11, 12, 21 | |
-| 9 shira.dahan | 11, 22 | |
-| 10 omer.katz | 11, 21, 22 | |
-| 11 maya.levi | 11, 21, 22 | ★ exactly as `DEMO_ACCOUNTS.md` |
-| 12 noam.peretz | 12, 21 | ★ exactly as `DEMO_ACCOUNTS.md` |
-| 13 yael.azulay | 11, 12, 22 | |
-| 14 daniel.shapira | 11, 21 | |
-| 15 lior.gabay | 11, 12 | |
-| 16 tal.harari | 12, 22 | |
-| 17 roni.malka | 21, 22 | |
-| 18 eitan.solomon | 12, 21, 22 | |
+| 7 noa.friedman | 11, 21, 31, 51 | |
+| 8 itay.regev | 11, 12, 21, 41, 51 | |
+| 9 shira.dahan | 11, 22, 31 | |
+| 10 omer.katz | 11, 21, 22, 31 | |
+| 11 maya.levi | 11, 21, 22, 31 | ★ the four courses `DEMO_ACCOUNTS.md` fixes, plus Biology |
+| 12 noam.peretz | 12, 21, 41 | ★ the two courses `DEMO_ACCOUNTS.md` fixes, plus Chemistry |
+| 13 yael.azulay | 11, 12, 22, 41, 51 | |
+| 14 daniel.shapira | 11, 21, 41 | |
+| 15 lior.gabay | 11, 12, 31, 51 | |
+| 16 tal.harari | 12, 22, 31, 51 | |
+| 17 roni.malka | 21, 22, 41, 51 | |
+| 18 eitan.solomon | 12, 21, 22, 41 | |
 
-Per-course totals: **11 → 8 students · 12 → 6 · 21 → 8 · 22 → 7.**
+Per-course totals: **11 → 8 students · 12 → 6 · 21 → 8 · 22 → 7 · 31 → 6 · 41 → 6 · 51 → 6.**
 Algebra's 8 is deliberate: it is the fully-graded execution, and 8 grades spread across
 5 deciles is what makes the F9.3 histogram look like a real class rather than a stub.
+
+**The three U-42 rosters are six each, spread over the whole roster rather than over the
+convenient half** (2026-08-30, live session). Eighteen new pairs across twelve students: six
+students gain two courses and six gain one, so nobody is left in two courses while somebody else
+sits in five, and no new course is a copy of another's roster. `maya.levi`'s and
+`noam.peretz`'s ★ rows keep every course `DEMO_ACCOUNTS.md` fixes for them and gain one, because
+that file states which courses they are in and not that those are all of them.
+
+**Six, not eight, and the reason is §9.6.** Biology 31 is the roster of a new fully graded
+sitting, and five of its six students sat it. A roster of six with five attempts is the shape
+that makes "who did not sit it" answerable on a screen; a roster that exactly matches its
+attempt list, as Algebra's does in §9.1, is the other shape, and the dataset now carries both.
 ---
 
-## 7. Question bank (40 questions)
+## 7. Question bank (58 questions)
 
 `display_id5` = course(2) + serial(3) — S-8. Every question is 4 answers, exactly one
 correct, all four pairwise distinct (C-8 / ADR-016). **Correct** column is the answer
 index 1-4. **Img** = has an illustration (10 total, PRD §5).
 
-**Language is English throughout** — all four courses. Topic names are English too
+**Language is English throughout** — all seven courses. Topic names are English too
 (`Linear equations`, `Quadratic functions`, `Inequalities`, `Recursion`), which is what case 3.4
 was rewritten against (B-9).
 
@@ -211,11 +277,12 @@ was rewritten against (B-9).
 > always did — the demo simply no longer ships any.
 
 **Authorship (`question_versions.created_by`) is a rule, not a column** — D9, stated here rather
-than repeated across 43 version rows:
+than repeated across 61 version rows:
 
 - **v1 of every question** is authored by the course's **first-listed teacher in §4**. So all
   Algebra and Calculus questions are `2 dana.cohen`, all Java questions `4 avi.mizrahi`, all
-  Databases questions `6 michal.sharon`.
+  Databases questions `6 michal.sharon`, and since U-42 all Biology questions
+  `19 galit.stern`, all Chemistry `20 orly.navon` and all Physics `21 sivan.adler`.
 - **A second version in a co-taught course** is authored by the **co-teacher**. Java (21) is the
   only co-taught course, so today this resolves to exactly one row: **`21003` v2 =
   `5 tamar.shani`**. Second versions in singly-taught courses stay with the first-listed teacher,
@@ -320,9 +387,66 @@ at v1 while the bank shows v2.
 exercises the new `question_id` + `UNIQUE(exam_version_id, question_id)` guard: 11005 v1
 and v2 must never both land in one exam version.
 
+### 7.6 Biology (course 31) — 6 questions ⚑ (added 2026-08-30, live session, U-42)
+
+Topics: Cells · Genetics
+
+| display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
+|---|---|---|---|---|---|---|---|---|---|
+| 31001 | Cells | EASY | Which organelle releases most of a cell's usable energy? | Mitochondrion | Ribosome | Golgi apparatus | Lysosome | 1 | |
+| 31002 | Cells | MEDIUM | A plant cell is left in pure water until its cell wall stops it taking in any more. That state is called: | Plasmolysed | Turgid | Flaccid | Lysed | 2 | |
+| 31003 | Cells | HARD | Ribosomes are prevented from binding the rough endoplasmic reticulum. Which product is affected first? | ATP made in the mitochondria | Glucose made in the chloroplast | Proteins destined for secretion | Water crossing the membrane | 3 | |
+| 31004 | Genetics | EASY | How many chromosomes does a normal human body cell contain? | 23 | 92 | 24 | 46 | 4 | |
+| 31005 | Genetics | MEDIUM | Two parents are each carriers of the same recessive disorder. What fraction of their children is expected to be affected? | One quarter | One half | Three quarters | None | 1 | |
+| 31006 | Genetics | HARD | Two individuals heterozygous for both of two independently assorting genes are crossed. What phenotype ratio is expected? | 3:1 | 9:3:3:1 | 1:1:1:1 | 1:2:1 | 2 | |
+
+### 7.7 Chemistry (course 41) — 6 questions ⚑ (added 2026-08-30, live session, U-42)
+
+Topics: Atomic structure · Chemical reactions
+
+| display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
+|---|---|---|---|---|---|---|---|---|---|
+| 41001 | Atomic structure | EASY | Which particle in an atom carries a negative charge? | Electron | Proton | Neutron | Nucleus | 1 | |
+| 41002 | Atomic structure | MEDIUM | An atom has 11 protons and 12 neutrons. What is its mass number? | 11 | 23 | 12 | 1 | 2 | |
+| 41003 | Atomic structure | HARD | Why does the first ionisation energy fall going down a group? | The nuclear charge falls | The atoms gain more protons | The outer electron is further from the nucleus and better shielded | The atoms become more electronegative | 3 | |
+| 41004 | Chemical reactions | EASY | What is the pH of a neutral aqueous solution at 25 degrees Celsius? | 0 | 14 | 1 | 7 | 4 | |
+| 41005 | Chemical reactions | MEDIUM | How many molecules of water are produced when two molecules of hydrogen react completely with one molecule of oxygen? | 2 | 1 | 3 | 4 | 1 | |
+| 41006 | Chemical reactions | HARD | A reaction at equilibrium is heated and the yield of product falls. What does that say about the forward reaction? | It is endothermic | It is exothermic | It is catalysed | It has stopped | 2 | |
+
+### 7.8 Physics (course 51) — 6 questions ⚑ (added 2026-08-30, live session, U-42)
+
+Topics: Motion · Energy
+
+| display_id5 | topic | diff | text | a1 | a2 | a3 | a4 | correct | img |
+|---|---|---|---|---|---|---|---|---|---|
+| 51001 | Motion | EASY | What is the SI unit of force? | Newton | Joule | Watt | Pascal | 1 | |
+| 51002 | Motion | MEDIUM | A car accelerates uniformly from rest at 3 m/s². How fast is it moving after 4 seconds? | 3 m/s | 12 m/s | 7 m/s | 0.75 m/s | 2 | |
+| 51003 | Motion | HARD | A ball is thrown straight up and caught again. Ignoring air resistance, what is its acceleration at the highest point? | Zero | Upwards and increasing | 9.8 m/s² downwards | Equal to its initial speed | 3 | |
+| 51004 | Energy | EASY | Which quantity is measured in joules? | Power | Momentum | Frequency | Energy | 4 | |
+| 51005 | Energy | MEDIUM | A 2 kg mass is lifted 5 m at constant speed. Taking g as 10 m/s², how much gravitational potential energy does it gain? | 100 J | 10 J | 50 J | 20 J | 1 | |
+| 51006 | Energy | HARD | A pendulum swings with no friction. Where is its kinetic energy greatest? | At the highest point of the swing | At the lowest point of the swing | It is the same everywhere | Halfway between the two | 2 | |
+
+> **Why these three sit after §7.5 rather than before it** (2026-08-30, live session, U-42).
+> §7.1 to §7.4 are the per-course banks and §7.5 is the second-version table, so a new course
+> bank "belongs" at §7.5 and the second versions would move to §7.8. **The sections are appended
+> instead, and the numbering records the order they were added rather than a taxonomy.** That is
+> the precedent U-34 set when it numbered execution 5's tables §9.4 rather than inserting them
+> ahead of §9.3, and it is worth keeping for the same reason: every section number in this
+> document is quoted from somewhere else - a parser heading list, a loader javadoc, an acceptance
+> case, a defect note - and renumbering a section silently repoints every one of those at
+> different content. Appending costs a paragraph of explanation once; renumbering costs a sweep
+> that has to be right everywhere or it is worse than not doing it.
+>
+> **Shape of the three, stated once rather than three times.** Each is six questions: two
+> topics, three questions per topic, one of each difficulty, so each course holds **two EASY,
+> two MEDIUM and two HARD**. Correct answers run 1, 2, 3, 4, 1, 2 down each table, which is the
+> same cycle §7.1 runs, so no course has a majority answer a guesser could exploit. All four
+> options in every row are pairwise distinct, none carries an illustration, and none has a
+> second version - see §4's note on why the co-teacher clause stays a one-row clause.
+
 ---
 
-## 8. Exams (6, in mixed states)
+## 8. Exams (7, in mixed states)
 
 `display_id6` = subject(2) + course(2) + serial(2) — S-10. Every exam version's points
 sum to **100** (service rule, §5). `status` lives on the *version*, not the exam.
@@ -335,6 +459,7 @@ sum to **100** (service rule, §5). `status` lives on the *version*, not the exa
 | 4 | `202101` | 21 | Java Fundamentals Exam | 4 avi.mizrahi | v1 **APPROVED** |
 | 5 | `202102` | 21 | Collections Quiz | 5 tamar.shani | v1 **REJECTED** |
 | 6 | `202201` | 22 | Databases Final | 6 michal.sharon | v1 **APPROVED** |
+| 7 | `303101` | 31 | Midterm: Biology | 19 galit.stern | v1 **APPROVED** |
 
 Every author teaches the course they wrote for (S-5). `dana.cohen` writes all three
 Mathematics exams because she is the only teacher on both Algebra and Calculus —
@@ -351,8 +476,19 @@ which keeps `rina.barak` free to be the *approver* on both, never her own.
 | 4 | v1 | 60 min | 21001→15, 21002→15, 21005→15, 21006→15, 21009→15, 21010→15, 21011→10 |
 | 5 | v1 | 30 min | 21005→35, 21006→35, 21007→30 |
 | 6 | v1 | 90 min | 22001→15, 22002→15, 22003→15, 22005→15, 22006→15, 22008→15, 22009→10 |
+| 7 | v1 | 45 min | 31001→15, 31004→15, 31002→20, 31005→20, 31003→30 |
 
 Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5).
+
+**Exam 7 is five questions, not seven, and its points are not a flat 15** ⚑ (added 2026-08-30,
+live session, U-43). Every other paper in this section is six 15-point questions plus a 10, so
+every reachable auto score in the dataset came from one arithmetic and a grading screen could
+not tell a scoring bug from a coincidence. Exam 7 is 15, 15, 20, 20, 30 - the two EASY questions,
+then the two MEDIUM, then the one HARD - which sums to 100 like everything else and yields a
+**different** set of reachable totals: 0, 15, 20, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 85, 100.
+§9.6's five scores are five of those, and none of them is reachable from a 6x15+10 paper except
+by coincidence. It also leaves 31006 out of the paper, so the Biology bank holds one question the
+exam does not use, exactly as every other course's does.
 
 ### 8.2 Texts and rejection reasons
 
@@ -364,6 +500,7 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 | 4 | Answer all questions. No IDE or documentation allowed. | Q21010 is the give-away question, keep it first. |
 | 5 | Short quiz on the Collections framework. | Draft, needs a fourth question before resubmitting. |
 | 6 | Closed book. Write SQL keywords in uppercase. | Q22007 historically has the lowest success rate, expect a low mean. |
+| 7 | Answer every question. Diagrams may be labelled in note form. | The last question is worth 30, so leave time for it. |
 
 **Rejection reasons (T-4.2 — the reason is sent to the teacher and stored):**
 
@@ -378,7 +515,7 @@ Each row sums to 100. Exam 1 v2 keeps 11005 at **version 1** deliberately (§7.5
 
 ---
 
-## 9. Executions (5) — S-2 "the same exam can be taken out of the drawer many times"
+## 9. Executions (7) — S-2 "the same exam can be taken out of the drawer many times"
 
 Times are **relative to load time**, resolved by the loader, and stored UTC. Codes are 4
 alphanumeric (C-1); the demo uses digits.
@@ -388,8 +525,8 @@ here rather than repeated per row, and the loader applies them uniformly:
 
 | Column | Rule |
 |---|---|
-| `exam_executions.created_by` | the **releasing teacher** — the author of the exam version being released. Executions 1, 4 and 5 → `2 dana.cohen`; execution 2 → `4 avi.mizrahi`; execution 3 → `6 michal.sharon`. |
-| `grades.status` / `approved_by` / `approved_at` | **execution 1 only**: every grade is `APPROVED`, `approved_by` = the **executing teacher** (`2 dana.cohen`, who released it and owns the grades per T-8.2), `approved_at` = close time + 2 days. Executions 2 and 5 carry `AUTO` grades with all three left null — that is what "awaiting grading" means. |
+| `exam_executions.created_by` | the **releasing teacher** — the author of the exam version being released. Executions 1, 4 and 5 → `2 dana.cohen`; executions 2 and 6 → `4 avi.mizrahi`; execution 3 → `6 michal.sharon`; execution 7 → `19 galit.stern`. |
+| `grades.status` / `approved_by` / `approved_at` | **executions 1, 6 and 7**: every grade is `APPROVED`, `approved_by` = the **executing teacher** (the one who released it and owns the grades per T-8.2, so `2 dana.cohen`, `4 avi.mizrahi` and `19 galit.stern` respectively), `approved_at` = close time + 2 days. Executions 2 and 5 carry `AUTO` grades with all three left null — that is what "awaiting grading" means. |
 | `exam_attempts.started_at` | **derived, not invented**: window start + a small stagger, such that `started_at + solving time` lands inside the window. The per-student solving times in §9.1 and §9.2 are the input; the loader computes the timestamp so the two can never disagree. |
 
 `ended_at` follows from `started_at` + solving time for `SUBMITTED` attempts, and equals the
@@ -403,14 +540,43 @@ allotted duration rather than a number someone chose.
 | 3 | 6 / v1 | `5164` | T+4h → T+6h | **SCHEDULED** | Opening later today, for the release demo |
 | 4 | 1 / v2 | `2075` | T−30m → T+3h | **LIVE** | Second execution of exam 1 — the S-2 proof |
 | 5 | 1 / v2 | `3318` | T−1d 09:00 → T−1d 10:30 | **CLOSED** | Awaiting grading, and it is `dana.cohen`'s — U-34 |
+| 6 | 4 / v1 | `6120` | T−7d 10:00 → T−7d 11:00 | **CLOSED** | Fully graded, stats frozen — U-43 |
+| 7 | 7 / v1 | `7745` | T−5d 09:00 → T−5d 10:00 | **CLOSED** | Fully graded, stats frozen — U-43 |
 
 Executions 3 and 4 are the two non-CLOSED rows, and their codes differ — the E9 service
-rule (unique code among non-CLOSED executions) holds on the seed as loaded. Execution 5 is
-CLOSED, so its `3318` is outside that rule and stays its own forever.
+rule (unique code among non-CLOSED executions) holds on the seed as loaded. Executions 5, 6 and 7
+are CLOSED, so their `3318`, `6120` and `7745` are outside that rule and stay their own forever.
+
+**Executions 6 and 7 exist because the reports screen had one row to compare** ⚑ (added
+2026-08-30, live session, U-43). E15's report reads only sittings that are CLOSED **and** carry
+frozen statistics, which is one sitting on the pre-U-43 dataset: `4821`. `7390` and `3318` are
+closed and unmarked, `5164` has not opened and `2075` is running, so all four are correctly
+excluded and the principal's three dimensions had exactly one row between them. A report screen
+whose every answer is a single row cannot demonstrate a comparison, and it also cannot show that
+the exclusion rule is doing anything, because there is nothing on the other side of it.
+
+**The two are placed to give each dimension something different**, which is why they are not two
+more Algebra sittings:
+
+- **`6120` is exam 4 released a second time** (T−7d), so course 21 and `avi.mizrahi` both acquire
+  a reportable sitting, and `7390` stays what it is: the same paper, a week later, still waiting
+  to be marked. One exam, two sittings, one marked and one not, is what makes "reports read only
+  what is finished" visible rather than asserted.
+- **`7745` is the Biology exam** (T−5d), whose author, course and subject are all new in U-42, so
+  the BY_TEACHER and BY_COURSE pickers each gain a third entry that has data behind it rather
+  than a "nothing to report" label.
+- **BY_STUDENT is where an actual multi-row comparison lives.** `noa.friedman` and `omer.katz`
+  each sat all three frozen sittings, across three different courses; `itay.regev`,
+  `shira.dahan` and `lior.gabay` sat two. The remaining seven students sat one, which is the
+  single-row state the reports copy now explains rather than leaving blank.
+
+**They are historical, so they take the wall-clock form** (`SeedTimes.dayOffsetAt`), exactly as
+1, 2 and 5 do: a CLOSED sitting has to have closed however late in the day the seed is loaded.
 
 **Two different kinds of `T` in that column, and the difference is load-bearing** (corrected
-2026-08-26, B-10). Executions 1, 2 and 5 are historical, so their `T−14d 09:00`, `T−3d 10:00`
-and `T−1d 09:00` mean *a wall-clock hour on a date relative to the load date* — the loader resolves them with
+2026-08-26, B-10). Executions 1, 2, 5, 6 and 7 are historical, so their `T−14d 09:00`,
+`T−3d 10:00`, `T−1d 09:00`, `T−7d 10:00` and `T−5d 09:00` mean *a wall-clock hour on a date
+relative to the load date* — the loader resolves them with
 `SeedTimes.dayOffsetAt`, which discards the load's own time of day. Executions 3 and 4 are the two
 the demo needs to be *happening*, so their offsets are from the **load instant** itself, through
 `SeedTimes.fromNow`: execution 4 opened half an hour ago and closes three hours from now,
@@ -436,6 +602,11 @@ releases, separate codes, windows, participants and statistics. **Execution 5 ma
 (added 2026-08-29, manual round 3, U-34), and the claim does not weaken with the third: `4821`
 is finished and approved, `2075` is running, `3318` is closed and unmarked, and no counter on
 any of them can reach any other because `exam_executions` holds no participation columns at all.
+
+**Exam 4 is now released twice as well** (2026-08-30, live session, U-43), and that second pair
+is the stronger form of the same claim: `6120` and `7390` are one paper with **different frozen
+outcomes** - `6120` mean 55, `7390` not yet a mean at all - where 1, 4 and 5 differ mostly in
+status. Two sittings of one paper whose statistics disagree is what a principal's report is for.
 
 ### 9.1 Execution 1 — participation (S-21) and grades
 
@@ -564,10 +735,10 @@ a prefix of the same list, so the per-question difficulty in the results view va
 real class does. 11007 and 11010 are the two most-missed; 11001 and 11005 are missed by nobody.
 
 **Executions 3 and 4 have no `attempt_answers`, because they have no attempts at all** (§9.3).
-Executions 2 and 5 have both: §9.2.1 and §9.4.1 give their grids, and each is a fixture for
-approving grades rather than for re-grading. This paragraph said "executions 2, 3 and 4 have no
-`attempt_answers`" until 2026-08-29 (manual round 3, U-34), which §9.2.1 four screens below it
-had already contradicted.
+Every other execution has both: §9.2.1 and §9.4.1 give the grids of the two awaiting-grading
+sittings, and §9.5.1 and §9.6.1 give the grids of the two U-43 sittings that are finished. This
+paragraph said "executions 2, 3 and 4 have no `attempt_answers`" until 2026-08-29 (manual round
+3, U-34), which §9.2.1 four screens below it had already contradicted.
 
 ---
 
@@ -729,6 +900,195 @@ in the row counts.
 
 ---
 
+### 9.5 Execution 6 — closed, fully graded, and it is Avi's ⚑ (added 2026-08-30, live session, U-43)
+
+Six of the eight students enrolled in Java (21) sat exam 4 v1 a week before `7390` did, all
+**SUBMITTED** — nobody timed out. Every grade is **APPROVED** by `4 avi.mizrahi`, the teacher who
+released it (T-8.2), `approved_at` = close + 2 days, and participation and statistics are
+**frozen**. No override anywhere, so `final` equals `auto` on every row. `extra_minutes = 0`.
+
+| student | attempt status | solving time (S-19) | auto | final |
+|---|---|---|---|---|
+| 18 eitan.solomon | SUBMITTED | 38 min | 90 | 90 |
+| 7 noa.friedman | SUBMITTED | 44 min | 70 | 70 |
+| 17 roni.malka | SUBMITTED | 47 min | 55 | 55 |
+| 8 itay.regev | SUBMITTED | 51 min | 45 | 45 |
+| 12 noam.peretz | SUBMITTED | 42 min | 40 | 40 |
+| 10 omer.katz | SUBMITTED | 52 min | 30 | 30 |
+
+**Six students, and `maya.levi` is deliberately not one of them.** §9.4 left her out of `3318`
+for a reason that binds harder here: her My Grades holds **exactly one row** on a freshly seeded
+database, which cases 8.2, 9.1 and 17.3 all read, and `3318` could only have broken that count if
+somebody approved it during a walkthrough. This sitting is approved *in the seed*, so putting her
+on it would change that count on load, with nobody having pressed anything. `daniel.shapira` is
+the second of the eight left out, which keeps the roster at six and the sitting's counters
+visibly unlike `7390`'s eight.
+
+**No comments and no override.** S-22 and S-23 are demonstrated on `4821`, where the four
+commented grades sit beside four uncommented ones and the single override moves a real student
+across the pass mark. Repeating either here would add rows to those sweeps without adding a
+state; what this sitting is for is a **second frozen statistics record**, and it is the only
+thing it adds.
+
+**Solving times stay inside the paper's 60 minutes and inside the 60-minute window**, and none
+equals either: nobody here ran out of time. The window is exactly as long as the paper, which is
+a shape the dataset did not previously hold — `4821`, `7390` and `3318` all give a window longer
+than the paper. It is legal (a student who joins at the bell gets no time, which is what
+`ExecutionContext.deadlineFor` reconciles) and it is historical, so nothing in the demo has to
+survive it.
+
+**Frozen `participation` JSON:** `{"started": 6, "finished": 6, "timed_out": 0}`
+
+**Frozen `stats` JSON** (computed from the final column — S-25):
+
+| metric | value |
+|---|---|
+| mean | 55 |
+| median | 50 |
+| stddev | 20 |
+| min | 30 |
+| max | 90 |
+| pass rate | 3 / 6 = 0.5 |
+| deciles | 30–39: 1 · 40–49: 2 · 50–59: 1 · 70–79: 1 · 90–100: 1 |
+
+> **Hand-checkable, on §9.1's rule.** Finals are 30, 40, 45, 55, 70, 90, summing to 330, so the
+> mean is exactly **55** — which is also the pass mark, so three of the six are at or above it
+> and the pass rate is exactly **0.5**. The median is the mean of the two middle scores,
+> (45 + 55) / 2 = **50**. **The standard deviation is the population form**, divisor n, the same
+> convention §9.1 fixes: Σ(x−55)² = 625 + 225 + 100 + 0 + 225 + 1225 = **2400**, so
+> σ = √(2400/6) = √400 = exactly **20**. The sample form would give ≈21.9.
+
+**This sitting is deliberately the weak one.** `4821` reads mean 72.5, σ 17.5, pass 0.875 and
+`6120` reads mean 55, σ 20, pass 0.5, so a report that puts them side by side shows two sittings
+that are genuinely different rather than two roundings of one class. It is also the reason the
+pass rate is exactly a half: a principal reading "3 of 6 (50%)" beside "7 of 8 (87.5%)" can check
+both numerators against the row counts on the same screen.
+
+#### 9.5.1 `attempt_answers` for execution 6
+
+Exam 4 v1's key, from §7.3 — the same paper §9.2.1 tabulates, because it is the same paper
+released a second time (S-2):
+
+| # | question | correct | points |
+|---|---|---|---|
+| 1 | 21001 | 1 | 15 |
+| 2 | 21002 | 2 | 15 |
+| 3 | 21005 | 1 | 15 |
+| 4 | 21006 | 2 | 15 |
+| 5 | 21009 | 2 | 15 |
+| 6 | 21010 | 3 | 15 |
+| 7 | 21011 | 4 | 10 |
+
+Every student answered every question — there are no `—` entries here, because nobody timed out.
+
+| student | 21001 | 21002 | 21005 | 21006 | 21009 | 21010 | 21011 | auto |
+|---|---|---|---|---|---|---|---|---|
+| 18 eitan.solomon | 1 | 2 | 1 | 2 | 2 | 3 | 1 | **90** |
+| 7 noa.friedman | 1 | 2 | 1 | 2 | 1 | 1 | 4 | **70** |
+| 17 roni.malka | 1 | 1 | 1 | 1 | 2 | 1 | 4 | **55** |
+| 8 itay.regev | 2 | 2 | 2 | 2 | 1 | 3 | 1 | **45** |
+| 12 noam.peretz | 1 | 3 | 3 | 3 | 2 | 2 | 4 | **40** |
+| 10 omer.katz | 2 | 1 | 1 | 1 | 1 | 3 | 2 | **30** |
+
+**No row here repeats the same student's row in §9.2.1**, and all six of these students sat that
+paper too. Two sittings of one paper in which a student reproduced her own answers cell for cell
+would make a per-question breakdown across the two look like a copied fixture.
+
+**Every question was missed by somebody and answered by somebody**, four correct on `21001` and
+`21005` and three on the other five, which is the opposite profile to §9.2.1's — there `21010`
+was missed by five of eight and `21001` by nobody. One paper, two classes, two difficulty
+profiles: that is what a per-question comparison across sittings is supposed to be able to show.
+
+---
+
+### 9.6 Execution 7 — the Biology sitting, closed and fully graded ⚑ (added 2026-08-30, live session, U-43)
+
+Five of the six students enrolled in Biology (31) sat exam 7 v1, all **SUBMITTED** — nobody timed
+out. Every grade is **APPROVED** by `19 galit.stern`, who wrote the paper and released it,
+`approved_at` = close + 2 days, and participation and statistics are **frozen**. No override, so
+`final` equals `auto` on every row. `extra_minutes = 0`.
+
+| student | attempt status | solving time (S-19) | auto | final |
+|---|---|---|---|---|
+| 16 tal.harari | SUBMITTED | 31 min | 100 | 100 |
+| 15 lior.gabay | SUBMITTED | 36 min | 80 | 80 |
+| 7 noa.friedman | SUBMITTED | 38 min | 70 | 70 |
+| 9 shira.dahan | SUBMITTED | 41 min | 55 | 55 |
+| 10 omer.katz | SUBMITTED | 44 min | 50 | 50 |
+
+**Five of six, not six of six.** `maya.levi` is enrolled in Biology and did not sit it, for
+§9.5's reason: her My Grades count is read by three acceptance cases and an approved grade added
+on load would change it. That leaves a roster of six with five attempts, which is a shape the
+dataset did not have — §9.1's eight-of-eight makes the roster and the attempt list identical, so
+"one enrolled student did not sit it" had nowhere to be seen.
+
+**Solving times stay inside the paper's 45 minutes and inside the 60-minute window**, and none
+equals either.
+
+**Frozen `participation` JSON:** `{"started": 5, "finished": 5, "timed_out": 0}`
+
+**Frozen `stats` JSON** (computed from the final column — S-25):
+
+| metric | value |
+|---|---|
+| mean | 71 |
+| median | 70 |
+| stddev | 18 |
+| min | 50 |
+| max | 100 |
+| pass rate | 4 / 5 = 0.8 |
+| deciles | 50–59: 2 · 70–79: 1 · 80–89: 1 · 90–100: 1 |
+
+> **Hand-checkable, on §9.1's rule.** Finals are 50, 55, 70, 80, 100, summing to 355, so the mean
+> is exactly **71**. Five scores, so the median is the third one, **70**. Population σ, divisor n:
+> Σ(x−71)² = 441 + 256 + 1 + 81 + 841 = **1620**, so σ = √(1620/5) = √324 = exactly **18**. The
+> sample form would give ≈20.1. Four of the five are at or above the pass mark of 55, so the pass
+> rate is exactly **0.8**; `omer.katz`'s 50 is the one fail.
+
+**Three frozen sittings, three different shapes.** `4821` is 8 students, mean 72.5, σ 17.5,
+pass 0.875; `6120` is 6 students, mean 55, σ 20, pass 0.5; `7745` is 5 students, mean 71, σ 18,
+pass 0.8. No two share a participant count, a mean, a σ or a pass rate, so no report row can be
+mistaken for another and no aggregate over them can be reproduced by weighting them wrongly. A
+participant-weighted mean over the three is (72.5×8 + 55×6 + 71×5) / 19 = 1260 / 19 ≈ **66.3**,
+where the unweighted mean of the three means would be ≈66.2: close enough to look the same and
+different enough to prove which one a screen is printing.
+
+#### 9.6.1 `attempt_answers` for execution 7
+
+Exam 7 v1's key, from §7.6 and §8.1. **The points are not flat**, which is the whole reason this
+paper exists in the shape it does:
+
+| # | question | correct | points |
+|---|---|---|---|
+| 1 | 31001 | 1 | 15 |
+| 2 | 31004 | 4 | 15 |
+| 3 | 31002 | 2 | 20 |
+| 4 | 31005 | 1 | 20 |
+| 5 | 31003 | 3 | 30 |
+
+Every student answered every question — there are no `—` entries here, because nobody timed out.
+
+| student | 31001 | 31004 | 31002 | 31005 | 31003 | auto |
+|---|---|---|---|---|---|---|
+| 16 tal.harari | 1 | 4 | 2 | 1 | 3 | **100** |
+| 15 lior.gabay | 1 | 4 | 2 | 3 | 3 | **80** |
+| 7 noa.friedman | 1 | 4 | 2 | 1 | 1 | **70** |
+| 9 shira.dahan | 1 | 1 | 2 | 1 | 2 | **55** |
+| 10 omer.katz | 2 | 1 | 2 | 4 | 3 | **50** |
+
+**Every score here is one the flat papers cannot produce, and that is the point.** 80 needs a
+20-point question missed, 70 needs the 30 missed, 55 needs a 15 and the 30 missed, and 50 needs
+everything except the 20 and the 30. A 6×15 + 10 paper reaches 70 and 55 too, but it cannot reach
+80 or 50 at all, so an auto-grader that ignored the stored points and assumed a flat paper would
+produce four wrong totals out of five here and none at all anywhere else in the dataset.
+
+**`31002` is missed by nobody and `31003` is the most-missed**, three of five getting the HARD
+30-pointer wrong — which is what makes it worth 30. `noa.friedman` and `omer.katz` sat all three
+frozen sittings, in three different courses, so the BY_STUDENT report has a genuine three-row
+comparison rather than a list of one.
+
+---
+
 ## 10. Bot content
 
 One bot per course (S-30), 4 bots, 2 sources each. **`raw` and `extracted_text` are both
@@ -754,6 +1114,14 @@ every source below carries real body text, not a placeholder.
 Bot 4 is seeded **inactive** on purpose: S-31 says a student may use the bot only if
 enrolled *and* the bot is active. Without an inactive bot there is no way to demo the
 second half of that rule.
+
+**Biology 31, Chemistry 41 and Physics 51 have no bot at all** (2026-08-30, live session, U-42).
+S-30 is "at most one bot per course", not "every course has one", and the manager screen's
+create-a-bot path (E16.12) is demonstrated by a teacher pressing the button on a course that has
+none. Before U-42 every course already had one, so that half of the screen could only be shown by
+deleting something first. Three bot-less courses is now the fixture for it, and the corpus stays
+2171 words across eight sources: writing three more grounded corpora would have been content work
+with nothing reading it, and an ungrounded bot is worse than no bot.
 
 ### 10.1 Sources (8)
 
@@ -883,7 +1251,9 @@ the score fix; anything that changes the seeded grades has to change this string
 exactly the sort of copy nobody thinks to re-check.
 
 `N-GRADING-DUE-JAVA` says eight attempts, which is §9.2's eight AUTO grades — the same coupling,
-and it stays true as long as the Java roster stays at eight.
+and it stays true as long as the Java roster stays at eight. **U-43 did not move it**: `6120` is
+fully approved, so it contributes nothing to anybody's grading queue, and the count is grades
+awaiting approval rather than grades in existence.
 
 **`N-GRADE-MAYA` ⚑ (added 2026-08-26, B-25).** Acceptance case 17.3 found that the eight rows
 above reach seven recipients and **`maya.levi` is not one of them** — 0 items, 0 unread — while
@@ -945,6 +1315,44 @@ else moved.
 and no other does: `exam_executions` 4 → 5, `exam_attempts` 16 → 20, `attempt_answers` 108 → 136
 (four students × seven questions, none absent), `grades` 16 → 20, and `notifications` 9 → 10 for
 `N-GRADING-DUE-ALG`. That is +1 +4 +28 +4 +1 = **+38**.
+
+**Row count: 414 → 581** with U-42 and U-43 (2026-08-30, live session). Fifteen tables move and
+**`notifications` is not one of them**:
+
+| table | was | is | why |
+|---|---|---|---|
+| `subjects` | 2 | 5 | U-42: Biology, Chemistry, Physics |
+| `courses` | 4 | 7 | U-42: 31, 41, 51 |
+| `users` | 18 | 21 | U-42: one teacher per new subject |
+| `course_teachers` | 5 | 8 | U-42: one per new course |
+| `coordinators` | 2 | 5 | U-42: one per new subject |
+| `enrollments` | 29 | 47 | U-42: six students in each of three courses |
+| `questions` | 40 | 58 | U-42: six per new course |
+| `question_versions` | 43 | 61 | U-42: one version each, no second versions |
+| `exams` | 6 | 7 | U-43: the Biology exam `303101` |
+| `exam_versions` | 7 | 8 | U-43: its one APPROVED version |
+| `exam_version_questions` | 39 | 44 | U-43: its five slots |
+| `exam_executions` | 5 | 7 | U-43: `6120` and `7745` |
+| `exam_attempts` | 20 | 31 | U-43: six on `6120`, five on `7745` |
+| `attempt_answers` | 136 | 203 | U-43: 6×7 = 42 and 5×5 = 25, none absent |
+| `grades` | 20 | 31 | U-43: eleven, all APPROVED |
+| `notifications` | 10 | 10 | **unchanged, deliberately — see below** |
+
+That is +3 +3 +3 +3 +3 +18 +18 +18 +1 +1 +5 +2 +11 +67 +11 = **+167**. The bot tables do not
+move: §10 explains why the three new courses have no bot.
+
+**⚑ Why the two new sittings add no notification, when `4821` has three.** `4821` carries
+`N-GRADE-NOA`, `N-GRADE-YAEL` and `N-GRADE-MAYA`, so the obvious move is a `GRADE_PUBLISHED` per
+student on `6120` and `7745` and an `EXECUTION_CLOSED` to the principal for each. **It is not
+made, and the reason is the warning four paragraphs above this one.** The idempotency key is
+recipient + type + title, and eight of the eleven new grades belong to students who already hold
+a `GRADE_PUBLISHED` row: a second one to `noa.friedman` would need a title that differs from
+"Your grade for Midterm: Algebra is available" purely to keep a composite key from collapsing,
+which is copy written to satisfy a loader rather than a reader. That is exactly the moment §11
+names as the moment `notifications` gains a real `seed_id` column, and adding a column to make a
+demo bell fuller is not a trade this round is willing to make. The three existing
+`GRADE_PUBLISHED` rows already prove the bell renders a published grade, and `N-GRADE-MAYA`
+already proves one deep-links.
 
 Every recipient is the person the event actually concerns: rejections and pending-approval
 notices go to the **author** (`dana.cohen`, `tamar.shani`), the approval request goes to the

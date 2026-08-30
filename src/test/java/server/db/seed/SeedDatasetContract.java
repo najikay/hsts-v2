@@ -14,6 +14,7 @@ import server.db.entities.Difficulty;
 import server.db.entities.QuestionVersion;
 import server.features.bank.QuestionValidator;
 import server.features.grading.AutoGrader;
+import server.features.grading.ScoreStatistics;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -55,22 +56,32 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
 
     /** Counts stated by SEED_CONTENT.md, section by section. */
     private static final Map<String, Long> EXPECTED_ROWS = Map.of(
-            "subjects", 2L,
-            "courses", 4L,
-            "users", 18L,
-            // Five, not six: the 2026-08-20 roster decision removed rina.barak from
-            // Calculus, making her a pure coordinator with no course_teachers row.
-            "course_teachers", 5L,
-            "coordinators", 2L,
+            // Five subjects and seven courses since U-42 (2026-08-30, live session): Biology 30,
+            // Chemistry 40 and Physics 50, one course each.
+            "subjects", 5L,
+            "courses", 7L,
+            // 21 since U-42: one teacher per new subject.
+            "users", 21L,
+            // Eight. It was five for a while: the 2026-08-20 roster decision removed rina.barak
+            // from Calculus, making her a pure coordinator with no course_teachers row, and
+            // U-42 then added one teacher to each of the three new courses.
+            "course_teachers", 8L,
+            // One per subject (S-1), and U-42's three teachers each coordinate their own.
+            "coordinators", 5L,
             // Seed 6 states no row total, only per-course figures: 11 -> 8, 12 -> 6,
-            // 21 -> 8, 22 -> 7. Those sum to 29, and enrollmentTotalsMatch() asserts each
-            // one separately so this number cannot be satisfied by the wrong distribution.
-            "enrollments", 29L,
-            "questions", 40L,
-            "question_versions", 43L,
+            // 21 -> 8, 22 -> 7, and U-42's 31 -> 6, 41 -> 6, 51 -> 6. Those sum to 47, and
+            // enrollmentTotalsMatch() asserts each one separately so this number cannot be
+            // satisfied by the wrong distribution.
+            "enrollments", 47L,
+            // 58 and 61 since U-42: six questions in each new course, one version each.
+            "questions", 58L,
+            "question_versions", 61L,
             // 9 since 2026-08-26: B-25 added N-GRADE-MAYA, so DEMO_DAY's sign-in account
             // has a bell at all. 10 since 2026-08-29: U-34 added N-GRADING-DUE-ALG, so the
-            // teacher the demo signs in as is told her own sitting is waiting.
+            // teacher the demo signs in as is told her own sitting is waiting. U-43 added two
+            // sittings and eleven grades and left this at 10 on purpose: seed 11 explains that
+            // the idempotency key is recipient + type + title, and eight of those eleven grades
+            // belong to students who already hold a GRADE_PUBLISHED row.
             "notifications", 10L);
 
     private SeedLoader loader() {
@@ -84,26 +95,28 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         EXPECTED_ROWS.forEach((table, expected) ->
                 assertThat(count(table)).as("%s", table).isEqualTo(expected));
 
-        assertThat(count("exams")).isEqualTo(6);
-        assertThat(count("exam_versions")).isEqualTo(7);
-        assertThat(count("exam_version_questions")).isEqualTo(39);
+        // §8, moved by U-43: the Biology exam is one exam, one version and five slots.
+        assertThat(count("exams")).isEqualTo(7);
+        assertThat(count("exam_versions")).isEqualTo(8);
+        assertThat(count("exam_version_questions")).isEqualTo(44);
 
         // §9 and §9.4, moved by U-34 (2026-08-29, manual round 3): execution 5 is one sitting,
         // four attempts, twenty-eight answers and four grades. These four counts were not
         // asserted anywhere until then, which is how the seed grew a sitting with nothing
-        // watching the totals.
-        assertThat(count("exam_executions")).isEqualTo(5);
-        assertThat(count("exam_attempts")).isEqualTo(20);
-        assertThat(count("attempt_answers")).isEqualTo(136);
-        assertThat(count("grades")).isEqualTo(20);
+        // watching the totals. §9.5 and §9.6 move them again with U-43 (2026-08-30): two
+        // sittings, eleven attempts, 6x7 + 5x5 = 67 answers and eleven grades.
+        assertThat(count("exam_executions")).isEqualTo(7);
+        assertThat(count("exam_attempts")).isEqualTo(31);
+        assertThat(count("attempt_answers")).isEqualTo(203);
+        assertThat(count("grades")).isEqualTo(31);
     }
 
     @Test
     @DisplayName("the summary reports what was actually inserted")
     void summaryAgreesWithTheDatabase() {
         assertThat(summary().outcome()).isEqualTo(SeedOutcome.LOADED);
-        assertThat(summary().rowsByTable()).containsEntry("users", 18);
-        assertThat(summary().rowsByTable()).containsEntry("questions", 40);
+        assertThat(summary().rowsByTable()).containsEntry("users", 21);
+        assertThat(summary().rowsByTable()).containsEntry("questions", 58);
         // Summed over the tables the summary itself names, rather than a list written here.
         // The hardcoded version went stale the moment §9 added four tables, and a total that
         // silently stops covering part of the load is worse than no total at all.
@@ -130,13 +143,13 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
 
         assertThat(second.outcome()).isEqualTo(SeedOutcome.UNCHANGED);
         assertThat(second.totalRows()).isZero();
-        assertThat(count("users")).isEqualTo(18);
-        assertThat(count("question_versions")).isEqualTo(43);
-        assertThat(count("exam_version_questions")).isEqualTo(39);
+        assertThat(count("users")).isEqualTo(21);
+        assertThat(count("question_versions")).isEqualTo(61);
+        assertThat(count("exam_version_questions")).isEqualTo(44);
         assertThat(count("notifications")).isEqualTo(10);
-        assertThat(count("exam_executions")).isEqualTo(5);
-        assertThat(count("exam_attempts")).isEqualTo(20);
-        assertThat(count("grades")).isEqualTo(20);
+        assertThat(count("exam_executions")).isEqualTo(7);
+        assertThat(count("exam_attempts")).isEqualTo(31);
+        assertThat(count("grades")).isEqualTo(31);
     }
 
     // ===== B-24: the loader can see dataset drift ==========================
@@ -290,7 +303,7 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
                         group by ev.id
                         """, Object[].class).getResultList());
 
-        assertThat(totals).hasSize(7);
+        assertThat(totals).hasSize(8);
         totals.forEach(row -> assertThat(((Number) row[1]).intValue())
                 .as("exam version %s", row[0]).isEqualTo(100));
     }
@@ -323,7 +336,7 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         List<QuestionVersion> all = inTx(session -> session.createQuery(
                 "select qv from QuestionVersion qv", QuestionVersion.class).getResultList());
 
-        assertThat(all).hasSize(43);
+        assertThat(all).hasSize(61);
         all.forEach(version -> {
             assertThat(version.getCorrectAnswer())
                     .as("question version %s", version.getId())
@@ -368,7 +381,9 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
                 Long.class).getSingleResult());
 
         assertThat(QuestionBankSection.illustratedCount()).isEqualTo(10);
-        assertThat(count("question_versions")).isEqualTo(43);
+        // 61 since U-42, and the illustrated count deliberately did not move with it: the three
+        // new courses carry no pictures, so eighteen more versions is eighteen more null blobs.
+        assertThat(count("question_versions")).isEqualTo(61);
 
         // ELEVEN rows, not ten. 11005 is illustrated and has a second version, and the bytes go
         // on both: case 6.1's demo paper pins v1 while case 2.6's bank list shows the latest, so
@@ -401,7 +416,7 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         List<String> hashes = inTx(session -> session.createQuery(
                 "select u.passwordHash from User u", String.class).getResultList());
 
-        assertThat(hashes).hasSize(18);
+        assertThat(hashes).hasSize(21);
         hashes.forEach(hash -> assertThat(BCrypt.verifyer()
                 .verify(UsersSection.SEED_PASSWORD.toCharArray(), hash).verified)
                 .as("demo123 must verify against %s", hash)
@@ -445,6 +460,12 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         assertThat(enrolledIn("12")).isEqualTo(6);
         assertThat(enrolledIn("21")).isEqualTo(8);
         assertThat(enrolledIn("22")).isEqualTo(7);
+        // ⚑ U-42. Six each, and Biology's six is load-bearing in the other direction from
+        // Algebra's eight: five of the six sat execution 7, so the roster and the attempt list
+        // deliberately differ where §9.1's are identical.
+        assertThat(enrolledIn("31")).isEqualTo(6);
+        assertThat(enrolledIn("41")).isEqualTo(6);
+        assertThat(enrolledIn("51")).isEqualTo(6);
     }
 
     @Test
@@ -464,6 +485,17 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
         assertThat(coursesTaughtBy("dana.cohen"))
                 .as("dana teaches Calculus alone since the roster change")
                 .isEqualTo(2);
+
+        // ⚑ U-42. Three more dual-hat rows, and the consequence FacultySection records rather
+        // than leaves to be discovered: each of these three is the only teacher in her subject
+        // and its coordinator, so she is the approver of her own exams. That is legal and it is
+        // the opposite of the demo's approval story, which stays on rina.barak and
+        // michal.sharon. Asserted rather than described, so removing the shape fails here.
+        for (String teacher : List.of("galit.stern", "orly.navon", "sivan.adler")) {
+            assertThat(coursesTaughtBy(teacher)).as("%s teaches one course", teacher).isEqualTo(1);
+            assertThat(coordinatedSubjectsOf(teacher))
+                    .as("%s coordinates one subject", teacher).isEqualTo(1);
+        }
     }
 
     @Test
@@ -539,7 +571,7 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
                 where a.id = g.attemptId and x.id = a.executionId and u.id = a.studentId
                 """, Object[].class).getResultList());
 
-        assertThat(graded).as("every seeded attempt carries a grade").hasSize(20);
+        assertThat(graded).as("every seeded attempt carries a grade").hasSize(31);
 
         for (Object[] row : graded) {
             long attemptId = ((Number) row[0]).longValue();
@@ -560,13 +592,140 @@ abstract class SeedDatasetContract extends SeedLoadedTestBase {
                     .isEqualTo(stored);
         }
 
-        // U-34 added sitting 3318, and this is the assertion that says so: the loop above is
-        // data-driven, so without this it would still pass over three sittings, or two.
+        // U-34 added sitting 3318 and U-43 added 6120 and 7745, and this is the assertion that
+        // says so: the loop above is data-driven, so without this it would still pass over three
+        // sittings, or two.
         assertThat(graded).extracting(row -> row[2]).as("every graded sitting is recomputed")
-                .containsOnly("4821", "7390", "3318");
+                .containsOnly("4821", "7390", "3318", "6120", "7745");
         assertThat(graded).filteredOn(row -> row[2].equals("3318"))
                 .as("execution 5's four AUTO grades, dana.cohen's awaiting-grading queue (U-34)")
                 .hasSize(4);
+        assertThat(graded).filteredOn(row -> row[2].equals("6120"))
+                .as("execution 6's six approved grades (U-43)").hasSize(6);
+        assertThat(graded).filteredOn(row -> row[2].equals("7745"))
+                .as("execution 7's five approved grades on the non-flat paper (U-43)").hasSize(5);
+    }
+
+    /**
+     * ⚑ <b>Every frozen statistics record is recomputed, by the product's own calculator.</b>
+     *
+     * <p>The sibling of {@link #everyAutoScoreIsWhatTheGraderProduces()}, and it exists for the
+     * same reason: {@code SeedLoadedDbContract} compares the loaded statistics against the
+     * document's, and a wrong mean written into both agrees with itself. Seed 9.1's own note asks
+     * for exactly this - "every figure in this table is hand-checkable, which is what E12.4's
+     * unit-tested against hand-computed fixtures asks for" - and until U-43 nothing recomputed
+     * any of them. Three sittings carry frozen columns now, hand-written into
+     * {@code ExecutionsSection} from three tables in the document, which is three places for an
+     * arithmetic slip to live.
+     *
+     * <p>So this reads the <b>final</b> scores out of the database, runs {@link ScoreStatistics}
+     * over them exactly as the grading service does at the moment a sitting's last grade is
+     * approved, and compares component by component. It also asserts <b>which</b> sittings are
+     * frozen, in both directions: a sitting whose grading has not finished must carry nulls, or
+     * its numbers would say the opposite of what the fixture is for.
+     */
+    @Test
+    @DisplayName("⚑ every frozen statistic is what ScoreStatistics produces from the finals")
+    void everyFrozenStatisticIsRecomputed() {
+        List<Object[]> frozen = inTx(session -> session.createQuery("""
+                select x.code, x.stats, x.participation
+                from ExamExecution x
+                where x.stats is not null or x.participation is not null
+                order by x.code
+                """, Object[].class).getResultList());
+
+        assertThat(frozen).extracting(row -> row[0])
+                .as("only sittings whose grading is finished carry frozen columns (S-21, S-25)")
+                .containsExactly("4821", "6120", "7745");
+
+        for (Object[] row : frozen) {
+            String code = (String) row[0];
+            server.db.entities.ExecutionStats stored = (server.db.entities.ExecutionStats) row[1];
+            server.db.entities.Participation participation =
+                    (server.db.entities.Participation) row[2];
+
+            assertThat(stored).as("sitting %s stats", code).isNotNull();
+            assertThat(participation).as("sitting %s participation", code).isNotNull();
+
+            List<Integer> finals = inTx(session -> session.createQuery("""
+                    select coalesce(g.finalScore, g.autoScore)
+                    from Grade g, ExamAttempt a, ExamExecution x
+                    where a.id = g.attemptId and x.id = a.executionId and x.code = :code
+                    """, Integer.class).setParameter("code", code).getResultList());
+
+            ScoreStatistics recomputed = ScoreStatistics.of(finals).orElseThrow();
+
+            assertThat(stored.average()).as("sitting %s mean", code)
+                    .isEqualTo(recomputed.mean());
+            assertThat(stored.median()).as("sitting %s median", code)
+                    .isEqualTo(recomputed.median());
+            assertThat(stored.stdDev()).as("sitting %s population sigma, divisor n", code)
+                    .isEqualTo(recomputed.standardDeviation());
+            assertThat(stored.min()).as("sitting %s min", code).isEqualTo(recomputed.min());
+            assertThat(stored.max()).as("sitting %s max", code).isEqualTo(recomputed.max());
+            assertThat(stored.passRate()).as("sitting %s pass rate, mark %d", code,
+                            ScoreStatistics.PASS_MARK)
+                    .isEqualTo(recomputed.passRate());
+            assertThat(stored.deciles()).as("sitting %s deciles", code)
+                    .isEqualTo(recomputed.deciles());
+
+            // Participation is not a statistic and ScoreStatistics knows nothing about it, so it
+            // is recomputed from the attempt rows themselves: started is every attempt, finished
+            // is the SUBMITTED ones and timed_out the rest (S-21).
+            List<Object[]> counts = inTx(session -> session.createQuery("""
+                    select cast(a.status as string), count(a)
+                    from ExamAttempt a, ExamExecution x
+                    where x.id = a.executionId and x.code = :code
+                    group by a.status
+                    """, Object[].class).setParameter("code", code).getResultList());
+
+            long submitted = counts.stream().filter(c -> c[0].equals("SUBMITTED"))
+                    .mapToLong(c -> ((Number) c[1]).longValue()).sum();
+            long timedOut = counts.stream().filter(c -> c[0].equals("TIMED_OUT"))
+                    .mapToLong(c -> ((Number) c[1]).longValue()).sum();
+
+            assertThat(participation.started()).as("sitting %s started", code)
+                    .isEqualTo((int) (submitted + timedOut));
+            assertThat(participation.finished()).as("sitting %s finished", code)
+                    .isEqualTo((int) submitted);
+            assertThat(participation.timedOut()).as("sitting %s timed out", code)
+                    .isEqualTo((int) timedOut);
+            assertThat(participation.started()).as("sitting %s covers every graded attempt", code)
+                    .isEqualTo(finals.size());
+        }
+    }
+
+    /**
+     * ⚑ <b>U-43's own tripwire: the three frozen sittings do not look like each other.</b>
+     *
+     * <p>The point of adding two was that a report comparing sittings had one row to compare. Two
+     * more rows that happened to carry the same mean, the same sigma or the same participant
+     * count would satisfy every count assertion above and still leave the screen unable to show a
+     * difference, so the property worth asserting is that the three are pairwise distinct on
+     * every figure a report prints.
+     */
+    @Test
+    @DisplayName("⚑ no two frozen sittings share a participant count, mean, sigma or pass rate")
+    void theThreeFrozenSittingsAreDistinguishable() {
+        List<Object[]> frozen = inTx(session -> session.createQuery("""
+                select x.code, x.stats, x.participation
+                from ExamExecution x where x.stats is not null
+                """, Object[].class).getResultList());
+
+        assertThat(frozen).hasSize(3);
+
+        assertThat(frozen).extracting(row ->
+                        ((server.db.entities.Participation) row[2]).started())
+                .as("participant counts").doesNotHaveDuplicates();
+        assertThat(frozen).extracting(row ->
+                        ((server.db.entities.ExecutionStats) row[1]).average())
+                .as("means").doesNotHaveDuplicates();
+        assertThat(frozen).extracting(row ->
+                        ((server.db.entities.ExecutionStats) row[1]).stdDev())
+                .as("standard deviations").doesNotHaveDuplicates();
+        assertThat(frozen).extracting(row ->
+                        ((server.db.entities.ExecutionStats) row[1]).passRate())
+                .as("pass rates").doesNotHaveDuplicates();
     }
 
     private long count(String table) {

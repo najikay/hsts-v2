@@ -76,9 +76,9 @@ class DataBrowseServiceTest {
                 .student(MAYA, "מאיה לוי", "maya.levi")
                 .course("11", "אלגברה")
                 .course("12", "חדו\"א")
-                .exam("101101", "11", "מבחן אמצע: אלגברה", "דנה כהן", 2, SUMMER)
+                .exam("101101", "11", "מבחן אמצע: אלגברה", "דנה כהן", 2, SUMMER, 1102L)
                 // An exam nobody has ever released: it belongs in a catalogue all the same.
-                .exam("101201", "12", "בוחן: גבולות", "דנה כהן", 1, SPRING)
+                .exam("101201", "12", "בוחן: גבולות", "דנה כהן", 1, SPRING, 1201L)
                 .sitting(1, "4821", SPRING, "מבחן אמצע: אלגברה", "11", DANA,
                         ExecutionStatus.CLOSED, SEEDED)
                 .sitting(2, "5150", SUMMER, "בוחן: אי-שוויונות", "11", DANA,
@@ -202,6 +202,21 @@ class DataBrowseServiceTest {
                     .as("the Calculus quiz has never been released and is listed all the same")
                     .containsExactly("101101", "101201");
             assertThat(answer.isEmpty()).isFalse();
+        }
+
+        @Test
+        @DisplayName("⚑ every row carries a version to open, or the catalogue is a dead end (A2)")
+        void everyRowIsOpenable() {
+            DataExams answer = (DataExams) service.exams(principal(),
+                    ask(Verb.DATA_EXAMS_GET)).getPayload();
+
+            assertThat(answer.exams()).extracting(DataExamRow::latestVersionId)
+                    .as("the latest version's id, carried through from SchoolExam so the "
+                            + "principal's Exams row can open EXAM_PREVIEW_GET, which is "
+                            + "addressed by version (REPORTS amendment A2, 2026-08-30)")
+                    .containsExactly(1102L, 1201L);
+            assertThat(answer.exams()).allSatisfy(row ->
+                    assertThat(row.isOpenable()).isTrue());
         }
 
         @Test

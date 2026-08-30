@@ -7,6 +7,7 @@ import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.PushEventBridge;
 import client.features.data.DataCopy;
+import client.features.data.DataDetailCopy;
 import client.features.data.DataTab;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
@@ -16,7 +17,16 @@ import common.dto.auth.Role;
 import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
+import common.dto.approval.ApprovalRow;
+import common.dto.approval.ApprovalState;
+import common.dto.approval.ExamPreview;
+import common.dto.approval.PreviewAnswerRow;
+import common.dto.approval.TeacherOnlyBlock;
 import common.dto.bank.Difficulty;
+import common.dto.bank.QuestionDetail;
+import common.dto.bank.QuestionVersionDetail;
+import common.dto.bank.VersionHistory;
+import common.dto.exam.ExamQuestion;
 import common.dto.report.DataExamRow;
 import common.dto.report.DataExams;
 import common.dto.report.DataResults;
@@ -58,6 +68,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>It also walks T-11.3 the only way a test can: it asserts that the screen holds no button
  * except its own tabs, which is what "look for any create, edit or delete control anywhere in
  * her shell" comes down to on the busiest screen the role has.
+ *
+ * <p><b>Since 2026-08-30 (live session, U-44) it walks the three screens the rows open</b>, one
+ * case per tab: click a row, and the detail screen is on the scene with the content that tab
+ * promised and no control on it that writes. That is the other half of T-11.3 — "anywhere in her
+ * shell" now includes three more screens — and it is also the wiring claim the FX-free session
+ * tests cannot make: that the click really navigates and the parameter really arrives.
  */
 @DisabledIfSystemProperty(named = "hsts.uitests", matches = "false")
 class DataBrowserInteractionTest extends ApplicationTest {
@@ -206,6 +222,160 @@ class DataBrowserInteractionTest extends ApplicationTest {
                 .contains(DataCopy.READ_ONLY_NOTE);
     }
 
+    // ===================== The rows open (U-44, 2026-08-30) ===============
+
+    /**
+     * Every label a mutating control in this application wears.
+     *
+     * <p>The T-11.3 assertion on the three detail screens is phrased against these rather than
+     * against "no button at all": a detail screen may legitimately carry a control that changes
+     * nothing (the histogram's Count/Percent toggle does), and a rule that banned every button
+     * would either fail on one of those or be quietly relaxed later. What must never appear is a
+     * control that writes, and these are what the app calls them.
+     */
+    private static final Set<String> MUTATING_LABELS = Set.of(
+            "Edit", "Edit question", "Delete", "Delete question", "New question", "New exam",
+            "Approve", "Send back", "Reject", "Save", "Save draft", "Submit",
+            "Submit for approval", "Release", "Cancel sitting", "Add time", "Publish");
+
+    @Test
+    @DisplayName("⚑ a Questions row opens the question, its key and its history, and nothing else")
+    void aQuestionRowOpensTheQuestion() {
+        ScreenManager manager = signIn(this::everythingLoads);
+        openData(manager);
+
+        clickOn(firstRow(manager.scene(), DataTab.QUESTIONS));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Node screen = detail(manager.scene(), ".principal-data-question");
+        Set<String> labels = labelTexts(screen);
+        assertThat(labels)
+                .as("the bank's own detail rendering: the id, the stem, the four options")
+                .contains("Question Q11001", "#11001", "Solve the linear equation",
+                        "x = 1", "x = 2", "x = 3", "x = 4");
+        assertThat(labels)
+                .as("she may see the key (F9.3, QuestionDetail's licence of 2026-08-21)")
+                .contains("Correct");
+        assertThat(labels)
+                .as("and the version history beside it")
+                .contains(DataDetailCopy.HISTORY_TITLE)
+                .anySatisfy(text -> assertThat(text).startsWith("Version 2"));
+        assertNothingMutates(screen);
+    }
+
+    @Test
+    @DisplayName("⚑ an Exams row opens the student's own paper, with no decision under it")
+    void anExamRowOpensThePaper() {
+        ScreenManager manager = signIn(this::everythingLoads);
+        openData(manager);
+
+        clickOn(toggleNamed(manager.scene(), DataTab.EXAMS.segment()));
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn(firstRow(manager.scene(), DataTab.EXAMS));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Node screen = detail(manager.scene(), ".principal-data-exam");
+        assertThat(labeledTexts(screen))
+                .as("the paper, drawn by the student's own card component: the heading each "
+                        + "card prints, the stem, and the four options as a student read them")
+                .contains("Algebra midterm", "Question 1 of 2", "What are the roots?",
+                        "1 and 6", "2 and 3");
+        assertThat(labelTexts(screen))
+                .as("and the fenced staff-only block beside it, answer key included")
+                .contains("Teacher only", "Answer key", "Written by Dana Cohen",
+                        "Q1 · option 2");
+        assertNothingMutates(screen);
+    }
+
+    @Test
+    @DisplayName("⚑ a Results row opens the sitting's frozen figures and its distribution")
+    void aResultsRowOpensTheSitting() {
+        ScreenManager manager = signIn(this::everythingLoads);
+        openData(manager);
+
+        clickOn(toggleNamed(manager.scene(), DataTab.RESULTS.segment()));
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn(firstRow(manager.scene(), DataTab.RESULTS));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Node screen = detail(manager.scene(), ".principal-data-sitting");
+        Set<String> labels = labelTexts(screen);
+        assertThat(labels)
+                .as("the newest sitting, which is the row the list puts first")
+                .contains("Algebra quiz · 5150");
+        assertThat(labels)
+                .as("E14's own six cards, unchanged, so one sitting reads the same on both screens")
+                .contains("Average", "Median", "Std deviation", "Pass rate", "Participants");
+        assertThat(labels).contains(DataDetailCopy.DISTRIBUTION_TITLE,
+                DataDetailCopy.DISTRIBUTION_HINT);
+        assertThat(cellTextsIn(screen))
+                .as("the frozen buckets, lowest band first. Only the rows the table has "
+                        + "realised are in the scene graph, so this asserts the head of the "
+                        + "list; that there are exactly ten and that the tenth reads "
+                        + "\"90 to 100\" is DataDetailCopyTest's, where it can be asserted "
+                        + "without a viewport")
+                .contains("0 to 9", "10 to 19");
+        assertNothingMutates(screen);
+    }
+
+    /** T-11.3, one screen at a time: not one control here writes anything. */
+    private static void assertNothingMutates(Node screen) {
+        assertThat(screen.lookupAll(".button").stream()
+                .filter(javafx.scene.control.Labeled.class::isInstance)
+                .map(node -> ((javafx.scene.control.Labeled) node).getText())
+                .filter(java.util.Objects::nonNull)
+                .toList())
+                .as("no control on a principal's detail screen may write (S-7, T-11.3)")
+                .doesNotContainAnyElementsOf(MUTATING_LABELS);
+        assertThat(screen.lookupAll(".text-field"))
+                .as("and nothing on it is typed into")
+                .isEmpty();
+        assertThat(labelTexts(screen))
+                .as("the screen says it is read only, so 'no buttons' cannot be read as "
+                        + "'the buttons are not built yet'")
+                .contains(DataDetailCopy.READ_ONLY_NOTE);
+    }
+
+    /** The first row of a tab's table, which is what a principal clicks. */
+    private Node firstRow(Scene scene, DataTab tab) {
+        Node row = table(scene, tab).lookupAll(".table-row-cell").stream()
+                .filter(node -> node instanceof javafx.scene.control.TableRow<?> candidate
+                        && !candidate.isEmpty())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no row in the " + tab + " table"));
+        return row;
+    }
+
+    /** One detail screen's root, so nothing on the shell around it satisfies an assertion. */
+    private static Node detail(Scene scene, String styleClass) {
+        Node node = scene.getRoot().lookup(styleClass);
+        assertThat(node).as("%s is on screen", styleClass).isNotNull();
+        return node;
+    }
+
+    /**
+     * Every {@code Labeled} under one node, not only the {@code .label} ones.
+     *
+     * <p>An exam card renders its options as radio buttons, which are {@code Labeled} and are
+     * not {@code .label} nodes. A student reads them, so a test claiming the principal sees the
+     * student's paper has to look at them too.
+     */
+    private static Set<String> labeledTexts(Node parent) {
+        return parent.lookupAll("*").stream()
+                .filter(javafx.scene.control.Labeled.class::isInstance)
+                .map(node -> ((javafx.scene.control.Labeled) node).getText())
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    private static Set<String> cellTextsIn(Node parent) {
+        return parent.lookupAll(".table-cell").stream()
+                .filter(javafx.scene.control.Labeled.class::isInstance)
+                .map(node -> ((javafx.scene.control.Labeled) node).getText())
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
     // ===================== Fixture =======================================
 
     private static BankQuestionRow question(String id, String course, String courseName,
@@ -225,6 +395,35 @@ class DataBrowserInteractionTest extends ApplicationTest {
                 List.of(0, 0, 0, 0, 0, 1, 1, 1, 1, 0));
     }
 
+    private static QuestionDetail linear() {
+        return new QuestionDetail("11001", "11", "Algebra", 2, 2, "Solve the linear equation",
+                List.of("x = 1", "x = 2", "x = 3", "x = 4"), 2, "Equations", Difficulty.EASY,
+                false, "Dana Cohen", SUMMER);
+    }
+
+    private static QuestionVersionDetail linearVersion(int versionNo) {
+        return new QuestionVersionDetail(versionNo, "Solve the linear equation",
+                List.of("x = 1", "x = 2", "x = 3", "x = 4"), 2, "Equations", Difficulty.EASY,
+                false, "Dana Cohen", versionNo == 1 ? SPRING : SUMMER);
+    }
+
+    private static ExamQuestion paperQuestion(int ordinal) {
+        return new ExamQuestion(900L + ordinal, "1200" + ordinal, ordinal, 50,
+                "What are the roots?", "1 and 6", "2 and 3", "minus 2 and minus 3", "0 and 5",
+                null);
+    }
+
+    private static ExamPreview midtermPreview() {
+        return new ExamPreview(
+                new ApprovalRow(1102L, "101101", "Algebra midterm", "11", "Algebra", 2,
+                        "Dana Cohen", SUMMER, 2, 60, ApprovalState.APPROVED, "", false, 0),
+                "Answer every question.",
+                List.of(paperQuestion(1), paperQuestion(2)),
+                new TeacherOnlyBlock("Mark question 2 generously.", "Dana Cohen",
+                        List.of(new PreviewAnswerRow(901, 1, (byte) 2),
+                                new PreviewAnswerRow(902, 2, (byte) 2))));
+    }
+
     private void everythingLoads(FakeClientConnection connection) {
         connection.replyOk(Verb.BANK_LIST, new BankPage(List.of(
                 question("11001", "11", "Algebra", "Solve the linear equation", "Equations",
@@ -236,14 +435,20 @@ class DataBrowserInteractionTest extends ApplicationTest {
                 0, BankListRequest.MAX_PAGE_SIZE, 3, 1));
         connection.replyOk(Verb.DATA_EXAMS_GET, new DataExams(List.of(
                 new DataExamRow("101101", "Algebra midterm", "11", "Algebra", "Dana Cohen", 2,
-                        SUMMER),
+                        SUMMER, 1102L),
                 new DataExamRow("101201", "Calculus quiz", "12", "Calculus", "Rina Barak", 1,
-                        SPRING))));
+                        SPRING, 1201L))));
         connection.replyOk(Verb.DATA_RESULTS_GET, new DataResults(List.of(
                 new ReportRow(2, "5150", "Algebra quiz", "11", "Algebra", SUMMER,
                         SUMMER.plusSeconds(7200), 4, quiet()),
                 new ReportRow(1, "4821", "Algebra midterm", "11", "Algebra", SPRING,
                         SPRING.plusSeconds(7200), 8, seeded()))));
+        // U-44's three details. All four verbs are reads she already held or was admitted to
+        // by APPROVAL amendment A1; none of them has a mutating sibling on this wire.
+        connection.replyOk(Verb.QUESTION_GET, linear());
+        connection.replyOk(Verb.QUESTION_VERSIONS,
+                new VersionHistory("11001", List.of(linearVersion(2), linearVersion(1))));
+        connection.replyOk(Verb.EXAM_PREVIEW_GET, midtermPreview());
     }
 
     private ScreenManager signIn(Consumer<FakeClientConnection> script) {

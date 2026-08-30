@@ -42,8 +42,9 @@ class WireDtoLeakGuardTest {
             Map.entry("AnswerReviewRow.isCorrect",
                     "same licence as AnswerReviewRow.correct"),
             Map.entry("PreviewAnswerRow.correctOption",
-                    "approval: the deciding coordinator and the version's own author, via "
-                    + "EXAM_PREVIEW_GET only - APPROVAL_WIRE_CONTRACT"),
+                    "approval: the deciding coordinator, the version's own author and the "
+                    + "principal (amendment A1, 2026-08-30), via EXAM_PREVIEW_GET only - "
+                    + "APPROVAL_WIRE_CONTRACT"),
             Map.entry("QuestionDetail.correctAnswer",
                     "bank outbound: staff-only authoring detail, principal included by the section-7.2 "
                     + "ruling - BANK_WIRE_CONTRACT; BankWireLeakGuardTest carries the local split"),
@@ -55,8 +56,9 @@ class WireDtoLeakGuardTest {
                     "bank inbound: same authoring licence as QuestionDraft"),
             Map.entry("TeacherOnlyBlock.answerKey",
                     "approval: the teacher-only half of the preview, same audience and gate as "
-                            + "PreviewAnswerRow (EXAM_PREVIEW_GET: deciding coordinator or the "
-                            + "version's own author) - APPROVAL_WIRE_CONTRACT"));
+                            + "PreviewAnswerRow (EXAM_PREVIEW_GET: deciding coordinator, the "
+                            + "version's own author, or the principal read-only under "
+                            + "amendment A1) - APPROVAL_WIRE_CONTRACT"));
 
     @Test
     @DisplayName("every correctness-suggesting component in common/dto/** is licensed by name")

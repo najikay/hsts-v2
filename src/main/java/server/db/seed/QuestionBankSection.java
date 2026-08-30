@@ -9,7 +9,22 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §7: the forty questions, and the three that ship with a second version (E2.15).
+ * Seed §7: the fifty-eight questions, and the three that ship with a second version (E2.15).
+ *
+ * <h2>⚑ U-42: eighteen questions in three new courses</h2>
+ *
+ * <p>2026-08-30, live session. Biology 31, Chemistry 41 and Physics 51 get six questions each,
+ * transcribed from seed §7.6, §7.7 and §7.8. Every one of the three has the same shape, stated
+ * once here rather than three times below: <b>two topics, three questions per topic, one of each
+ * difficulty</b>, so each course holds two EASY, two MEDIUM and two HARD. Correct answers run
+ * 1, 2, 3, 4, 1, 2 down each course, the same cycle §7.1 runs, so no course has a majority answer
+ * a guesser could exploit. None carries an illustration and none has a second version - see
+ * {@link FacultySection} on why the co-teacher clause stays a one-row clause.
+ *
+ * <p>The document numbers them §7.6 to §7.8, <em>after</em> the second-version table at §7.5,
+ * which is appending rather than inserting. That is U-34's precedent (execution 5's tables are
+ * §9.4, not a renumbering of §9.3) and it exists because every section number in that document
+ * is quoted from a parser heading list, a javadoc, an acceptance case or a defect note.
  *
  * <h2>Transcription decisions, all flagged in the PR report</h2>
  *
@@ -214,7 +229,73 @@ final class QuestionBankSection implements SeedSection {
                     "Distributed", "Deferred", "Deterministic", "Durability", 4, false),
             new Q("22009", "Transactions", Difficulty.MEDIUM,
                     "Which isolation level still permits a phantom read?",
-                    "READ COMMITTED", "REPEATABLE READ", "SERIALIZABLE", "None of them", 1, false));
+                    "READ COMMITTED", "REPEATABLE READ", "SERIALIZABLE", "None of them", 1, false),
+
+            // ⚑ U-42, 7.6 Biology (course 31), 6 questions
+            new Q("31001", "Cells", Difficulty.EASY,
+                    "Which organelle releases most of a cell's usable energy?",
+                    "Mitochondrion", "Ribosome", "Golgi apparatus", "Lysosome", 1, false),
+            new Q("31002", "Cells", Difficulty.MEDIUM,
+                    "A plant cell is left in pure water until its cell wall stops it taking in any more. That state is called:",
+                    "Plasmolysed", "Turgid", "Flaccid", "Lysed", 2, false),
+            new Q("31003", "Cells", Difficulty.HARD,
+                    "Ribosomes are prevented from binding the rough endoplasmic reticulum. Which product is affected first?",
+                    "ATP made in the mitochondria", "Glucose made in the chloroplast",
+                    "Proteins destined for secretion", "Water crossing the membrane", 3, false),
+            new Q("31004", "Genetics", Difficulty.EASY,
+                    "How many chromosomes does a normal human body cell contain?",
+                    "23", "92", "24", "46", 4, false),
+            new Q("31005", "Genetics", Difficulty.MEDIUM,
+                    "Two parents are each carriers of the same recessive disorder. What fraction of their children is expected to be affected?",
+                    "One quarter", "One half", "Three quarters", "None", 1, false),
+            new Q("31006", "Genetics", Difficulty.HARD,
+                    "Two individuals heterozygous for both of two independently assorting genes are crossed. What phenotype ratio is expected?",
+                    "3:1", "9:3:3:1", "1:1:1:1", "1:2:1", 2, false),
+
+            // ⚑ U-42, 7.7 Chemistry (course 41), 6 questions
+            new Q("41001", "Atomic structure", Difficulty.EASY,
+                    "Which particle in an atom carries a negative charge?",
+                    "Electron", "Proton", "Neutron", "Nucleus", 1, false),
+            new Q("41002", "Atomic structure", Difficulty.MEDIUM,
+                    "An atom has 11 protons and 12 neutrons. What is its mass number?",
+                    "11", "23", "12", "1", 2, false),
+            new Q("41003", "Atomic structure", Difficulty.HARD,
+                    "Why does the first ionisation energy fall going down a group?",
+                    "The nuclear charge falls", "The atoms gain more protons",
+                    "The outer electron is further from the nucleus and better shielded",
+                    "The atoms become more electronegative", 3, false),
+            new Q("41004", "Chemical reactions", Difficulty.EASY,
+                    "What is the pH of a neutral aqueous solution at 25 degrees Celsius?",
+                    "0", "14", "1", "7", 4, false),
+            new Q("41005", "Chemical reactions", Difficulty.MEDIUM,
+                    "How many molecules of water are produced when two molecules of hydrogen react completely with one molecule of oxygen?",
+                    "2", "1", "3", "4", 1, false),
+            new Q("41006", "Chemical reactions", Difficulty.HARD,
+                    "A reaction at equilibrium is heated and the yield of product falls. What does that say about the forward reaction?",
+                    "It is endothermic", "It is exothermic", "It is catalysed",
+                    "It has stopped", 2, false),
+
+            // ⚑ U-42, 7.8 Physics (course 51), 6 questions
+            new Q("51001", "Motion", Difficulty.EASY,
+                    "What is the SI unit of force?",
+                    "Newton", "Joule", "Watt", "Pascal", 1, false),
+            new Q("51002", "Motion", Difficulty.MEDIUM,
+                    "A car accelerates uniformly from rest at 3 m/s². How fast is it moving after 4 seconds?",
+                    "3 m/s", "12 m/s", "7 m/s", "0.75 m/s", 2, false),
+            new Q("51003", "Motion", Difficulty.HARD,
+                    "A ball is thrown straight up and caught again. Ignoring air resistance, what is its acceleration at the highest point?",
+                    "Zero", "Upwards and increasing", "9.8 m/s² downwards",
+                    "Equal to its initial speed", 3, false),
+            new Q("51004", "Energy", Difficulty.EASY,
+                    "Which quantity is measured in joules?",
+                    "Power", "Momentum", "Frequency", "Energy", 4, false),
+            new Q("51005", "Energy", Difficulty.MEDIUM,
+                    "A 2 kg mass is lifted 5 m at constant speed. Taking g as 10 m/s², how much gravitational potential energy does it gain?",
+                    "100 J", "10 J", "50 J", "20 J", 1, false),
+            new Q("51006", "Energy", Difficulty.HARD,
+                    "A pendulum swings with no friction. Where is its kinetic energy greatest?",
+                    "At the highest point of the swing", "At the lowest point of the swing",
+                    "It is the same everywhere", "Halfway between the two", 2, false));
 
     private static final List<V2> SECOND_VERSIONS = List.of(
             // Rewords the stem; answers unchanged. Exam 1 stays pinned to v1 (7.5, 8.1).

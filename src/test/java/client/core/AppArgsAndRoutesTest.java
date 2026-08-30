@@ -179,8 +179,9 @@ class AppArgsAndRoutesTest {
             // is the id that was already here and which the rail has spelled since E5.4, so
             // the table lost a row rather than gaining one. E7.11 added the exam builder
             // behind the list's Edit, View and New buttons. E12.6 added the teacher's review
-            // of one marked paper, 2026-08-30 (live session, U-38), on the drill-in spelling
-            // every other view-of-one-thing here uses: the parent's id and a dotted suffix.
+            // of one marked paper and U-44 the three screens the principal's Data rows open
+            // (2026-08-30, live session), all on the drill-in spelling every other
+            // view-of-one-thing here uses: the parent's id, a dot, and what the row is.
             // Per-role registration and the role→home mapping are covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
@@ -190,7 +191,7 @@ class AppArgsAndRoutesTest {
                             "approvals", "approvals.preview", "exams", "exams.build",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
                             "grades", "grades.checked", "grading", "grading.review",
-                            "reports", "data",
+                            "reports", "data", "data.question", "data.exam", "data.results",
                             "questions.edit");
         }
 

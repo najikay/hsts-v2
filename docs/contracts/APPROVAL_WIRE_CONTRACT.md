@@ -241,3 +241,51 @@ the queue and carries `examVersionId` as a nav parameter.
    per-response field rather than becoming a client-side comparison against the session.
 3. **No push on a decision.** The author learns through a durable notification. If T-4 demo pacing
    wants the author's screen to move without a bell, that is one additive `PUSH_*` verb.
+
+---
+
+## Additive amendments
+
+Everything below was added **after** the 2026-08-21 freeze, under the additive-only rule this
+contract opened with: no verb renamed, no payload component removed, retyped or reordered, no
+semantics changed for any existing field. A client built against v1 still works against a server
+that implements the amendments, and vice versa.
+
+### A1 — `EXAM_PREVIEW_GET` admits the principal (E15.2 / F9.3, U-44, added 2026-08-30)
+
+| Verb | Caller | Request payload | OK payload |
+|---|---|---|---|
+| `EXAM_PREVIEW_GET` | coordinator of the subject, the version's author, **or the principal** | `ExamPreviewRequest` | `ExamPreview` |
+
+**The role list grows by one and nothing else changes.** No new verb, no new DTO, no new field, no
+new error code, and not one line of sections 1-9 touched. `Authorization.requireRole` on that
+handler reads `TEACHER, COORDINATOR, PRINCIPAL`; the two decisions beside it still read
+`COORDINATOR` alone, which is what keeps S-7 — "the principal holds literally zero mutating verbs"
+— a property of three role lists rather than of a screen that hides its buttons.
+
+**Why.** The lead's ruling of 2026-08-30 (U-44): the principal's Data screen listed the school's
+questions, exams and sittings and nothing opened. F9.3 gives her a read of the data *as entered*,
+and an exam read that stops at the catalogue row is a list of names. The other two tabs needed no
+amendment at all — `QUESTION_GET` and `QUESTION_VERSIONS` have carried `PRINCIPAL` since E6 (BANK
+§3), and a sitting's detail is the `ReportRow` `DATA_RESULTS_GET` already sends — so this is the
+single smallest change that makes all three rows openable.
+
+**Her scope is the school, so there is none to check.** The handler branches on the role and
+returns before the author-or-coordinator test: spec 7.3.1 and F9.3 give her every course, so a
+scope check on this path could only ever pass, and writing one would imply a slice that does not
+exist. That is the same shape `DataBrowseService` and `ReportService` already wear. She still gets
+`NOT_FOUND` for a version that does not exist, on the same line as everybody else.
+
+**She sees the answer key, and that is the existing licence rather than a new one.** `ExamPreview`
+carries `TeacherOnlyBlock`, and the correctness boundary this product defends is *students* — the
+same reasoning BANK's ruling 2 of 2026-08-21 gave when it sent the principal `QuestionDetail` with
+its key rather than inventing a keyless projection for her. `CorrectnessLeakGuardTest`'s licence
+for `findAnswerKeyForAuthoring` names one more staff audience and no new one in kind; no
+key-bearing type moved package, and `common.dto.exam` is untouched.
+
+**Client.** Route `data.exam` (`DataExamView`), registered for the principal only and aliased to
+`data`. It renders through `ExamPaperPane` — the paper column and the teacher-only pane lifted out
+of `ExamPreviewView` in the same change — so the two screens draw one preview with one renderer,
+which is rule 1 of this contract surviving a second reader. It builds no footer: no Approve, no
+Send back, nothing disabled or hidden, and the session behind it (`DataExamSession`) has no method
+that could send a decision.

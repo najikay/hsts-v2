@@ -414,6 +414,14 @@ public final class ExamRepository {
      *
      * <p>Carries no questions, no answer key, no instructions and no approval status.
      *
+     * <p>It does carry the latest version's <b>id</b> (2026-08-30, live session, U-44), and that
+     * is the one column here nobody reads on screen. It is what the principal's catalogue row is
+     * opened by: {@code EXAM_PREVIEW_GET} is addressed by version, the correlated subquery below
+     * already binds {@code v} to the newest one, so the id is a field of a row we are selecting
+     * rather than a second query. The alternative - a resolve verb turning a display id into a
+     * version id - would be a round trip for a fact this row already knows, which is exactly what
+     * the BANK contract's {@code latestVersionId} amendment declined.
+     *
      * <p>Consumer: E15.2's {@code DATA_EXAMS_GET}.
      *
      * @param session the current session
@@ -423,7 +431,7 @@ public final class ExamRepository {
         return session.createQuery("""
                         select new server.db.projections.SchoolExam(
                             e.displayId, e.courseCode, c.name, v.name, u.fullName,
-                            v.versionNo, v.createdAt)
+                            v.versionNo, v.createdAt, v.id)
                         from Exam e, Course c, ExamVersion v, User u
                         where c.code = e.courseCode
                           and u.id = e.authorId

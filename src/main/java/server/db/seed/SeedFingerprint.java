@@ -52,8 +52,14 @@ import java.util.function.Function;
  *   <li><b>Catches</b> rows added beside the seed by a person using the app, because the counts
  *       go up. That is a false positive in spirit and a true one in fact: this database is no
  *       longer the dataset, and "reload before you demo" is the right answer either way.</li>
+ *   <li><b>Catches an existing demo database that predates U-42 and U-43</b>, which is the case
+ *       an operator meets on 2026-08-30: eight of the ten probes moved, so a database seeded
+ *       before that session warns on the next {@code LOAD_IF_MISSING} rather than quietly
+ *       serving a two-subject school. The answer is the same as always, <b>Reload demo
+ *       data</b>: the loader inserts missing rows and cannot retire the ones it no longer
+ *       ships.</li>
  *   <li><b>Does not catch</b> a change to seeded content no probe looks at. Ten probes are not
- *       a checksum of 414 rows and this class does not pretend otherwise. It is a spot-check
+ *       a checksum of 581 rows and this class does not pretend otherwise. It is a spot-check
  *       chosen to be cheap (nine counts and one string), stable across reloads, and pointed at
  *       the things that have actually drifted.</li>
  *   <li><b>Never deletes anything, and never fails a load.</b> It warns. A guard that refused
@@ -94,17 +100,20 @@ final class SeedFingerprint {
      * different dataset.
      */
     private static final List<Probe> PROBES = List.of(
-            count("users", 18),
-            count("questions", 40),
-            count("question_versions", 43),
-            count("exams", 6),
-            count("exam_versions", 7),
-            // U-34 (2026-08-29, manual round 3) moved four of these five: execution 5 added
-            // one sitting, four attempts and four grades, and N-GRADING-DUE-ALG one
-            // notification. attempt_answers is not probed, so its 108 -> 136 is not here.
-            count("exam_executions", 5),
-            count("exam_attempts", 20),
-            count("grades", 20),
+            // U-42 (2026-08-30, live session) moved the first three: three subjects, three
+            // courses, three teachers, eighteen questions and eighteen question versions.
+            count("users", 21),
+            count("questions", 58),
+            count("question_versions", 61),
+            // U-43 moved the rest: the Biology exam is one exam and one version, and its
+            // execution plus the second Java one are two sittings, eleven attempts and eleven
+            // grades. attempt_answers is not probed, so its 136 -> 203 is not here, and
+            // notifications did not move at all - seed §11 says why.
+            count("exams", 7),
+            count("exam_versions", 8),
+            count("exam_executions", 7),
+            count("exam_attempts", 31),
+            count("grades", 31),
             count("notifications", 10),
             new Probe("dana.cohen's display name", "Dana Cohen", session -> scalar(session,
                     "select u.fullName from User u where u.username = 'dana.cohen'")));

@@ -99,6 +99,11 @@ public final class ShellBoot {
         state.alias(Routes.GRADE_REVIEW.id(), Routes.GRADING.id());
         state.alias(Routes.QUESTION_EDIT.id(), Routes.QUESTIONS.id());
         state.alias(Routes.EXAM_BUILD.id(), Routes.EXAMS.id());
+        // The principal's three drill-ins (2026-08-30, live session, U-44). All three belong
+        // to the Data rail item, because all three are one row of one of its three tabs.
+        state.alias(Routes.DATA_QUESTION.id(), Routes.DATA.id());
+        state.alias(Routes.DATA_EXAM.id(), Routes.DATA.id());
+        state.alias(Routes.DATA_RESULTS.id(), Routes.DATA.id());
         shell.setUser(login.displayName(), login.role());
         startNotifications(manager, shell, login);
         shell.setOnLogout(() -> logout(manager));

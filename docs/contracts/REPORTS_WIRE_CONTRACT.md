@@ -381,3 +381,38 @@ conversation between two colleagues, not catalogue data. Spec 7.3.1's "all data 
 about the school's *content*, and the principal already learns what matters operationally from
 the Results tab: a sitting exists only for an exam that was approved and released. If the defense
 asks, that is the answer: she sees every consequence of approval, and none of the judgement.
+
+---
+
+### A2 — `latestVersionId` on `DataExamRow` (U-44's openable catalogue row, added 2026-08-30)
+
+`DataExamRow` gains `long latestVersionId` **appended** after `lastVersionAt`: the primary key of
+the version its name and date already come from. Nothing is renamed, retyped or reordered, and no
+existing component changes meaning.
+
+**Why.** The lead's ruling of 2026-08-30 (U-44) gave the Data browser's Exams rows a detail
+screen, and that screen is E8's `EXAM_PREVIEW_GET` (APPROVAL amendment A1), which is addressed by
+**version**. This row carried a display id and a version *number* and no version id, so the
+browser could list an exam and not open it — the same gap, for the same join reason, that BANK's
+amendment A1 closed on `BankQuestionRow` when the builder's picker could show a question and not
+pin it.
+
+**Alternative rejected: a resolve verb.** A `DATA_EXAM_VERSION_GET` turning a display id into a
+version id would be a round trip for a fact the catalogue row already knows — the correlated
+subquery in `ExamRepository.findAllSummaries` has already bound `v` to the newest version, so the
+id is a column of a row being selected rather than a second query. BANK A1 declined the same
+option for the same reason.
+
+**It is the one component of this row nobody reads.** Everything else on it is printed in a cell;
+this is what a click carries. It identifies a *version*, never a person: `authorName` still
+travels as a name with no id beside it, for the reason section A1's DTO note gives.
+
+**No disclosure class is added.** Exam version PKs already travel on the authoring wire
+(`ExamVersionRow`, `ComposedQuestion`) and on the approval wire (`ApprovalRow.examVersionId`), and
+the verb this id is spent on refuses anyone the amendment above does not name. `SchoolExam` gains
+the same field for the same reason, server-side.
+
+**Compatibility.** `DataExamRow.isOpenable()` is `latestVersionId > 0`, and the client leaves a row
+that answers false unopenable rather than sending a request for version 0 — which is what a v1
+server's row would look like if the two tiers were ever built separately. They are not (both ship
+from one build), so this is a guard rather than a supported configuration.

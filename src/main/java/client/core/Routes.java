@@ -266,6 +266,40 @@ public final class Routes {
      */
     public static final Route DATA = Route.shell("data", "Data", "Data");
 
+    /**
+     * One question of the school's bank, opened from the Data browser (E15.2 — F9.3, S-7,
+     * U-44, the lead's ruling of 2026-08-30).
+     *
+     * <p>Not on any rail, for the reason {@link #EXAM_PREVIEW} and {@link #CHECKED_FORM} are
+     * not: it is a view of one question, and a rail item that needed a question chosen first
+     * would be a dead end. Reached from a Questions row, which carries the five-digit display
+     * id as a nav parameter, and aliased to {@link #DATA} so the navbar Back goes to the list.
+     *
+     * <p>Registered for the principal alone, and read-only <b>by what it can send</b>: the two
+     * verbs behind it are {@code QUESTION_GET} and {@code QUESTION_VERSIONS}, both of which have
+     * admitted her since E6 and neither of which can change a row (BANK contract section 3).
+     */
+    public static final Route DATA_QUESTION = Route.shell("data.question", "Question");
+
+    /**
+     * One exam of the school's catalogue, as a student would have seen it (E15.2 — F9.3, U-44).
+     *
+     * <p>The coordinator's preview without the decisions: the same {@code EXAM_PREVIEW_GET},
+     * the same paper built from the student's own wire type, and no Approve, no Send back and no
+     * footer. Reached from an Exams row, which carries the latest version's id, and aliased to
+     * {@link #DATA}.
+     */
+    public static final Route DATA_EXAM = Route.shell("data.exam", "Exam");
+
+    /**
+     * One closed sitting's results and frozen statistics (E15.2 — F9.3, F8.5, U-44).
+     *
+     * <p>Reached from a Results row, which carries the execution id, and aliased to
+     * {@link #DATA}. It re-reads {@code DATA_RESULTS_GET} rather than being handed the row it
+     * was opened from, so a cold deep link into it renders exactly what a click into it does.
+     */
+    public static final Route DATA_RESULTS = Route.shell("data.results", "Sitting results");
+
     private Routes() {
     }
 
@@ -294,7 +328,8 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS, EXAM_BUILD,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING, GRADE_REVIEW, REPORTS, DATA, QUESTION_EDIT);
+                CHECKED_FORM, GRADING, GRADE_REVIEW, REPORTS, DATA, DATA_QUESTION, DATA_EXAM,
+                DATA_RESULTS, QUESTION_EDIT);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

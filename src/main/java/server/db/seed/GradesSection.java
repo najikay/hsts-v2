@@ -8,7 +8,21 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §9.1, §9.2 and §9.4: twenty grades in two deliberately different states (E2.15).
+ * Seed §9.1 to §9.6: thirty-one grades in two deliberately different states (E2.15).
+ *
+ * <h2>⚑ U-43: two more approved sittings, and a second approver</h2>
+ *
+ * <p>2026-08-30, live session. {@code 6120}'s six grades are approved by {@code avi.mizrahi} and
+ * {@code 7745}'s five by {@code galit.stern}, each of them the teacher who released the sitting
+ * (T-8.2). Until this round {@code dana.cohen} was the only {@code approved_by} value in the
+ * dataset, so a query that had accidentally hardcoded her would have passed everything.
+ *
+ * <p><b>Neither carries a comment or an override</b>, and both are approved with
+ * {@code final_score} equal to {@code auto_score}. S-22 and S-23 are demonstrated on
+ * {@code 4821}, where four commented grades sit beside four uncommented ones and one override
+ * moves a real student across the pass mark; repeating either here would add rows to those
+ * sweeps without adding a state. What these two sittings add is a second and a third <b>frozen
+ * statistics record</b>, which is the whole of what U-43 was for.
  *
  * <h2>Three executions, and still the two halves of the grading story</h2>
  *
@@ -54,7 +68,9 @@ import java.util.List;
  *
  * <p>Executions 2 and 5 stay comment-free. Nothing there is approved, and S-24 means no student
  * can read any of it; a comment on a grade nobody can open would be a row that contradicts the
- * fixture it lives in.
+ * fixture it lives in. Executions 6 and 7 are comment-free for the opposite reason: everything
+ * there <em>is</em> approved and readable, and eleven more commented grades would drown the four
+ * on {@code 4821} that the comment sweep is written against.
  *
  * <h2>Who approves, and why it is not the coordinator</h2>
  *
@@ -122,7 +138,28 @@ final class GradesSection implements SeedSection {
                     new SeedGrade("noa.friedman", 85, null, null, null),
                     new SeedGrade("shira.dahan", 75, null, null, null),
                     new SeedGrade("daniel.shapira", 60, null, null, null),
-                    new SeedGrade("itay.regev", 45, null, null, null))));
+                    new SeedGrade("itay.regev", 45, null, null, null))),
+
+            // ⚑ U-43, §9.5. Approved by avi.mizrahi, who released it. Finals equal autos: no
+            // override here, so the frozen mean of exactly 55 is the mean of the machine's own
+            // scores. 30, 40, 45, 55, 70, 90 sum to 330.
+            new Sitting("6120", true, "avi.mizrahi", List.of(
+                    new SeedGrade("eitan.solomon", 90, null, null, null),
+                    new SeedGrade("noa.friedman", 70, null, null, null),
+                    new SeedGrade("roni.malka", 55, null, null, null),
+                    new SeedGrade("itay.regev", 45, null, null, null),
+                    new SeedGrade("noam.peretz", 40, null, null, null),
+                    new SeedGrade("omer.katz", 30, null, null, null))),
+
+            // ⚑ U-43, §9.6. Approved by galit.stern, who wrote the paper and released it. She is
+            // also the coordinator of subject 30, which FacultySection records as the one
+            // consequence of the dual-hat shape being taken to its limit. 50, 55, 70, 80, 100.
+            new Sitting("7745", true, "galit.stern", List.of(
+                    new SeedGrade("tal.harari", 100, null, null, null),
+                    new SeedGrade("lior.gabay", 80, null, null, null),
+                    new SeedGrade("noa.friedman", 70, null, null, null),
+                    new SeedGrade("shira.dahan", 55, null, null, null),
+                    new SeedGrade("omer.katz", 50, null, null, null))));
 
     @Override
     public String name() {

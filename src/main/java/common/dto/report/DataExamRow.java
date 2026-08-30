@@ -34,6 +34,12 @@ import java.util.Objects;
  * @param versions      how many versions the exam has, which is its latest version number
  * @param lastVersionAt when that version was written, UTC (ADR-010). Named for what it is:
  *                      {@code exams} rows carry no timestamp of their own
+ * @param latestVersionId the primary key of that latest version, so the row can be
+ *                      <b>opened</b> (REPORTS amendment A2, 2026-08-30, live session, U-44). The
+ *                      one component here a principal never reads: {@code EXAM_PREVIEW_GET} is
+ *                      addressed by version, so without it this row could be listed and not
+ *                      opened. An id that identifies a <em>version</em>, never a person - the
+ *                      author still travels by name alone, for the reason stated above
  */
 public record DataExamRow(String displayId6,
                           String examName,
@@ -41,7 +47,8 @@ public record DataExamRow(String displayId6,
                           String courseName,
                           String authorName,
                           int versions,
-                          Instant lastVersionAt) implements Serializable {
+                          Instant lastVersionAt,
+                          long latestVersionId) implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -68,5 +75,14 @@ public record DataExamRow(String displayId6,
     /** @return {@code true} when this exam has been rewritten at least once (F2.3's history). */
     public boolean hasBeenRevised() {
         return versions > 1;
+    }
+
+    /**
+     * @return {@code true} when this row can be opened (2026-08-30, live session, U-44). False
+     *         only for a row built by an older server that never carried the id, in which case
+     *         the browser leaves the row unopenable rather than sending a request for version 0
+     */
+    public boolean isOpenable() {
+        return latestVersionId > 0;
     }
 }

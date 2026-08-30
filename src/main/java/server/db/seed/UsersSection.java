@@ -7,7 +7,13 @@ import server.db.entities.UserRole;
 import java.util.List;
 
 /**
- * Seed §3: the eighteen people (E2.15, E2.17).
+ * Seed §3: the twenty-one people (E2.15, E2.17).
+ *
+ * <p><b>⚑ U-42 (2026-08-30, live session)</b> added rows 19, 20 and 21: one TEACHER per new
+ * subject. Their national ids continue the synthetic ascending series and are checksum-valid
+ * Israeli ids like every other one here, and each of them teaches her subject's only course and
+ * coordinates that subject - three more of {@code michal.sharon}'s dual-hat shape, per
+ * {@link FacultySection}.
  *
  * <h2>The password</h2>
  *
@@ -18,12 +24,12 @@ import java.util.List;
  *
  * <p>Cost {@link #BCRYPT_COST} matches {@code InMemoryUserDirectory.DEV_COST} deliberately, so
  * sign-in takes the same time before and after the swap. It also keeps a reseed quick, which
- * matters because a reseed happens minutes before a demo: eighteen hashes at cost 12 would be
+ * matters because a reseed happens minutes before a demo: twenty-one hashes at cost 12 would be
  * a noticeable pause where cost 10 is not.
  *
- * <p><b>Hashed per user, not once and copied.</b> The plaintext is the same for all eighteen,
- * so a single {@code hashToString} call would put one identical string in eighteen rows.
- * BCrypt generates a fresh salt per call, so hashing each user separately produces eighteen
+ * <p><b>Hashed per user, not once and copied.</b> The plaintext is the same for all twenty-one,
+ * so a single {@code hashToString} call would put one identical string in twenty-one rows.
+ * BCrypt generates a fresh salt per call, so hashing each user separately produces twenty-one
  * different stored hashes from one password, which is what real data looks like and what
  * anyone inspecting the table during a defense would expect to see. The cost is about two
  * seconds on an operation that runs rarely. {@code InMemoryUserDirectory} hashes once and
@@ -68,7 +74,11 @@ final class UsersSection implements SeedSection {
             new SeedUser("lior.gabay", "Lior Gabay", UserRole.STUDENT, "413860529"),
             new SeedUser("tal.harari", "Tal Harari", UserRole.STUDENT, "425097185"),
             new SeedUser("roni.malka", "Roni Malka", UserRole.STUDENT, "436712400"),
-            new SeedUser("eitan.solomon", "Eitan Solomon", UserRole.STUDENT, "448521062"));
+            new SeedUser("eitan.solomon", "Eitan Solomon", UserRole.STUDENT, "448521062"),
+            // ⚑ U-42. One teacher per new subject; each coordinates her own (FacultySection).
+            new SeedUser("galit.stern", "Galit Stern", UserRole.TEACHER, "451936272"),
+            new SeedUser("orly.navon", "Orly Navon", UserRole.TEACHER, "460748155"),
+            new SeedUser("sivan.adler", "Sivan Adler", UserRole.TEACHER, "471603944"));
 
     @Override
     public String name() {

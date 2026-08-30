@@ -154,7 +154,7 @@ public final class SeedDocument {
     /** §6, flattened to one row per (student, course) pair. */
     public record EnrollmentRow(String student, String course) { }
 
-    /** §7.1 to §7.4. */
+    /** §7.1 to §7.4, and §7.6 to §7.8 since U-42. */
     public record QuestionRow(String displayId, String topic, String difficulty, String text,
                               String a1, String a2, String a3, String a4,
                               int correct, boolean illustrated) {
@@ -330,10 +330,22 @@ public final class SeedDocument {
         return List.copyOf(enrolled);
     }
 
-    /** @return every question in §7.1 through §7.4, in document order */
+    /**
+     * @return every per-course question bank, in document order
+     *
+     * <p><b>The heading list is not contiguous, and that is the document's shape rather than a
+     * typo.</b> §7.1 to §7.4 are the four original course banks, §7.5 is the second-version
+     * table, and §7.6 to §7.8 are the three banks U-42 appended on 2026-08-30. The document
+     * appends sections rather than renumbering them - U-34's precedent, where execution 5's
+     * tables are §9.4 rather than an insertion ahead of §9.3 - because every section number in
+     * it is quoted from somewhere else, this list included. A bank added and not listed here
+     * fails {@code SeedLoadedDbContract.questionsMatch} rather than passing quietly: the loaded
+     * rows would outnumber the document's.
+     */
     public List<QuestionRow> questions() {
         List<QuestionRow> all = new ArrayList<>();
-        for (String heading : List.of("### 7.1", "### 7.2", "### 7.3", "### 7.4")) {
+        for (String heading : List.of("### 7.1", "### 7.2", "### 7.3", "### 7.4",
+                "### 7.6", "### 7.7", "### 7.8")) {
             for (String[] cells : rows(heading, 10)) {
                 all.add(new QuestionRow(
                         plain(cells[0]), plain(cells[1]), plain(cells[2]), plain(cells[3]),
@@ -499,9 +511,13 @@ public final class SeedDocument {
             // ⚑ U-34. Execution 5 is dana.cohen's awaiting-grading sitting, and it is numbered
             // 9.4 because 9.3 was already taken by the two sittings with nothing pre-seeded.
             case 5 -> "9.4";
+            // ⚑ U-43. The two fully graded sittings added on 2026-08-30, appended for the same
+            // reason: 9.5 is exam 4's second release and 9.6 is the Biology sitting.
+            case 6 -> "9.5";
+            case 7 -> "9.6";
             default -> throw new IllegalStateException("SEED_CONTENT.md: execution " + execution
-                    + " has no per-student section. §9 tabulates executions 1, 2 and 5; 3 and 4 "
-                    + "have no attempts at all (§9.3).");
+                    + " has no per-student section. §9 tabulates executions 1, 2, 5, 6 and 7; "
+                    + "3 and 4 have no attempts at all (§9.3).");
         };
         return (sub.isEmpty() ? "### " : "#### ") + section + sub;
     }
@@ -510,7 +526,8 @@ public final class SeedDocument {
      * Per-student grades for one execution.
      *
      * @param execution 1 for §9.1's closed and approved set, 2 for §9.2's awaiting approval,
-     *                  5 for §9.4's
+     *                  5 for §9.4's, 6 for §9.5's and 7 for §9.6's - the two U-43 sittings that
+     *                  are closed, approved and frozen
      * @return one row per student
      */
     /**
@@ -580,10 +597,11 @@ public final class SeedDocument {
 
     public List<GradeRow> grades(int execution) {
         String heading = executionHeading(execution, "");
-        // §9.1 carries a note column and §9.2 does not, which is why the widths differ and why
-        // the width check is worth having: reading one with the other's shape would silently
-        // take the wrong cell for every field after the third. §9.4 is written to §9.2's five
-        // columns deliberately: it is the same state, so it is the same table.
+        // §9.1 carries a note column and no other section does, which is why the widths differ
+        // and why the width check is worth having: reading one with the other's shape would
+        // silently take the wrong cell for every field after the third. §9.4, §9.5 and §9.6 are
+        // all written to §9.2's five columns deliberately - the note column exists because §9.1
+        // has a timed-out attempt and an override to explain, and none of the other four does.
         int columns = execution == 1 ? 6 : 5;
 
         return map(rows(heading, columns), cells -> new GradeRow(
@@ -600,7 +618,7 @@ public final class SeedDocument {
      * <p>The header row names the questions, so a column's meaning comes from the document
      * rather than from a constant here. A dash yields {@code answered = false}.
      *
-     * @param execution 1 for §9.1.1, 2 for §9.2.1, 5 for §9.4.1
+     * @param execution 1 for §9.1.1, 2 for §9.2.1, 5 for §9.4.1, 6 for §9.5.1, 7 for §9.6.1
      * @return one row per (student, question) cell
      */
     public List<SelectionRow> selections(int execution) {

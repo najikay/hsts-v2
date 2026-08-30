@@ -446,19 +446,19 @@ five new entries, one reopening.
 ### U-42 · SEED · two subjects is thin
 **In Naji's words:** "we might need to do things other than CS and math, like bio, chem, physics maybe the seeding is a little lacking"
 **Ruling:** a later seed wave: three more subjects with a course each, a teacher and a coordinator per subject, enrollments, and a handful of questions per course so pickers, reports and the data browser show breadth; no new exams or sittings unless the demo needs them.
-**Status:** `NEW` — after the interaction round.
+**Status:** `DONE` — 2026-08-30: Biology 30/31 (`galit.stern`), Chemistry 40/41 (`orly.navon`), Physics 50/51 (`sivan.adler`), each teacher coordinating her subject; six students per course; six questions per course; Midterm: Biology approved with a graded sitting `7745`; seed total 581. Pending eyes after Reload demo data.
 
 ### U-43 · SEED/FUNCTIONAL · reports show the same figures whatever the dimension or subject
 **In Naji's words:** "by teacher by course by students, all of them give the exact same data, same within each category, changing course or teacher or student give one out of two situations, the exact same data or nothing at all ... big bug"
 **Restated:** by design a report reads only closed sittings whose statistics were **frozen** at the last grade approval (F8.5, C-5), and the seed has exactly **one** such sitting (`4821`, Algebra, Dana). So every dimension and every subject resolves to that one row or to nothing: By teacher → Dana → 4821; By course → Algebra → 4821; By student → any Algebra student → 4821's class statistics (the by-student dimension compares the classes a student sat in, never her own marks, by the strategy's own javadoc and F9.4). `7390` and `3318` are unfrozen on purpose (they are the grading demos). The screen is working; the data cannot show it.
 **Ruling:** (1) seed at least three frozen sittings across two subjects (a second Algebra sitting, a Java one, and one for a new subject from U-42) so each dimension has something to compare; (2) the report's empty and single-row states say why ("one closed and graded sitting so far"); (3) a note in DEMO_SCRIPT: approve 3318 and 7390 before act 6, which is B-18's rule already. Not a code defect in the strategies.
-**Status:** `NEW` — seed wave with U-42.
+**Status:** `DONE` — three frozen sittings (`4821` Algebra/Dana, `6120` Java/Avi, `7745` Biology/Galit) so By teacher, By course and By student compare real rows; the single-row hint "One closed and graded sitting so far; approve more sittings to compare" when there is only one; B-18 amended. Pending eyes.
 
 ### U-44 · FUNCTIONAL · the principal's Data tab opens nothing
 **In Naji's words:** "in the data tab, nothing opens, so if a principal wants to read an exam or question or results should there be a modal or a screen to display those things?"
 **Restated:** F9.3 gives the principal a read-only browse of bank, exams and results; the browser lists rows and stops there. A row should open a read-only detail: a question (the bank's detail card, no actions), an exam version (the coordinator's student-identical preview, no Approve/Send back), a sitting's results (the teacher's results table and statistics, read-only, no print restriction).
 **Ruling:** build it: `data.detail` routes off the rail, reusing the existing read-only renderers; every mutating control absent (S-7 stays structurally true: the principal has no mutating verbs either way).
-**Status:** `NEW` — next wave.
+**Status:** `DONE` — routes `data.question` / `data.exam` / `data.results` (principal only, off the rail, Back to Data): the bank's detail pane and the coordinator's paper renderer lifted into shared components; APPROVAL A1 admits the principal to the exam preview, REPORTS A2 puts the latest version id on the catalogue row; results detail shows the frozen statistics, deciles and histogram. No screen carries a writing control. Pending eyes.
 
 ### U-45 · TEST HYGIENE · the bot interaction suite trips a teardown race under the full build
 **Found by:** three full verifies on 2026-08-29/30, each with exactly one error in `BotInteractionTest` (`aWriteOnOneCourseNeverMovesAnother`, then `selectingACardLoadsThatCoursesBot`): `NullPointerException ... AbstractScreen.eventBus() is null` while a screen builds; the class passes alone every time. `FxTestHarness`'s own javadoc documents the race: `resetGlobalState` after one test can land while a queued FX runnable from it still builds a screen against the emptied `ScreenManager`.

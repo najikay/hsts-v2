@@ -224,7 +224,10 @@ cause before the stack trace. Read the sentence:
 ### 3.4 Seed
 
 - [ ] In the server console, click **Load demo data if missing** (safe, inserts only what is missing)
-- [ ] The result panel reports the rows loaded (**414** in all, 18 users among them)
+- [ ] The result panel reports the rows loaded (**581** in all, 21 users among them, as of
+      2026-08-30 / U-42 + U-43. On a database seeded before that session the load will insert
+      the new rows and the console will warn that the two do not match; press **Reload demo
+      data** once and the warning goes)
 - [ ] Sign in from a client as `maya.levi` / `demo123` to prove the seed took — **her bell
       should read 1 unread**, and clicking it should land on My Grades (seed §11
       `N-GRADE-MAYA`, added under B-25; before it she was the one demoed account with an
@@ -453,21 +456,37 @@ what is being handed in, and zipping before the rehearsal means the zip holds an
 **Walk scenario 8 (grading approval) BEFORE scenario 12 (reports). This is not a preference; the
 reports screen demonstrates badly in the other order, and the fix costs nothing.**
 
-The report engine's corpus is `REPORTABLE` = *CLOSED and statistics frozen*. On a fresh seed
-exactly **one** execution qualifies — `4821`, the Algebra midterm. `7390` and `3318` are closed
-but every grade on both is still `AUTO`, **deliberately**, because `7390` is the fixture case 8.2
-uses to prove that auto-checking publishes nothing and `3318` is the same fixture released by
-`dana.cohen` (seed §9.4, U-34); `5164` is scheduled and `2075` is live. So on a fresh seed
-every report dimension returns a **one-row table**, and the screen that exists to *compare* gets
-demonstrated comparing one thing. Side-by-side deciles, the participant-weighted mean and the
-pooled σ are all unobservable — the summary of one row is that row.
+The report engine's corpus is `REPORTABLE` = *CLOSED and statistics frozen*. **Three** executions
+qualify on a fresh seed as of 2026-08-30 (U-43): `4821` the Algebra midterm, `6120` a second
+sitting of the Java exam, and `7745` the Biology midterm. `7390` and `3318` are closed but every
+grade on both is still `AUTO`, **deliberately**, because `7390` is the fixture case 8.2 uses to
+prove that auto-checking publishes nothing and `3318` is the same fixture released by
+`dana.cohen` (seed §9.4, U-34); `5164` is scheduled and `2075` is live.
+
+**What that changes for this section.** Until U-43 exactly one execution qualified, every report
+dimension returned a one-row table, and the screen that exists to *compare* got demonstrated
+comparing one thing. It now depends on which dimension you open:
+
+- **BY_STUDENT compares out of the box.** `noa.friedman` and `omer.katz` each sat all three, in
+  three different courses; `itay.regev`, `shira.dahan` and `lior.gabay` sat two. Open one of the
+  first two and the side-by-side deciles, the participant-weighted mean and the pooled σ are all
+  observable without approving anything.
+- **BY_TEACHER and BY_COURSE still return one row each**, because the three frozen sittings are
+  on three different authors and three different courses on purpose - that is what gives those
+  two pickers three entries with data instead of one. A one-row report now **says so**: the
+  screen prints "One closed and graded sitting so far; approve more sittings to compare" under
+  the cards (U-43), so it reads as a true answer rather than a broken screen.
+
+The order below still matters and is still worth walking, because a row appearing *during* the
+demo is a better demonstration than a row that was always there.
 
 Approving `7390`'s eight grades in case **8.5** freezes its statistics on the spot. Run in that
 order:
 
 - [ ] **8.5 first.** As `avi.mizrahi`, approve execution `7390`'s grades (single, then bulk)
-- [ ] **Then 12.1–12.4.** The reports now carry **two** rows, and the second one appeared
-      *during the demo* rather than having been there all along
+- [ ] **Then 12.1–12.4.** `avi.mizrahi`'s BY_TEACHER report now carries **two** rows, `6120`
+      and `7390`, and the second one appeared *during the demo* rather than having been there
+      all along. Course 21's BY_COURSE report gains the same second row
 
 The second row is worth showing on its own merits: SEED_CONTENT §9.2 built `7390`'s spread to be
 **deliberately unlike** `4821`'s — 30, 40, 55, 60, 70, 75, 85, 100 against 45, 55, 60, 70, 75, 85,
@@ -476,9 +495,13 @@ mistaken for copies, and the pooled mean genuinely differs from the mean of the 
 the arithmetic an examiner is most likely to poke at.
 
 **If the order slips**, say so rather than working around it: the honest sentence is *"the reports
-compare closed and marked sittings, and the seed ships one — let me approve the second sitting's
-grades and it will appear."* That answer is better than a second seeded execution would have been,
-which is why the seed was **not** changed.
+compare closed and marked sittings, and this teacher has one — let me approve the second
+sitting's grades and it will appear."* **Amended 2026-08-30 (U-43):** this paragraph used to end
+"which is why the seed was **not** changed", and the seed has now been changed, deliberately and
+in the other direction. The reason it was safe to add two frozen sittings is that `7390` stays
+unmarked: the live approval above still produces a row on screen, and the difference is that the
+screen it lands on is no longer empty before it. The seed carrying three sittings and the demo
+creating a fourth is strictly more than either alone.
 
 ---
 

@@ -10,7 +10,17 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §8: six exams in mixed states, their versions, and what each version contains (E2.15).
+ * Seed §8: seven exams in mixed states, their versions, and what each version contains (E2.15).
+ *
+ * <h2>⚑ U-43: the Biology exam, and why its points are not flat</h2>
+ *
+ * <p>2026-08-30, live session. Exam 7, {@code 303101}, is one APPROVED version of five questions
+ * written by {@code galit.stern}, and it exists so execution 7 (§9.6) has a paper to release.
+ * <b>Its points are 15, 15, 20, 20, 30 rather than the 6x15 + 10 every other paper here uses.</b>
+ * That is not decoration. Until this exam, every reachable auto score in the dataset came from
+ * one arithmetic, so a grading bug that assumed a flat paper would have produced the right total
+ * on every attempt in the seed. This paper reaches 80 and 50, which a 6x15 + 10 paper cannot
+ * reach at all, and §9.6's five scores include both.
  *
  * <h2>Exam 1 is the versioning showpiece, and the pin is the point</h2>
  *
@@ -151,7 +161,23 @@ final class ExamsSection implements SeedSection {
                                     latest("22005", 15),
                                     latest("22006", 15),
                                     latest("22008", 15),
-                                    latest("22009", 10))))));
+                                    latest("22009", 10))))),
+
+            // ⚑ U-43. The Biology exam. Author, course and subject are all new in U-42, so this
+            // is what gives the principal's BY_TEACHER and BY_COURSE pickers a third entry with
+            // data behind it. Easy, easy, medium, medium, hard: 15 + 15 + 20 + 20 + 30 = 100.
+            // 31006 is deliberately left out, so the bank holds a question the paper does not
+            // use, exactly as every other course's does.
+            new SeedExam("303101", "Midterm: Biology", "galit.stern",
+                    "Answer every question. Diagrams may be labelled in note form.",
+                    "The last question is worth 30, so leave time for it.",
+                    List.of(new Version(1, 45, ExamVersionStatus.APPROVED, null,
+                            List.of(
+                                    latest("31001", 15),
+                                    latest("31004", 15),
+                                    latest("31002", 20),
+                                    latest("31005", 20),
+                                    latest("31003", 30))))));
 
     /** Every version's points must total this; seed §8.1 and the E7 service rule agree. */
     static final int REQUIRED_POINTS = 100;

@@ -108,6 +108,25 @@ public final class ReportsCopy {
             "Nothing here has been sat and fully marked, so there is nothing to compare. "
                     + "A sitting joins this report once its last grade is approved.");
 
+    /**
+     * Said under the cards when the report found <b>one</b> row.
+     *
+     * <p>The fourth state of this screen, and the one it had no words for. The three panels above
+     * cover having nothing at all; a report with a single sitting shows real figures and a table
+     * with one line in it, and every card, the chart and the word "compare" in the subtitle then
+     * describe something the reader cannot do. That reads as a broken screen rather than as a
+     * true answer, which is what {@code SCOPE_HINT} already stops the table doing for the
+     * sittings it leaves out.
+     *
+     * <p><b>It says what would make it go away, like every other empty state here</b>, and it
+     * says the same thing {@code NO_EXECUTIONS} does about what qualifies: approval is what puts
+     * a sitting in a report. The "Sittings" card already reads "one sitting, no trend" under its
+     * figure; that is a caption on a number, and this is the sentence the reader needs when the
+     * whole screen is the number.
+     */
+    public static final String SINGLE_ROW_HINT =
+            "One closed and graded sitting so far; approve more sittings to compare.";
+
     // ===================== Formatting ======================================
 
     /** Date and time as a report reads it off a row: "20 Aug 2026". */
@@ -287,6 +306,17 @@ public final class ReportsCopy {
         }
         return countOf(summary.participants(), "student", "students") + " across "
                 + countOf(summary.executions(), "sitting", "sittings");
+    }
+
+    /**
+     * @param summary the cross-row aggregate
+     * @return {@link #SINGLE_ROW_HINT} when the report found exactly one sitting, and
+     *         {@code ""} otherwise. Empty rather than null, on {@link #participantsLine}'s
+     *         precedent, so the view hides a label instead of branching on a null
+     */
+    public static String comparisonHint(ReportSummary summary) {
+        Objects.requireNonNull(summary, "summary");
+        return summary.isSingleExecution() ? SINGLE_ROW_HINT : "";
     }
 
     private static String countOf(int count, String singular, String plural) {

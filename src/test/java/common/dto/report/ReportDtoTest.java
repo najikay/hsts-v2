@@ -430,16 +430,16 @@ class ReportDtoTest {
 
         private DataExamRow exam(int versions) {
             return new DataExamRow("101101", "מבחן אמצע", "11", "אלגברה", "דנה כהן", versions,
-                    OPENED);
+                    OPENED, 1101L);
         }
 
         @Test
         @DisplayName("an exam row needs an identity, because a catalogue row without one is noise")
         void identityIsRequired() {
             assertThatNullPointerException().isThrownBy(() ->
-                    new DataExamRow(null, "מבחן", "11", "אלגברה", "דנה כהן", 1, OPENED));
+                    new DataExamRow(null, "מבחן", "11", "אלגברה", "דנה כהן", 1, OPENED, 1101L));
             assertThatNullPointerException().isThrownBy(() ->
-                    new DataExamRow("101101", "מבחן", null, "אלגברה", "דנה כהן", 1, OPENED));
+                    new DataExamRow("101101", "מבחן", null, "אלגברה", "דנה כהן", 1, OPENED, 1101L));
         }
 
         @Test
@@ -455,7 +455,7 @@ class ReportDtoTest {
         @Test
         @DisplayName("the optional labels fold to empty, so no cell ever prints the word null")
         void missingLabelsFoldToEmpty() {
-            DataExamRow row = new DataExamRow("101101", null, "11", null, null, 1, OPENED);
+            DataExamRow row = new DataExamRow("101101", null, "11", null, null, 1, OPENED, 1101L);
 
             assertThat(row.examName()).isEmpty();
             assertThat(row.courseName()).isEmpty();

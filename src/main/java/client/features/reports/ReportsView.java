@@ -77,6 +77,9 @@ public final class ReportsView extends AbstractScreen {
     private final Label heading = new Label();
     private final Label error = new Label();
     private final Label participants = new Label();
+
+    /** Why a one-row report is one row, said under the cards rather than left to be guessed. */
+    private final Label comparisonHint = new Label();
     /**
      * The five summary cards, in a pane that wraps (2026-08-29, manual rounds 3-4,
      * U-28).
@@ -113,6 +116,8 @@ public final class ReportsView extends AbstractScreen {
         error.getStyleClass().addAll("small", "danger-text");
         error.setWrapText(true);
         participants.getStyleClass().addAll("small", "muted");
+        comparisonHint.getStyleClass().addAll("small", "muted");
+        comparisonHint.setWrapText(true);
 
         summaryCards.getStyleClass().add("reports-summary");
         summaryCards.setAlignment(Pos.CENTER_LEFT);
@@ -121,7 +126,7 @@ public final class ReportsView extends AbstractScreen {
         chart.setPrefHeight(300);
 
         root.getChildren().addAll(new VBox(2, title, subtitle), buildPickerRow(), error,
-                heading, summaryCards, participants, table, chart);
+                heading, summaryCards, participants, comparisonHint, table, chart);
         VBox.setVgrow(table, Priority.ALWAYS);
         return root;
     }
@@ -273,6 +278,12 @@ public final class ReportsView extends AbstractScreen {
         show(summaryCards, any);
         participants.setText(any ? ReportsCopy.participantsLine(session.summary()) : "");
         show(participants, any);
+
+        // Only when there IS a report and it holds one row. An empty report already has a panel
+        // saying why, and a hint beside it would be two answers to one question.
+        String hint = any ? ReportsCopy.comparisonHint(session.summary()) : "";
+        comparisonHint.setText(hint);
+        show(comparisonHint, !hint.isEmpty());
     }
 
     private void renderRows() {

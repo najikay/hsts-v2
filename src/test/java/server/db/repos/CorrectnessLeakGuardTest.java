@@ -237,11 +237,17 @@ class CorrectnessLeakGuardTest {
         // findAnswerKeyForAuthoring joined the list in E8: a coordinator deciding whether to
         // approve an exam has to be able to check that its answers are right, which is
         // authoring work on somebody else's exam rather than a fourth audience. It is reached
-        // by EXAM_PREVIEW_GET only, behind requireRole(TEACHER, COORDINATOR), then either the
-        // caller authored the version or requireCoordinatorOf passes on its subject
+        // by EXAM_PREVIEW_GET only, behind requireRole(TEACHER, COORDINATOR, PRINCIPAL), then
+        // either the caller authored the version or requireCoordinatorOf passes on its subject
         // (licence corrected 2026-08-21, Member A's rule-5 pass: the earlier wording was
         // narrower than the code). ApprovalServiceTest proves every refusal, including the
         // plain teacher who neither authored nor coordinates.
+        // The PRINCIPAL joined that role list on 2026-08-30 (live session, U-44, APPROVAL
+        // amendment A1) and skips the scope test rather than passing it: F9.3 gives her the
+        // whole school, so there is no slice for a guard to compute. She is not a fourth
+        // audience for this read in kind — she is staff, and the boundary this guard defends
+        // is students, which is the same reasoning that sent her QuestionDetail with its key
+        // on 2026-08-21. She reaches no verb in the approval group that writes.
         // findVersionsForAuthoring joined the list in E6's read half (2026-08-22). Its audience
         // is the same one findVersionForAuthoring and findLatestVersionForAuthoring already
         // serve, and it is not a new one: E6.12's version history panel, opened by a teacher on

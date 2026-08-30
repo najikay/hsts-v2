@@ -1,6 +1,7 @@
 package client.features.data;
 
 import client.core.NavParams;
+import client.core.Routes;
 import client.ui.components.Buttons;
 import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
@@ -50,11 +51,24 @@ import java.util.function.Function;
  * <h2>Read-only by construction (F9.3, S-7) ⚑</h2>
  *
  * <p>There is not one control on this screen that sends anything but the three reads behind it,
- * and not one editable field except the filter box, which never leaves the client. No context
- * menu, no row action, no dialog. T-11.3 asks a reviewer to look for a create, edit, delete or
- * approve control anywhere in her shell; this file is where she would look for it on the busiest
- * screen the role has, and {@link DataCopy#READ_ONLY_NOTE} says so on screen so that "there are
- * no buttons" cannot be mistaken for "the buttons are not built yet".
+ * and not one editable field except the filter box, which never leaves the client. No button, no
+ * context menu, no dialog. T-11.3 asks a reviewer to look for a create, edit, delete or approve
+ * control anywhere in her shell; this file is where she would look for it on the busiest screen
+ * the role has, and {@link DataCopy#READ_ONLY_NOTE} says so on screen so that "there are no
+ * buttons" cannot be mistaken for "the buttons are not built yet".
+ *
+ * <h2>The rows open, and opening is still a read (2026-08-30, live session, U-44)</h2>
+ *
+ * <p>Every row navigates: a question to {@code data.question}, an exam to {@code data.exam}, a
+ * sitting to {@code data.results}. That is {@link DataTable#openOnClick}, whose hover hint reads
+ * "Open" and is a promise this screen can keep — a click really does go somewhere, which is the
+ * distinction {@code selectOnClick} exists for on a master-detail screen where it does not.
+ *
+ * <p>It changes nothing about the paragraph above. Each of the three destinations is a screen
+ * with no mutating control of its own, reached by verbs that were reads before this screen
+ * existed, and the way back is the shell's navbar Back, which {@code ShellBoot} aliases to this
+ * route. What the ruling of 2026-08-30 fixed is a browse whose rows listed data and would not
+ * show it, which is the dead end PRD section 4.1 forbids rather than a safety property.
  *
  * <h2>The segments are the enum</h2>
  *
@@ -207,6 +221,8 @@ public final class DataView extends AbstractScreen {
         questions.columnWidths(90, 380, 180, 120, 190, 100, 150);
         questions.numericColumns(5);
         questions.getStyleClass().add("data-questions");
+        questions.openOnClick(row -> navigator().navigate(Routes.DATA_QUESTION.id(),
+                NavParams.of(DataQuestionView.PARAM_QUESTION, row.displayId5())));
 
         exams.column("Id", DataExamRow::displayId6);
         exams.column("Exam", DataExamRow::examName);
@@ -218,6 +234,8 @@ public final class DataView extends AbstractScreen {
         exams.columnWidths(90, 300, 190, 200, 110, 160);
         exams.numericColumns(4);
         exams.getStyleClass().add("data-exams");
+        exams.openOnClick(row -> navigator().navigate(Routes.DATA_EXAM.id(),
+                NavParams.of(DataExamView.PARAM_EXAM_VERSION, row.latestVersionId())));
 
         sittings.column("Sitting", DataCopy::sittingLabel);
         sittings.column("Course", row -> DataCopy.course(row.courseCode(), row.courseName()));
@@ -232,6 +250,8 @@ public final class DataView extends AbstractScreen {
         sittings.columnWidths(300, 190, 150, 100, 100, 100, 130, 130);
         sittings.numericColumns(3, 4, 5, 6, 7);
         sittings.getStyleClass().add("data-sittings");
+        sittings.openOnClick(row -> navigator().navigate(Routes.DATA_RESULTS.id(),
+                NavParams.of(DataSittingView.PARAM_EXECUTION, row.executionId())));
 
         tables.put(DataTab.QUESTIONS, questions);
         tables.put(DataTab.EXAMS, exams);

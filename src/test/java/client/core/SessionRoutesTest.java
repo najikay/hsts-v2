@@ -156,15 +156,30 @@ class SessionRoutesTest {
         @DisplayName("a principal gets no authoring route either (S-7)")
         void principal() {
             assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
-                    .as("both of her feature routes are reads: REPORT_SUBJECTS_GET and "
-                            + "REPORT_GET behind Reports, and BANK_LIST, DATA_EXAMS_GET and "
-                            + "DATA_RESULTS_GET behind Data. There is no sixth verb (S-7). "
+                    .as("every one of her routes is a read: REPORT_SUBJECTS_GET and REPORT_GET "
+                            + "behind Reports, BANK_LIST, DATA_EXAMS_GET and DATA_RESULTS_GET "
+                            + "behind Data, and behind the three screens a Data row opens "
+                            + "(U-44, 2026-08-30) QUESTION_GET, QUESTION_VERSIONS, "
+                            + "QUESTION_IMAGE_GET and EXAM_PREVIEW_GET. Nine verbs and not one "
+                            + "of them writes (S-7). "
                             + "Routes.QUESTIONS was absent before the retirement PR and is "
                             + "absent after it, and the reason got stronger rather than weaker: "
                             + "the id now serves BankView, which carries Delete and Edit, so "
                             + "her bank read stays the Data screen (ruling on #41)")
                     .containsExactly(Routes.HOME_PRINCIPAL, Routes.SETTINGS, Routes.REPORTS,
-                            Routes.DATA);
+                            Routes.DATA, Routes.DATA_QUESTION, Routes.DATA_EXAM,
+                            Routes.DATA_RESULTS);
+        }
+
+        @Test
+        @DisplayName("⚑ and nobody else gets the three screens her Data rows open (U-44)")
+        void theDataDetailsArePrincipalOnly() {
+            for (Role role : List.of(Role.TEACHER, Role.COORDINATOR, Role.STUDENT)) {
+                assertThat(SessionRoutes.routesFor(role))
+                        .as("%s has no route into the principal's data browser", role)
+                        .doesNotContain(Routes.DATA, Routes.DATA_QUESTION, Routes.DATA_EXAM,
+                                Routes.DATA_RESULTS);
+            }
         }
 
         @Test

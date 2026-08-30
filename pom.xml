@@ -376,8 +376,27 @@
                         <exclude>client/features/grading/GradeReviewView*</exclude>
                         <exclude>client/features/grading/OverrideDialog*</exclude>
                         <exclude>client/features/results/MarkedPaper*</exclude>
+                        <!-- E8's paper and teacher-only rendering, lifted out of ExamPreviewView for
+                             U-44 so the principal's exam screen draws the same nodes with the
+                             same student-owned card component. Node-building only. -->
+                        <exclude>client/features/approval/ExamPaperPane*</exclude>
+                        <!-- U-44 (2026-08-30): the three screens a Data row opens. Same rule as the
+                             browser above - every decision is in the three sessions beside them
+                             or in DataDetailCopy, all of which are measured, and each view
+                             renders through a shared read-only pane it does not own. -->
+                        <exclude>client/features/data/DataQuestionView*</exclude>
+                        <exclude>client/features/data/DataExamView*</exclude>
+                        <exclude>client/features/data/DataSittingView*</exclude>
+                        <!-- The bank's detail rendering, lifted out of BankView for U-44 so the
+                             principal's question screen draws the same nodes. Node-building only:
+                             every string on it comes from BankCopy, which is measured. -->
+                        <exclude>client/features/bank/QuestionDetailPane*</exclude>
                         <exclude>client/features/approval/ApprovalQueueView*</exclude>
                         <exclude>client/features/approval/ExamPreviewView*</exclude>
+<!-- E8's paper and teacher-only rendering, lifted out of ExamPreviewView for
+                             U-44 so the principal's exam screen draws the same nodes with the
+                             same student-owned card component. Node-building only. -->
+                        <exclude>client/features/approval/ExamPaperPane*</exclude>
                         <exclude>client/features/approval/RejectDialog*</exclude>
                         <!-- E7.10's thin view; ExamListSession and ExamListCopy beside it are measured. -->
                         <exclude>client/features/exambuild/ExamListView*</exclude>
@@ -403,8 +422,20 @@
                              the count line and every row label), and both are measured. The
                              tab enum beside them is measured too. -->
                         <exclude>client/features/data/DataView*</exclude>
+<!-- U-44 (2026-08-30): the three screens a Data row opens. Same rule as the
+                             browser above - every decision is in the three sessions beside them
+                             or in DataDetailCopy (every sentence, the decile labels and shares,
+                             the participants line), all of which are measured, and each view
+                             renders through a shared read-only pane it does not own. -->
+                        <exclude>client/features/data/DataQuestionView*</exclude>
+                        <exclude>client/features/data/DataExamView*</exclude>
+                        <exclude>client/features/data/DataSittingView*</exclude>
                         <!-- E6.9's thin view; BankSession and BankCopy beside it are measured. -->
                         <exclude>client/features/bank/BankView*</exclude>
+<!-- The bank's detail rendering, lifted out of BankView for U-44 so the
+                             principal's question screen draws the same nodes. Node-building only:
+                             every string on it comes from BankCopy, which is measured. -->
+                        <exclude>client/features/bank/QuestionDetailPane*</exclude>
                         <!-- E6.10's thin view; QuestionEditorSession and -Copy are measured. -->
                         <exclude>client/features/bank/QuestionEditorView*</exclude>
 <!-- E16 study bot: the four screens plus the three FX-only widgets they draw

@@ -41,17 +41,25 @@ class SeedDocumentTest {
     void everySectionYieldsRows() {
         SeedDocument document = real();
 
-        assertThat(document.subjects()).hasSize(2);
-        assertThat(document.courses()).hasSize(4);
-        assertThat(document.users()).hasSize(18);
-        assertThat(document.coordinators()).hasSize(2);
-        assertThat(document.questions()).hasSize(40);
-        assertThat(document.exams()).hasSize(6);
-        assertThat(document.examTexts()).hasSize(6);
+        // ⚑ U-42 (2026-08-30) moved the first five: three subjects, three courses, three
+        // teachers and eighteen questions, six in each of Biology 31, Chemistry 41 and
+        // Physics 51.
+        assertThat(document.subjects()).hasSize(5);
+        assertThat(document.courses()).hasSize(7);
+        assertThat(document.users()).hasSize(21);
+        assertThat(document.coordinators()).hasSize(5);
+        assertThat(document.questions()).hasSize(58);
+        // ⚑ U-43 added exam 7, the Biology paper.
+        assertThat(document.exams()).hasSize(7);
+        assertThat(document.examTexts()).hasSize(7);
         assertThat(document.grades(1)).hasSize(8);
         assertThat(document.grades(2)).hasSize(8);
         // §9.4, added 2026-08-29 with U-34: dana.cohen's own awaiting-grading sitting.
         assertThat(document.grades(5)).hasSize(4);
+        // §9.5 and §9.6, added 2026-08-30 with U-43: the two frozen, fully approved sittings.
+        assertThat(document.grades(6)).hasSize(6);
+        assertThat(document.grades(7)).hasSize(5);
+        // Unchanged on purpose: §11 explains why the two new sittings add no notification.
         assertThat(document.notifications()).hasSize(10);
     }
 
@@ -115,7 +123,7 @@ class SeedDocumentTest {
         // named "-" would put a nonexistent user in the expectations.
         List<SeedDocument.TeachesRow> teaches = real().courseTeachers();
 
-        assertThat(teaches).hasSize(5);
+        assertThat(teaches).hasSize(8);
         assertThat(teaches).noneMatch(row -> row.teacher().equals("rina.barak"));
         assertThat(teaches).filteredOn(row -> row.course().equals("12"))
                 .extracting(SeedDocument.TeachesRow::teacher)
@@ -127,11 +135,23 @@ class SeedDocumentTest {
     void enrollmentsFlatten() {
         List<SeedDocument.EnrollmentRow> enrolled = real().enrollments();
 
-        assertThat(enrolled).hasSize(29);
+        assertThat(enrolled).hasSize(47);
         assertThat(countCourse(enrolled, "11")).isEqualTo(8);
         assertThat(countCourse(enrolled, "12")).isEqualTo(6);
         assertThat(countCourse(enrolled, "21")).isEqualTo(8);
         assertThat(countCourse(enrolled, "22")).isEqualTo(7);
+        // ⚑ U-42: six each, and every one of the twelve students is in at least one of them,
+        // which is what "spread over the roster" means and what a per-course count alone
+        // cannot say.
+        assertThat(countCourse(enrolled, "31")).isEqualTo(6);
+        assertThat(countCourse(enrolled, "41")).isEqualTo(6);
+        assertThat(countCourse(enrolled, "51")).isEqualTo(6);
+        assertThat(enrolled.stream()
+                .filter(row -> List.of("31", "41", "51").contains(row.course()))
+                .map(SeedDocument.EnrollmentRow::student)
+                .distinct().count())
+                .as("eighteen new pairs across all twelve students, not over a convenient half")
+                .isEqualTo(12);
     }
 
     @Test
@@ -141,7 +161,8 @@ class SeedDocumentTest {
         // database id and must never be treated as one; see SeedSection.
         assertThat(real().coordinators())
                 .extracting(SeedDocument.CoordinatorRow::teacher)
-                .containsExactlyInAnyOrder("rina.barak", "michal.sharon");
+                .containsExactlyInAnyOrder("rina.barak", "michal.sharon",
+                        "galit.stern", "orly.navon", "sivan.adler");
     }
 
     @Test
@@ -154,7 +175,7 @@ class SeedDocumentTest {
         List<SeedDocument.RejectionRow> rejections = real().rejectionReasons();
 
         assertThat(rejections).hasSize(2);
-        assertThat(real().examTexts()).as("the first table is still read as the texts").hasSize(6);
+        assertThat(real().examTexts()).as("the first table is still read as the texts").hasSize(7);
 
         assertThat(rejections).extracting(SeedDocument.RejectionRow::exam)
                 .containsExactlyInAnyOrder(1, 5);
@@ -183,7 +204,7 @@ class SeedDocumentTest {
         // would stop testing the thing it names.
         List<SeedDocument.CompositionRow> composition = real().composition();
 
-        assertThat(composition).hasSize(39);
+        assertThat(composition).hasSize(44);
 
         List<SeedDocument.CompositionRow> pinned = composition.stream()
                 .filter(row -> row.pinnedVersion() != null)
@@ -253,7 +274,7 @@ class SeedDocumentTest {
     void examVersionStatusesAreParsed() {
         List<SeedDocument.ExamVersionStatusRow> statuses = real().examVersionStatuses();
 
-        assertThat(statuses).hasSize(7);
+        assertThat(statuses).hasSize(8);
         assertThat(statuses).filteredOn(row -> row.exam() == 1)
                 .extracting(SeedDocument.ExamVersionStatusRow::status)
                 .containsExactly("REJECTED", "APPROVED");
@@ -292,15 +313,23 @@ class SeedDocumentTest {
     // ------------------------------------------------- sections 9 and 10
 
     @Test
-    @DisplayName("the five executions parse, including which exam version each releases")
+    @DisplayName("the seven executions parse, including which exam version each releases")
     void executionsParse() {
         List<SeedDocument.ExecutionRow> executions = real().executions();
 
-        assertThat(executions).hasSize(5);
+        assertThat(executions).hasSize(7);
         assertThat(executions).extracting(SeedDocument.ExecutionRow::code)
-                .containsExactly("4821", "7390", "5164", "2075", "3318");
+                .containsExactly("4821", "7390", "5164", "2075", "3318", "6120", "7745");
         assertThat(executions).extracting(SeedDocument.ExecutionRow::status)
-                .containsExactly("CLOSED", "CLOSED", "SCHEDULED", "LIVE", "CLOSED");
+                .containsExactly("CLOSED", "CLOSED", "SCHEDULED", "LIVE", "CLOSED",
+                        "CLOSED", "CLOSED");
+        // ⚑ U-43. 6120 is exam 4 again - the same paper as 7390, released a week earlier - and
+        // 7745 is the Biology exam, which is exam 7 and has no other sitting.
+        assertThat(executions.get(1).exam()).isEqualTo(4);
+        assertThat(executions.get(5).exam()).isEqualTo(4);
+        assertThat(executions.get(5).examVersion()).isEqualTo(1);
+        assertThat(executions.get(6).exam()).isEqualTo(7);
+        assertThat(executions.get(6).examVersion()).isEqualTo(1);
 
         // Executions 1, 4 and 5 release the SAME exam version. That is S-2, and it is why
         // exam_executions carries no participation counters: three releases of one version must
@@ -352,6 +381,9 @@ class SeedDocumentTest {
         assertThatThrownBy(() -> real().grades(3))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("execution 3 has no per-student section");
+        assertThatThrownBy(() -> real().selections(4))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("execution 4 has no per-student section");
     }
 
     @Test
@@ -388,6 +420,93 @@ class SeedDocumentTest {
         // and it was the empty note line that started this round.
         assertThat(comments).allSatisfy(row ->
                 assertThat(row.comment()).doesNotContain("`").endsWith("."));
+    }
+
+    @Test
+    @DisplayName("⚑ §9.5 and §9.6 parse as their own sittings, both approved and frozen (U-43)")
+    void theTwoFrozenSittingsParseFromTheirOwnSections() {
+        // The same trap §9.4 sprang: executionHeading answers by number, so a sitting the
+        // document does not tabulate has to fail rather than silently returning another's rows.
+        // These two are the first sections since §9.1 whose grades carry a final score, which is
+        // what "approved" means in a table with no status column.
+        List<SeedDocument.GradeRow> java = real().grades(6);
+
+        assertThat(java).extracting(SeedDocument.GradeRow::student)
+                .as("six of the eight Java students, and deliberately not the demo student")
+                .containsExactly("eitan.solomon", "noa.friedman", "roni.malka", "itay.regev",
+                        "noam.peretz", "omer.katz")
+                .doesNotContain("maya.levi");
+        assertThat(java).extracting(SeedDocument.GradeRow::auto)
+                .containsExactly(90, 70, 55, 45, 40, 30);
+        assertThat(java).allSatisfy(row -> {
+            assertThat(row.attemptStatus()).isEqualTo("SUBMITTED");
+            assertThat(row.finalScore())
+                    .as("approved, and no override anywhere, so final equals auto")
+                    .isEqualTo(row.auto());
+        });
+
+        List<SeedDocument.GradeRow> biology = real().grades(7);
+
+        assertThat(biology).extracting(SeedDocument.GradeRow::student)
+                .as("five of the six enrolled in Biology: the roster and the attempt list differ")
+                .containsExactly("tal.harari", "lior.gabay", "noa.friedman", "shira.dahan",
+                        "omer.katz")
+                .doesNotContain("maya.levi");
+        assertThat(biology).extracting(SeedDocument.GradeRow::auto)
+                .containsExactly(100, 80, 70, 55, 50);
+        assertThat(biology).allSatisfy(row ->
+                assertThat(row.finalScore()).isEqualTo(row.auto()));
+
+        // The grids. Seven questions on the Java paper, five on the Biology one, and nobody
+        // timed out on either, so every cell is a row.
+        assertThat(real().selections(6)).hasSize(42)
+                .allMatch(SeedDocument.SelectionRow::answered);
+        List<SeedDocument.SelectionRow> bio = real().selections(7);
+        assertThat(bio).hasSize(25).allMatch(SeedDocument.SelectionRow::answered);
+        // The Biology paper's questions are listed in the exam's composition order, not the
+        // bank's display-id order: 31001, 31004, 31002, 31005, 31003. A grid read against the
+        // wrong order would score every attempt from the wrong answer key.
+        assertThat(bio.stream().map(SeedDocument.SelectionRow::question).distinct().toList())
+                .containsExactly("31001", "31004", "31002", "31005", "31003");
+        assertThat(bio.stream()
+                .filter(row -> row.student().equals("tal.harari"))
+                .map(SeedDocument.SelectionRow::selected)
+                .toList())
+                .as("the one full-marks paper, so its row IS the answer key")
+                .containsExactly(1, 4, 2, 1, 3);
+    }
+
+    @Test
+    @DisplayName("⚑ the three U-42 banks are six questions each, two per difficulty (U-42)")
+    void theNewCourseBanksHaveTheShapeSectionSevenStates() {
+        // §7's note states the shape once for all three rather than three times, so this is the
+        // assertion that the three tables actually obey it. A bank added to the document and
+        // left off SeedDocument.questions()'s heading list would show up here as a missing
+        // course rather than as nothing at all.
+        List<SeedDocument.QuestionRow> all = real().questions();
+
+        for (String course : List.of("31", "41", "51")) {
+            List<SeedDocument.QuestionRow> bank = all.stream()
+                    .filter(row -> row.displayId().startsWith(course))
+                    .toList();
+
+            assertThat(bank).as("course %s", course).hasSize(6);
+            assertThat(bank).extracting(SeedDocument.QuestionRow::difficulty)
+                    .as("course %s difficulties", course)
+                    .containsExactlyInAnyOrder("EASY", "EASY", "MEDIUM", "MEDIUM", "HARD", "HARD");
+            assertThat(bank.stream().map(SeedDocument.QuestionRow::topic).distinct().toList())
+                    .as("course %s topics", course).hasSize(2);
+            assertThat(bank).extracting(SeedDocument.QuestionRow::correct)
+                    .as("course %s answer cycle, so no option is a majority a guesser could use",
+                            course)
+                    .containsExactly(1, 2, 3, 4, 1, 2);
+            assertThat(bank).allSatisfy(row -> {
+                assertThat(row.illustrated()).as("%s carries no illustration", row.displayId())
+                        .isFalse();
+                assertThat(row.options()).as("%s options", row.displayId())
+                        .doesNotHaveDuplicates().hasSize(4);
+            });
+        }
     }
 
     @Test

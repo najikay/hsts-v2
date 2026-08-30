@@ -69,6 +69,15 @@ import java.util.Optional;
  * calls {@link Authorization#requireCoordinatorOf} against the same transaction's data, so
  * the read scoping and the write scoping cannot drift apart.
  *
+ * <h2>One reader has no scope at all, and only on the read (amendment A1)</h2>
+ *
+ * <p>{@link #preview} admits the PRINCIPAL school-wide since 2026-08-30 (live session, U-44):
+ * F9.3 gives her the data as entered, and E15.2's exam catalogue could list a row it could not
+ * open. {@link #approve} and {@link #reject} still say {@code requireRole(COORDINATOR)}, so the
+ * whole of her presence in this feature is one read verb — which is what keeps S-7's "literally
+ * zero mutating verbs" a property of three role lists rather than of a screen that hides its
+ * buttons.
+ *
  * <h2>Self-approval is allowed, and recorded (F4.3 ⚑)</h2>
  *
  * <p>A coordinator may approve her own exam. The seed has exactly that case
@@ -167,12 +176,21 @@ public final class ApprovalService {
      * component the take-exam screen renders, so "she sees exactly what the student sees" is
      * a property of the data path.
      *
-     * <p>Two callers are allowed and they are allowed for different reasons. The subject's
-     * coordinator, because deciding on an exam she cannot read is the failure this epic
-     * exists to fix. The version's <em>own author</em>, because F4.2 requires the rejection
-     * reason to be visible on the exam, and a teacher who cannot reopen what she submitted
-     * cannot act on the reason she was given. Both see the answer key; both are staff, and
-     * the key is on the exam either of them wrote or owns.
+     * <p>Three callers are allowed and they are allowed for three different reasons. The
+     * subject's coordinator, because deciding on an exam she cannot read is the failure this
+     * epic exists to fix. The version's <em>own author</em>, because F4.2 requires the
+     * rejection reason to be visible on the exam, and a teacher who cannot reopen what she
+     * submitted cannot act on the reason she was given. And the <b>principal</b>, because
+     * F9.3 gives her a read of the school's data as entered and an exam read that stops at
+     * the catalogue row is a list of names (APPROVAL amendment A1, 2026-08-30, live session,
+     * U-44). All three see the answer key; all three are staff, and the guard that matters
+     * for the principal is that she reaches no verb here that writes.
+     *
+     * <p><b>Her branch is the role and nothing else</b>, which is the same shape
+     * {@code DataBrowseService} and {@code ReportService} wear: spec 7.3.1 gives her the whole
+     * school, so there is no slice to compute and a scope check could only ever pass. It is
+     * written as an early return rather than folded into the author-or-coordinator test,
+     * because "which guard applies is a property of the caller" is what a reviewer checks here.
      *
      * <p>Anyone else is refused — including a teacher of the same course who did not write
      * it and does not coordinate the subject. The refusal names what to do next rather than
@@ -180,11 +198,14 @@ public final class ApprovalService {
      * here already knows it does.
      */
     Message preview(CallerContext caller, Message request) {
-        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR, Role.PRINCIPAL);
         if (!(request.getPayload() instanceof ExamPreviewRequest ask)) {
             return Message.error(request, ErrorCode.VALIDATION, ApprovalMessages.MALFORMED_REQUEST);
         }
         long callerId = caller.userId();
+        // Read-only and school-wide, so nothing below narrows her (amendment A1). She still
+        // gets NOT_FOUND for a version that does not exist, on the same line as everybody else.
+        boolean readsEverything = caller.hasAnyRole(Role.PRINCIPAL);
 
         return store.inTx(data -> {
             Optional<ExamVersionContext> found = data.versionContext(ask.examVersionId());
@@ -192,7 +213,7 @@ public final class ApprovalService {
                 return Message.error(request, ErrorCode.NOT_FOUND, ApprovalMessages.VERSION_UNKNOWN);
             }
             ExamVersionContext version = found.get();
-            if (!version.isAuthoredBy(callerId)) {
+            if (!readsEverything && !version.isAuthoredBy(callerId)) {
                 requireCoordinatorOf(caller, version, data);
             }
 

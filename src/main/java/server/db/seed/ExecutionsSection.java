@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Seed §9: the five executions (E2.15).
+ * Seed §9: the seven executions (E2.15).
  *
  * <h2>Why the windows are relative and what that costs</h2>
  *
@@ -28,6 +28,23 @@ import java.util.List;
  * it is live; execution 3 opens 3 hours out and runs 2 hours, so it is scheduled. Execution 3 used
  * to be "today at 14:00", which is a description of the past for any load after lunch - see
  * {@link #SCHEDULED_OPENS}.
+ *
+ * <h2>⚑ U-43: two more frozen sittings, because reports had one row to compare</h2>
+ *
+ * <p>2026-08-30, live session. E15's report reads only sittings that are CLOSED <b>and</b> carry
+ * frozen statistics, which was one sitting: {@code 4821}. {@code 7390} and {@code 3318} are
+ * closed and unmarked, {@code 5164} has not opened and {@code 2075} is running, so all four are
+ * correctly excluded and the principal's three dimensions had one row between them. A report
+ * screen whose every answer is a single row cannot demonstrate a comparison, and it cannot show
+ * that the exclusion rule is doing anything either, because there is nothing on the other side
+ * of it.
+ *
+ * <p>{@code 6120} is exam 4 released a week earlier, so course 21 and {@code avi.mizrahi} each
+ * acquire a reportable sitting while {@code 7390} stays unmarked. {@code 7745} is the Biology
+ * exam, whose author, course and subject are all new in U-42, so BY_TEACHER and BY_COURSE each
+ * gain a third entry with data behind it. <b>BY_STUDENT is where a real multi-row comparison
+ * lives:</b> {@code noa.friedman} and {@code omer.katz} sat all three frozen sittings, in three
+ * different courses.
  *
  * <h2>Executions 1, 4 and 5 run the same exam version, deliberately</h2>
  *
@@ -148,7 +165,20 @@ final class ExecutionsSection implements SeedSection {
             // the wall-clock form, exactly as 1 and 2. No participation and no stats: freezing
             // happens once grading is done (§9.4), and this one's has not started.
             new SeedExecution("101101", 2, "3318", 1, 9, 0, 90,
-                    ExecutionStatus.CLOSED, "dana.cohen", null));
+                    ExecutionStatus.CLOSED, "dana.cohen", null),
+            // ⚑ U-43. Exam 4 released a week before 7390 did, closed, fully graded and frozen.
+            // The reports screen read only 4821 before this: E15 compares CLOSED sittings that
+            // carry frozen statistics, and there was exactly one in the dataset. This one gives
+            // course 21 and avi.mizrahi a reportable sitting while 7390 stays what it is, so
+            // "reports read only what is finished" is visible rather than asserted. Historical,
+            // so the wall-clock form. Its window is exactly as long as its paper, which is a
+            // shape none of the other four had.
+            new SeedExecution("202101", 1, "6120", 7, 10, 0, 60,
+                    ExecutionStatus.CLOSED, "avi.mizrahi", null),
+            // ⚑ U-43. The Biology sitting: a third frozen record, on a course, a teacher and a
+            // subject that are all new in U-42, and on a paper whose points are not flat.
+            new SeedExecution("303101", 1, "7745", 5, 9, 0, 60,
+                    ExecutionStatus.CLOSED, "galit.stern", null));
 
     /**
      * §9.1's frozen participation, from its own eight attempt rows.
@@ -174,6 +204,71 @@ final class ExecutionsSection implements SeedSection {
             72.5, 72.5, 17.5, 45, 100, 0.875,
             List.of(0, 0, 0, 0, 1, 1, 1, 2, 1, 2));
 
+    /**
+     * §9.5's frozen participation and statistics for {@code 6120} ⚑ (U-43).
+     *
+     * <p>Six SUBMITTED and nobody timed out. Finals are 30, 40, 45, 55, 70, 90 - no override on
+     * this sitting, so every final equals its auto. They sum to 330, so the mean is exactly
+     * <b>55</b>, which is also the pass mark, so three of the six are at or above it and the pass
+     * rate is exactly <b>0.5</b>. The median is (45 + 55) / 2 = <b>50</b>. Population sigma,
+     * divisor n, the same convention §9.1 fixes: Σ(x−55)² = 2400, so σ = √(2400/6) = √400 =
+     * exactly <b>20</b>. Every figure is hand-checkable, which is what E12.4 asks for, and
+     * {@code SeedDatasetContract} recomputes all of them with {@code ScoreStatistics} rather than
+     * trusting this list.
+     *
+     * <p><b>Deliberately the weak sitting.</b> 4821 reads mean 72.5, σ 17.5, pass 0.875; this
+     * reads 55, 20 and 0.5. A report putting the two side by side shows two genuinely different
+     * classes rather than two roundings of one.
+     */
+    private static final Participation EXECUTION_6_PARTICIPATION = new Participation(6, 6, 0);
+
+    private static final ExecutionStats EXECUTION_6_STATS = new ExecutionStats(
+            55, 50, 20, 30, 90, 0.5,
+            List.of(0, 0, 0, 1, 2, 1, 0, 1, 0, 1));
+
+    /**
+     * §9.6's frozen participation and statistics for {@code 7745} ⚑ (U-43).
+     *
+     * <p>Five SUBMITTED and nobody timed out, from a roster of six: {@code maya.levi} is enrolled
+     * in Biology and did not sit it, so the roster and the attempt list differ here where §9.1's
+     * are identical. Finals are 50, 55, 70, 80, 100, summing to 355, so the mean is exactly
+     * <b>71</b>; five scores, so the median is the third, <b>70</b>. Σ(x−71)² = 1620, so
+     * σ = √(1620/5) = √324 = exactly <b>18</b>. Four of the five are at or above the pass mark of
+     * 55, so the pass rate is exactly <b>0.8</b>.
+     *
+     * <p><b>No two frozen sittings share a number.</b> 4821 is 8 students at 72.5 / 17.5 / 0.875,
+     * 6120 is 6 at 55 / 20 / 0.5 and this is 5 at 71 / 18 / 0.8, so no report row can be mistaken
+     * for another and no aggregate over the three can be reproduced by weighting them wrongly.
+     */
+    private static final Participation EXECUTION_7_PARTICIPATION = new Participation(5, 5, 0);
+
+    private static final ExecutionStats EXECUTION_7_STATS = new ExecutionStats(
+            71, 70, 18, 50, 100, 0.8,
+            List.of(0, 0, 0, 0, 0, 2, 0, 1, 1, 1));
+
+    /**
+     * What a closed, fully graded sitting freezes at the point its last grade is approved
+     * (S-21, S-25).
+     *
+     * @param participation the three attempt counts
+     * @param stats         the statistics computed from the <em>final</em> scores
+     */
+    private record Frozen(Participation participation, ExecutionStats stats) { }
+
+    /**
+     * The sittings that carry frozen columns, by execution code.
+     *
+     * <p><b>A map rather than the {@code if (code.equals("4821"))} this used to be</b>, which was
+     * correct while exactly one sitting was frozen and would have silently kept freezing exactly
+     * one when U-43 added two more. A sitting absent from this map stores null in both columns,
+     * which is what "grading has not finished" means: {@code 7390} and {@code 3318} are closed
+     * and unmarked, {@code 5164} has not opened and {@code 2075} is running.
+     */
+    private static final java.util.Map<String, Frozen> FROZEN = java.util.Map.of(
+            "4821", new Frozen(EXECUTION_1_PARTICIPATION, EXECUTION_1_STATS),
+            "6120", new Frozen(EXECUTION_6_PARTICIPATION, EXECUTION_6_STATS),
+            "7745", new Frozen(EXECUTION_7_PARTICIPATION, EXECUTION_7_STATS));
+
     @Override
     public String name() {
         return "9 executions";
@@ -198,9 +293,10 @@ final class ExecutionsSection implements SeedSection {
                     execution.status(),
                     SeedLookup.requireUserId(session, execution.releasedBy()));
 
-            if (execution.code().equals("4821")) {
-                row.setParticipation(EXECUTION_1_PARTICIPATION);
-                row.setStats(EXECUTION_1_STATS);
+            Frozen frozen = FROZEN.get(execution.code());
+            if (frozen != null) {
+                row.setParticipation(frozen.participation());
+                row.setStats(frozen.stats());
             }
 
             session.persist(row);

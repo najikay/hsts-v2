@@ -86,6 +86,12 @@ public final class DataBrowseService {
      * request that carries something anyway is answered rather than refused, because there is no
      * field whose contents could change what is read.
      *
+     * <p>Each row carries the latest version's id as well as its number (REPORTS amendment A2,
+     * 2026-08-30, live session, U-44), which is what makes a catalogue row openable: the
+     * principal's exam detail is {@code EXAM_PREVIEW_GET}, and that verb is addressed by version.
+     * The id comes off the row the catalogue query already selects, so nothing here asks a second
+     * question.
+     *
      * @param caller  the authenticated principal
      * @param request the request; its payload is ignored
      * @return {@code OK} with a {@link DataExams}, empty when the school has written none
@@ -96,7 +102,8 @@ public final class DataBrowseService {
         List<DataExamRow> rows = new ArrayList<>(found.size());
         for (SchoolExam exam : found) {
             rows.add(new DataExamRow(exam.displayId(), exam.examName(), exam.courseCode(),
-                    exam.courseName(), exam.authorName(), exam.versions(), exam.lastVersionAt()));
+                    exam.courseName(), exam.authorName(), exam.versions(), exam.lastVersionAt(),
+                    exam.latestVersionId()));
         }
         log.debug("Data browser: {} exam(s) for {}", rows.size(), caller);
         return Message.ok(request, new DataExams(rows));

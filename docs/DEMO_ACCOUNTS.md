@@ -34,8 +34,17 @@ two-command block, PowerShell:
 java -cp target\hsts-server.jar server.db.seed.SeedMain --reseed
 ```
 
-A successful reseed answers with the per-table breakdown and a total (414 rows as of U-34;
-the exact number moves when the dataset does — the breakdown mattering more than the total).
+A successful reseed answers with the per-table breakdown and a total (581 rows as of U-42 and
+U-43, 2026-08-30; the exact number moves when the dataset does — the breakdown mattering more
+than the total).
+
+> **An existing demo database needs one Reload.** U-42 and U-43 add three subjects, three
+> courses, three teachers, eighteen questions, one exam and two sittings, and the loader inserts
+> only what is missing, so a plain load on a database seeded before 2026-08-30 leaves a database
+> that is neither the old dataset nor this one. The console says so — the dataset fingerprint
+> compares eight counts and warns that this database "does not look like it was seeded by this
+> build's dataset" — and the answer is **Reload demo data**, once. It deletes everything and
+> reloads, which is the standard pre-demo step anyway.
 
 A plain load, the default and what first boot offers, only inserts rows that are missing. It is
 safe to repeat and safe to run against a database somebody is using, but it will **not** refresh
@@ -62,15 +71,15 @@ password below.
 > requires by not revealing whether the account exists, which is also why nothing on screen can
 > tell you the seed is missing.
 
-The seed hashes it with BCrypt at load, once per user, so the eighteen stored hashes all differ.
+The seed hashes it with BCrypt at load, once per user, so the twenty-one stored hashes all differ.
 Verification goes through the real `BCrypt.verifyer()` path (F1.1, S-38).
 
 | Username | Password | Name | Role | National ID \*\* | Courses |
 |---|---|---|---|---|---|
 | `dana.cohen` | `demo123` | Dana Cohen | TEACHER | `214703951` | Algebra 11, Calculus 12 — teaches |
 | `rina.barak` | `demo123` | Rina Barak | COORDINATOR \* | `248190639` | none; coordinates Mathematics 10 without teaching. The **pure-coordinator** login (roster decision, 2026-08-20); the dual-hat case is `michal.sharon` |
-| `maya.levi` | `demo123` | Maya Levi | STUDENT | `374301851` | Algebra 11, Java Programming 21, Databases 22 — enrolled |
-| `noam.peretz` | `demo123` | Noam Peretz | STUDENT | `385612098` | Calculus 12, Java Programming 21 — enrolled |
+| `maya.levi` | `demo123` | Maya Levi | STUDENT | `374301851` | Algebra 11, Java Programming 21, Databases 22, Biology 31 — enrolled. She sat none of the Biology or U-43 sittings on purpose: her My Grades holds exactly one row on a fresh seed |
+| `noam.peretz` | `demo123` | Noam Peretz | STUDENT | `385612098` | Calculus 12, Java Programming 21, Chemistry 41 — enrolled |
 | `principal.avia` | `demo123` | Avia Shalev | PRINCIPAL | `301548202` | none (school-wide read-only, S-7) |
 
 \*\* **National IDs are on stage during the take-exam act** (M-2, 2026-08-28): starting an
@@ -98,9 +107,10 @@ that catches it, which is worth knowing if the login role is ever questioned in 
 English — UI copy and seed content both; the Hebrew display names were translated in UI wave 1
 and this file's earlier claim to the contrary was corrected the same day). Course codes are the
 2-character `courses.code2` values from ARCHITECTURE §5 (Mathematics 10 → Algebra 11,
-Calculus 12; Computer Science 20 → Java 21, Databases 22).
+Calculus 12; Computer Science 20 → Java 21, Databases 22; and since U-42, Biology 30 → Biology
+31, Chemistry 40 → Chemistry 41, Physics 50 → Physics 51).
 
-## The full roster — eighteen accounts, all `demo123`
+## The full roster — twenty-one accounts, all `demo123`
 
 The five above are the ones the demo script names. The complete seeded roster
 (authoritative order = `UsersSection`; content story in `docs/seed/SEED_CONTENT.md` §3):
@@ -110,7 +120,7 @@ The five above are the ones the demo script names. The complete seeded roster
 | `principal.avia` | Avia Shalev | PRINCIPAL | school-wide read-only (S-7) |
 | `dana.cohen` | Dana Cohen | TEACHER | Algebra 11 + Calculus 12; Calculus solo. Sitting `3318` is hers and is **awaiting grading**, so her Grading queue has work in it on a fresh seed (seed §9.4, added under U-34) |
 | `rina.barak` | Rina Barak | TEACHER → wire COORDINATOR | the PURE coordinator: Mathematics 10, teaches nothing |
-| `avi.mizrahi` | Avi Mizrahi | TEACHER | Java 21 co-teacher; the grading-demo teacher |
+| `avi.mizrahi` | Avi Mizrahi | TEACHER | Java 21 co-teacher; the grading-demo teacher. He also owns sitting `6120`, a second release of the Java exam that is closed, fully approved and frozen, so his Results and the principal's reports have something beside `7390` (seed §9.5, added under U-43) |
 | `tamar.shani` | Tamar Shani | TEACHER | Java 21 co-teacher (the two-teachers-one-course case) |
 | `michal.sharon` | Michal Sharon | TEACHER → wire COORDINATOR | dual-hat: teaches Databases 22, coordinates CS 20 |
 | `noa.friedman` | Noa Friedman | STUDENT | |
@@ -125,6 +135,16 @@ The five above are the ones the demo script names. The complete seeded roster
 | `tal.harari` | Tal Harari | STUDENT | |
 | `roni.malka` | Roni Malka | STUDENT | |
 | `eitan.solomon` | Eitan Solomon | STUDENT | |
+| `galit.stern` | Galit Stern | TEACHER → wire COORDINATOR | ⚑ U-42: teaches Biology 31 and coordinates Biology 30. She wrote `Midterm: Biology` and approved the grades of sitting `7745` (seed §8, §9.6) |
+| `orly.navon` | Orly Navon | TEACHER → wire COORDINATOR | ⚑ U-42: teaches Chemistry 41 and coordinates Chemistry 40 |
+| `sivan.adler` | Sivan Adler | TEACHER → wire COORDINATOR | ⚑ U-42: teaches Physics 51 and coordinates Physics 50 |
+
+**The three U-42 teachers are all dual-hat, and each is therefore the approver of her own
+exams.** That is legal — the `coordinators` primary key is the subject alone — and it is the
+opposite of the approval story the demo tells, which stays where it always was: `rina.barak`
+approves `dana.cohen`'s Mathematics exams and `michal.sharon` approves the Java ones. The three
+new subjects exist for breadth in the pickers and the reports, not as a second approval demo. See
+`SEED_CONTENT.md` §5.
 
 The unannotated students exist so class rosters, approval queues and grade distributions look
 like a school rather than a fixture. Notable ones, expanded:

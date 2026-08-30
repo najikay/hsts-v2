@@ -12,6 +12,24 @@ import java.util.List;
  * <p>These two rows-per-pair tables are what turn eighteen flat user rows into the demo's
  * shape, and the arrangement is deliberate rather than arbitrary.
  *
+ * <h2>⚑ U-42: three more dual-hat coordinators, and one consequence worth naming</h2>
+ *
+ * <p>2026-08-30, live session. Biology 31, Chemistry 41 and Physics 51 each get one teacher, and
+ * that teacher coordinates her own subject. Each of them is therefore <b>the approver of her own
+ * exams</b>, which nothing forbids - the {@code coordinators} primary key is the subject alone,
+ * and S-1 asks for a coordinator per subject rather than for a second teacher to exist - but it
+ * is the opposite of the approval story the demo tells, so it is recorded here rather than
+ * discovered. That story stays on Mathematics and Computer Science, where {@code rina.barak}
+ * approves what {@code dana.cohen} wrote and {@code michal.sharon} approves what the Java
+ * teachers wrote, and where every approval and rejection fixture in seed §8.2 lives. The three
+ * new subjects are breadth for the pickers and the reports; giving each a second teacher purely
+ * so the approver could differ would have added three users nothing else in the dataset uses.
+ *
+ * <p><b>Java stays the only co-taught course</b>, deliberately: seed §7's authorship rule
+ * resolves a second question version to the co-teacher, and that clause is proven by firing on
+ * exactly one row ({@code 21003} v2). A second co-taught course would give it two, which costs
+ * nothing and buys a second place to keep the "exactly one" assertion honest.
+ *
  * <h2>Two shapes of coordinator, on purpose (roster decision, 2026-08-20)</h2>
  *
  * <p>{@code rina.barak} is the <b>pure coordinator</b>: a {@code coordinators} row for subject
@@ -46,11 +64,19 @@ final class FacultySection implements SeedSection {
             new Teaches("12", "dana.cohen"),
             new Teaches("21", "avi.mizrahi"),
             new Teaches("21", "tamar.shani"),
-            new Teaches("22", "michal.sharon"));
+            new Teaches("22", "michal.sharon"),
+            // ⚑ U-42. One teacher per new course, and she coordinates the subject below.
+            new Teaches("31", "galit.stern"),
+            new Teaches("41", "orly.navon"),
+            new Teaches("51", "sivan.adler"));
 
     private static final List<Coordinates> COORDINATORS = List.of(
             new Coordinates("10", "rina.barak"),
-            new Coordinates("20", "michal.sharon"));
+            new Coordinates("20", "michal.sharon"),
+            // ⚑ U-42. Dual-hat, like michal.sharon: each teaches her subject's only course.
+            new Coordinates("30", "galit.stern"),
+            new Coordinates("40", "orly.navon"),
+            new Coordinates("50", "sivan.adler"));
 
     /**
      * A course's teachers in §4's document order.
