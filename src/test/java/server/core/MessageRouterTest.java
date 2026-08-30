@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -120,7 +121,33 @@ class MessageRouterTest {
                     CallerContext.anonymous(connection));
 
             assertThat(response.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST);
-            assertThat(response.errorMessage()).contains("LOGIN");
+            assertThat(response.errorMessage()).isEqualTo(MessageRouter.UNSUPPORTED_VERB_MESSAGE);
+        }
+
+        /**
+         * The sentence for an unhandled verb names no verb (2026-08-30, wave 6, B-35).
+         *
+         * <p>This used to assert the opposite - that the answer {@code contains("LOGIN")} -
+         * because the router built the sentence as {@code "Unsupported operation: " + verb}.
+         * Several client sessions render {@code errorMessage()} straight into a label, so the
+         * enum constant was reachable copy; the verb belongs in the server log, which is why
+         * the {@code WARN} line above the return still carries it.
+         */
+        @Test
+        @DisplayName("⚑ B-35: the unknown-verb sentence carries no protocol constant")
+        void unknownVerbSentenceNamesNoVerb() {
+            for (Verb verb : List.of(Verb.LOGIN, Verb.PUSH_NOTIFICATION, Verb.BANK_LIST)) {
+                Message response = router.route(Message.request(verb, null),
+                        CallerContext.anonymous(connection));
+
+                assertThat(response.errorMessage())
+                        .as("the answer to an unhandled %s", verb)
+                        .isEqualTo(MessageRouter.UNSUPPORTED_VERB_MESSAGE)
+                        .doesNotContain(verb.name())
+                        .doesNotContain("_")
+                        .startsWith("That action")
+                        .endsWith(".");
+            }
         }
 
         @Test

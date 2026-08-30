@@ -154,12 +154,13 @@ recorded here so nobody spends the day chasing them.
 
 | Where | The line | What it is |
 |---|---|---|
-| the **server** jar, about a second after the Flyway block | `ERROR Log4j2 could not find a logging implementation. Please add log4j-core to the classpath. Using SimpleLogger to log to the console...` | **B-2**, open. Something on the classpath — most likely a transitive dependency of the bot SDK — uses the log4j2 API with no binding present, so log4j2 falls back to its own SimpleLogger. The server's own logging is logback and every subsequent line is normal. It is red, which is the whole problem with it. Reproduced in the packaged jar by acceptance case 15.1 |
+| the **server** jar — **gone since 2026-08-30** | ~~`ERROR Log4j2 could not find a logging implementation. Please add log4j-core to the classpath. Using SimpleLogger to log to the console...`~~ | **B-2, fixed in wave 6, so nothing to explain on the day.** The log4j2 API came from `poi-ooxml` (not the bot SDK, as first guessed) with nothing implementing it; `log4j-to-slf4j` now routes it into logback. Checked on the packaged jar: `java -jar target/hsts-server.jar --headless --port 5599 --no-discovery` runs a full minute with zero `ERROR` lines. Kept in this table because the note is what tells whoever runs the jar that its absence is the expected state |
 | the **client** jar, before anything else | `WARNING: Unsupported JavaFX configuration: classes were loaded from 'unnamed module @...'` | **B-26**, closed by this note. Inherent to a shaded JavaFX application: the classes are on the classpath rather than the module path, which is exactly what makes the jar double-clickable (F14.1). There is no fix that keeps the deliverable, so there is no fix. The toolkit starts, the connect screen builds, and discovery runs — case 15.2 watched it log *"Discovery found 0 server(s) on the local network"* and go on to the manual entry card |
 
-If asked about either: the first is a dependency's logging API with no binding, the second is
-what a single-jar JavaFX application prints on every JVM. Neither touches a rule, a screen or a
-row.
+If asked: the second is what a single-jar JavaFX application prints on every JVM, and there is
+no fix that keeps the double-clickable jar. The first no longer prints at all (2026-08-30, wave
+6) — it was a dependency's logging API with no implementation, and the implementation is now on
+the classpath. Neither touches a rule, a screen or a row.
 
 ---
 

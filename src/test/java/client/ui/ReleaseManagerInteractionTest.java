@@ -27,8 +27,11 @@ import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -205,6 +208,76 @@ class ReleaseManagerInteractionTest extends ApplicationTest {
         assertThat(dice).as("and can hand the choice back").isNotNull();
         assertThat(dice.getOnAction()).isNotNull();
         assertThat(labelTexts(dialog)).contains(ReleaseCopy.CODE_LABEL, ReleaseCopy.CODE_HINT);
+    }
+
+    /**
+     * The clock is readable ⚑ (2026-08-30, live session, U-47).
+     *
+     * <p>The teacher's words were "too smooshed together, I can't see the numbers clearly".
+     * Two causes, and neither of them is visible to a copy test: the dialog was capped at the
+     * 520px reading measure every {@code .hsts-dialog} gets, and an {@code HBox} that runs out
+     * of room shrinks its children towards their computed minimums rather than clipping the
+     * row — a {@link Spinner}'s minimum is narrower than two digits and its own arrows, so
+     * the preferred width it was given lost silently.
+     *
+     * <p>So the two claims asserted here are the two halves of the fix: the card asks for the
+     * wider measure by style class, and the clock controls carry a MINIMUM width, which is the
+     * only kind of width a squeezed layout has to honour.
+     */
+    @Test
+    @DisplayName("⚑ U-47: the create dialog is wide, and the clock spinners cannot be squeezed")
+    void theClockIsReadable() {
+        ScreenManager manager = signIn(ReleaseList.empty(NOW));
+        openReleases(manager);
+        Scene dialog = buildCreateDialog();
+
+        assertThat(dialog.getRoot().lookup(".release-create-dialog").getStyleClass())
+                .as("`wide` is what buys the Opens / Closes rows their width; without it the "
+                        + "stylesheet caps this card at the 520px reading measure")
+                .contains("hsts-dialog", "wide");
+
+        Set<Node> spinners = dialog.getRoot().lookupAll(".release-moment-spinner");
+        assertThat(spinners).as("an hour and a minute for Opens, and the same for Closes")
+                .hasSize(4);
+        assertThat(spinners).allSatisfy(spinner -> assertThat(((Spinner<?>) spinner).getMinWidth())
+                .as("a preferred width is a preference; a squeezed HBox honours the minimum")
+                .isGreaterThanOrEqualTo(80));
+
+        Set<Node> dates = dialog.getRoot().lookupAll(".release-moment-date");
+        assertThat(dates).hasSize(2);
+        assertThat(dates).allSatisfy(date -> assertThat(((DatePicker) date).getMinWidth())
+                .as("a date picker squeezed under its calendar button shows half a date")
+                .isGreaterThanOrEqualTo(150));
+    }
+
+    @Test
+    @DisplayName("U-47: Opens and Closes are two labelled rows, with the complaint under both")
+    void theTwoMomentsAreSeparateLabelledRows() {
+        ScreenManager manager = signIn(ReleaseList.empty(NOW));
+        openReleases(manager);
+        Scene dialog = buildCreateDialog();
+
+        Set<Node> rows = dialog.getRoot().lookupAll(".release-moment-row");
+        assertThat(rows).as("one row for Opens, one for Closes").hasSize(2);
+        assertThat(rows).allSatisfy(row -> {
+            // Caption above its controls rather than beside them: sitting beside them on a
+            // 70px minimum, it took the width the four controls needed and gave nothing back.
+            VBox stacked = (VBox) row;
+            assertThat(((Label) stacked.getChildren().get(0)).getText())
+                    .isIn(ReleaseCopy.OPENS_LABEL, ReleaseCopy.CLOSES_LABEL);
+            assertThat(stacked.getChildren().get(1).getStyleClass()).contains("release-moment");
+        });
+        assertThat(dialog.getRoot().lookupAll(".release-moment-colon"))
+                .as("a visible separator, so 09 05 is not read as one number")
+                .hasSize(2);
+
+        // The window complaint stays under the rows it is about, which is where she is
+        // already looking when a date stops being legal.
+        VBox body = (VBox) dialog.getRoot().lookup(".release-create-dialog");
+        List<Node> children = body.getChildren();
+        int lastRow = rows.stream().mapToInt(children::indexOf).max().orElseThrow();
+        assertThat(children.indexOf(dialog.getRoot().lookup(".release-window-error")))
+                .isGreaterThan(lastRow);
     }
 
     @Test

@@ -57,6 +57,24 @@ import java.util.Optional;
  */
 public final class LoginView extends AbstractScreen {
 
+    /**
+     * Navigation parameter: the username to pre-fill (⚑ U-52).
+     *
+     * <p>Set by the shell when a reconnect drops her back here. She did not choose
+     * to sign out, so re-typing the name she was already signed in with is friction
+     * this screen has no reason to add.
+     */
+    public static final String PARAM_USERNAME = "username";
+
+    /**
+     * Navigation parameter: a sentence to show above the form (⚑ U-52).
+     *
+     * <p>The copy is the caller's — {@code ConnectFlow.RECONNECTED_SIGN_IN_AGAIN}
+     * today — because the reason she is looking at this screen is not something
+     * the screen itself knows.
+     */
+    public static final String PARAM_NOTICE = "notice";
+
     /** The status line when there is no server to name. */
     private static final String NOT_CONNECTED = "Not connected";
 
@@ -76,6 +94,8 @@ public final class LoginView extends AbstractScreen {
     private HBox capsRow;
     private HBox errorRow;
     private Label errorText;
+    private HBox noticeRow;
+    private Label noticeText;
     private VBox card;
     private HBox connectionRow;
 
@@ -113,12 +133,27 @@ public final class LoginView extends AbstractScreen {
         session.reset();
         usernameField.textField().clear();
         passwordField.textField().clear();
-        // Re-asked rather than remembered: a visit that follows a reconnect must not inherit
-        // the last visit's verdict, and a visit that follows a drop must not inherit "up".
-        connectionUp = true;
+
+        // The reconnect route arrives with both of these (⚑ U-52): she was signed in a
+        // moment ago and did not ask to leave, so her name comes back with her and the
+        // sentence says why the dashboard turned into a login form.
+        String username = params == null ? "" : params.getString(PARAM_USERNAME, "");
+        usernameField.textField().setText(username);
+        showNotice(params == null ? "" : params.getString(PARAM_NOTICE, ""));
+
+        // Asked of the manager rather than assumed ⚑ (2026-08-30, Findings.txt, U-52).
+        // This used to be an unconditional `true`, so signing out after the client lost
+        // the network produced a status row that said Connected on a socket nobody could
+        // reach: the adapter still answered isConnectionOpen(), and the drop that had
+        // already been announced was forgotten the moment the screen was shown again.
+        connectionUp = ScreenManager.getInstance().isConnectionAlive();
         renderConnection();
         Animations.slideInY(card, true, 12, Motion.SLOW_MS);
-        usernameField.textField().requestFocus();
+        if (username.isBlank()) {
+            usernameField.textField().requestFocus();
+        } else {
+            passwordField.textField().requestFocus();
+        }
     }
 
     @Override
@@ -229,10 +264,11 @@ public final class LoginView extends AbstractScreen {
 
         capsRow = capsLockRow();
         errorRow = errorRow();
+        noticeRow = noticeRow();
         signInButton = signInButton();
 
-        card = new VBox(16, title, subtitle, usernameField, passwordField, capsRow, errorRow,
-                signInButton);
+        card = new VBox(16, title, subtitle, noticeRow, usernameField, passwordField, capsRow,
+                errorRow, signInButton);
         card.getStyleClass().add("hsts-card");
         card.setMaxWidth(CARD_WIDTH);
         card.setMinWidth(CARD_WIDTH);
@@ -298,6 +334,31 @@ public final class LoginView extends AbstractScreen {
         return row;
     }
 
+    /**
+     * The neutral strip that says why she is here (⚑ U-52).
+     *
+     * <p>Deliberately not the error row: a reconnect that worked is good news with a
+     * chore attached, and painting it red would read as a failed sign-in she never
+     * attempted.
+     */
+    private HBox noticeRow() {
+        noticeText = new Label();
+        noticeText.getStyleClass().add("banner-text");
+        noticeText.setWrapText(true);
+
+        HBox row = new HBox(8, Icons.of(Icons.INFO, Icons.SIZE_DEFAULT, "banner-icon"), noticeText);
+        row.getStyleClass().add("hsts-banner");
+        row.setAlignment(Pos.CENTER_LEFT);
+        setShown(row, false);
+        return row;
+    }
+
+    private void showNotice(String message) {
+        boolean has = message != null && !message.isBlank();
+        noticeText.setText(has ? message : "");
+        setShown(noticeRow, has);
+    }
+
     private HBox connectionRow() {
         HBox row = new HBox(8);
         row.setAlignment(Pos.CENTER);
@@ -319,6 +380,10 @@ public final class LoginView extends AbstractScreen {
         passwordField.control().setDisable(submitting);
         renderButton();
 
+        if (submitting) {
+            // The reconnect sentence has done its job the moment she acts on it.
+            showNotice("");
+        }
         setShown(errorRow, session.hasError());
         if (session.hasError()) {
             errorText.setText(session.errorMessage());
@@ -353,7 +418,10 @@ public final class LoginView extends AbstractScreen {
      */
     private void renderConnection() {
         IClientConnection client = client();
-        boolean connected = connectionUp && client != null && client.isConnectionOpen();
+        // isConnectionAlive() and not isConnectionOpen() ⚑ U-52: a client that lost the
+        // network answers the second one with a stale true, because OCSF only notices a
+        // dead socket when a read fails. The manager also remembers the drop.
+        boolean connected = connectionUp && ScreenManager.getInstance().isConnectionAlive();
         connectionUp = connected;
         ServerEndpoint endpoint = connected
                 ? new ServerEndpoint(client.getHost(), client.getPort()) : null;

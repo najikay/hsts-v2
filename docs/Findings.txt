@@ -1,0 +1,72 @@
+Findings
+
+
+
+Bugs
+
+[BUG] A · Question Bank — stale detail pane after "Save as new version", and it is NOT
+      just rendering. HIGH, and it is in my own lane (E6).
+      What you see: save as new version returns to the bank with that question
+      highlighted, but the right-hand pane still shows the OLD version. Click another
+      question and back and the new one appears. So the save worked; the pane did not
+      refresh.
+      What it actually costs: if I do NOT click away, and press Edit on that same question
+      again, the editor opens on the OLD version. Saving then fails with "Someone else
+      saved a new version of this question while you had it open." Nobody else did. It was
+      me, seconds earlier.
+      The server is right — the client really did send a stale base version. The bug is
+      that the client kept one.
+      Why it is worse than it looks:
+        - it fakes a concurrency conflict, so it pollutes the two-teacher lock testing —
+          I cannot tell a real conflict from this one without a second machine watching;
+        - on demo day a teacher editing the same question twice in a row gets told someone
+          else edited it, with nobody else signed in. That sentence in front of examiners
+          is worse than the bug.
+      Check when fixing: does the same staleness happen after delete and after add?
+
+[BUG] A · Question Bank → Version history — it lists past versions with when they were
+      edited and by whom, but does not show the previous version itself. PRD F2.3: "Edit
+      creates a new version; previous version remains in the bank (viewable in a version
+      history panel)." Listing metadata is not viewing the version. Raise the reading with
+      Naji on the call, but the requirement names the panel as where you view it.
+
+[BUG] A · My Exams → "New exam" dropdown — the option text is the same colour as the
+      background, so the three options are invisible. Hovering makes one barely readable.
+      Unusable as it stands, and it is the entry point to the whole authoring flow.
+
+[BUG] B · Reconnect after the machine slept — HIGH, and I think U-17 is not fully fixed.
+      The laptop screen went off (on battery, not plugged in) and the connection dropped.
+      The yellow banner appeared with Retry. **Retry did nothing.** I signed out and tried
+      to sign in again: the status at the bottom said **Connected**, but the sign-in was
+      refused telling me to check the server. Same dead end as my round-2 blocker.
+      Two separate failures in one incident, worth splitting on the call:
+        (a) the banner's Retry does not reconnect;
+        (b) the status row says Connected while the connection is dead — which is the
+            exact signature U-17 describes and claims to have fixed.
+      Different trigger from round 2: that one was the SERVER being restarted; this one
+      the CLIENT machine losing the network while the server stayed up. The fix may cover
+      the reconnect path and not the client-side-drop path.
+      Still to check when I reproduce it (sleep the laptop or turn its Wi-Fi off):
+        - does a brand new client window still work? (round 2's workaround — if yes, same
+          class of defect)
+        - does the server console still count me as a connected client?
+        - what is the exact refusal wording on the login screen?
+
+[BUG]
+
+
+
+Recommendations
+
+[REC] A · Exam Builder — composing an exam manually shows only the stem, id, topic and
+      difficulty. The four answer options are nowhere: not while picking, not after saving
+      a draft, not when reopening the draft to edit. There is no link from a picked
+      question back to the question either, so the only way to check what I am putting on
+      an exam is to leave, open the Question Bank, and search for it by hand.
+      A teacher composing an exam cannot see what the exam says.
+      Concrete fix, and it is cheap because the screen already exists: the "Exam Preview
+      (read-only, student-identical)" screen is already built for F4.1. Make it reachable
+      from the builder for a draft, and/or make a picked row expand to show its answers.
+      Argument for the call: F4.1 requires that preview for the coordinator and the PRD
+      notes in brackets "(this was a v1 failure)". The same failure applies to the author,
+      who is the one who can still fix the exam.

@@ -1,8 +1,11 @@
 package client.features.approval;
 
 import client.core.NavParams;
+import client.core.Navigator;
 import client.core.Routes;
+import client.core.ScreenManager;
 import client.features.exam.QuestionCardView;
+import client.features.exambuild.ExamBuildRoutes;
 import client.ui.components.Buttons;
 import client.ui.components.StatusChip;
 import client.ui.components.WarnConfirm;
@@ -10,6 +13,8 @@ import client.ui.screen.AbstractScreen;
 import common.dto.approval.ApprovalRow;
 import common.dto.approval.ExamPreview;
 import common.dto.approval.TeacherOnlyBlock;
+import common.dto.auth.LoginResult;
+import common.dto.auth.Role;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
@@ -54,6 +59,19 @@ import java.util.Optional;
  */
 public final class ExamPreviewView extends AbstractScreen {
 
+    /**
+     * The nav key naming the screen this preview was opened from (2026-08-30, U-53).
+     *
+     * <p>House convention, the same shape as {@code ExamBuilderView.PARAM_COURSE}: the receiving
+     * view spells the key and every navigator imports it, so a rename cannot leave a producer and
+     * a consumer disagreeing silently. Absent means the approvals queue, which is where this
+     * screen was reached from for its whole life before the exam builder gained a Preview.
+     *
+     * <p>A route id rather than a boolean, because "which door" already has more than two
+     * answers and a flag would have to be renamed the first time a third one is added.
+     */
+    public static final String PARAM_FROM = "from";
+
     private final BorderPane root = new BorderPane();
     private final Label examName = new Label();
     private final Label meta = new Label();
@@ -64,9 +82,18 @@ public final class ExamPreviewView extends AbstractScreen {
     private final HBox statusRow = new HBox(8);
     private final Button approve = Buttons.primary(ApprovalCopy.APPROVE_CONFIRM);
     private final Button reject = Buttons.danger(ApprovalCopy.REJECT_CONFIRM);
-    private final Button back = Buttons.secondary("Back to approvals");
+    private final Button back = Buttons.secondary(ApprovalCopy.BACK_TO_APPROVALS);
 
     private ExamPreviewSession session;
+
+    /**
+     * The route this preview was opened from, or {@code ""} for the approvals queue.
+     *
+     * <p>Read in {@code onShow} and not in {@code build}: the screen is built once and shown on
+     * every navigation, so a value captured at build time would be the first visit's answer
+     * forever.
+     */
+    private String openedFrom = "";
 
     @Override
     protected Parent build() {
@@ -81,7 +108,7 @@ public final class ExamPreviewView extends AbstractScreen {
 
         approve.setOnAction(e -> confirmApprove());
         reject.setOnAction(e -> confirmReject());
-        back.setOnAction(e -> navigator().navigate(Routes.APPROVALS.id()));
+        back.setOnAction(e -> goBack());
 
         root.getStyleClass().add("exam-preview");
         root.setTop(buildHeader());
@@ -92,8 +119,75 @@ public final class ExamPreviewView extends AbstractScreen {
 
     @Override
     public void onShow(NavParams params) {
+        openedFrom = params.getString(PARAM_FROM, "");
+        // The label follows the door, and is set here rather than in render() because it is a
+        // fact about the navigation rather than about the answer: it must read correctly while
+        // the preview is still loading and on the screen that says it could not be opened.
+        back.setText(ExamBuildRoutes.BUILDER.equals(openedFrom)
+                ? ApprovalCopy.BACK_TO_BUILDER : ApprovalCopy.BACK_TO_APPROVALS);
         long examVersionId = params.getLong("examVersionId", 0);
         session.open(examVersionId);
+    }
+
+    /**
+     * Back to whichever screen opened this one (2026-08-30, Findings.txt, U-53) ⚑.
+     *
+     * <p>The footer's control names a destination rather than a direction, which is what its
+     * header javadoc says it is for. That was one destination while one screen opened this one.
+     * Since U-53 the exam builder's Preview opens it too, and "Back to approvals" on a teacher's
+     * screen is worse than wrong: {@code Routes.APPROVALS} is registered for the coordinator
+     * alone, so pressing it would throw out of {@code Navigator.navigate} rather than take her
+     * anywhere.
+     *
+     * <p>{@code navigate} rather than {@code back()}: the builder needs its {@code
+     * examVersionId} back, exactly as {@code ExamBuilderView.backToTheList} argues, and the
+     * entry she arrived from cannot be relied on to carry it. The shell's own navbar Back is
+     * the history-first control and stays that.
+     *
+     * <p>Falls through to the approvals queue for anything unregistered, which is the harness
+     * and the component gallery. The button is never a dead end that throws.
+     */
+    private void goBack() {
+        Navigator navigator = navigator();
+        if (navigator == null) {
+            return;
+        }
+        if (ExamBuildRoutes.BUILDER.equals(openedFrom)
+                && navigator.isRegistered(ExamBuildRoutes.BUILDER)) {
+            navigator.navigate(ExamBuildRoutes.BUILDER,
+                    NavParams.of("examVersionId", session.preview()
+                            .map(loaded -> loaded.summary().examVersionId()).orElse(0L)));
+            return;
+        }
+        if (navigator.isRegistered(Routes.APPROVALS.id())) {
+            navigator.navigate(Routes.APPROVALS.id());
+            return;
+        }
+        navigator.back();
+    }
+
+    /**
+     * Whether the signed-in user may decide on this version at all (U-53) ⚑.
+     *
+     * <p><b>The role, and only the role.</b> {@code EXAM_APPROVE} and {@code EXAM_REJECT} both
+     * open with {@code Authorization.requireRole(caller, Role.COORDINATOR)}, so this is that
+     * server line read back rather than a second rule: a teacher who reached either verb is
+     * refused, and a screen that offered her the buttons would be asking a question it knows the
+     * answer to. The same argument {@code ExamBuilderSession.save} makes about {@code READ_ONLY}.
+     *
+     * <p>It became a question this screen has to ask on 2026-08-30, when U-53 gave the author a
+     * Preview of her own. Until then only a coordinator could reach the route, so the buttons
+     * were unconditional and correct; the third reader U-44 admitted, the principal, was given
+     * {@code DataExamView} instead precisely so that this screen did not have to grow a mode.
+     * The author is the first reader to arrive on this screen who may not decide, and hiding is
+     * right rather than disabling: a disabled Approve reads as "not yet", and there is no yet.
+     *
+     * @return {@code true} for a coordinator, and for a shell with no signed-in user, which is
+     *         the harness and the gallery
+     */
+    private boolean mayDecide() {
+        LoginResult user = ScreenManager.getInstance().signedInUser();
+        return user == null || user.role() == Role.COORDINATOR;
     }
 
     @Override
@@ -113,6 +207,9 @@ public final class ExamPreviewView extends AbstractScreen {
             paper.getChildren().clear();
             teacherPanel.getChildren().clear();
             statusRow.getChildren().clear();
+            boolean mayDecide = mayDecide();
+            show(approve, mayDecide);
+            show(reject, mayDecide);
             approve.setDisable(true);
             reject.setDisable(true);
             return;
@@ -132,8 +229,11 @@ public final class ExamPreviewView extends AbstractScreen {
         renderPaper(preview);
         renderTeacherPanel(preview.teacherOnly());
 
-        approve.setDisable(!session.canDecide());
-        reject.setDisable(!session.canDecide());
+        boolean mayDecide = mayDecide();
+        show(approve, mayDecide);
+        show(reject, mayDecide);
+        approve.setDisable(!mayDecide || !session.canDecide());
+        reject.setDisable(!mayDecide || !session.canDecide());
     }
 
     private void renderStatus(ApprovalRow summary) {

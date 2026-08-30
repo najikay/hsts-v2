@@ -18,16 +18,23 @@ import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
+import common.dto.bank.QuestionRequest;
+import common.dto.bank.QuestionVersionDetail;
+import common.dto.bank.VersionHistory;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
 import server.features.exambuild.ExamValidator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The logic behind the exam builder (Presentation tier, E7.11 to E7.14 — F3.1, F3.3, F3.5, S-11).
@@ -215,6 +222,33 @@ public final class ExamBuilderSession {
     private String teacherText = "";
     private final List<Line> lines = new ArrayList<>();
 
+    /**
+     * Which rows are showing their answers, by the question's own id (2026-08-30, U-53).
+     *
+     * <p>Keyed on {@code displayId5} rather than on the list index, because the index is the
+     * paper's order and the order moves: a row expanded at position 3 and then moved up would
+     * take its open state to whatever landed at 3. §5.2 already makes the display id unique
+     * within one composition ({@link #isOnPaper}), so it is the one key on a row that a reorder,
+     * a repoint and a re-pin all leave alone.
+     */
+    private final Set<String> openAnswers = new LinkedHashSet<>();
+
+    /**
+     * The bank's answer per question, held for as long as the builder is open.
+     *
+     * <p>The whole {@link VersionHistory} rather than the one version being shown, and that is
+     * what makes one read serve a row before and after E7.14 re-pins it: the pinned version and
+     * the newer version it moves to are both in this answer already, so pressing "Use the newer
+     * version" on an open row repaints from the cache instead of asking again.
+     */
+    private final Map<String, VersionHistory> answerCache = new HashMap<>();
+
+    /** Ids with a read in flight, so a second open cannot send a second request. */
+    private final Set<String> answersLoading = new LinkedHashSet<>();
+
+    /** Ids whose last read failed, which the row says rather than showing an empty list. */
+    private final Set<String> answersFailed = new LinkedHashSet<>();
+
     // --- the bank picker (E7.12) ------------------------------------------
     private boolean pickerOpen;
     private AsyncViewState pickerState = AsyncViewState.IDLE;
@@ -337,6 +371,15 @@ public final class ExamBuilderSession {
         studentText = "";
         teacherText = "";
         lines.clear();
+        // The answers belong to the paper being left (U-53). The cache is keyed on a display id
+        // and nothing else, so carrying it across an open() would show the previous exam's read
+        // under the next exam's row wherever the two share a question - and the open set would
+        // expand rows on the new paper she never touched. loadGeneration has already moved above,
+        // so a read still in flight for the old exam is discarded rather than refilling this.
+        openAnswers.clear();
+        answerCache.clear();
+        answersLoading.clear();
+        answersFailed.clear();
         saved = false;
         saveError = null;
         saveNotice = null;
@@ -602,8 +645,151 @@ public final class ExamBuilderSession {
         if (!isEditable() || index < 0 || index >= lines.size()) {
             return;
         }
+        // Collapsed rather than left open: a question added back is a row she has not opened,
+        // and a row that came back already expanded would be this screen remembering a click
+        // she made about something else. The cached history stays, so re-opening it is free.
+        openAnswers.remove(lines.get(index).displayId5());
         lines.remove(index);
         onChange.run();
+    }
+
+    // ===================== The answers on a picked row (U-53) =============
+
+    /**
+     * Opens or closes one row's answers, fetching them the first time (U-53 ⚑).
+     *
+     * <p><b>{@code QUESTION_VERSIONS}, not {@code QUESTION_GET}, and the pinned version is the
+     * reason.</b> The paper pins an exact bank version (E7.7), and {@code QUESTION_GET} is
+     * addressed by display id alone: {@code BankBrowseService.get} resolves the question's
+     * <em>latest</em> version and there is no field on {@code QuestionRequest} to ask it for
+     * another. So on any row carrying E7.7's badge it would answer with wording and a key that
+     * belong to a version this exam does not contain, under a stem that belongs to the version
+     * it does, and nothing on screen would say which. {@code QUESTION_VERSIONS} carries every
+     * version's text, options and key on the same frozen record
+     * ({@code QuestionVersionDetail}), through the same {@code BankReadHandlers.asReader} gate,
+     * so the pinned version can be picked out by number and no wire changes.
+     *
+     * <p>Read rather than picked from the picker's own {@code BANK_LIST} answer for the same
+     * reason the bank detail is a second verb: {@code BankQuestionRow} carries no options and no
+     * key, the picker is only loaded while it is open, and it is scoped to one course.
+     *
+     * <p>Offered on a read-only version too. Reading what the exam says is not an edit, and §8's
+     * read path is the case where it matters most: an approved version is the one a teacher
+     * opens precisely to check what students will be asked.
+     *
+     * @param index the row's position on the paper
+     */
+    public void toggleAnswers(int index) {
+        if (index < 0 || index >= lines.size()) {
+            return;
+        }
+        String displayId = lines.get(index).displayId5();
+        if (openAnswers.remove(displayId)) {
+            onChange.run();
+            return;
+        }
+        openAnswers.add(displayId);
+        requestAnswers(displayId);
+        onChange.run();
+    }
+
+    /**
+     * Asks the bank for one question's versions, once.
+     *
+     * <p>A cached answer is not re-read and an in-flight one is not asked twice, so opening,
+     * closing and opening a row again costs one round trip. A <em>failed</em> read is retried,
+     * which is what {@link ExamBuildCopy#ANSWERS_FAILED} tells her to do: there is no retry
+     * button on the row, because the toggle she already has is the retry.
+     */
+    private void requestAnswers(String displayId) {
+        if (displayId == null || displayId.isBlank()
+                || answerCache.containsKey(displayId) || answersLoading.contains(displayId)) {
+            return;
+        }
+        answersLoading.add(displayId);
+        answersFailed.remove(displayId);
+        int generation = loadGeneration;
+        dispatcher.send(Verb.QUESTION_VERSIONS, new QuestionRequest(displayId))
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settleAnswers(generation, displayId, response, failure)));
+    }
+
+    /**
+     * Takes a history only if the screen is still on the exam that asked for it.
+     *
+     * <p>The same generation guard {@link #settleLoad} carries, and for a quieter version of the
+     * same reason: {@link #resetLoaded} empties the cache because it belongs to the paper being
+     * left, so an answer arriving after it would refill the new exam's cache with a question the
+     * new exam may not contain. Harmless to draw and wrong to keep.
+     */
+    private void settleAnswers(int generation, String displayId, Message response,
+                               Throwable failure) {
+        if (generation != loadGeneration) {
+            return;
+        }
+        answersLoading.remove(displayId);
+        if (failure != null || response == null || response.isError()
+                || !(response.getPayload() instanceof VersionHistory history)) {
+            answersFailed.add(displayId);
+            onChange.run();
+            return;
+        }
+        answerCache.put(displayId, history);
+        onChange.run();
+    }
+
+    /**
+     * @param line one row of the paper
+     * @return {@code true} while that row is showing its answers
+     */
+    public boolean answersOpen(Line line) {
+        return line != null && openAnswers.contains(line.displayId5());
+    }
+
+    /**
+     * @param line one row of the paper
+     * @return where that row's answers have got to. {@code IDLE} is a row nobody has opened
+     */
+    public AsyncViewState answersState(Line line) {
+        if (line == null) {
+            return AsyncViewState.IDLE;
+        }
+        String displayId = line.displayId5();
+        if (answersLoading.contains(displayId)) {
+            return AsyncViewState.LOADING;
+        }
+        if (answersFailed.contains(displayId)) {
+            return AsyncViewState.ERROR;
+        }
+        return answerCache.containsKey(displayId) ? AsyncViewState.READY : AsyncViewState.IDLE;
+    }
+
+    /**
+     * The version <b>this paper pins</b>, out of everything the bank holds for that question ⚑.
+     *
+     * <p>Selected by {@code pinnedVersionNo} and never by "the newest one", which is the whole
+     * point of reading a history rather than a detail. {@code uq_question_versions_no} makes
+     * {@code (questionId, versionNo)} unique, so at most one entry can match and the choice
+     * cannot be ambiguous.
+     *
+     * <p>Empty when the bank's answer does not contain that number, which the row reports as
+     * {@link ExamBuildCopy#ANSWERS_VERSION_GONE} rather than as a failed read: the read
+     * succeeded and said something, and what it said is that the pinned version is not there.
+     *
+     * @param line one row of the paper
+     * @return the pinned version's text, options and key, once it has been read
+     */
+    public Optional<QuestionVersionDetail> answersFor(Line line) {
+        if (line == null) {
+            return Optional.empty();
+        }
+        VersionHistory history = answerCache.get(line.displayId5());
+        if (history == null) {
+            return Optional.empty();
+        }
+        return history.versions().stream()
+                .filter(version -> version.versionNo() == line.pinnedVersionNo())
+                .findFirst();
     }
 
     // ===================== The bank picker (E7.12) ========================
@@ -1353,6 +1539,31 @@ public final class ExamBuilderSession {
     /** @return the version this screen is editing, or {@code 0} before a create has landed. */
     public long examVersionId() {
         return examVersionId;
+    }
+
+    /**
+     * Whether there is a saved version for the preview to read (2026-08-30, U-53) ⚑.
+     *
+     * <p>{@code EXAM_PREVIEW_GET} is addressed by exam <b>version</b>, so what the Preview
+     * control needs is not "a paper" but "a paper the server has". That is exactly
+     * {@link #examVersionId()}: {@link #resetLoaded} zeroes it, a load sets it, and
+     * {@link #settleSave} sets it from the server's own re-read. So an unsaved
+     * {@link Mode#CREATE} answers false and everything else answers true, and the rule is one
+     * expression over a field the server owns rather than a second boolean this screen would
+     * have to remember to move.
+     *
+     * <p>Derived, for the reason {@link Mode} and {@link #hasRepinned()} are: a flag somebody
+     * sets is a flag somebody can leave set, and this one would leave a Preview button pointing
+     * at the previous exam's version after an {@link #open}.
+     *
+     * <p><b>Not gated on {@link #isEditable()}.</b> A read-only version is the case where a
+     * preview is most useful, and a version another teacher holds the edit lock on is still one
+     * this teacher may read.
+     *
+     * @return {@code true} once this exam has a stored version, and while no save is in flight
+     */
+    public boolean canPreview() {
+        return examVersionId > 0 && !saving;
     }
 
     /** Clears the success notice once its toast has been shown. */

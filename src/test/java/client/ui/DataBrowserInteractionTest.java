@@ -6,6 +6,7 @@ import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.PushEventBridge;
+import client.features.bank.BankCopy;
 import client.features.data.DataCopy;
 import client.features.data.DataDetailCopy;
 import client.features.data.DataTab;
@@ -36,6 +37,7 @@ import common.protocol.Message;
 import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
@@ -261,6 +263,28 @@ class DataBrowserInteractionTest extends ApplicationTest {
                 .contains(DataDetailCopy.HISTORY_TITLE)
                 .anySatisfy(text -> assertThat(text).startsWith("Version 2"));
         assertNothingMutates(screen);
+
+        // U-50 reaches this screen through the shared renderer, and the point of the sharing is
+        // that it does. The principal reads the bank to see what was entered (F9.3), so a
+        // history that named v1 without showing it left her the same half-answer it left a
+        // teacher (2026-08-30, Findings.txt, U-50).
+        assertThat(labels)
+                .as("collapsed to begin with, so the timeline is still a timeline")
+                .doesNotContain("Solve 2x + 3 = 7", "x = 5", "x = 7");
+        Button older = screen.lookupAll(".bank-history-toggle").stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> BankCopy.HISTORY_SHOW_VERSION.equals(button.getText()))
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new AssertionError("no history toggle on the question"));
+        clickOn(older);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(screen))
+                .as("v1 as it read, with the key marked, on the screen U-44 built over the "
+                        + "bank's own renderer")
+                .contains("Solve 2x + 3 = 7", "x = 5", "x = 7", "Correct");
+        assertNothingMutates(screen);
     }
 
     @Test
@@ -401,10 +425,22 @@ class DataBrowserInteractionTest extends ApplicationTest {
                 false, "Dana Cohen", SUMMER);
     }
 
+    /**
+     * One version of 11001, and the two of them read <b>differently</b> on purpose.
+     *
+     * <p>They were identical until 2026-08-30 (Findings.txt, U-50), which was enough while the
+     * history panel showed only dates and authors. Now that an entry opens to show the version
+     * it names, two versions with the same words could not tell an expanded v1 from the v2 in
+     * the pane above it, and the assertion would pass on the wrong node.
+     */
     private static QuestionVersionDetail linearVersion(int versionNo) {
-        return new QuestionVersionDetail(versionNo, "Solve the linear equation",
-                List.of("x = 1", "x = 2", "x = 3", "x = 4"), 2, "Equations", Difficulty.EASY,
-                false, "Dana Cohen", versionNo == 1 ? SPRING : SUMMER);
+        return versionNo == 1
+                ? new QuestionVersionDetail(1, "Solve 2x + 3 = 7",
+                        List.of("x = 1", "x = 2", "x = 5", "x = 7"), 2, "Equations",
+                        Difficulty.EASY, false, "Dana Cohen", SPRING)
+                : new QuestionVersionDetail(versionNo, "Solve the linear equation",
+                        List.of("x = 1", "x = 2", "x = 3", "x = 4"), 2, "Equations",
+                        Difficulty.EASY, false, "Dana Cohen", SUMMER);
     }
 
     private static ExamQuestion paperQuestion(int ordinal) {

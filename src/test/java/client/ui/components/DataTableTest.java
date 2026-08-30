@@ -1,5 +1,10 @@
 package client.ui.components;
 
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.TableView;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.BeforeAll;
@@ -89,6 +94,79 @@ class DataTableTest extends ApplicationTest {
                     assertThat(column.getMinWidth()).isLessThanOrEqualTo(column.getPrefWidth());
                     assertThat(column.getMaxWidth()).isGreaterThanOrEqualTo(column.getPrefWidth());
                 });
+    }
+
+    // ===================== The column chooser (U-36) =====================
+
+    @Test
+    @DisplayName("⚑ U-36: a hidden column is hidden, not gone")
+    void hideColumnsHidesByTitle() {
+        DataTable<Row> table = build();
+        interact(() -> table.hideColumns("Question"));
+
+        assertThat(table.table().getColumns().get(0).isVisible())
+                .as("a column nobody hid")
+                .isTrue();
+        assertThat(table.table().getColumns().get(1).isVisible()).isFalse();
+        assertThat(table.table().getColumns())
+                .as("hidden, so the chooser can put it back; dropping it would take the data, "
+                        + "the sort order and the tick box with it")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("a title no column has is ignored rather than thrown")
+    void hidingAColumnThatIsNotThereIsSafe() {
+        DataTable<Row> table = build();
+        interact(() -> table.hideColumns("Difficulty"));
+
+        assertThat(table.table().getColumns()).allMatch(column -> column.isVisible());
+    }
+
+    @Test
+    @DisplayName("⚑ U-36: the chooser offers every column, ticked to match what is shown")
+    void theChooserListsTheColumns() {
+        DataTable<Row> table = build();
+        interact(() -> table.hideColumns("Question").columnChooser());
+
+        List<MenuItem> items = chooserItems(table);
+        assertThat(items).extracting(MenuItem::getText).containsExactly("Id", "Question");
+        assertThat(items).allMatch(CheckMenuItem.class::isInstance);
+        assertThat(((CheckMenuItem) items.get(0)).isSelected())
+                .as("a shown column opens the chooser already ticked")
+                .isTrue();
+        assertThat(((CheckMenuItem) items.get(1)).isSelected())
+                .as("and a column hidden before the chooser was built opens clear")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("ticking a box in the chooser brings the column back")
+    void tickingTheBoxShowsTheColumn() {
+        DataTable<Row> table = build();
+        interact(() -> table.hideColumns("Question").columnChooser());
+
+        interact(() -> ((CheckMenuItem) chooserItems(table).get(1)).setSelected(true));
+
+        assertThat(table.table().getColumns().get(1).isVisible()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the chooser is asked for once, however many times a screen asks")
+    void theChooserIsMountedOnce() {
+        DataTable<Row> table = build();
+        interact(() -> table.columnChooser().columnChooser());
+
+        assertThat(table.getChildren().get(0).lookupAll(".table-column-chooser")).hasSize(1);
+    }
+
+    /** @return the chooser's menu items, read off the button the toolbar mounts. */
+    private List<MenuItem> chooserItems(DataTable<Row> table) {
+        Node button = table.getChildren().get(0).lookup(".table-column-chooser");
+        assertThat(button).as("the chooser sits on the toolbar strip").isInstanceOf(Button.class);
+        ContextMenu menu = ((Button) button).getContextMenu();
+        assertThat(menu).as("the chooser's own menu").isNotNull();
+        return menu.getItems();
     }
 
     /**

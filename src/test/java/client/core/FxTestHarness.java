@@ -1,6 +1,7 @@
 package client.core;
 
 import javafx.application.Platform;
+import org.testfx.util.WaitForAsyncUtils;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +51,25 @@ import java.util.concurrent.TimeUnit;
  * post work (animation stops, bus unregistration), and none of that should be
  * left sitting in the queue when the next test boots a new app.
  *
+ * <h2>2026-08-30, wave 6, U-45: one generation was not enough</h2>
+ *
+ * <p>The shape above still failed about one full build in three, in
+ * {@code BotInteractionTest} and once in {@code TakeExamInteractionTest}, always as
+ * {@code NullPointerException ... AbstractScreen.eventBus() is null} while a screen built.
+ * The gap is that a single latch only proves the queue as it stood <i>when the latch was
+ * posted</i> is empty. A runnable ahead of the latch may post another - a navigation that
+ * builds a screen, a build that posts its own follow-up - and that second generation lands
+ * <b>behind</b> the latch, so the drain returns with work still queued and the reset runs on
+ * top of it. {@link #drainFxEvents()} therefore drains two generations, and each generation
+ * also hands control to TestFX's {@code WaitForAsyncUtils.waitForFxEvents()}, which pumps the
+ * queue and is what the interaction tests themselves wait on.
+ *
+ * <p>Two generations is a window, not a proof: no drain can wait for a background thread that
+ * has not posted yet. The other half of the fix is that a screen built into the emptied world
+ * no longer throws - {@code AbstractScreen}'s bus, dispatcher and connection accessors hand
+ * back inert detached collaborators when the manager has no event bus, so the late build
+ * paints into a scene nobody will show and is discarded with it.
+ *
  * <p>Lives in {@code client.core} on purpose: {@code resetForTests()} is
  * package-private, so a harness in this package calls it directly and the
  * copied {@code setAccessible} reflection disappears from all fourteen tests.
@@ -82,17 +102,47 @@ public final class FxTestHarness {
 
     /**
      * Blocks until every {@code Platform.runLater} runnable queued before this
-     * call has run.
+     * call has run, and then until everything <i>those</i> runnables queued has
+     * run too (U-45).
      *
      * <p>The mechanism is the FIFO ordering of the FX event queue and nothing
      * else: put a latch-releasing runnable at the back of the queue, wait for
-     * it, and everything ahead of it is necessarily done. It does <b>not</b>
-     * wait for background threads that have not posted yet — that is what step 2
-     * of the class contract is for.
+     * it, and everything ahead of it is necessarily done. One pass is not
+     * enough, because a runnable ahead of the latch can post work behind it —
+     * which is precisely how a screen came to be built after its world was
+     * discarded. It does <b>not</b> wait for background threads that have not
+     * posted yet — that is what step 2 of the class contract is for.
      */
     public static void drainFxEvents() {
+        drainOneGeneration();
+        drainOneGeneration();
+    }
+
+    /** One latch to the back of the queue, then TestFX's own pump. */
+    private static void drainOneGeneration() {
         runOnFxThreadAndWait(() -> {
         });
+        waitForTestFxEvents();
+    }
+
+    /**
+     * Hands control to {@code WaitForAsyncUtils.waitForFxEvents()}, which pumps the FX queue
+     * the same way the interaction tests do while they wait for a screen to appear.
+     *
+     * <p>Swallows the two conditions that are normal in a teardown, exactly as
+     * {@link #runOnFxThreadAndWait(Runnable)} does: no toolkit was ever started, and a call
+     * made from the FX thread itself, where waiting for the queue would be waiting for the
+     * caller.
+     */
+    private static void waitForTestFxEvents() {
+        if (Platform.isFxApplicationThread()) {
+            return;
+        }
+        try {
+            WaitForAsyncUtils.waitForFxEvents();
+        } catch (RuntimeException noToolkit) {
+            // Nothing was booted, or the pump gave up; either way there is nothing to drain.
+        }
     }
 
     /**

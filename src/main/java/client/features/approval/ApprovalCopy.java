@@ -112,6 +112,26 @@ public final class ApprovalCopy {
     /** Cancel button on both dialogs. */
     public static final String KEEP_LOOKING = "Keep looking";
 
+    // ===================== Leaving the preview ============================
+
+    /**
+     * The preview footer's own way out, for a coordinator.
+     *
+     * <p>Was a literal in {@code ExamPreviewView} until 2026-08-30 (Findings.txt, U-53), when it
+     * gained a second reader and therefore a second wording. Two sentences that name two
+     * destinations belong beside each other where the copy test can see both.
+     */
+    public static final String BACK_TO_APPROVALS = "Back to approvals";
+
+    /**
+     * The same control for an author who arrived from the exam builder (U-53).
+     *
+     * <p>Names where she came from rather than the direction, exactly as the coordinator's does.
+     * It is also the only correct wording for her: {@code Routes.APPROVALS} is registered for the
+     * coordinator alone, so an author sent "back to approvals" would be sent nowhere.
+     */
+    public static final String BACK_TO_BUILDER = "Back to the exam";
+
     /**
      * The live hint under the reason field, as it is being typed.
      *

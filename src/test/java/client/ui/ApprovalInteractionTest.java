@@ -7,6 +7,8 @@ import client.core.Routes;
 import client.core.ScreenManager;
 import client.events.PushEventBridge;
 import client.features.approval.ApprovalCopy;
+import client.features.approval.ExamPreviewView;
+import client.features.exambuild.ExamBuildRoutes;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
@@ -235,6 +237,108 @@ class ApprovalInteractionTest extends ApplicationTest {
                 .contains(ApprovalCopy.PREVIEW_BANNER);
     }
 
+    // ===================== The author's own preview (U-53) ===============
+
+    /**
+     * The author of the exam above, who is a plain teacher and coordinates nothing.
+     *
+     * <p>{@code ApprovalService.preview} has admitted the version's own author since E8 - F4.2
+     * needs a teacher to be able to reopen what she submitted - and U-53 gave her the route and
+     * a Preview button on the builder to reach it with.
+     */
+    private static final LoginResult DANA = new LoginResult(2, "dana.cohen", "Dana Cohen",
+            Role.TEACHER, List.of(new CourseRef("12", "Calculus")), 0);
+
+    /**
+     * Findings.txt U-53, and the line the whole change has to hold ⚑.
+     *
+     * <p>The author gets the <b>same screen</b> the coordinator gets, because E8's argument is
+     * that one paper has one renderer. What she must not get is a decision: {@code EXAM_APPROVE}
+     * and {@code EXAM_REJECT} both open with {@code requireRole(COORDINATOR)}, so a teacher who
+     * pressed either would be refused by the server, and a screen that offered the buttons would
+     * be asking a question it knows the answer to.
+     *
+     * <p><b>Hidden rather than disabled</b>, and the assertion is on visibility for that reason.
+     * A greyed-out Approve reads as "not yet" - as it does for a coordinator looking at a version
+     * that is no longer pending - and for an author there is no yet.
+     */
+    @Test
+    @DisplayName("⚑ an author previewing her own exam gets no Approve and no Send back (U-53)")
+    void theAuthorSeesNoDecisions() {
+        ScreenManager manager = signIn(DANA,
+                connection -> connection.replyOk(Verb.EXAM_PREVIEW_GET, PREVIEW));
+        openPreviewFromTheBuilder(manager);
+
+        Scene scene = manager.scene();
+        assertThat(visibleButtonsNamed(scene, ApprovalCopy.APPROVE_CONFIRM))
+                .as("approving is a coordinator verb, so it is not on her screen at all")
+                .isEmpty();
+        assertThat(visibleButtonsNamed(scene, ApprovalCopy.REJECT_CONFIRM))
+                .as("and neither is sending her own exam back to herself")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("and she gets the whole paper and the teacher-only notes, which are hers")
+    void theAuthorStillSeesThePaperAndTheNotes() {
+        ScreenManager manager = signIn(DANA,
+                connection -> connection.replyOk(Verb.EXAM_PREVIEW_GET, PREVIEW));
+        openPreviewFromTheBuilder(manager);
+
+        Scene scene = manager.scene();
+        assertThat(scene.getRoot().lookupAll(".question-card"))
+                .as("the same renderer, not a reduced one built for authors")
+                .hasSize(2);
+        assertThat(scene.getRoot().lookup(".teacher-only-panel")).isNotNull();
+        assertThat(labelTexts(scene))
+                .contains("Mark question 2 generously; it was covered late.")
+                .contains("Q1 · option 2", "Q2 · option 2");
+    }
+
+    /**
+     * The way out names where she came from (U-53).
+     *
+     * <p>Not cosmetic: {@code Routes.APPROVALS} is registered for the coordinator alone, and
+     * {@code Navigator.navigate} throws on an unregistered id, so a footer still reading "Back to
+     * approvals" would be a button that threw out of an FX handler on a teacher's screen.
+     */
+    @Test
+    @DisplayName("⚑ arriving from the builder, Back names the exam rather than the queue")
+    void theAuthorsBackNamesTheBuilder() {
+        ScreenManager manager = signIn(DANA,
+                connection -> connection.replyOk(Verb.EXAM_PREVIEW_GET, PREVIEW));
+        openPreviewFromTheBuilder(manager);
+
+        assertThat(visibleButtonsNamed(manager.scene(), ApprovalCopy.BACK_TO_BUILDER)).hasSize(1);
+        assertThat(visibleButtonsNamed(manager.scene(), ApprovalCopy.BACK_TO_APPROVALS)).isEmpty();
+
+        clickOn(visibleButtonsNamed(manager.scene(), ApprovalCopy.BACK_TO_BUILDER).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.navigator().current())
+                .isPresent()
+                .get()
+                .extracting(entry -> entry.routeId())
+                .as("back to the builder, carrying the version so it reopens the same exam")
+                .isEqualTo(ExamBuildRoutes.BUILDER);
+    }
+
+    @Test
+    @DisplayName("a coordinator arriving from her queue still reads Back to approvals")
+    void theCoordinatorsBackIsUnchanged() {
+        ScreenManager manager = signIn(connection -> {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET, new ApprovalQueue(List.of(PENDING), true));
+            connection.replyOk(Verb.EXAM_PREVIEW_GET, PREVIEW);
+        });
+        openPreview(manager);
+
+        assertThat(visibleButtonsNamed(manager.scene(), ApprovalCopy.BACK_TO_APPROVALS)).hasSize(1);
+        assertThat(visibleButtonsNamed(manager.scene(), ApprovalCopy.APPROVE_CONFIRM))
+                .as("and she still has both decisions, which is what the split is between")
+                .hasSize(1);
+        assertThat(visibleButtonsNamed(manager.scene(), ApprovalCopy.REJECT_CONFIRM)).hasSize(1);
+    }
+
     // ===================== Rejecting, with real input ====================
 
     @Test
@@ -322,6 +426,17 @@ class ApprovalInteractionTest extends ApplicationTest {
     // ===================== Fixture =======================================
 
     private ScreenManager signIn(Consumer<FakeClientConnection> script) {
+        return signIn(RINA, script);
+    }
+
+    /**
+     * Signs a named role in, because the preview now has two readers (2026-08-30, U-53).
+     *
+     * <p>Was {@code RINA} inline, and the coordinator's overload above keeps every existing
+     * caller reading exactly as it did. What the parameter buys is the author's own visit, which
+     * is a different screen with the same payload behind it.
+     */
+    private ScreenManager signIn(LoginResult user, Consumer<FakeClientConnection> script) {
         interact(() -> new ClientApp().start(new Stage()));
         WaitForAsyncUtils.waitForFxEvents();
 
@@ -333,7 +448,7 @@ class ApprovalInteractionTest extends ApplicationTest {
             } catch (IOException e) {
                 throw new AssertionError(e);
             }
-            connection.replyOk(Verb.LOGIN, RINA);
+            connection.replyOk(Verb.LOGIN, user);
             connection.replyOk(Verb.LOGOUT, null);
             script.accept(connection);
 
@@ -343,7 +458,7 @@ class ApprovalInteractionTest extends ApplicationTest {
             manager.setDispatcher(dispatcher);
             dispatcher.setPushListener(new PushEventBridge(manager.eventBus()));
 
-            ShellBoot.enter(manager, RINA);
+            ShellBoot.enter(manager, user);
         });
         WaitForAsyncUtils.waitForFxEvents();
         return manager;
@@ -359,6 +474,48 @@ class ApprovalInteractionTest extends ApplicationTest {
         interact(() -> manager.navigator().navigate(Routes.EXAM_PREVIEW.id(),
                 NavParams.of("examVersionId", CALCULUS_V1)));
         WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /**
+     * The author's door: the builder's Preview, which travels a {@code from} (U-53).
+     *
+     * <p>Goes through the builder first rather than jumping straight to the preview, because the
+     * back this drives is a real one: the entry it returns to has to be the builder's.
+     */
+    private void openPreviewFromTheBuilder(ScreenManager manager) {
+        interact(() -> manager.navigator().navigate(ExamBuildRoutes.BUILDER,
+                NavParams.of("examVersionId", CALCULUS_V1)));
+        WaitForAsyncUtils.waitForFxEvents();
+        interact(() -> manager.navigator().navigate(Routes.EXAM_PREVIEW.id(),
+                NavParams.of("examVersionId", CALCULUS_V1,
+                        ExamPreviewView.PARAM_FROM, ExamBuildRoutes.BUILDER)));
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /** Buttons carrying this label that are really on screen, ancestors included. */
+    private static List<Button> visibleButtonsNamed(Scene scene, String text) {
+        return scene.getRoot().lookupAll(".button").stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> text.equals(button.getText()))
+                .filter(ApprovalInteractionTest::reallyVisible)
+                .toList();
+    }
+
+    /**
+     * Really on screen, ancestors included.
+     *
+     * <p>{@code Node.isVisible()} answers about that node alone, so a control inside a hidden
+     * container still answers true and an "is not offered" assertion built on it would be
+     * weaker than it reads. Same helper, same reason, as the exam builder's.
+     */
+    private static boolean reallyVisible(javafx.scene.Node node) {
+        for (javafx.scene.Node at = node; at != null; at = at.getParent()) {
+            if (!at.isVisible()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** @return the scene of the modal that is currently on top, which is the dialog. */

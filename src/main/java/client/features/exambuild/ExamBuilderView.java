@@ -4,6 +4,8 @@ import client.core.NavParams;
 import client.core.Navigator;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.features.approval.ExamPreviewView;
+import client.features.bank.QuestionDetailPane;
 import client.features.locks.EditLockState;
 import client.features.locks.FxHeartbeat;
 import client.features.locks.LockAwareEditor;
@@ -29,11 +31,13 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -123,6 +127,15 @@ public final class ExamBuilderView extends AbstractScreen {
     private final Button saveButton = Buttons.primary(ExamBuildCopy.SAVE_BUTTON);
     private final Button retryLoad = Buttons.outline(ExamBuildCopy.RETRY);
 
+    /**
+     * Opens the saved version as a coordinator reads it (2026-08-30, Findings.txt, U-53).
+     *
+     * <p>In the header rather than the footer, which is where Save is. The footer is where a
+     * decision about the draft is taken; this takes none: it leaves for another screen and comes
+     * back, and it is available on a read-only version where the footer is not there at all.
+     */
+    private final Button previewButton = Buttons.secondary(ExamBuildCopy.PREVIEW_BUTTON);
+
     // --- the texts, one segment each --------------------------------------
     private final VBox studentPane = new VBox();
     private final VBox teacherPane = new VBox(6);
@@ -151,6 +164,23 @@ public final class ExamBuilderView extends AbstractScreen {
     private final Label composeStatus = new Label();
     private final VBox report = new VBox(4);
     private String criteriaShape;
+
+    /**
+     * The two nodes each picked row owns for its answers, in the paper's order (U-53).
+     *
+     * <p>Rebuilt with the cards and never looked up in the scene graph, which is the same
+     * discipline the points boxes follow: a lookup would find a node by style class and could
+     * find the wrong card's, while a list built in the same loop as the cards is in the same
+     * order as the paper by construction.
+     *
+     * @param displayId5 the question this row draws, kept for readability when debugging
+     * @param toggle     the Show answers / Hide answers control
+     * @param box        the column its answers are painted into
+     */
+    private record AnswerRow(String displayId5, Button toggle, VBox box) {
+    }
+
+    private final List<AnswerRow> answerRows = new ArrayList<>();
 
     private ExamBuilderSession session;
 
@@ -367,6 +397,40 @@ public final class ExamBuilderView extends AbstractScreen {
         });
         retryLoad.setOnAction(e -> session.reopen());
         saveButton.setOnAction(e -> session.save());
+        previewButton.setOnAction(e -> openPreview());
+    }
+
+    /**
+     * Opens the saved version on the preview screen (2026-08-30, Findings.txt, U-53) ⚑.
+     *
+     * <p>The <b>coordinator's</b> preview, {@code Routes.EXAM_PREVIEW} over
+     * {@code EXAM_PREVIEW_GET}, rather than a second one built for the author. The server already
+     * admits her: {@code ApprovalService.preview} lets the version's own author through beside
+     * the coordinator and the principal, and the reason it gives is F4.2's - a teacher who cannot
+     * reopen what she submitted cannot act on the reason she was given. That is this teacher. A
+     * second preview screen is what E8's whole argument rules out: one paper, one renderer, and
+     * no copy of it to drift.
+     *
+     * <p>{@code from} travels so the preview's own Back can name the screen she came from. It
+     * carries a route id rather than a boolean, because the preview is reached from the approvals
+     * queue as well, and "which door" is a question with more than two answers.
+     *
+     * <p>Guarded on registration rather than assumed: {@code Navigator.navigate} throws on an
+     * unregistered id, and this screen is built directly by its own interaction test and by the
+     * component gallery, neither of which has a route table. Doing nothing there is right, and
+     * costs a teacher nothing, because every shell that offers this button registers the route.
+     */
+    private void openPreview() {
+        Navigator navigator = navigator();
+        if (navigator == null || !session.canPreview()) {
+            return;
+        }
+        if (!navigator.isRegistered(Routes.EXAM_PREVIEW.id())) {
+            return;
+        }
+        navigator.navigate(Routes.EXAM_PREVIEW.id(),
+                NavParams.of("examVersionId", session.examVersionId(),
+                        ExamPreviewView.PARAM_FROM, ExamBuildRoutes.BUILDER));
     }
 
     /**
@@ -443,6 +507,14 @@ public final class ExamBuilderView extends AbstractScreen {
         // different things, and only the first should run early.
         show(readOnlyBanner, mode == ExamBuilderSession.Mode.READ_ONLY
                 && session.state() == AsyncViewState.READY);
+
+        // Disabled rather than hidden until the draft is saved (U-53). A control that appears
+        // once she presses Save is a control she has to discover twice; one that is there and
+        // says why it is inert teaches the rule the first time she reaches for it.
+        boolean canPreview = session.canPreview();
+        previewButton.setDisable(!canPreview);
+        previewButton.setTooltip(canPreview ? null
+                : new Tooltip(ExamBuildCopy.PREVIEW_NEEDS_SAVE));
 
         boolean failed = session.loadError().isPresent();
         loadError.setText(session.loadError().orElse(""));
@@ -557,6 +629,10 @@ public final class ExamBuilderView extends AbstractScreen {
         if (!shape.equals(paperShape)) {
             paperShape = shape;
             paper.getChildren().clear();
+            // The registry names nodes on cards that are about to be discarded. Cleared with
+            // them rather than left to be overwritten: a paper that shrinks would otherwise
+            // leave renderAnswers painting into a box no longer in the scene.
+            answerRows.clear();
             if (lines.isEmpty()) {
                 Label empty = new Label(ExamBuildCopy.PAPER_EMPTY);
                 empty.getStyleClass().addAll("small", "muted");
@@ -568,6 +644,70 @@ public final class ExamBuilderView extends AbstractScreen {
                 paper.getChildren().add(questionCard(index, lines.get(index), lines.size()));
             }
         }
+        renderAnswers(lines);
+    }
+
+    /**
+     * Paints each row's answers without rebuilding the row (2026-08-30, Findings.txt, U-53) ⚑.
+     *
+     * <p><b>Outside {@link #shapeOf}, and that is the whole design of it.</b> Expanding a row and
+     * an answers read landing are both changes the cards draw from, so the obvious move is to put
+     * them in the rebuild key. That key's own rule forbids it: it holds "nothing she can be
+     * halfway through typing", and a rebuild destroys the points {@code TextField} mid-keystroke,
+     * which is PR23 §4.2's defect. An answers read is asynchronous and can land at any moment,
+     * including that one. So the cards stay standing and only the two nodes this feature owns are
+     * repainted, which is the same reason the points are absent from the key.
+     *
+     * <p>Nothing here consults {@code isEditable()}: reading what a question says is not an edit,
+     * and a read-only version is the case where a teacher most wants it.
+     *
+     * @param lines the paper, in the order the cards were built in
+     */
+    private void renderAnswers(List<ExamBuilderSession.Line> lines) {
+        for (int index = 0; index < answerRows.size() && index < lines.size(); index++) {
+            AnswerRow row = answerRows.get(index);
+            ExamBuilderSession.Line line = lines.get(index);
+            boolean open = session.answersOpen(line);
+            row.toggle().setText(open ? ExamBuildCopy.HIDE_ANSWERS : ExamBuildCopy.SHOW_ANSWERS);
+            show(row.box(), open);
+            row.box().getChildren().clear();
+            if (!open) {
+                continue;
+            }
+            row.box().getChildren().add(answersContent(line));
+        }
+    }
+
+    /**
+     * What an opened row shows: the four answers, or the one sentence about why not.
+     *
+     * <p>The answers themselves come from {@link QuestionDetailPane#answers}, the bank's own
+     * renderer, rather than from a loop here. That component's argument is that there is one
+     * place where an option is marked correct; a builder that drew its own would be the second
+     * place, and only one of the two has a test that would notice the marking moving.
+     */
+    private Node answersContent(ExamBuilderSession.Line line) {
+        return switch (session.answersState(line)) {
+            // IDLE and EMPTY are unreachable from answersState, which answers with three of the
+            // five. Folded into the waiting sentence rather than thrown on: an opened row that
+            // showed a stack trace where its answers go would be worse than one that says
+            // "loading" a moment longer than it should.
+            case LOADING, IDLE, EMPTY -> caption(ExamBuildCopy.ANSWERS_LOADING);
+            case ERROR -> caption(ExamBuildCopy.ANSWERS_FAILED);
+            // READY means the bank answered. It does not mean the answer contained the version
+            // this paper pins, which is a different thing to say and gets its own sentence.
+            case READY -> session.answersFor(line)
+                    .<Node>map(version ->
+                            QuestionDetailPane.answers(version.answers(), version.correctAnswer()))
+                    .orElseGet(() -> caption(ExamBuildCopy.ANSWERS_VERSION_GONE));
+        };
+    }
+
+    private static Label caption(String sentence) {
+        Label label = new Label(sentence);
+        label.getStyleClass().addAll("small", "muted");
+        label.setWrapText(true);
+        return label;
     }
 
     /**
@@ -653,6 +793,20 @@ public final class ExamBuilderView extends AbstractScreen {
                 text.getChildren().add(badge);
             }
         }
+
+        // The disclosure and the box it fills (2026-08-30, Findings.txt, U-53). Both are
+        // registered rather than looked up afterwards, so renderAnswers can repaint them without
+        // rebuilding the card around them - which is what keeps an answers read that lands while
+        // she is typing from destroying the points box beside it.
+        Button toggle = Buttons.styled(ExamBuildCopy.SHOW_ANSWERS, Buttons.GHOST, Buttons.SMALL);
+        toggle.setOnAction(e -> session.toggleAnswers(index));
+        HBox toggleRow = new HBox(8, toggle);
+        toggleRow.setAlignment(Pos.CENTER_LEFT);
+        VBox answersBox = new VBox(6);
+        answersBox.getStyleClass().add("exam-question-answers");
+        show(answersBox, false);
+        text.getChildren().addAll(toggleRow, answersBox);
+        answerRows.add(new AnswerRow(line.displayId5(), toggle, answersBox));
 
         TextField points = new TextField(String.valueOf(line.points()));
         points.setPrefWidth(70);
@@ -839,7 +993,11 @@ public final class ExamBuilderView extends AbstractScreen {
         // takes a lock on a READ_ONLY version at all, and taking one over would clear lockedOut
         // while leaving mode() READ_ONLY, so the form would stay inert behind a button that
         // changed nothing. The two banners cannot now appear together.
-        VBox header = new VBox(10, new VBox(4, title, courseLine, subtitle), lockBanner,
+        HBox titleRow = new HBox(16, new VBox(4, title, courseLine, subtitle), Buttons.spacer(),
+                previewButton);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox header = new VBox(10, titleRow, lockBanner,
                 readOnlyBanner, new VBox(8, loadError, retryLoad));
         header.setPadding(new Insets(24, 28, 12, 28));
         return header;

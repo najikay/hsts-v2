@@ -59,7 +59,12 @@ public final class StudentHomeView extends AbstractScreen {
         enterButton.setDisable(true);
 
         HBox entry = new HBox(12, codeField, enterButton);
-        entry.setAlignment(Pos.CENTER_LEFT);
+        // 2026-08-30, live session, U-48: TOP_LEFT, not CENTER_LEFT. The form field grows
+        // when its hint or its validation sentence shows, and a centre-aligned row then
+        // re-centres the button against the taller field, so it jumped by half a line every
+        // time the sentence came and went. Anchored to the top, the button sits beside the
+        // input (the margin below is the label's height) whatever appears under the field.
+        entry.setAlignment(Pos.TOP_LEFT);
         HBox.setHgrow(codeField, Priority.NEVER);
         // Align the button with the control, not with the field's label row.
         HBox.setMargin(enterButton, new javafx.geometry.Insets(22, 0, 0, 0));

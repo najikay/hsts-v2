@@ -269,7 +269,7 @@ lead-verified, one batch commit.
 **In Naji's words:** "BIG BUG: the number of study bots isn't limited for teachers, the teacher can create and manage bots, not just one bot"
 **Restated:** PRD F12.1 is one bot per course (S-30). The server holds that structurally: `bots.course` is `UNIQUE` (V6) and `BOT_CREATE` is idempotent — a second create hands back the existing bot. So the database cannot hold two bots for a course. What the screen showed is not yet known: a teacher of two courses (`dana.cohen`) legitimately sees two bots, one per course; or the manager kept offering "Create the study bot" after a create.
 **Surface:** `client/features/bot/BotManagerView` (suspected). **Ruling:** `NEW` — the exact steps and what was on screen are needed before this is fixed or closed as design.
-**Status:** `ANSWERED BY U-26` — manual round 3 (2026-08-29) supplied the steps: a two-course teacher was seeing one card because the screen managed one course at a time. The limit was never missing; the list was.
+**Status:** `DONE` — answered by U-26 (the list of the teacher's bots, 0df6edd); the one-bot-per-course rule is the PDF's and stays.
 
 ### U-15 · COPY · national IDs in the demo files
 **In Naji's words:** "The IDs for the students aren't in the demo file (need to be added for easier testing) - or redo the demo"
@@ -410,7 +410,8 @@ five new entries, one reopening.
 ### U-36 · COSMETIC · the question bank's eight columns beside a fixed detail pane
 **Found by:** the truncation guard's first run (2026-08-29): at 1024x700 the bank's eight columns share 449px next to the 420px detail pane, so long stems can only be read from the cell tooltip.
 **Ruling:** logged, not taken now: candidates are a collapsible detail pane, fewer default columns (hide Written / Version behind a column chooser), or a wider minimum window. Naji's call on the next round.
-**Status:** `NEW`.
+**Ruling (2026-08-30, Naji: nothing stays open for being low):** fix — the detail pane collapses to a strip when the window is under 1100 px and the table hides Written and Version behind a column chooser by default. Wave 6 agent V.
+**Status:** `DONE` — DataTable gained a themed column chooser (ghost tune icon, CheckMenuItems bound to each column's visibleProperty; not JavaFX's unstyled menu button). Bank starts with Version and Written hidden; the detail pane is 420 px at 1100 px and wider, 320 px below, following the scene width. Six columns share 549 px at 1024x700 instead of eight sharing 449.
 
 ## Live session (2026-08-29, after 0df6edd) — Naji browsing with the lead, `docs/manual-round-4-notes.txt`
 
@@ -463,5 +464,53 @@ five new entries, one reopening.
 ### U-45 · TEST HYGIENE · the bot interaction suite trips a teardown race under the full build
 **Found by:** three full verifies on 2026-08-29/30, each with exactly one error in `BotInteractionTest` (`aWriteOnOneCourseNeverMovesAnother`, then `selectingACardLoadsThatCoursesBot`): `NullPointerException ... AbstractScreen.eventBus() is null` while a screen builds; the class passes alone every time. `FxTestHarness`'s own javadoc documents the race: `resetGlobalState` after one test can land while a queued FX runnable from it still builds a screen against the emptied `ScreenManager`.
 **Ruling:** fix the harness, not the tests: `resetGlobalState` drains the FX queue (`WaitForAsyncUtils.waitForFxEvents()` twice, then reset), and screens built during teardown must not throw on a null bus. Until then a sole red of this shape is rerun once.
-**Status:** `NEW`.
+**Ruling (2026-08-30):** fix now — `FxTestHarness.resetGlobalState` drains the FX queue before resetting; screens built during teardown tolerate a null bus. Wave 6 agent V.
+**Status:** `DONE` — two causes: the harness drained one generation of FX work, and a runnable ahead of the latch could post a screen build behind it, landing after resetGlobalState emptied the world; and AbstractScreen accessors returned null with no manager. drainFxEvents now drains two generations through TestFX's pump; a screen with no manager gets inert detached collaborators (poster drops work, dispatcher refuses sends) while null still means the gallery/console case. Three consecutive runs of Bot/TakeExam/Grading/Smoke: 34/34 each.
+
+### U-46 · FUNCTIONAL · grading approves one student at a time; Select all does not hold
+**In Naji's words:** "the grading tab is breaking when selecting more than one student and select all, it's not working it's approving only one at a time"
+**Restated:** bulk approval rides JavaFX's native MULTIPLE selection, which accumulates only with Ctrl/Shift-click; a plain click on the next student replaces the selection. The session-side bulk path (`approveSelected` sends every selected id) is fine; the screen never lets a plain click build a set. Select all selects through the same model and is then undone by the next plain click.
+**Ruling:** a tick column on the grading table: plain click on the checkbox accumulates, Select all ticks every approvable row, Approve selected sends every ticked id; the row click stays for Review and Change score and never changes the ticks. Wave 6 agent Q.
+**Added (Naji, later the same day):** "the grading tab breaks completely and easily after a few clicks" - so the selection model is not the only fault; the screen's state after a few select / approve clicks is inconsistent (the re-render guard, the refresh after approve, or the Review column's button cell fighting the selection). Agent Q must reproduce a click sequence that breaks it in `GradingInteractionTest` before fixing, not only add the tick column.
+**Status:** `DONE` — a tick column (checkbox per approvable row, rendered from the session, its press consumed so it never moves the row selection), Select all ticks every approvable row, Approve selected sends every ticked id; row selection is single and only aims Review / Change score. The second defect reproduced and fixed: a plain row click no longer re-rendered the screen once the old mirroring listener was gone, so Change score stayed stale; a render on row selection fixes it and the whole click sequence is a regression test. Pending eyes.
+
+### U-47 · COSMETIC · the Release an exam dialog is cramped; the time fields are hard to read
+**In Naji's words:** "the release exam modal from the teacher side is too smooshed together I can't see the numbers clearly (the clock thing)"
+**Restated:** `CreateReleaseDialog`'s Opens / Closes rows pack a DatePicker and hour/minute spinners into one line inside a dialog capped at the house max width; the spinners' digits are clipped or crowded.
+**Ruling:** fix (Low): wider dialog for this one form (it has two date-time rows side by side), each Moment on its own row with a labelled date picker and hour : minute spinners at a readable width, the complaint line under them; the truncation guard must cover the dialog if it can reach it.
+**Status:** `DONE` — the dialog carries `.hsts-dialog.wide` (720 px), Opens and Closes are two labelled rows with the caption above, date picker 150 px and spinners 80 px as minimums (an HBox had been shrinking the spinners below two digits), a colon between hour and minute; the override dialog got the same spacing rule. Pending eyes.
+
+### U-48 · COSMETIC · the student dashboard's Enter button is misaligned and moves
+**In Naji's words:** "in the students dashboard, the take exam card, in it the enter button is a little off and moves, we need to fix that"
+**Restated:** `StudentHomeView`'s exam-code card lays the field and the Enter button in a row whose height changes as the field's hint / validation sentence appears and disappears, so the button jumps; and the button's baseline does not sit on the field's. (U-28's min-width pin may also have changed its width as the label swapped.)
+**Ruling:** fix (Low): a fixed-height row for the field and button aligned on the centre line; the hint / validation line reserves its space (an empty line keeps the height) so nothing below shifts; the button's width fixed. Wave 6.
+**Status:** `DONE` — the field-and-button row is anchored to the top instead of the centre line, so the button no longer re-centres against the field when its hint or validation sentence appears; dashboard suites green. Pending eyes.
+
+## Omar's `docs/Findings.txt` (2026-08-30, tested on the build before b032201)
+
+### U-49 · FUNCTIONAL · the bank keeps the old version after "Save as new version"; the next edit fakes a conflict
+**In Omar's words:** "save as new version returns to the bank with that question highlighted, but the right-hand pane still shows the OLD version ... press Edit on that same question again, the editor opens on the OLD version. Saving then fails with 'Someone else saved a new version of this question while you had it open.' Nobody else did."
+**Restated:** the server is right (a stale base version was sent); the client kept the pre-save detail in the pane and handed it to the editor. Same staleness to check after add and after delete.
+**Ruling:** after every write the bank re-reads the detail (and the list row) before it renders or hands anything to the editor; the editor always opens on a fresh read. Wave 6 agent S. HIGH.
+**Status:** `DONE` — root cause: the bank screen is cached, and `BankSession.load()` only re-read the list, so the detail pane's copy of the open question (and its versionNo) survived the trip to the editor; the second save then branched from v1 and the server refused it as a conflict. Now `load()`/`reload()` re-read the open question, and Edit always opens on a fresh QUESTION_GET (`refreshDetailThen`). Edit/Delete wait for that read to settle. Failing-then-passing test drives the real router.
+
+### U-50 · FUNCTIONAL · Version history lists versions but does not show them
+**In Omar's words:** "it lists past versions with when they were edited and by whom, but does not show the previous version itself. PRD F2.3: previous version remains in the bank (viewable in a version history panel)."
+**Ruling:** each history entry expands to that version's stem and four answers with the correct one marked (read-only); the wire already carries version content or gains it by BANK amendment. Agent S.
+**Status:** `DONE` — `QuestionVersionDetail` already carried stem, options, correct answer, topic and difficulty (BOT/BANK section 2 licenses read-only history); the pane just dropped them. Each history entry now has a "Show this version" toggle over a read-only body built lazily on first open. Inherited by the principal's data.question view. No contract amendment.
+
+### U-51 · COSMETIC · New exam dropdown text invisible
+**In Omar's words:** "the option text is the same colour as the background".
+**Status:** `DONE` already — U-29 in 0df6edd (menu items inherited the owner button's on-accent text). Verify after pulling.
+
+### U-52 · FUNCTIONAL · reconnect after the CLIENT machine loses the network
+**In Omar's words:** "The laptop screen went off ... the yellow banner appeared with Retry. Retry did nothing. I signed out and tried to sign in again: the status at the bottom said Connected, but the sign-in was refused."
+**Restated:** two faults. (a) The shell's reconnect banner's Retry is not wired to anything that re-dials the server (only the exam screen's own banner resumes an attempt). (b) After a silent network drop the OCSF client still answers `isConnectionOpen() == true`, and `LoginView.onShow` trusts it, so the status says Connected and the sign-in goes down a dead socket. U-17 fixed the server-restart path (dispatcher rebind), not this one.
+**Ruling:** on `ConnectionLostEvent` the client is marked dead (closed) so nothing trusts it again; the shell banner's Retry re-dials the pinned server through `ConnectWiring` (rebind), and because the server freed the session (F1.4) it lands on Login with the username pre-filled and a toast saying to sign in again; the login status row reads the real state. Wave 6 agent T. HIGH.
+**Status:** `DONE` — a ConnectionLostEvent now closes the client and records the loss for the life of the process (`ScreenManager.isConnectionAlive`), so an adapter that keeps answering "open" is dead anyway; the shell banner's Retry (it was wired to nothing) re-dials the pinned server through the U-17 rebind and lands on Login with the username pre-filled and "Reconnected. Sign in again."; the take-exam banner re-dials the same way and resumes the attempt; Login reads the real state on show. Pending eyes (sleep the laptop / turn Wi-Fi off).
+
+### U-53 · FLOW · the exam builder shows no answers and has no preview (Omar's recommendation)
+**In Omar's words:** "composing an exam manually shows only the stem, id, topic and difficulty. The four answer options are nowhere ... A teacher composing an exam cannot see what the exam says."
+**Ruling:** two things: a picked row expands to show its four answers with the key (read-only, from a question read); and a **Preview** action on a saved draft opens the student-identical preview the coordinator uses (the author is already admitted to EXAM_PREVIEW_GET). Wave 6 agent U.
+**Status:** `DONE` — each picked row has a Show answers / Hide answers toggle over a read-only box (bank's own renderer, correct option marked). Answers come from QUESTION_VERSIONS (QUESTION_GET cannot ask for a pinned version, and a row carrying an older pin would otherwise show the newest version's options under the pinned stem); cache keyed by display id, cleared on load, generation-guarded. Preview button in the builder header (enabled once saved, any authored version, read-only or not) opens the approval paper with Approve/Send back hidden for a non-coordinator and Back returning to the builder. EXAM_PREVIEW moved to the teaching block; ApprovalService already admits the author. No wire change.
 

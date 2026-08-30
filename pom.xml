@@ -51,6 +51,8 @@
         <bcrypt.version>0.10.2</bcrypt.version>
         <slf4j.version>2.0.16</slf4j.version>
         <logback.version>1.5.12</logback.version>
+        <!-- Matches the log4j-api that org.apache.poi:poi-ooxml brings (B-2). -->
+        <log4j.version>2.23.1</log4j.version>
         <pdfbox.version>3.0.3</pdfbox.version>
         <poi.version>5.3.0</poi.version>
         <anthropic.version>2.34.0</anthropic.version>
@@ -157,6 +159,33 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+        </dependency>
+        <!--
+            2026-08-30, wave 6, B-2. The server printed a red line about thirty seconds into
+            start-up: "Log4j2 could not find a logging implementation. Please add log4j-core to
+            the classpath. Using SimpleLogger to log to the console...". Nothing was broken -
+            the server's own logging is logback and every other line appeared normally - but it
+            is the terminal that is on screen during the defence, and a red ERROR invites a
+            question that costs more to answer than to prevent.
+
+            The cause is one transitive dependency: org.apache.poi:poi-ooxml brings
+            org.apache.logging.log4j:log4j-api, which logs through the log4j2 API and finds no
+            binding, so log4j2 falls back to its own SimpleLogger and says so. (The report
+            guessed the bot SDK; the dependency tree says POI.)
+
+            log4j-to-slf4j IS that binding: it implements the log4j2 API on top of slf4j, so
+            those lines arrive in logback with everyone else's and log4j2 stops looking for
+            log4j-core. Pinned to the same version as the log4j-api the tree resolves - an API
+            and a bridge from different 2.x lines is the one way this combination breaks.
+
+            Deliberately not log4j-core, which would be a SECOND logging implementation
+            alongside logback, and not an exclusion of log4j-api, which would leave POI calling
+            classes that are not there.
+        -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-to-slf4j</artifactId>
+            <version>${log4j.version}</version>
         </dependency>
 
         <!-- ============ Bot source extraction + providers (ADR-009) ============ -->

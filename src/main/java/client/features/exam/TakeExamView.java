@@ -1,7 +1,13 @@
 package client.features.exam;
 
+import client.core.ConnectPrefs;
 import client.core.NavParams;
 import client.core.Routes;
+import client.core.ScreenManager;
+import client.core.ServerEndpoint;
+import client.features.connect.ConnectFlow;
+import client.features.connect.Reconnector;
+import client.features.login.ShellBoot;
 import client.ui.components.CountdownTimer;
 import client.ui.components.ReconnectBanner;
 import client.ui.components.ToastStack;
@@ -15,6 +21,8 @@ import javafx.scene.Parent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+
+import java.util.Optional;
 
 /**
  * Taking an exam, from the code screen to the takeover (Presentation tier, E10.9–E10.15).
@@ -58,6 +66,9 @@ public final class TakeExamView extends AbstractScreen {
     private ExamEntryView entryView;
     private ExamFormView formView;
 
+    /** How many times Retry has been pressed on this banner (⚑ U-52), for its wording. */
+    private int retryAttempt;
+
     /** The window whose focus is currently being watched (E11.7), or {@code null}. */
     private javafx.stage.Window watchedWindow;
     private javafx.beans.value.ChangeListener<Boolean> focusWatch;
@@ -81,7 +92,7 @@ public final class TakeExamView extends AbstractScreen {
         done.onLeave(this::leave);
         entryView.onLeave(this::leaveEntry);
 
-        banner.setOnRetry(() -> attempt.resume().thenRun(banner::hide));
+        banner.setOnRetry(this::retryConnection);
         content.setCenter(entryView);
 
         root.getStyleClass().add("take-exam");
@@ -125,6 +136,63 @@ public final class TakeExamView extends AbstractScreen {
         // method of its own, and registering it would only add a second unregister to
         // forget.
         return false;
+    }
+
+    // ===================== Reconnecting ==================================
+
+    /**
+     * The paper's Retry (E10.15 ⚑ U-52).
+     *
+     * <p>It has always resumed the attempt, and that was right as far as it went:
+     * the answers and the clock are the server's, so getting the paper back is one
+     * refetch. What it assumed was a socket to refetch through. 2026-08-30,
+     * Findings.txt, U-52: when the <b>client</b> lost the network, the socket is
+     * dead and the resume goes nowhere, so Retry appeared to do nothing at all.
+     *
+     * <p>So the socket comes first and the resume second. A live connection still
+     * resumes straight away, which is the server-restart case U-17 covered and the
+     * one this screen was written for.
+     */
+    private void retryConnection() {
+        ScreenManager manager = ScreenManager.getInstance();
+        if (manager.isConnectionAlive()) {
+            resumeAttempt();
+            return;
+        }
+        Reconnector reconnector = new Reconnector(manager, eventBus(), ConnectPrefs.userHome());
+        Optional<ServerEndpoint> target = reconnector.endpoint();
+        if (target.isEmpty()) {
+            // Nothing was ever pinned or remembered, so there is no address to dial
+            // and only a person can supply one.
+            navigator().navigate(Routes.CONNECT.id());
+            return;
+        }
+        ServerEndpoint endpoint = target.get();
+        banner.showReconnecting(++retryAttempt);
+        reconnector.redial(this::resumeAttempt,
+                failure -> banner.showRetryFailed(ConnectFlow.retryFailed(endpoint, failure)));
+    }
+
+    /**
+     * Refetches the attempt down whichever socket is live now.
+     *
+     * <p>The dispatcher is the same object it always was — a re-dial rebinds it
+     * rather than replacing it (⚑ U-17) — so the session built at {@code build()}
+     * time is still talking to the right place, and this needs no rewiring.
+     *
+     * <p>A refusal means the session went with the connection (F1.4), and there is
+     * no paper to go back to: {@link ShellBoot#afterReconnect} ends the session
+     * locally and Login says so, with her username already filled in.
+     */
+    private void resumeAttempt() {
+        attempt.resume().thenAccept(resumed -> {
+            if (Boolean.TRUE.equals(resumed)) {
+                retryAttempt = 0;
+                banner.hide();
+            } else {
+                ShellBoot.afterReconnect(ScreenManager.getInstance());
+            }
+        });
     }
 
     // ===================== Flow ==========================================

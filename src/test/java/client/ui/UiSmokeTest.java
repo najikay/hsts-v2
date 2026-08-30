@@ -7,10 +7,13 @@ import client.core.Routes;
 import client.core.ScreenManager;
 import client.core.ServerEndpoint;
 import client.events.ConnectionLostEvent;
+import client.features.connect.ConnectFlow;
 import client.features.connect.ConnectWiring;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
+import client.net.IClientConnection;
 import client.net.RequestDispatcher;
+import client.ui.components.ReconnectBanner;
 import client.ui.shell.NavItem;
 import common.dto.approval.ApprovalQueue;
 import common.dto.auth.CourseRef;
@@ -278,6 +281,138 @@ class UiSmokeTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("\u26a1 U-52: a client that lost the network is dead even while it claims to be open")
+    void loginTellsTheTruthAfterTheClientLostTheNetwork() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+        LoginResult dana = new LoginResult(1001, "dana.cohen", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")));
+
+        // A client that goes on reporting an open socket after it died. Not a contrivance:
+        // HSTSClient answers isConnectionOpen() from OCSF's isConnected(), which only flips
+        // once a read fails, so a laptop that slept on battery comes back exactly like this.
+        FakeClientConnection stubborn = new FakeClientConnection("demo-server", 5555) {
+            @Override
+            public boolean isConnectionOpen() {
+                return true;
+            }
+        };
+        interact(() -> {
+            attachFakeConnection(manager, stubborn).replyOk(Verb.LOGIN, dana);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        signIn(manager.scene(), "dana.cohen", "demo123");
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(manager.shell()).as("she is signed in when the network goes").isNotNull();
+
+        // 2026-08-30, Findings.txt, U-52: the client machine loses the network.
+        interact(() -> manager.eventBus().post(
+                new ConnectionLostEvent("demo-server:5555", "no route to host")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(stubborn.isConnectionOpen())
+                .as("the adapter is unrepentant, which is the whole trouble")
+                .isTrue();
+        assertThat(manager.isConnectionAlive())
+                .as("but the app has retired it, so nothing may use it again")
+                .isFalse();
+
+        // He signs out, which is what he actually did. The status row said Connected here
+        // while every sign-in was refused with "check the server".
+        interact(() -> ShellBoot.logout(manager));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Set<String> labels = labelTexts(manager.scene());
+        assertThat(labels).contains("Disconnected", "Not connected");
+        assertThat(labels).doesNotContain("Connected");
+        assertThat(linkNamed(manager.scene(), "Reconnect"))
+                .as("and the one thing to do about it is offered")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("\u26a1 U-52: the shell banner's Retry re-dials, and Login asks her to sign in again")
+    void theShellBannerRetryReconnectsAndLandsOnLogin() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+        LoginResult dana = new LoginResult(1001, "dana.cohen", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")));
+
+        interact(() -> {
+            attachFakeConnection(manager).replyOk(Verb.LOGIN, dana);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        signIn(manager.scene(), "dana.cohen", "demo123");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        interact(() -> manager.eventBus().post(
+                new ConnectionLostEvent("demo-server:5555", "no route to host")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        ReconnectBanner banner = manager.shell().reconnectBanner();
+        assertThat(banner.isShowing()).as("the amber strip, with its Retry").isTrue();
+
+        IClientConnection dead = manager.getClient();
+        RequestDispatcher correlator = manager.getDispatcher();
+        interact(() -> retryButton(banner).fire());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // The defect: this button had no action wired to it at all, so pressing it did
+        // nothing whatsoever. It now builds a fresh client for the endpoint this computer
+        // already knows, around the dispatcher every cached screen is holding (U-17).
+        assertThat(manager.getClient())
+                .as("Retry re-dials rather than reusing the socket that died")
+                .isNotSameAs(dead);
+        assertThat(manager.getDispatcher())
+                .as("through the correlator the screens already hold")
+                .isSameAs(correlator);
+
+    }
+
+    @Test
+    @DisplayName("\u26a1 U-52: a reconnect lands on Login, pre-filled, saying why")
+    void aReconnectLandsOnLoginAskingHerToSignInAgain() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+        LoginResult dana = new LoginResult(1001, "dana.cohen", "Dana Cohen", Role.TEACHER,
+                List.of(new CourseRef("11", "Algebra 11")));
+
+        interact(() -> {
+            attachFakeConnection(manager).replyOk(Verb.LOGIN, dana);
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        signIn(manager.scene(), "dana.cohen", "demo123");
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(manager.shell()).isNotNull();
+
+        // The socket came back. The server freed the session with the old one (F1.4), so
+        // the shell signs her out locally and Login says why, with her name already there.
+        interact(() -> ShellBoot.afterReconnect(manager));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.shell()).isNull();
+        assertThat(manager.signedInUser()).isNull();
+        assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.LOGIN.id());
+        assertThat(usernameField(manager.scene()).getText())
+                .as("she did not ask to sign out, so she does not retype her name")
+                .isEqualTo("dana.cohen");
+        assertThat(labelTexts(manager.scene()))
+                .contains(ConnectFlow.RECONNECTED_SIGN_IN_AGAIN);
+    }
+
+    /** The banner's one button, found by type rather than by a style class it shares. */
+    private static Button retryButton(ReconnectBanner banner) {
+        return banner.getChildrenUnmodifiable().stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the reconnect banner has no Retry button"));
+    }
+
+    @Test
     @DisplayName("signing in installs the role's shell; signing out tears it down (E5.4/E5.7)")
     void shellBootsAndTearsDown() {
         launchApp(AppArgs.none());
@@ -368,7 +503,12 @@ class UiSmokeTest extends ApplicationTest {
      * everything the login screen and the logout verb need, without a server.
      */
     private FakeClientConnection attachFakeConnection(ScreenManager manager) {
-        FakeClientConnection connection = new FakeClientConnection("demo-server", 5555);
+        return attachFakeConnection(manager, new FakeClientConnection("demo-server", 5555));
+    }
+
+    /** @see #attachFakeConnection(ScreenManager) with a connection of the caller's own */
+    private FakeClientConnection attachFakeConnection(ScreenManager manager,
+                                                      FakeClientConnection connection) {
         try {
             connection.connect();
         } catch (IOException e) {
@@ -382,14 +522,19 @@ class UiSmokeTest extends ApplicationTest {
         return connection;
     }
 
-    /** Fills the login form and presses its primary button, as a user would. */
-    private void signIn(Scene scene, String username, String password) {
-        PasswordField passwordField = (PasswordField) scene.getRoot().lookup(".password-field");
-        TextField usernameField = scene.getRoot().lookupAll(".text-input").stream()
+    /** @return the login form's username control. */
+    private static TextField usernameField(Scene scene) {
+        return scene.getRoot().lookupAll(".text-input").stream()
                 .filter(node -> node instanceof TextField && !(node instanceof PasswordField))
                 .map(TextField.class::cast)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no username field on the login screen"));
+    }
+
+    /** Fills the login form and presses its primary button, as a user would. */
+    private void signIn(Scene scene, String username, String password) {
+        PasswordField passwordField = (PasswordField) scene.getRoot().lookup(".password-field");
+        TextField usernameField = usernameField(scene);
         Button signIn = (Button) scene.getRoot().lookup(".button.primary");
 
         interact(() -> {

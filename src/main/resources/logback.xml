@@ -68,6 +68,15 @@
     <logger name="org.hibernate" level="WARN"/>
     <logger name="com.zaxxer.hikari" level="WARN"/>
     <logger name="org.flywaydb" level="INFO"/>
+    <!--
+        2026-08-30, wave 6, B-2. POI logs through the log4j2 API, which now reaches logback
+        through log4j-to-slf4j instead of printing its own red "could not find a logging
+        implementation" line. Pinned at WARN so a bridge that arrived to remove noise cannot
+        become a second source of it: anything POI has to say about a spreadsheet is not what
+        the demo terminal is for.
+    -->
+    <logger name="org.apache.logging.log4j" level="WARN"/>
+    <logger name="org.apache.poi" level="WARN"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

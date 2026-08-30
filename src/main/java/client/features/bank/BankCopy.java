@@ -347,6 +347,23 @@ public final class BankCopy {
     public static final String HISTORY_CLOSE = "Hide history";
 
     /**
+     * Opens one entry to show the version it describes (2026-08-30, Findings.txt, U-50).
+     *
+     * <p>F2.3 asks for the previous version to be "viewable in a version history panel", and a
+     * timeline of dates and authors is not that: it says a version exists without ever showing
+     * what it said. The words name the version rather than the row, because a teacher reading
+     * "Version 2 of 3" above it is deciding whether to read <em>that</em> version, not whether
+     * to expand a widget.
+     */
+    public static final String HISTORY_SHOW_VERSION = "Show this version";
+
+    /**
+     * Closes it again. Collapsed is the resting state: a timeline of ten open versions is a page
+     * nobody can scan.
+     */
+    public static final String HISTORY_HIDE_VERSION = "Hide this version";
+
+    /**
      * One entry in the timeline.
      *
      * @param version the version being described

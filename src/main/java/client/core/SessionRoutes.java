@@ -130,14 +130,31 @@ public final class SessionRoutes {
             // builder sends to the exams the caller wrote, so this list decides what is
             // offered and never what is permitted.
             routes.add(Routes.EXAM_BUILD);
+            // The preview, offered to both teaching roles since 2026-08-30 (Findings.txt,
+            // U-53). The builder's Preview opens it on the draft she is composing, because a
+            // teacher who cannot see what her exam says cannot check it before submitting.
+            //
+            // It is the SAME route and the same screen the coordinator gets, deliberately: E8's
+            // argument is that one paper has one renderer, and a second preview built for the
+            // author would be the copy that argument rules out. The server was already on this
+            // side of the line - ApprovalService.preview admits the version's own author beside
+            // the coordinator and the principal, and has since E8 - so this list catches up with
+            // a verb rather than opening one.
+            //
+            // What it does NOT hand her is a decision. EXAM_APPROVE and EXAM_REJECT both say
+            // requireRole(COORDINATOR), and ExamPreviewView hides both controls for anyone who
+            // is not one, so the two lines below still add exactly one read verb to a teacher.
+            routes.add(Routes.EXAM_PREVIEW);
         }
         if (role == Role.COORDINATOR) {
             // Approvals is the one item that separates a coordinator's rail from a
             // teacher's (PRD §3). The preview is registered with it rather than on its own
             // rail item: it is a view of one exam, reached from the queue or from a
             // notification, and the server re-checks the subject on every request.
+            // The queue is the one item that separates a coordinator's rail from a teacher's.
+            // The preview beside it is registered by the teaching block above and is not added
+            // twice: it is one screen with two doors, and the queue is the coordinator's.
             routes.add(Routes.APPROVALS);
-            routes.add(Routes.EXAM_PREVIEW);
         }
         if (role == Role.STUDENT) {
             // Taking an exam is a student's, and only a student's (E10). A teacher who

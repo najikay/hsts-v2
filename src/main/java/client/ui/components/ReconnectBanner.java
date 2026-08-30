@@ -76,6 +76,24 @@ public final class ReconnectBanner extends HBox {
     }
 
     /**
+     * Shows the disconnected state again after a Retry that did not get through,
+     * carrying the caller's own sentence (⚑ U-52).
+     *
+     * <p>Separate from {@link #showDisconnected(String)} because the two say
+     * different things. That one reports the drop and reassures ("your work is
+     * saved on the server"); this one reports a failed attempt to undo it, and the
+     * sentence comes from {@code ConnectFlow.retryFailed}, which names the address
+     * and the next step without leaking a class name (B-37).
+     *
+     * @param message a whole sentence, already in the product's voice
+     */
+    public void showRetryFailed(String message) {
+        apply(State.DISCONNECTED, message == null || message.isBlank()
+                ? "Could not reconnect. Check this computer is on the network, then try again."
+                : message);
+    }
+
+    /**
      * Shows the "trying again" state.
      *
      * @param attempt 1-based attempt number, surfaced so the user can see progress

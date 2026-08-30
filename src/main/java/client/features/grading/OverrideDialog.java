@@ -55,6 +55,9 @@ public final class OverrideDialog {
     public record Outcome(int score, String justification, String teacherComment) {
     }
 
+    /** Three digits and the arrow column beside them, and no more. */
+    private static final double SCORE_WIDTH = 110;
+
     private OverrideDialog() {
         // static helper — no instances
     }
@@ -71,6 +74,16 @@ public final class OverrideDialog {
 
         Spinner<Integer> score = new Spinner<>(0, 100, row.effectiveScore());
         score.setEditable(true);
+        // 2026-08-30, live session, U-47: the same treatment the release dialog's clock
+        // spinners got. A spinner left to a VBox is stretched the full width of the
+        // dialog, which reads as a text box rather than a number, and one left with no
+        // caption is the only unlabelled control in a stack of labelled ones.
+        score.setPrefWidth(SCORE_WIDTH);
+        score.setMinWidth(SCORE_WIDTH);
+        score.setMaxWidth(SCORE_WIDTH);
+
+        Label scoreLabel = new Label(GradingCopy.COLUMN_SCORE);
+        scoreLabel.getStyleClass().addAll("small", "muted");
 
         TextArea reason = new TextArea();
         reason.setPromptText(GradingCopy.JUSTIFICATION_PROMPT);
@@ -93,7 +106,9 @@ public final class OverrideDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle(GradingCopy.OVERRIDE_TITLE);
         dialog.setHeaderText(row.studentName());
-        dialog.getDialogPane().setContent(new VBox(8, score, reasonLabel, reason,
+        // 12px, not 8: three stacked groups at 8px read as one block, which is the
+        // crowding U-47 was raised about next door. The dialog is not made wider.
+        dialog.getDialogPane().setContent(new VBox(12, scoreLabel, score, reasonLabel, reason,
                 new Separator(), commentLabel, comment));
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, ButtonType.OK);
 

@@ -356,10 +356,46 @@ public final class GradingQueueSession {
         onChange.run();
     }
 
+    /**
+     * Ticks every row of the open sitting that can still be approved (2026-08-30, live session,
+     * U-46).
+     *
+     * <p>Here rather than on the screen, because the ticks are here. Until U-46 "Select all"
+     * drove the table's own multiple selection and a listener mirrored that back into this list,
+     * so the next plain click on a row replaced the whole selection and undid it: the teacher was
+     * approving one paper at a time. One direction now, and the tick column is the only thing
+     * that writes to this list.
+     *
+     * <p>Approved rows are skipped rather than ticked and refused. Re-approving is harmless by
+     * contract, but counting rows already done would make {@link GradingCopy#bulkConfirm(int)}
+     * overstate what is about to happen.
+     *
+     * <p>{@link GradingCopy#canOverride} is the approvable rule, read from there rather than
+     * restated: a second copy of "only while AUTO" is a second place to be wrong, and it is the
+     * same predicate that decides whether a row is given a checkbox at all.
+     */
+    public void selectAllApprovable() {
+        selected.clear();
+        for (StudentGradeRow row : rows()) {
+            if (GradingCopy.canOverride(row)) {
+                selected.add(row.gradeId());
+            }
+        }
+        onChange.run();
+    }
+
     /** Unticks everything. */
     public void clearSelection() {
         selected.clear();
         onChange.run();
+    }
+
+    /**
+     * @param gradeId the row
+     * @return whether that row is ticked, which is what the tick column draws itself from
+     */
+    public boolean isSelected(long gradeId) {
+        return selected.contains(gradeId);
     }
 
     // ===================== What the screen reads =========================

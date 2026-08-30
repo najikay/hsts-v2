@@ -19,6 +19,9 @@ import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
+import common.dto.bank.QuestionRequest;
+import common.dto.bank.QuestionVersionDetail;
+import common.dto.bank.VersionHistory;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -1674,6 +1677,333 @@ class ExamBuilderSessionTest {
             // renderLockState would re-enter a render that can itself call back into the lock.
             session.setLockedOut(true);
             assertThat(renders[0]).as("true to true must be silent").isEqualTo(1);
+        }
+    }
+
+    // ===================== The answers on a picked row (U-53) =============
+
+    /**
+     * A version history, newest first, exactly as {@code QUESTION_VERSIONS} answers.
+     *
+     * <p>The two versions carry different options AND a different key, which is what makes the
+     * "which version did it show" assertions below able to fail: a selector that reached for the
+     * newest would pass every one of them if only the wording differed.
+     */
+    private static VersionHistory history(String displayId5) {
+        return new VersionHistory(displayId5, List.of(
+                new QuestionVersionDetail(4, "What is recursion, restated?",
+                        List.of("v4 first", "v4 second", "v4 third", "v4 fourth"), 3,
+                        "Recursion", Difficulty.MEDIUM, false, "Dana Cohen", WHEN),
+                new QuestionVersionDetail(2, "What is recursion?",
+                        List.of("v2 first", "v2 second", "v2 third", "v2 fourth"), 1,
+                        "Recursion", Difficulty.MEDIUM, false, "Dana Cohen", WHEN),
+                new QuestionVersionDetail(1, "What is recursion?",
+                        List.of("v1 first", "v1 second", "v1 third", "v1 fourth"), 4,
+                        "Recursion", Difficulty.MEDIUM, false, "Dana Cohen", WHEN)));
+    }
+
+    private void bankHasVersions() {
+        connection.respondTo(Verb.QUESTION_VERSIONS, request -> Message.ok(request,
+                history(((QuestionRequest) request.getPayload()).displayId5())));
+    }
+
+    private static int versionRequests(FakeClientConnection connection) {
+        return (int) connection.sentMessages().stream()
+                .filter(message -> message.getVerb() == Verb.QUESTION_VERSIONS)
+                .count();
+    }
+
+    @Nested
+    @DisplayName("a picked row's answers (2026-08-30, Findings.txt, U-53)")
+    class Answers {
+
+        @Test
+        @DisplayName("a row starts collapsed and asks the bank for nothing")
+        void collapsedByDefault() {
+            bankHasVersions();
+            openDraft();
+
+            assertThat(session.answersOpen(session.lines().get(0))).isFalse();
+            assertThat(versionRequests(connection))
+                    .as("opening an exam must not fetch three questions nobody has opened")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("⚑ expanding a row reads the bank and yields the pinned version's key")
+        void expandingReadsTheBank() {
+            bankHasVersions();
+            openDraft();
+
+            session.toggleAnswers(0);
+
+            assertThat(session.answersOpen(session.lines().get(0))).isTrue();
+            assertThat(session.answersState(session.lines().get(0)))
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(lastSent(Verb.QUESTION_VERSIONS).getPayload())
+                    .asInstanceOf(type(QuestionRequest.class))
+                    .extracting(QuestionRequest::displayId5)
+                    .isEqualTo("11001");
+            assertThat(session.answersFor(session.lines().get(0)))
+                    .get()
+                    .extracting(QuestionVersionDetail::answers,
+                            QuestionVersionDetail::correctAnswer)
+                    .containsExactly(
+                            List.of("v1 first", "v1 second", "v1 third", "v1 fourth"), 4);
+        }
+
+        /**
+         * The reason this reads a history rather than {@code QUESTION_GET} ⚑.
+         *
+         * <p>Row 2 pins v2 while the bank has moved on to v4, which is E7.7's badge case.
+         * {@code QUESTION_GET} answers with the latest version and takes no version to ask for,
+         * so a builder built on it would show v4's options and v4's key under a stem that is v2's
+         * - a paper describing itself as something it is not, with nothing on screen saying so.
+         * The assertion is on the key, because that is the half a teacher cannot check by eye.
+         */
+        @Test
+        @DisplayName("⚑ a superseded row shows the version the PAPER pins, not the bank's newest")
+        void supersededRowShowsThePinnedVersion() {
+            bankHasVersions();
+            openDraft();
+
+            session.toggleAnswers(1);
+
+            ExamBuilderSession.Line pinnedToV2 = session.lines().get(1);
+            assertThat(pinnedToV2.hasNewerVersion())
+                    .as("the fixture's second row is the superseded one")
+                    .isTrue();
+            assertThat(session.answersFor(pinnedToV2))
+                    .get()
+                    .extracting(QuestionVersionDetail::versionNo,
+                            QuestionVersionDetail::correctAnswer)
+                    .containsExactly(2, 1);
+        }
+
+        @Test
+        @DisplayName("expanding a row twice collapses it, and neither costs a second read")
+        void toggleIsCached() {
+            bankHasVersions();
+            openDraft();
+
+            session.toggleAnswers(0);
+            session.toggleAnswers(0);
+            assertThat(session.answersOpen(session.lines().get(0))).isFalse();
+
+            session.toggleAnswers(0);
+            assertThat(session.answersOpen(session.lines().get(0))).isTrue();
+            assertThat(versionRequests(connection))
+                    .as("the cache is what makes a disclosure control cheap enough to use")
+                    .isEqualTo(1);
+        }
+
+        /**
+         * The cache serves the re-pin as well, which is what buys reading the whole history.
+         *
+         * <p>E7.14 moves the row's pin to the newest version without re-reading anything. That
+         * newest version is already in the answer this row fetched, so the wording under the
+         * toggle corrects itself on the click with no second round trip - while the stem above
+         * it, which {@code ComposedQuestion} never carried, stays stale until the save.
+         */
+        @Test
+        @DisplayName("⚑ re-pinning an open row repaints from the cache rather than re-reading")
+        void repinningUsesTheCachedHistory() {
+            bankHasVersions();
+            openDraft();
+            session.toggleAnswers(1);
+
+            session.updateToLatest(1);
+
+            assertThat(session.answersFor(session.lines().get(1)))
+                    .get()
+                    .extracting(QuestionVersionDetail::versionNo,
+                            QuestionVersionDetail::correctAnswer)
+                    .containsExactly(4, 3);
+            assertThat(versionRequests(connection)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a refused read says so, and showing the row again retries it")
+        void aFailedReadIsRetried() {
+            connection.replyError(Verb.QUESTION_VERSIONS, ErrorCode.NOT_FOUND, "gone");
+            openDraft();
+
+            session.toggleAnswers(0);
+            assertThat(session.answersState(session.lines().get(0)))
+                    .isEqualTo(AsyncViewState.ERROR);
+
+            // The copy tells her to show them again, so showing them again has to re-ask. A
+            // cached failure would leave her reading a sentence about a retry that never runs.
+            bankHasVersions();
+            session.toggleAnswers(0);
+            session.toggleAnswers(0);
+            assertThat(session.answersState(session.lines().get(0)))
+                    .isEqualTo(AsyncViewState.READY);
+        }
+
+        /**
+         * A history that does not contain the pinned version is not a failed read ⚑.
+         *
+         * <p>The read succeeded and said something; what it said is that the bank no longer holds
+         * the version this paper points at. Reporting that as an error would send her retrying a
+         * request that already worked, which is why the state stays READY and the answer is
+         * empty.
+         */
+        @Test
+        @DisplayName("⚑ a history without the pinned version is READY with nothing to show")
+        void pinnedVersionMissingFromTheHistory() {
+            connection.respondTo(Verb.QUESTION_VERSIONS, request -> Message.ok(request,
+                    new VersionHistory("11001", List.of(
+                            new QuestionVersionDetail(9, "Rewritten entirely",
+                                    List.of("a", "b", "c", "d"), 1, "Recursion",
+                                    Difficulty.MEDIUM, false, "Dana Cohen", WHEN)))));
+            openDraft();
+
+            session.toggleAnswers(0);
+
+            assertThat(session.answersState(session.lines().get(0)))
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.answersFor(session.lines().get(0))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a removed row is collapsed, so adding it back does not come back open")
+        void removingCollapses() {
+            bankHasVersions();
+            openDraft();
+            session.toggleAnswers(0);
+
+            session.remove(0);
+
+            // The paper's first row is now what was its second, and nobody has opened that one.
+            assertThat(session.answersOpen(session.lines().get(0))).isFalse();
+        }
+
+        /**
+         * The answers belong to the paper that was open (⚑ the generation guard).
+         *
+         * <p>{@code resetLoaded} empties the cache and the open set for the same reason it zeroes
+         * {@code examVersionId}: both belong to the exam being left. The cache is keyed on a
+         * display id alone, so a question on both papers would otherwise carry the previous
+         * exam's read - and its pinned version - onto the new one's row.
+         */
+        @Test
+        @DisplayName("⚑ opening another exam collapses every row and empties the cache")
+        void openingAnotherExamClearsTheAnswers() {
+            bankHasVersions();
+            openDraft();
+            session.toggleAnswers(0);
+
+            serverHas(ApprovalState.DRAFT, 3);
+            session.open(VERSION_ID);
+
+            assertThat(session.answersOpen(session.lines().get(0))).isFalse();
+            assertThat(session.answersState(session.lines().get(0)))
+                    .isEqualTo(AsyncViewState.IDLE);
+        }
+
+        @Test
+        @DisplayName("a read-only version still opens its answers, because reading is not editing")
+        void readOnlyStillExpands() {
+            bankHasVersions();
+            serverHas(ApprovalState.APPROVED, 3);
+            session.open(VERSION_ID);
+
+            session.toggleAnswers(0);
+
+            assertThat(session.mode()).isEqualTo(ExamBuilderSession.Mode.READ_ONLY);
+            assertThat(session.answersOpen(session.lines().get(0))).isTrue();
+            assertThat(session.answersFor(session.lines().get(0))).isPresent();
+        }
+
+        @Test
+        @DisplayName("an index off the end of the paper is ignored rather than thrown on")
+        void indexOutOfRange() {
+            bankHasVersions();
+            openDraft();
+
+            session.toggleAnswers(-1);
+            session.toggleAnswers(99);
+
+            assertThat(versionRequests(connection)).isZero();
+        }
+    }
+
+    // ===================== The preview (U-53) =============================
+
+    @Nested
+    @DisplayName("the Preview control's rule (2026-08-30, Findings.txt, U-53)")
+    class Preview {
+
+        /**
+         * The whole rule, and the reason it is one expression ⚑.
+         *
+         * <p>{@code EXAM_PREVIEW_GET} is addressed by exam version, so what Preview needs is not
+         * a paper but a paper the server has. A new exam has none until {@code EXAM_CREATE}
+         * answers, which is the moment this flips - and it flips because {@code settleSave}
+         * adopts the server's own re-read, not because anything here was told to.
+         */
+        @Test
+        @DisplayName("⚑ a new exam cannot be previewed until its first save has landed")
+        void createGainsThePreviewOnSave() {
+            session.openNew("11");
+            assertThat(session.canPreview())
+                    .as("there is no version id yet, so there is nothing to preview")
+                    .isFalse();
+
+            connection.respondTo(Verb.EXAM_CREATE, request ->
+                    Message.ok(request, stored(ApprovalState.DRAFT, 1)));
+            session.save();
+
+            assertThat(session.canPreview()).isTrue();
+            assertThat(session.examVersionId())
+                    .as("and it previews the version the server wrote, not one this screen chose")
+                    .isEqualTo(VERSION_ID);
+        }
+
+        @Test
+        @DisplayName("an opened draft can be previewed at once, because it is already saved")
+        void anOpenedDraftCanBePreviewed() {
+            openDraft();
+            assertThat(session.canPreview()).isTrue();
+        }
+
+        /**
+         * A read-only version is the case where a preview is most useful, so it is offered.
+         *
+         * <p>{@code isEditable()} is deliberately not consulted: the preview writes nothing, and
+         * a version already sent for approval is exactly the one a teacher opens to check what
+         * students will be asked.
+         */
+        @Test
+        @DisplayName("⚑ a read-only version can be previewed, unlike everything else on the screen")
+        void readOnlyCanStillBePreviewed() {
+            serverHas(ApprovalState.PENDING, 3);
+            session.open(VERSION_ID);
+
+            assertThat(session.isEditable()).isFalse();
+            assertThat(session.canPreview()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a version another teacher holds can still be previewed (E18.5)")
+        void aLockedOutVersionCanBePreviewed() {
+            openDraft();
+            session.setLockedOut(true);
+
+            assertThat(session.isEditable()).isFalse();
+            assertThat(session.canPreview())
+                    .as("a colleague's edit lock stops writes, not reads")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a failed load leaves nothing to preview")
+        void aFailedLoadCannotBePreviewed() {
+            connection.replyError(Verb.EXAM_VERSION_GET, ErrorCode.NOT_FOUND, "gone");
+            session.open(VERSION_ID);
+
+            assertThat(session.canPreview()).isFalse();
         }
     }
 }

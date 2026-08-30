@@ -88,7 +88,7 @@ class SessionRoutesTest {
 
         @Test
         @DisplayName("a teacher gets home, settings, the bank, the monitor, the bot, results, "
-                + "the grading pair and her exams")
+                + "the grading pair, her exams and the preview of one")
         void teacher() {
             // One bank route, not two. Routes.QUESTIONS is the versioned bank since the
             // retirement PR: the id stayed and the screen behind it changed, so the interim
@@ -97,29 +97,59 @@ class SessionRoutesTest {
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
-                            Routes.GRADE_REVIEW, Routes.EXAMS, Routes.EXAM_BUILD);
+                            Routes.GRADE_REVIEW, Routes.EXAMS, Routes.EXAM_BUILD,
+                            Routes.EXAM_PREVIEW);
         }
 
         @Test
-        @DisplayName("a coordinator gets the same plus the approvals pair (E8)")
+        @DisplayName("a coordinator gets the same plus the approvals queue (E8)")
         void coordinator() {
             assertThat(SessionRoutes.routesFor(Role.COORDINATOR))
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
                             Routes.GRADE_REVIEW, Routes.EXAMS, Routes.EXAM_BUILD,
-                            Routes.APPROVALS, Routes.EXAM_PREVIEW);
+                            Routes.EXAM_PREVIEW, Routes.APPROVALS);
         }
 
+        /**
+         * The queue is the coordinator's; the preview is not (2026-08-30, Findings.txt, U-53) ⚑.
+         *
+         * <p>This test asserted both until U-53, and the pair was the right shape while a
+         * teacher could not see her own exam at all. It is now two different claims. The
+         * <b>queue</b> stays coordinator-only, because it lists other people's exams and every
+         * decision on it is a coordinator verb. The <b>preview</b> is a read of one exam, and
+         * {@code ApprovalService.preview} has admitted the version's own author since E8, so
+         * withholding the route only meant a teacher could not read what she had written.
+         *
+         * <p>What must not follow from that is a teacher who can decide, and that is asserted on
+         * the screen rather than here: {@code ApprovalInteractionTest} shows an author a preview
+         * with no Approve and no Send back on it.
+         */
         @Test
-        @DisplayName("only a coordinator is offered the approvals screens (PRD §3)")
-        void approvalsAreCoordinatorOnly() {
+        @DisplayName("only a coordinator is offered the approvals QUEUE (PRD §3)")
+        void theQueueIsCoordinatorOnly() {
             assertThat(SessionRoutes.routesFor(Role.TEACHER))
-                    .doesNotContain(Routes.APPROVALS, Routes.EXAM_PREVIEW);
+                    .doesNotContain(Routes.APPROVALS);
             assertThat(SessionRoutes.routesFor(Role.STUDENT))
                     .doesNotContain(Routes.APPROVALS, Routes.EXAM_PREVIEW, Routes.EXAMS);
             assertThat(SessionRoutes.routesFor(Role.PRINCIPAL))
                     .doesNotContain(Routes.APPROVALS, Routes.EXAM_PREVIEW, Routes.EXAMS);
+        }
+
+        /**
+         * The other half of the split above: both authoring roles reach the preview (U-53).
+         *
+         * <p>Offering it to one and not the other is how a coordinator finds a button that
+         * throws, which is the argument {@code Routes.EXAM_BUILD} already carries one line up:
+         * {@code Navigator.navigate} throws on an unregistered id rather than doing nothing, and
+         * the builder's Preview is on both roles' screen.
+         */
+        @Test
+        @DisplayName("⚑ both roles that may author an exam may preview one (U-53)")
+        void bothAuthoringRolesPreview() {
+            assertThat(SessionRoutes.routesFor(Role.TEACHER)).contains(Routes.EXAM_PREVIEW);
+            assertThat(SessionRoutes.routesFor(Role.COORDINATOR)).contains(Routes.EXAM_PREVIEW);
         }
 
         @Test

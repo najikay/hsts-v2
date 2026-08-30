@@ -5,6 +5,8 @@ import client.core.NavEntry;
 import client.core.NavParams;
 import client.core.NavigationEvent;
 import client.core.Routes;
+import client.features.approval.ExamPreviewView;
+import client.features.bank.BankCopy;
 import client.core.ScreenManager;
 import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
@@ -25,6 +27,9 @@ import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
+import common.dto.bank.QuestionRequest;
+import common.dto.bank.QuestionVersionDetail;
+import common.dto.bank.VersionHistory;
 import common.dto.lock.EntityRef;
 import common.dto.lock.LockChange;
 import common.dto.lock.LockHolder;
@@ -802,12 +807,168 @@ class ExamBuilderInteractionTest extends ApplicationTest {
         return navigations;
     }
 
+    /**
+     * Registers the exam preview so the header's Preview has somewhere to go (U-53).
+     *
+     * <p>The same stub shape as {@link #registerTheExamList}: what is under test is which
+     * destination is asked for and with what, not what that screen renders. The real one is
+     * driven by {@code ApprovalInteractionTest}, which is where the author's view of it lives.
+     *
+     * @return the list the navigator appends to, empty until something navigates
+     */
+    private List<NavigationEvent> registerThePreview() {
+        ScreenManager manager = ScreenManager.getInstance();
+        manager.navigator().register(Routes.EXAM_PREVIEW);
+        manager.screens().register(Routes.EXAM_PREVIEW.id(), StubScreen::new);
+
+        List<NavigationEvent> navigations = new java.util.ArrayList<>();
+        manager.navigator().addListener(navigations::add);
+        return navigations;
+    }
+
     /** Stands in for the exam list so a navigation can complete without booting it. */
     private static final class StubScreen extends client.ui.screen.AbstractScreen {
         @Override
         protected javafx.scene.Parent build() {
             return new javafx.scene.layout.VBox();
         }
+    }
+
+    // ===================== The answers on a picked row (U-53) =============
+
+    /**
+     * Findings.txt U-53, on the real toolkit ⚑.
+     *
+     * <p>"A teacher composing an exam cannot see what the exam says." The session test proves the
+     * right version is selected; this proves the four options and the word "Correct" are really
+     * in the scene graph after a real click, which is the claim the finding is about.
+     */
+    @Test
+    @DisplayName("⚑ Show answers puts the four options and the key on screen (U-53)")
+    void showingAnswersRevealsTheFourOptionsAndTheKey() {
+        Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
+
+        assertThat(visibleLabelTexts(scene))
+                .as("a row is collapsed until she asks: the answers are not merely hidden, "
+                        + "they have not been read")
+                .doesNotContain("A method that calls itself");
+
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.SHOW_ANSWERS).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(visibleLabelTexts(scene))
+                .as("the four options of the version this paper pins, with the key marked "
+                        + "in a word rather than in a colour")
+                .contains("A method that calls itself", "A while loop", "A kind of array",
+                        "A compiler flag", BankCopy.CORRECT_MARK);
+        assertThat(verbsSentOn((FakeClientConnection) ScreenManager.getInstance().getClient()))
+                .as("read with the bank's own history verb, which is the only one that can "
+                        + "answer for the version the paper pins rather than the newest")
+                .contains(Verb.QUESTION_VERSIONS);
+    }
+
+    @Test
+    @DisplayName("the toggle names the state she is moving to, and moves back")
+    void theToggleFlipsBack() {
+        Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
+
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.SHOW_ANSWERS).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(visibleButtonsNamed(scene, ExamBuildCopy.HIDE_ANSWERS)).hasSize(1);
+
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.HIDE_ANSWERS).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(visibleLabelTexts(scene)).doesNotContain("A method that calls itself");
+        assertThat(visibleButtonsNamed(scene, ExamBuildCopy.HIDE_ANSWERS)).isEmpty();
+    }
+
+    /**
+     * The rebuild rule, from the other side ⚑.
+     *
+     * <p>{@code renderAnswers} runs outside {@code shapeOf} precisely so an answers read landing
+     * cannot destroy a points box mid-keystroke. What that buys is asserted here rather than
+     * argued: the box she was typing in still holds what she typed, and still has the focus, on
+     * the render the answers arrived on.
+     */
+    @Test
+    @DisplayName("⚑ answers arriving do not rebuild the card under the points box")
+    void answersDoNotDestroyThePointsBox() {
+        Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
+        TextField points = pointsFieldShowing(scene, "50");
+        clickOn(points);
+        eraseText(2);
+        write("7");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        clickOn(visibleButtonsNamed(scene, ExamBuildCopy.SHOW_ANSWERS).get(0));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(points.getScene())
+                .as("the very TextField she was typing in is still in the scene")
+                .isSameAs(scene);
+        assertThat(points.getText()).isEqualTo("7");
+        assertThat(visibleLabelTexts(scene)).contains("A method that calls itself");
+    }
+
+    // ===================== The preview (U-53) =============================
+
+    @Test
+    @DisplayName("⚑ Preview is inert on a new exam, which has no saved version to read")
+    void previewIsInertBeforeTheFirstSave() {
+        Scene scene = openBuilder(null, 0);
+
+        Button preview = visibleButtonsNamed(scene, ExamBuildCopy.PREVIEW_BUTTON).get(0);
+        assertThat(preview.isDisable())
+                .as("EXAM_PREVIEW_GET is addressed by version, and a new exam has none")
+                .isTrue();
+        assertThat(preview.getTooltip())
+                .as("and it says why, rather than being a control that simply does nothing")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("⚑ Preview opens the saved version, carrying its id and the door it came from")
+    void previewNavigatesToTheSavedVersion() {
+        Scene scene = openBuilder(ApprovalState.DRAFT, VERSION_ID);
+        List<NavigationEvent> navigations = registerThePreview();
+
+        Button preview = visibleButtonsNamed(scene, ExamBuildCopy.PREVIEW_BUTTON).get(0);
+        assertThat(preview.isDisable())
+                .as("an opened draft is already saved, so there is a version to read")
+                .isFalse();
+
+        clickOn(preview);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(navigations).as("the act landed: something navigated").hasSize(1);
+        NavEntry target = navigations.get(0).to();
+        assertThat(target.routeId())
+                .as("the coordinator's own preview route, not a second screen built for authors")
+                .isEqualTo(Routes.EXAM_PREVIEW.id());
+        assertThat(target.params().getLong("examVersionId", 0))
+                .as("⚑ and the version on screen, which is what the preview is addressed by")
+                .isEqualTo(VERSION_ID);
+        assertThat(target.params().getString(ExamPreviewView.PARAM_FROM, ""))
+                .as("so the preview's Back can name the builder rather than the approvals queue")
+                .isEqualTo(ExamBuildRoutes.BUILDER);
+    }
+
+    /**
+     * The preview is a read, so the two things that stop every write do not stop it.
+     *
+     * <p>A version sent for approval is exactly the one a teacher opens to check what students
+     * will be asked, and that screen has no Save button at all.
+     */
+    @Test
+    @DisplayName("a read-only version still offers Preview, where it offers nothing else")
+    void readOnlyStillPreviews() {
+        Scene scene = openBuilder(ApprovalState.PENDING, VERSION_ID);
+
+        assertThat(visibleButtonsNamed(scene, ExamBuildCopy.SAVE_BUTTON)).isEmpty();
+        assertThat(visibleButtonsNamed(scene, ExamBuildCopy.PREVIEW_BUTTON))
+                .singleElement()
+                .satisfies(preview -> assertThat(preview.isDisable()).isFalse());
     }
 
     // ===================== Harness ========================================
@@ -829,7 +990,27 @@ class ExamBuilderInteractionTest extends ApplicationTest {
                         Message.ok(request, stored(state)));
             }
             connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request, bank()));
+            connection.respondTo(Verb.QUESTION_VERSIONS, request -> Message.ok(request,
+                    history(((QuestionRequest) request.getPayload()).displayId5())));
         }, versionId);
+    }
+
+    /**
+     * The version history a picked row's Show answers reads (U-53).
+     *
+     * <p>Two versions with different options and different keys, because the fixture's second
+     * row pins v2 while the bank holds v4: an assertion that only proved "four options appeared"
+     * would pass on either version, and which one appears is the whole claim.
+     */
+    private static VersionHistory history(String displayId5) {
+        return new VersionHistory(displayId5, List.of(
+                new QuestionVersionDetail(4, "What is recursion, restated?",
+                        List.of("A call to itself", "A loop", "A stack", "A queue"), 2,
+                        "Recursion", Difficulty.MEDIUM, false, "Dana Cohen", WHEN),
+                new QuestionVersionDetail(1, "What is recursion?",
+                        List.of("A method that calls itself", "A while loop",
+                                "A kind of array", "A compiler flag"), 1,
+                        "Recursion", Difficulty.MEDIUM, false, "Dana Cohen", WHEN)));
     }
 
     /**

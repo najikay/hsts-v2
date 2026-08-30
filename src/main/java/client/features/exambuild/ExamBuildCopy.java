@@ -121,6 +121,74 @@ public final class ExamBuildCopy {
     /** The action beside that badge (E7.14): take the newer version onto this paper. */
     public static final String USE_NEWER_VERSION = "Use the newer version";
 
+    // ===================== The answers on a picked row (U-53) =============
+
+    /**
+     * The toggle that opens one picked row's four answers (2026-08-30, Findings.txt, U-53).
+     *
+     * <p>The finding was that a teacher composing an exam cannot see what the exam says: a row
+     * carried a stem, an id, a topic and a difficulty, and the four things a student actually
+     * chooses between were nowhere on the screen. The wording names the state she is moving to
+     * rather than the state she is in, which is how every other disclosure control here reads.
+     */
+    public static final String SHOW_ANSWERS = "Show answers";
+
+    /** @see #SHOW_ANSWERS */
+    public static final String HIDE_ANSWERS = "Hide answers";
+
+    /**
+     * Said in the opened row while the bank read is in flight.
+     *
+     * <p>The answers are not on the composition wire and deliberately so:
+     * {@code ComposedQuestion} carries no key, which is what keeps E7 off the correctness
+     * boundary. Opening a row is therefore a round trip, and a round trip has a moment worth
+     * naming.
+     */
+    public static final String ANSWERS_LOADING = "Loading the answers...";
+
+    /**
+     * Said when that read failed.
+     *
+     * <p>Names the retry rather than offering a button for it: hiding the answers and showing
+     * them again re-sends the read, so the way out is the control she has just used, and a
+     * second control beside it would be a second way to do one thing.
+     */
+    public static final String ANSWERS_FAILED =
+            "The answers could not be loaded. Try showing them again.";
+
+    /**
+     * Said when the bank answered without the version this paper pins.
+     *
+     * <p>Distinct from a failed read on purpose. A history that does not contain the pinned
+     * version is a paper pointing at something the bank no longer serves, and calling that a
+     * load failure would send her retrying a read that had already succeeded.
+     */
+    public static final String ANSWERS_VERSION_GONE =
+            "The bank no longer holds the version this paper pins, so its answers cannot be "
+                    + "shown here.";
+
+    // ===================== The preview (U-53) =============================
+
+    /**
+     * The header control that opens the paper as a coordinator reads it (U-53).
+     *
+     * <p>"Preview" rather than "View exam": the builder is already a view of the exam, and what
+     * this opens is the other one, the one with the student's own question cards and the
+     * teacher-only notes beside them.
+     */
+    public static final String PREVIEW_BUTTON = "Preview";
+
+    /**
+     * Why the control is inert on a paper that has never been saved.
+     *
+     * <p>A tooltip rather than a sentence on the header, because it answers a question only the
+     * teacher who tried the button is asking. The preview is served by
+     * {@code EXAM_PREVIEW_GET}, which addresses an exam <em>version</em>, and a draft that has
+     * never been saved is not one yet.
+     */
+    public static final String PREVIEW_NEEDS_SAVE =
+            "Save this draft first. The preview reads the saved version.";
+
     /**
      * Shown once on a paper where something has been re-pinned and not yet saved (E7.14).
      *

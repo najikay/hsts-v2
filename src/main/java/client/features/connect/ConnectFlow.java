@@ -147,6 +147,39 @@ public final class ConnectFlow {
     public static final String UNREACHABLE_NO_ROUTE =
             "That address cannot be reached from this network.";
 
+    // --- reconnecting a client that lost the network (U-52) ---------------
+
+    /**
+     * What Login says after the shell re-dialled successfully (2026-08-30,
+     * Findings.txt, U-52).
+     *
+     * <p>Two facts, in the order she needs them. The connection is back, so the
+     * banner was telling the truth and Retry worked; and she has to sign in again,
+     * because the server freed her session when the socket dropped (F1.4) and the
+     * new socket is an anonymous one. Saying only the first would leave her
+     * wondering why the dashboard turned into a login form.
+     */
+    public static final String RECONNECTED_SIGN_IN_AGAIN = "Reconnected. Sign in again.";
+
+    /**
+     * The reconnect banner's sentence when a Retry did not get through (U-52).
+     *
+     * <p>Built the same way {@link #afterFailedConnect} builds its own: the address,
+     * then a product sentence for the cause when there is one, then what to do. It
+     * goes through {@link #reasonFor}, so a throwable's class name can no more reach
+     * this banner than it can reach the connect screen (B-37).
+     *
+     * @param attempted where the re-dial went, may be {@code null}
+     * @param cause     what the connect threw, may be {@code null}
+     */
+    public static String retryFailed(ServerEndpoint attempted, Throwable cause) {
+        String where = attempted == null ? "the server" : attempted.display();
+        String reason = reasonFor(cause);
+        return "Could not reach " + where + "."
+                + (reason.isEmpty() ? "" : " " + reason)
+                + " Check this computer is on the network, then try again.";
+    }
+
     private ConnectFlow() {
     }
 

@@ -106,6 +106,15 @@ public final class BankSession {
     private QuestionDetail detail;
     private int detailGeneration;
 
+    /**
+     * What to do once the open question has been re-read, or {@code null} (U-49).
+     *
+     * <p>One shot and one at a time: it is cleared before it runs, dropped when the re-read
+     * fails, and dropped when the selection moves, so a callback can neither run twice nor run
+     * about a question the teacher has since clicked away from.
+     */
+    private java.util.function.Consumer<QuestionDetail> whenFresh;
+
     // --- its illustration (E6.6) ---------------------------------------
     private AsyncViewState imageState = AsyncViewState.IDLE;
     private String imageError;
@@ -154,6 +163,11 @@ public final class BankSession {
     /** Loads the first page. What {@code onShow} calls. */
     public void load() {
         rowLocks.start();
+        // Before the list, and it matters that it is a re-read rather than a first read: this
+        // is the path the editor comes back down after writing a new version, and the pane it
+        // returns to is still holding the version that was replaced (2026-08-30, Findings.txt,
+        // U-49). A no-op when nothing is open.
+        refreshDetail();
         requestPage(0);
     }
 
@@ -176,6 +190,11 @@ public final class BankSession {
      * forbids asking the teacher to press one, and nothing on this screen does.
      */
     public void reload() {
+        // The row AND the question behind it. A delete that leaves a different question open,
+        // and any write that lands while this screen is up, both move the detail as well as the
+        // list, and a reload that re-asked for only half of it would leave the other half
+        // describing a version that no longer exists (2026-08-30, Findings.txt, U-49).
+        refreshDetail();
         requestPage(page);
     }
 
@@ -372,6 +391,11 @@ public final class BankSession {
      * contract chose: an image never travels in a list or a detail, so a bank of illustrated
      * questions does not cost a megabyte per row.
      *
+     * <p>Clicking the row that is already open is a no-op, which is what stops the list's own
+     * selection listener re-fetching on every render. That shortcut is <b>only</b> about a click
+     * that changes nothing; a re-read the screen asks for goes through {@link #refreshDetail()},
+     * which does not consult it (2026-08-30, Findings.txt, U-49).
+     *
      * @param displayId5 the five-digit id, or {@code null} to clear the pane
      */
     public void select(String displayId5) {
@@ -383,11 +407,75 @@ public final class BankSession {
         if (displayId5.equals(selectedId) && detailState == AsyncViewState.READY) {
             return;
         }
+        open(displayId5, false);
+    }
+
+    /**
+     * Re-reads the open question, whatever the pane is already holding (U-49).
+     *
+     * <p><b>The defect this exists for.</b> {@code QuestionDetail} is a snapshot of one version,
+     * and the editor is handed the pane's copy of it as the staleness token for its next save.
+     * So a teacher who saved a new version and came back to the bank found a pane still drawing
+     * the version she had replaced, and an Edit that opened on it and was refused with "somebody
+     * else saved a new version of this question" about her own save. Nothing re-read it:
+     * {@link #load()} re-asked for the list only, and {@link #select(String)} declined to re-ask
+     * for a question that was already showing.
+     *
+     * <p>The previous version stays on screen while the answer is in flight rather than the pane
+     * blanking to "no question selected" beside a row that is still highlighted. What does not
+     * stay is the writing: {@link #isDetailSettled()} is false until the answer lands, and the
+     * screen shuts Edit and Delete on it, so no write can be built from the version being
+     * replaced.
+     */
+    public void refreshDetail() {
+        refreshDetailThen(null);
+    }
+
+    /**
+     * The same re-read, with something to do once the fresh version is in hand.
+     *
+     * <p>What Edit goes through, so the editor <b>always</b> opens on an answer to
+     * {@code QUESTION_GET} and never on whatever the pane was holding. The callback fires when
+     * the question and, for an illustrated one, its bytes have both arrived, because
+     * {@code QuestionEditorSession.forEdit} takes those bytes as a required argument and a hook
+     * that fired between the two would throw.
+     *
+     * <p>It is dropped rather than deferred when the re-read fails: the pane renders its own
+     * "could not be opened" panel with a retry, and an editor opened on a question the server
+     * has just refused to hand over would be an editor whose save cannot land.
+     *
+     * @param ready what to do with the fresh version, or {@code null} to only refresh
+     */
+    public void refreshDetailThen(java.util.function.Consumer<QuestionDetail> ready) {
+        if (selectedId == null) {
+            return;
+        }
+        whenFresh = ready;
+        open(selectedId, true);
+    }
+
+    /**
+     * Issues the {@code QUESTION_GET} behind both entry points.
+     *
+     * @param displayId5  the question to read
+     * @param keepShowing whether the version already on screen stays there while the answer is
+     *                    in flight. True for a re-read of the open question, where blanking the
+     *                    pane would make the screen contradict its own highlighted row; false
+     *                    for a move to a different question, where leaving the previous one up
+     *                    would describe the wrong row
+     */
+    private void open(String displayId5, boolean keepShowing) {
         int generation = ++detailGeneration;
         selectedId = displayId5;
-        detail = null;
         detailError = null;
         detailState = AsyncViewState.LOADING;
+        if (!keepShowing) {
+            detail = null;
+            whenFresh = null;
+        }
+        // The picture and the timeline belong to a version, not to a question, so both are
+        // dropped either way: a re-read that kept them would draw the old version's diagram
+        // under the new version's words.
         resetImage();
         resetHistory();
         onChange.run();
@@ -406,6 +494,7 @@ public final class BankSession {
             detail = null;
             detailError = BankCopy.DETAIL_FAILED;
             detailState = AsyncViewState.ERROR;
+            whenFresh = null;
             onChange.run();
             return;
         }
@@ -419,6 +508,25 @@ public final class BankSession {
         }
         if (historyOpen) {
             requestHistory(generation, payload.displayId5());
+        }
+        if (!payload.hasImage()) {
+            // Nothing else to wait for. An illustrated question fires from settleImage instead,
+            // because the editor cannot be built without its bytes.
+            fireWhenFresh();
+        }
+    }
+
+    /**
+     * Runs the one-shot handed to {@link #refreshDetailThen}, once everything it needs is here.
+     *
+     * <p>Cleared before it runs rather than after, so a callback that navigates and comes
+     * straight back cannot find itself still armed.
+     */
+    private void fireWhenFresh() {
+        java.util.function.Consumer<QuestionDetail> ready = whenFresh;
+        whenFresh = null;
+        if (ready != null && detail != null) {
+            ready.accept(detail);
         }
     }
 
@@ -445,6 +553,7 @@ public final class BankSession {
         detailError = null;
         detailState = AsyncViewState.IDLE;
         detailGeneration++;
+        whenFresh = null;
         resetImage();
         resetHistory();
     }
@@ -472,6 +581,9 @@ public final class BankSession {
             image = null;
             imageError = BankCopy.IMAGE_FAILED;
             imageState = AsyncViewState.ERROR;
+            // The editor takes the bytes as a required argument, so there is nothing to open.
+            // The pane says why the picture is missing and Edit stays shut.
+            whenFresh = null;
             onChange.run();
             return;
         }
@@ -479,6 +591,7 @@ public final class BankSession {
         imageError = null;
         imageState = AsyncViewState.READY;
         onChange.run();
+        fireWhenFresh();
     }
 
     private void resetImage() {
@@ -856,6 +969,20 @@ public final class BankSession {
     /** @return the detail pane's load state */
     public AsyncViewState detailState() {
         return detailState;
+    }
+
+    /**
+     * Whether the question on screen is the answer to a settled {@code QUESTION_GET} (U-49).
+     *
+     * <p>The distinction {@link #detail()} alone cannot make. A re-read keeps the previous
+     * version drawn while the new one is in flight, which is right for reading and wrong for
+     * writing: the screen shuts Edit and Delete on a false answer here, so neither can be built
+     * from a version the server is in the middle of replacing.
+     *
+     * @return whether the detail is a settled read rather than one being refreshed
+     */
+    public boolean isDetailSettled() {
+        return detailState == AsyncViewState.READY;
     }
 
     /** @return the detail pane's failure sentence, or {@code null} */

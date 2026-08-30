@@ -18,18 +18,26 @@ import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
+import common.dto.bank.QuestionEdit;
 import common.dto.bank.QuestionImage;
+import common.dto.bank.QuestionVersionDetail;
+import common.dto.bank.VersionHistory;
 import common.dto.lock.EntityRef;
 import common.dto.lock.LockChange;
 import common.dto.lock.LockHolder;
+import common.dto.lock.LockResponse;
 import common.dto.lock.LocksSnapshot;
+import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
+import client.core.Routes;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableRow;
+import javafx.scene.control.TextArea;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -42,6 +50,7 @@ import server.features.bank.QuestionLockKey;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -101,6 +110,11 @@ class BankScreenInteractionTest extends ApplicationTest {
             List.of("Twelve", "Fourteen", "Sixteen", "Eighteen"), 3, "Geometry", Difficulty.HARD,
             false, "Dana Cohen", SPRING);
 
+    /** Version 1 of 11001, the version the U-49 sequence starts from. */
+    private static final QuestionDetail LINEAR_V1 = new QuestionDetail("11001", "11", "Algebra",
+            1, 1, "Solve the linear equation", List.of("x = 1", "x = 2", "x = 3", "x = 4"), 2,
+            "Equations", Difficulty.EASY, false, "Dana Cohen", SPRING);
+
     @BeforeAll
     static void headless() {
         System.setProperty("testfx.robot", "glass");
@@ -111,6 +125,9 @@ class BankScreenInteractionTest extends ApplicationTest {
         System.setProperty("prism.text", "t2k");
         System.setProperty("java.awt.headless", "true");
     }
+
+    /** The instance {@code openBank} put on screen, so a test can re-show it as a return does. */
+    private BankView viewUnderTest;
 
     @Override
     public void start(Stage stage) {
@@ -405,6 +422,222 @@ class BankScreenInteractionTest extends ApplicationTest {
         assertThat(buttonNamed(scene, BankCopy.EDIT).isDisabled()).isFalse();
     }
 
+    // ===================== U-49: what the pane comes back with ============
+
+    /**
+     * The whole of U-49, driven through the real router (2026-08-30, Findings.txt, U-49 ⚑).
+     *
+     * <p><b>The defect.</b> A teacher opened a question, pressed Edit, saved a new version, and
+     * landed back on the bank with the row highlighted and the pane still drawing the version
+     * she had just replaced. Pressing Edit again opened the editor on that stale
+     * {@code QuestionDetail}, whose {@code versionNo} is the staleness token
+     * {@code QUESTION_UPDATE} carries, so the server answered {@code CONFLICT} and the screen
+     * told her that <em>somebody else</em> had saved a new version of this question. Nobody
+     * had. It was her own save, one screen ago.
+     *
+     * <p><b>Why nothing caught it.</b> Neither half is wrong on its own.
+     * {@code BankSession.load} re-asked for the list, which is what a returning screen owes the
+     * rows; {@code select} declines to re-ask for a question that is already showing, which is
+     * what stops the table's selection listener fetching on every render. Between them nothing
+     * ever re-issued {@code QUESTION_GET}, and the object that went stale is one the FX-free
+     * session test cannot see going anywhere: it is handed to the editor through
+     * {@code NavParams} by the view.
+     *
+     * <p>So it takes this file and it takes the router: the sequence is bank to editor to bank
+     * to editor, and it is the <em>second</em> editor that is the assertion. The scripted server
+     * is stateful and refuses a stale base exactly as {@code QuestionService} does, so a
+     * conflict here is the product's own conflict rather than a test's invention.
+     */
+    @Test
+    @DisplayName("⚑ a new version is what the bank shows and what the next Edit sends (U-49)")
+    void aSavedVersionIsWhatTheBankAndTheNextEditorSee() {
+        QuestionDetail[] onServer = {LINEAR_V1};
+        List<Integer> basesSent = new ArrayList<>();
+        List<String> refused = new ArrayList<>();
+
+        Scene scene = openRoutedBank(connection -> {
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request,
+                    new BankPage(List.of(rowOf(onServer[0])), 0,
+                            BankListRequest.DEFAULT_PAGE_SIZE, 1, 1)));
+            connection.respondTo(Verb.QUESTION_GET, request -> Message.ok(request, onServer[0]));
+            connection.respondTo(Verb.QUESTION_UPDATE, request -> {
+                QuestionEdit edit = (QuestionEdit) request.getPayload();
+                basesSent.add(edit.baseVersionNo());
+                if (edit.baseVersionNo() != onServer[0].versionNo()) {
+                    // What QuestionService does with a stale token, and the sentence the editor
+                    // turns into "somebody else saved a new version of this question".
+                    refused.add("v" + edit.baseVersionNo());
+                    return Message.error(request, ErrorCode.CONFLICT, "stale base version");
+                }
+                onServer[0] = nextVersionOf(onServer[0], edit.text());
+                return Message.ok(request, onServer[0]);
+            });
+            connection.respondTo(Verb.LOCK_ACQUIRE, request -> Message.ok(request,
+                    LockResponse.granted(QuestionLockKey.of("11001"),
+                            new LockHolder(DANA.userId(), DANA.displayName()),
+                            SPRING.plusSeconds(120))));
+            connection.replyOk(Verb.LOCK_RELEASE, null);
+            connection.replyOk(Verb.LOCK_RENEW, null);
+            connection.replyOk(Verb.LOCKS_SNAPSHOT,
+                    new LocksSnapshot(EntityRef.QUESTION, java.util.Map.of()));
+        });
+
+        clickOn(rowShowing(scene, "Solve the linear equation"));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(labelTexts(scene)).contains(BankCopy.versionLine(LINEAR_V1));
+
+        clickOn(buttonNamed(scene, BankCopy.EDIT));
+        settle();
+        writeStem(scene, "Solve the linear equation, showing your working");
+        clickOn(buttonNamed(scene, QuestionEditorCopy.SAVE));
+        settle();
+
+        Set<String> afterFirstSave = labelTexts(scene);
+        assertThat(afterFirstSave)
+                .as("the pane is the screen's answer to 'what does this question say now', and "
+                        + "it came back saying what the question said before she saved")
+                .contains("Solve the linear equation, showing your working")
+                .doesNotContain("Solve the linear equation");
+        assertThat(afterFirstSave)
+                .as("and the version line is the F2.3 indicator, so a stale one is the screen "
+                        + "telling her which version she is about to branch from, wrongly")
+                .contains("Version 2, the newest")
+                .doesNotContain("Version 1, the newest");
+
+        clickOn(buttonNamed(scene, BankCopy.EDIT));
+        settle();
+        assertThat(labelTexts(scene))
+                .as("the editor says what saving will do, and it opens on the version that "
+                        + "exists rather than the one the pane was holding")
+                .contains(QuestionEditorCopy.editSubtitle(2));
+
+        writeStem(scene, "Solve the linear equation and check your answer");
+        clickOn(buttonNamed(scene, QuestionEditorCopy.SAVE));
+        settle();
+
+        assertThat(basesSent)
+                .as("each save branches from the version before it: v1 then v2, never v1 twice")
+                .containsExactly(1, 2);
+        assertThat(refused)
+                .as("a CONFLICT here would be the fake one U-49 records - her own save reported "
+                        + "to her as a colleague's")
+                .isEmpty();
+        assertThat(labelTexts(scene))
+                .as("and the third version is on screen, with no refresh asked of her (NFR-18)")
+                .contains("Version 3, the newest",
+                        "Solve the linear equation and check your answer");
+    }
+
+    /**
+     * The same staleness, checked on the other two writes because the finding asks (U-49).
+     *
+     * <p>Add and delete are safe for reasons that are not the same reason, and neither of them
+     * is "nothing goes stale". A create leaves the pane describing whatever was open before it,
+     * which is a different question and is re-read like any other on the way back; a delete
+     * clears the selection when it lands on the question that was open. What this pins is the
+     * first half: a question open while a new one is added still reads correctly afterwards,
+     * because the return re-reads it rather than trusting the copy in hand.
+     */
+    @Test
+    @DisplayName("adding a question re-reads the one still open, not just the list (U-49)")
+    void addingAQuestionAlsoRefreshesTheOpenOne() {
+        QuestionDetail[] onServer = {LINEAR_V1};
+        int[] reads = {0};
+
+        Scene scene = openBank(connection -> {
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request,
+                    new BankPage(List.of(rowOf(onServer[0])), 0,
+                            BankListRequest.DEFAULT_PAGE_SIZE, 1, 1)));
+            connection.respondTo(Verb.QUESTION_GET, request -> {
+                reads[0]++;
+                return Message.ok(request, onServer[0]);
+            });
+        });
+
+        clickOn(rowShowing(scene, "Solve the linear equation"));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(reads[0]).isEqualTo(1);
+
+        // Somebody wrote a version while she was away, which is what coming back from any
+        // write looks like from this screen's side of the wire.
+        onServer[0] = nextVersionOf(onServer[0], "Solve the linear equation over the reals");
+        interact(() -> viewUnderTest.onShow(NavParams.empty()));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(reads[0])
+                .as("returning to the bank re-reads the open question, it does not trust the "
+                        + "copy the pane is drawing")
+                .isEqualTo(2);
+        assertThat(labelTexts(scene)).contains("Solve the linear equation over the reals",
+                "Version 2, the newest");
+    }
+
+    // ===================== U-50: history shows the version ================
+
+    /**
+     * F2.3's "viewable in a version history panel", made true (2026-08-30, Findings.txt, U-50 ⚑).
+     *
+     * <p>The panel listed every version with its date, its author and a sentence naming which
+     * fields moved, and showed the content of none of them. So a teacher could be told that v1
+     * said something different without ever being told what it said, which is the whole of what
+     * F2.3 asks the panel for and the one thing it did not do.
+     *
+     * <p>Nothing on the wire changed for this: {@code QuestionVersionDetail} has carried the
+     * stem, the four options and the key since E6.3, and {@code BankWireLeakGuardTest} licenses
+     * it in writing for exactly this staff-only read. The defect was that the renderer dropped
+     * them on the floor.
+     */
+    @Test
+    @DisplayName("⚑ a history entry opens to show the version it names, key marked (U-50)")
+    void aHistoryEntryOpensToShowThatVersion() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, GEOMETRY_V2);
+            connection.replyOk(Verb.QUESTION_VERSIONS, new VersionHistory("11005", List.of(
+                    version(2, "Read the diagram and answer",
+                            List.of("Twelve", "Fourteen", "Sixteen", "Eighteen"), 3),
+                    version(1, "Read the diagram",
+                            List.of("Ten", "Eleven", "Thirteen", "Fifteen"), 2))));
+        });
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn(buttonNamed(scene, BankCopy.HISTORY_OPEN));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(scene))
+                .as("the timeline still leads with when and by whom, which is what it is read "
+                        + "top-down for")
+                .anySatisfy(text -> assertThat(text).startsWith("Version 1"));
+        assertThat(scene.getRoot().lookupAll(".bank-history-version").stream()
+                .filter(Node::isVisible).toList())
+                .as("and every version is shut to begin with: ten open versions is a panel "
+                        + "nobody can scan")
+                .isEmpty();
+        assertThat(labelTexts(scene))
+                .as("so v1's own words are not on screen yet")
+                .doesNotContain("Ten", "Eleven", "Thirteen", "Fifteen");
+
+        List<Button> toggles = buttonsNamed(scene, BankCopy.HISTORY_SHOW_VERSION);
+        assertThat(toggles).as("one toggle per version, current one included").hasSize(2);
+        clickOn(toggles.get(1));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Node opened = scene.getRoot().lookupAll(".bank-history-version").stream()
+                .filter(Node::isVisible)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no version opened"));
+        assertThat(labelTexts(opened))
+                .as("v1 exactly as it read: the stem, all four options, and the key marked on "
+                        + "the one it belonged to - a history that hid which answer was right "
+                        + "would be a diff a teacher cannot read")
+                .contains("Read the diagram", "Ten", "Eleven", "Thirteen", "Fifteen",
+                        BankCopy.CORRECT_MARK);
+        assertThat(buttonsNamed(scene, BankCopy.HISTORY_HIDE_VERSION))
+                .as("and the toggle says which way it goes next")
+                .hasSize(1);
+    }
+
     // ===================== Fixture and harness ============================
 
     private void bankHasTwoQuestions(FakeClientConnection connection) {
@@ -444,6 +677,25 @@ class BankScreenInteractionTest extends ApplicationTest {
      * as a suite-wide item.
      */
     private Scene openBankAs(LoginResult who, Consumer<FakeClientConnection> script) {
+        ScreenManager manager = boot(who, script);
+
+        Scene[] holder = new Scene[1];
+        interact(() -> {
+            BankView view = new BankView();
+            Scene scene = new Scene(view.view(), 1280, 820);
+            Stage stage = new Stage();
+            stage.setScene(scene);
+            stage.show();
+            view.onShow(NavParams.empty());
+            viewUnderTest = view;
+            holder[0] = scene;
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        return holder[0];
+    }
+
+    /** The half of {@code openBankAs} that is app rather than screen. */
+    private ScreenManager boot(LoginResult who, Consumer<FakeClientConnection> script) {
         ScreenManager manager = ScreenManager.getInstance();
         interact(() -> {
             ClientEventBus bus = new ClientEventBus(ClientEventBus.newBus(),
@@ -471,19 +723,87 @@ class BankScreenInteractionTest extends ApplicationTest {
             manager.setSignedInUser(who);
         });
         WaitForAsyncUtils.waitForFxEvents();
+        return manager;
+    }
 
-        Scene[] holder = new Scene[1];
+    /**
+     * The bank reached the way a teacher reaches it: through the router.
+     *
+     * <p>The rest of this file drives {@link BankView} on its own stage, and says why in
+     * {@code openBankAs}'s javadoc. The U-49 sequence cannot: the defect lives in what one
+     * screen hands the next through {@code NavParams} and in what the first screen does when it
+     * is shown again, and neither exists without a navigator, a screen cache and the real
+     * lifecycle. So this registers exactly the two routes the sequence walks and lets
+     * {@code ScreenManager} do the rest; there is still no shell and still no connect screen,
+     * which is what keeps the teardown race out of it.
+     *
+     * @return the manager's own scene, whose root the router swaps
+     */
+    private Scene openRoutedBank(Consumer<FakeClientConnection> script) {
+        ScreenManager manager = boot(DANA, script);
         interact(() -> {
-            BankView view = new BankView();
-            Scene scene = new Scene(view.view(), 1280, 820);
-            Stage stage = new Stage();
-            stage.setScene(scene);
-            stage.show();
-            view.onShow(NavParams.empty());
-            holder[0] = scene;
+            manager.navigator().registerAll(Routes.QUESTIONS, Routes.QUESTION_EDIT);
+            manager.screens().register(Routes.QUESTIONS.id(), BankView::new);
+            manager.screens().register(Routes.QUESTION_EDIT.id(), QuestionEditorView::new);
+            manager.navigator().navigate(BankRoutes.LIST);
         });
+        settle();
+        return manager.scene();
+    }
+
+    /**
+     * Waits out a route transition as well as the event queue.
+     *
+     * <p>{@code ScreenManager} plays {@code Animations.riseIn} over
+     * {@link client.ui.anim.Motion#ROUTE_MS} on every screen it swaps in, and
+     * {@code waitForFxEvents} pumps pulses rather than advancing the clock. Clicking into a
+     * screen that is still 8px off its resting place is how a routed test flakes.
+     */
+    private void settle() {
         WaitForAsyncUtils.waitForFxEvents();
-        return holder[0];
+        sleep(client.ui.anim.Motion.ROUTE_MS * 3L);
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /** Types a new stem into whichever editor is on screen. */
+    private void writeStem(Scene scene, String text) {
+        TextArea box = (TextArea) scene.getRoot().lookupAll(".text-area").stream()
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no editor on screen"));
+        interact(() -> box.setText(text));
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /** The version the server writes when it accepts an edit: n+1, with the new stem. */
+    private static QuestionDetail nextVersionOf(QuestionDetail current, String text) {
+        return new QuestionDetail(current.displayId5(), current.courseCode(),
+                current.courseName(), current.versionNo() + 1, current.latestVersionNo() + 1,
+                text, current.answers(), current.correctAnswer(), current.topic(),
+                current.difficulty(), current.hasImage(), current.authorName(),
+                current.createdAt());
+    }
+
+    /** The list row the bank would show for a question, so the two answers cannot disagree. */
+    private static BankQuestionRow rowOf(QuestionDetail detail) {
+        return new BankQuestionRow(detail.displayId5(), detail.courseCode(), detail.courseName(),
+                detail.text(), detail.topic(), detail.difficulty(), 701L,
+                detail.latestVersionNo(), detail.hasImage(), detail.createdAt());
+    }
+
+    /** One row of a version history. */
+    private static QuestionVersionDetail version(int versionNo, String text, List<String> answers,
+                                                 int correct) {
+        return new QuestionVersionDetail(versionNo, text, answers, correct, "Geometry",
+                Difficulty.HARD, false, "Dana Cohen", SPRING);
+    }
+
+    /** Every button carrying this label, for a control the screen draws once per entry. */
+    private static List<Button> buttonsNamed(Scene scene, String label) {
+        return scene.getRoot().lookupAll(".button").stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> label.equals(button.getText()))
+                .toList();
     }
 
     /** One button by its label, so a test cannot pass by finding a different control. */
@@ -518,7 +838,12 @@ class BankScreenInteractionTest extends ApplicationTest {
     }
 
     private static Set<String> labelTexts(Scene scene) {
-        return scene.getRoot().lookupAll(".label").stream()
+        return labelTexts(scene.getRoot());
+    }
+
+    /** The same, under one node, so an assertion cannot be satisfied by the screen around it. */
+    private static Set<String> labelTexts(Node root) {
+        return root.lookupAll(".label").stream()
                 .filter(Label.class::isInstance)
                 .map(node -> ((Label) node).getText())
                 .filter(Objects::nonNull)

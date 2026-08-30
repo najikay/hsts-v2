@@ -21,6 +21,7 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
@@ -34,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -322,39 +324,74 @@ public final class CreateReleaseDialog {
         }
         body.getChildren().add(Buttons.row(dismiss, confirm));
 
-        body.getStyleClass().addAll("hsts-dialog", "release-create-dialog");
-        body.setMaxWidth(560);
+        // 2026-08-30, live session, U-47: `wide` is what buys the Opens / Closes rows
+        // their width. The number lives in the stylesheet beside `.hsts-dialog`, not
+        // here, because an explicit max width set from code is a second opinion about
+        // the same measurement, and the stylesheet's is the one that wins at runtime.
+        body.getStyleClass().addAll("hsts-dialog", "release-create-dialog", "wide");
         return body;
     }
 
-    /** A date and a time, which is what a teacher actually thinks in. */
+    /**
+     * A date and a time, which is what a teacher actually thinks in.
+     *
+     * <h2>2026-08-30, live session, U-47: the row has to be allowed its width</h2>
+     *
+     * <p>The teacher could not read the clock: "too smooshed together, I can't see the
+     * numbers clearly". Two things were doing that, and only the second is obvious.
+     *
+     * <p>The caption sat <b>beside</b> the controls on a 70px minimum, so a row that was
+     * already the widest thing in a 520px card started 82px behind. The caption now sits
+     * <b>above</b> its controls, which costs a line of height and gives the whole measure
+     * back to the four fields that need it.
+     *
+     * <p>And an {@code HBox} that runs out of room does not clip, it <b>shrinks</b>: it
+     * takes every child down towards its minimum width, and a {@link Spinner}'s computed
+     * minimum is narrower than two digits plus its own arrows. A preferred width is only a
+     * preference, so it lost that argument silently. The minimums below are the fix; the
+     * preferred widths are kept beside them so the row reads the same when there is room
+     * to spare.
+     */
     private static final class Moment {
+
+        /** Two digits, a caret column, and the padding a text field draws inside. */
+        private static final double SPINNER_WIDTH = 80;
+
+        /** Enough for a long localised date and the calendar button beside it. */
+        private static final double DATE_WIDTH = 150;
 
         private final DatePicker date = new DatePicker();
         private final Spinner<Integer> hour = new Spinner<>(0, 23, 9);
         private final Spinner<Integer> minute = new Spinner<>(0, 59, 0, 5);
-        private final HBox row;
+        private final VBox row;
 
         private Moment(String label, LocalDateTime initial) {
             date.setValue(initial.toLocalDate());
             hour.getValueFactory().setValue(initial.getHour());
             minute.getValueFactory().setValue(initial.getMinute());
-            hour.setPrefWidth(80);
-            minute.setPrefWidth(80);
-            hour.setEditable(true);
-            minute.setEditable(true);
+            date.setPrefWidth(DATE_WIDTH);
+            date.setMinWidth(DATE_WIDTH);
+            date.getStyleClass().add("release-moment-date");
+            for (Spinner<Integer> spinner : List.of(hour, minute)) {
+                spinner.setPrefWidth(SPINNER_WIDTH);
+                spinner.setMinWidth(SPINNER_WIDTH);
+                spinner.setEditable(true);
+                spinner.getStyleClass().add("release-moment-spinner");
+            }
 
             Label at = new Label("at");
             at.getStyleClass().add("muted");
-            HBox fields = new HBox(8, date, at, hour, new Label(":"), minute);
+            Label colon = new Label(":");
+            colon.getStyleClass().addAll("muted", "release-moment-colon");
+            HBox fields = new HBox(10, date, at, hour, colon, minute);
             fields.setAlignment(Pos.CENTER_LEFT);
+            fields.setMinWidth(Region.USE_PREF_SIZE);
             fields.getStyleClass().add("release-moment");
 
             Label caption = new Label(label);
             caption.getStyleClass().add("field-label");
-            this.row = new HBox(12, caption, fields);
-            this.row.setAlignment(Pos.CENTER_LEFT);
-            caption.setMinWidth(70);
+            this.row = new VBox(6, caption, fields);
+            this.row.getStyleClass().add("release-moment-row");
         }
 
         private void onChange(Runnable listener) {
@@ -372,7 +409,7 @@ public final class CreateReleaseDialog {
                     .atZone(zone).toInstant();
         }
 
-        private HBox node() {
+        private VBox node() {
             return row;
         }
     }

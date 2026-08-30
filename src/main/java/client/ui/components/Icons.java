@@ -92,7 +92,11 @@ public final class Icons {
     public static final String CHEVRON_LEFT = "mdoal-chevron_left";
     public static final String CHEVRON_RIGHT = "mdoal-chevron_right";
     public static final String CLOUD_OFF = "mdoal-cloud_off";
-    public static final String REFRESH = "mdomz-refresh";
+    /**
+     * The column chooser's glyph (2026-08-30, wave 6, U-36): sliders, the mark this pack has
+     * for "adjust what you are looking at". The pack has no VIEW_COLUMN in either half.
+     */
+    public static final String COLUMNS = "mdomz-tune";
     // Not "mdoal-logout" ⚑ (B-38): the pack has LOGIN and EXIT_TO_APP but no LOGOUT, so the
     // profile menu's sign-out item has been drawing an invisible spacer since E5.
     public static final String LOGOUT = "mdoal-exit_to_app";

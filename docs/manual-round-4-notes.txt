@@ -19,3 +19,9 @@ rina.barak
 principal.avia
 - Reports: By teacher / By course / By student all give the exact same data; changing the subject gives the same data or nothing. "big bug".
 - Data tab: nothing opens; a principal wanting to read an exam, a question or results has no detail screen or modal.
+
+dana.cohen, after the meeting
+- Grading: selecting more than one student and Select all is not working; approving happens one at a time.
+- Releases: the Release an exam modal is too smooshed together; the time (clock) fields are hard to read.
+- Student dashboard: in the Take an exam card the Enter button is a little off and moves.
+- Grading: the tab "breaks completely and easily after a few clicks" (selecting students / select all / approve).

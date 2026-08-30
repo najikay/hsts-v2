@@ -13,6 +13,7 @@ import common.dto.auth.LoginResult;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
 import common.dto.bank.QuestionDetail;
+import javafx.beans.value.ChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -27,6 +28,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import java.io.ByteArrayInputStream;
@@ -67,8 +69,27 @@ import java.util.List;
  */
 public final class BankView extends AbstractScreen {
 
-    /** How wide the detail column is. The list takes everything else. */
+    /** How wide the detail column is on a window with room for it. The list takes the rest. */
     private static final double DETAIL_WIDTH = 420;
+
+    /**
+     * What the detail pane shrinks to on a narrow window (2026-08-30, wave 6, U-36).
+     *
+     * <p>320px is the narrowest this card reads at: the stem still wraps to a sensible line,
+     * and the three actions along its foot still sit on one row. Below that the pane would be
+     * the thing that is broken instead of the table.
+     */
+    private static final double DETAIL_WIDTH_NARROW = 320;
+
+    /**
+     * The window width under which the detail pane gives way (U-36).
+     *
+     * <p>Above it the pane's 420px costs the table nothing it misses; below it the table is
+     * down to 449px for eight columns, which is the width the truncation guard reported. The
+     * scene is the thing measured rather than the stage, because the stage carries its own
+     * decorations and the layout only ever sees the scene.
+     */
+    private static final double NARROW_WINDOW = 1100;
 
     private final VBox root = new VBox(14);
     private final DataTable<BankQuestionRow> list = new DataTable<>();
@@ -175,6 +196,14 @@ public final class BankView extends AbstractScreen {
         // ratio of these numbers, the stem gets the room and the id and the
         // version get almost none.
         list.columnWidths(80, 340, 150, 120, 160, 80, 150, 160);
+        // 2026-08-30, wave 6, U-36. Eight columns beside the detail pane leave 449px on a
+        // 1024px window, and no ratio makes a question stem readable in a share of that. The
+        // two that go are the two a reader consults least while she is looking for a question:
+        // the version number is on the detail card she opens next, and the date a version was
+        // written is a fact about the history rather than about the question. Both come back
+        // from the chooser and neither is lost.
+        list.columnChooser();
+        list.hideColumns("Version", "Written");
         list.getStyleClass().add("bank-list");
         list.emptyState(new EmptyState(Icons.BANK, BankCopy.NO_QUESTIONS.title(),
                 BankCopy.NO_QUESTIONS.hint()));
@@ -281,15 +310,50 @@ public final class BankView extends AbstractScreen {
         VBox pane = new VBox(14, detailEmpty, retry, detailBody, historyBody);
         pane.getStyleClass().addAll("hsts-card", "bank-detail");
         pane.setPadding(new Insets(18));
-        pane.setPrefWidth(DETAIL_WIDTH);
-        pane.setMinWidth(DETAIL_WIDTH);
 
         ScrollPane scroll = new ScrollPane(pane);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("bank-detail-scroll");
-        scroll.setPrefWidth(DETAIL_WIDTH);
-        scroll.setMinWidth(DETAIL_WIDTH);
+        widenWithTheWindow(pane, scroll);
         return scroll;
+    }
+
+    /**
+     * Lets the detail pane give way on a narrow window (2026-08-30, wave 6, U-36).
+     *
+     * <p>420px was a constant, and a constant is what made the table's problem unfixable from
+     * the table's side: whatever the window, the list got what was left. Now the pane asks for
+     * 420 when the scene is 1100px or wider and 320 when it is not, which hands the columns
+     * exactly the 100px the guard said they were short.
+     *
+     * <p>It follows the scene rather than being set once, because the window is resized while
+     * the screen is on it - the truncation guard resizes it twice per visit, and a user drags
+     * a corner. The listener is attached when the node joins a scene and taken off when it
+     * leaves, so a screen that is cached for the life of the process does not accumulate one
+     * per visit.
+     */
+    private void widenWithTheWindow(Region pane, Region scroll) {
+        ChangeListener<Number> onWidth =
+                (observable, was, width) -> applyDetailWidth(pane, scroll, width.doubleValue());
+        scroll.sceneProperty().addListener((observable, was, now) -> {
+            if (was != null) {
+                was.widthProperty().removeListener(onWidth);
+            }
+            if (now != null) {
+                now.widthProperty().addListener(onWidth);
+                applyDetailWidth(pane, scroll, now.getWidth());
+            }
+        });
+        applyDetailWidth(pane, scroll, DETAIL_WIDTH + NARROW_WINDOW);
+    }
+
+    /** Sets both halves of the pane to the width this scene has room for (U-36). */
+    private void applyDetailWidth(Region pane, Region scroll, double sceneWidth) {
+        double width = sceneWidth < NARROW_WINDOW ? DETAIL_WIDTH_NARROW : DETAIL_WIDTH;
+        pane.setPrefWidth(width);
+        pane.setMinWidth(width);
+        scroll.setPrefWidth(width);
+        scroll.setMinWidth(width);
     }
 
     // ===================== Rendering ======================================
@@ -419,7 +483,10 @@ public final class BankView extends AbstractScreen {
         // only where she teaches. Both write controls go together, and both say why, because a
         // greyed button with no reason is a defect of its own on a screen she reached legitimately.
         boolean mayWrite = session.canWriteIn(detail.courseCode());
-        delete.setDisable(session.isDeleting() || !mayWrite);
+        // isDetailSettled for the same reason canEdit consults it: QUESTION_DELETE carries the
+        // shown version as its staleness token, so a delete built from a version being
+        // refreshed would be refused for a conflict nobody caused (U-49).
+        delete.setDisable(session.isDeleting() || !mayWrite || !session.isDetailSettled());
         String why = mayWrite ? null : BankCopy.readOnlyCourse(detail.courseName());
         setReason(delete, why);
         setReason(edit, why);
@@ -582,6 +649,13 @@ public final class BankView extends AbstractScreen {
         if (detail == null || session.isDeleting()) {
             return false;
         }
+        // And it must be a settled read rather than one being refreshed. The pane keeps the
+        // previous version drawn while a re-read is in flight, which is right for reading and
+        // wrong for writing: an edit built from it would carry the staleness token of the very
+        // version the server is replacing (2026-08-30, Findings.txt, U-49).
+        if (!session.isDetailSettled()) {
+            return false;
+        }
         // The bytes, and enough of them. Three states have to agree here and two of them are
         // easy to miss: QuestionImage normalises a null blob to an EMPTY array, so a non-null
         // check passes for a picture that is not there; and this view already renders that
@@ -594,8 +668,33 @@ public final class BankView extends AbstractScreen {
         return !detail.hasImage() || (bytes != null && bytes.length > 0);
     }
 
+    /**
+     * Edit: re-read the question, then open the editor on what came back (U-49).
+     *
+     * <p><b>Never on what the pane is holding</b>, which is the defect this is the repair for.
+     * The detail is a snapshot of one version and it is also the staleness token the editor's
+     * next save carries, so a pane that had gone stale since it was drawn produced an editor
+     * whose save the server refused with "somebody else saved a new version of this question"
+     * about the teacher's own previous save. {@link BankSession#refreshDetailThen} issues a
+     * fresh {@code QUESTION_GET} and calls back once the answer, and for an illustrated question
+     * its bytes, are both in hand.
+     *
+     * <p>Nothing happens when the re-read fails, and that is the honest outcome: the pane
+     * renders its own "could not be opened" panel with a retry beside it, and an editor opened
+     * on a question the server has just declined to hand over could not have saved anyway.
+     */
     private void openEditorForSelected() {
-        QuestionDetail detail = session.detail();
+        if (!canEdit(session.detail())) {
+            return;
+        }
+        session.refreshDetailThen(this::openEditorOn);
+    }
+
+    /**
+     * Opens the editor on a freshly read version, re-checking the gate the re-read may have
+     * moved: a question that gained an illustration, or lost the course she writes in.
+     */
+    private void openEditorOn(QuestionDetail detail) {
         if (!canEdit(detail)) {
             return;
         }

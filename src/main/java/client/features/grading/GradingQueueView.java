@@ -16,11 +16,15 @@ import javafx.scene.Parent;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -29,6 +33,7 @@ import javafx.scene.layout.VBox;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.IntPredicate;
 
 /**
  * The teacher's grading screen (Presentation tier, E12.5/E12.6/E12.7 — T-8).
@@ -44,6 +49,16 @@ import java.util.Optional;
  * <p>Bulk approve asks first, because it publishes a class's marks and cannot be undone. The
  * override does not ask: its dialog <em>is</em> the deliberation, and a second "are you sure"
  * after someone has typed a justification is a click that teaches nothing.
+ *
+ * <h2>Ticks and selection are two different things (2026-08-30, live session, U-46)</h2>
+ *
+ * <p>Which papers she is about to approve lives in a <b>checkbox column</b> and in
+ * {@link GradingQueueSession}'s selection behind it. Which row Review and Change score act on is
+ * the table's own single selection. They were the same thing until U-46 and that was the defect:
+ * the table was in {@code MULTIPLE} mode with a listener mirroring its selected rows into the
+ * session, so a plain click on the next student <em>replaced</em> the selection instead of adding
+ * to it, Select all was undone by the next click, and Naji found himself "approving only one at a
+ * time". A tick is a deliberate act on one row and survives a click anywhere else.
  */
 public final class GradingQueueView extends AbstractScreen {
 
@@ -58,7 +73,7 @@ public final class GradingQueueView extends AbstractScreen {
     private final DataTable<StudentGradeRow> table = new DataTable<>();
 
     private final Button approveSelected = new Button(GradingCopy.APPROVE_SELECTED);
-    private final Button selectAll = new Button("Select all");
+    private final Button selectAll = new Button(GradingCopy.SELECT_ALL);
     private final Button override = new Button(GradingCopy.OVERRIDE);
 
     private final EmptyState queueEmpty = new EmptyState(Icons.GRADING,
@@ -66,6 +81,30 @@ public final class GradingQueueView extends AbstractScreen {
 
     private GradingQueueSession session;
     private boolean selecting;
+
+    /**
+     * What the checkboxes were last drawn from, so a render knows when they are stale.
+     *
+     * <p>The cells read the session, and a cell is only asked to redraw itself when its row
+     * changes. A re-read that clears the selection usually brings new rows with it and the ticks
+     * clear themselves, but not always: a refused approval answers with rows equal to the ones on
+     * screen, {@link #setRows} rightly skips the write, and nothing would tell the checkboxes that
+     * the session no longer holds them ticked.
+     */
+    private List<Long> renderedTicks = List.of();
+
+    /**
+     * The bulk confirmation, as a seam (2026-08-30, live session, U-46).
+     *
+     * <p>Production asks in a modal, which is the point of the dialog and is also why no test can
+     * press Approve selected: {@code showAndWait} blocks the FX thread the test is driving, so a
+     * headless run hangs rather than fails. The confirmation is therefore a field, and
+     * {@code GradingInteractionTest} replaces it with "yes" the same reflective way
+     * {@code ReleaseManagerInteractionTest} reaches a screen's session. What is under test is what
+     * the request carries; that a teacher is asked first is asserted by reading this wiring, not
+     * by clicking through it.
+     */
+    private IntPredicate bulkConfirm = this::askBeforePublishing;
 
     @Override
     protected Parent build() {
@@ -148,7 +187,8 @@ public final class GradingQueueView extends AbstractScreen {
 
     private void buildTable() {
         table.title("Students");
-        table.column(GradingCopy.COLUMN_STUDENT, StudentGradeRow::studentName)
+        table.column(tickColumn())
+                .column(GradingCopy.COLUMN_STUDENT, StudentGradeRow::studentName)
                 .column(GradingCopy.COLUMN_AUTO, row -> String.valueOf(row.autoScore()))
                 .column(GradingCopy.COLUMN_SCORE, row -> row.effectiveScore() + " / 100")
                 .column(GradingCopy.COLUMN_STATE, GradingCopy::state)
@@ -156,36 +196,98 @@ public final class GradingQueueView extends AbstractScreen {
                 .column(reviewColumn())
                 // F-9: "Auto" and "Score" hold two or three digits; the student name
                 // holds a full name and was clipping at the default window size. The Review
-                // column is sized to its button rather than to a heading it does not have.
-                .columnWidths(260, 110, 130, 150, 60, 110)
-                .numericColumns(1, 2);
+                // column is sized to its button rather than to a heading it does not have, and
+                // the tick column to a checkbox, which is the narrowest thing on the row.
+                .columnWidths(52, 260, 110, 130, 150, 60, 110)
+                .numericColumns(2, 3);
 
-        // Selection drives the bulk approve. Multiple selection rather than a checkbox column:
-        // it is the platform's own idiom and needs no extra column to explain itself.
-        table.table().getSelectionModel().setSelectionMode(
-                javafx.scene.control.SelectionMode.MULTIPLE);
-        table.table().getSelectionModel().getSelectedItems()
-                .addListener((javafx.collections.ListChangeListener<StudentGradeRow>) change -> {
-                    if (selecting) {
-                        return;
-                    }
-                    session.clearSelection();
-                    for (StudentGradeRow row : table.table().getSelectionModel().getSelectedItems()) {
-                        if (row != null && GradingCopy.canOverride(row)) {
-                            session.select(row.gradeId(), true);
-                        }
+        // Single, and only for Review and Change score. The bulk approve reads the ticks, so a
+        // click on a row must be free to mean "this one" without disturbing what is chosen
+        // (2026-08-30, live session, U-46).
+        table.table().getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        // A row click changes nothing in the session, and Change score is enabled from the row
+        // that is selected: without this the button kept whatever it was when the session last
+        // changed, so the teacher clicked a paper she could still change and found the control
+        // dead (2026-08-30, live session, U-46 addendum). Re-rendering is all it does, and the
+        // guard is the one render already sets around its own writes to the two lists.
+        table.table().getSelectionModel().selectedItemProperty()
+                .addListener((observable, was, now) -> {
+                    if (!selecting) {
+                        render();
                     }
                 });
+    }
+
+    /**
+     * The column the bulk approve is actually made of (2026-08-30, live session, U-46).
+     *
+     * <p>One checkbox per row, and only on rows {@link GradingCopy#canOverride} allows: an
+     * approved paper cannot be approved again, and a box she can tick and not act on is a control
+     * that lies. The ticks <b>are</b> {@link GradingQueueSession}'s selection — drawn from it in
+     * {@code updateItem} rather than remembered in the cell — which is what makes the session's
+     * clear-on-re-read rule visible: when a refresh drops the selection the boxes empty with it.
+     *
+     * <p>The mouse press is consumed and the box fired by hand. A press that reached the cell
+     * would also move the table's single selection to this row, which is the row Change score
+     * acts on: ticking Omer must not silently re-aim the override at him. Consuming in a
+     * <em>filter</em> is what makes that deterministic — it runs before the checkbox's own
+     * behaviour and before the cell's, so nothing depends on which handler was installed first.
+     * {@code setFocusTraversable(false)} keeps the boxes out of the tab order for the same
+     * reason: this column is a pointer gesture, and Select all is the keyboard's way in.
+     *
+     * @return the column, ready to hand to the table
+     */
+    private TableColumn<StudentGradeRow, StudentGradeRow> tickColumn() {
+        TableColumn<StudentGradeRow, StudentGradeRow> column =
+                new TableColumn<>(GradingCopy.COLUMN_TICK);
+        column.setCellValueFactory(cell ->
+                new javafx.beans.property.SimpleObjectProperty<>(cell.getValue()));
+        column.setPrefWidth(52);
+        column.setMinWidth(44);
+        column.setSortable(false);
+        column.setCellFactory(unused -> new TableCell<>() {
+            private final CheckBox tick = new CheckBox();
+
+            {
+                setAlignment(Pos.CENTER);
+                tick.setFocusTraversable(false);
+                tick.setTooltip(new Tooltip(GradingCopy.TICK_HINT));
+                tick.setAccessibleText(GradingCopy.TICK_HINT);
+                tick.setOnAction(event -> {
+                    StudentGradeRow row = getItem();
+                    if (row != null) {
+                        session.select(row.gradeId(), tick.isSelected());
+                    }
+                });
+                tick.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+                    event.consume();
+                    tick.fire();
+                });
+            }
+
+            @Override
+            protected void updateItem(StudentGradeRow row, boolean empty) {
+                super.updateItem(row, empty);
+                boolean approvable = !empty && row != null && GradingCopy.canOverride(row);
+                if (approvable) {
+                    tick.setSelected(session.isSelected(row.gradeId()));
+                }
+                setGraphic(approvable ? tick : null);
+            }
+        });
+        return column;
     }
 
     /**
      * The column that opens one student's paper (E12.6 — U-38).
      *
      * <p>A button per row rather than the table's own {@code openOnClick} gesture, and the
-     * reason is this table's other job: rows are <b>multi-selected</b> here to drive the bulk
-     * approve, so a click that navigated away would fight the click that ticks a row. A button
-     * is the one affordance that can say "open this one" on a surface where the row itself
-     * already means something else.
+     * reason is this table's other job: a click on a row here <b>selects</b> it, which is what
+     * aims Change score, so a click that also navigated away would fight it. A button is the one
+     * affordance that can say "open this one" on a surface where the row itself already means
+     * something else. (Since U-46 the bulk approve is the tick column's, not the selection's;
+     * the argument for a button is unchanged, and now there is a second control on the row that
+     * a navigating click would have fought.)
      *
      * @return the column, ready to hand to the table
      */
@@ -264,6 +366,14 @@ public final class GradingQueueView extends AbstractScreen {
                 setRows(java.util.List.of());
             });
 
+            // The ticks are drawn from the session, and only a cell update redraws them. When
+            // the rows did not change but the selection did, ask the table for that update.
+            List<Long> ticks = session.selection();
+            if (!ticks.equals(renderedTicks)) {
+                renderedTicks = ticks;
+                table.table().refresh();
+            }
+
             String message = session.error().orElse("");
             error.setText(message);
             show(error, !message.isEmpty());
@@ -305,47 +415,52 @@ public final class GradingQueueView extends AbstractScreen {
     }
 
     /**
-     * Ticks every row that can still be approved, <b>in the table</b>.
+     * Ticks every row that can still be approved.
      *
-     * <p>The table is this screen's source of truth for selection, and the listener mirrors it
-     * into the session. Driving it the other way — session first, table second — is what broke
-     * row selection outright: the listener clears the session before rebuilding it, that clear
-     * triggers a render, and a render that touched the table's selection wiped it out from
-     * under the listener's own iteration. One direction, no loop, nothing to guard.
-     *
-     * <p>Approved rows are skipped rather than ticked and refused. Re-approving is harmless by
-     * contract, but counting rows already done would make the confirmation overstate what is
-     * about to happen.
+     * <p>One line since 2026-08-30 (live session, U-46), and that is the fix. It used to select
+     * the rows in the <em>table</em> and let a listener mirror them into the session, so the next
+     * plain click on any row replaced the whole thing and Select all had never happened. The
+     * session owns the ticks; see {@link GradingQueueSession#selectAllApprovable()} for which
+     * rows it counts and why the approved ones are left out.
      */
     private void selectAllApprovableRows() {
-        var model = table.table().getSelectionModel();
-        model.clearSelection();
-        for (StudentGradeRow row : session.rows()) {
-            if (GradingCopy.canOverride(row)) {
-                model.select(row);
-            }
-        }
+        session.selectAllApprovable();
     }
 
     // ===================== Actions =======================================
 
     /**
-     * Asks before publishing a class's marks.
+     * Asks before publishing a class's marks, then sends every ticked grade.
      *
      * <p>The one destructive-ish action on this screen: approving cannot be undone, because
-     * overriding an approved grade answers {@code CONFLICT} by design.
+     * overriding an approved grade answers {@code CONFLICT} by design. The count in the question
+     * is the number of ticks, which since U-46 is also exactly what
+     * {@link GradingQueueSession#approveSelected()} will send.
+     *
+     * <p>The asking itself goes through {@link #bulkConfirm} so that a test can drive the rest of
+     * this method without a modal on the FX thread; see that field.
      */
     private void confirmAndApprove() {
         int count = session.selectionSize();
         if (count == 0) {
             return;
         }
+        if (bulkConfirm.test(count)) {
+            session.approveSelected();
+        }
+    }
+
+    /**
+     * The modal half of {@link #confirmAndApprove}: a plain confirmation, named by its count.
+     *
+     * @param count how many grades are ticked
+     * @return {@code true} when she pressed OK
+     */
+    private boolean askBeforePublishing(int count) {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 GradingCopy.bulkConfirm(count), ButtonType.CANCEL, ButtonType.OK);
         confirm.setHeaderText(null);
-        confirm.showAndWait()
-                .filter(button -> button == ButtonType.OK)
-                .ifPresent(button -> session.approveSelected());
+        return confirm.showAndWait().filter(button -> button == ButtonType.OK).isPresent();
     }
 
     /**

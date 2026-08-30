@@ -11,7 +11,11 @@ import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -25,7 +29,9 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -66,6 +72,9 @@ public final class DataTable<T> extends VBox {
     /** The affordance revealed at the end of a hovered row that opens something. */
     public static final String OPEN_AFFORDANCE = "Open →";
 
+    /** What the column chooser says on hover (2026-08-30, wave 6, U-36). */
+    public static final String COLUMN_CHOOSER_TOOLTIP = "Choose which columns to show";
+
     /** How far the affordance sits from the wrapper's right edge, clear of a scrollbar. */
     private static final double AFFORDANCE_INSET = 20;
 
@@ -88,11 +97,14 @@ public final class DataTable<T> extends VBox {
     private final HBox toolbar = new HBox(8);
     private final Label countLabel = new Label();
     private final Label affordance = new Label(OPEN_AFFORDANCE);
+    /** Column to the word at the top of it, in the order the columns were added (U-36). */
+    private final Map<TableColumn<T, ?>, String> columnTitles = new LinkedHashMap<>();
 
     private Node skeleton = Skeletons.list(6);
     private Node emptyState = EmptyState.noResults();
     private Node errorState;
     private TextField search;
+    private Button chooser;
     private BiPredicate<T, String> searchMatcher;
     private AsyncViewState state = AsyncViewState.IDLE;
     private Consumer<T> openAction;
@@ -166,6 +178,7 @@ public final class DataTable<T> extends VBox {
         heading(column, title);
         column.setCellValueFactory(cell -> new SimpleStringProperty(reader.apply(cell.getValue())));
         column.setCellFactory(ignored -> textCell());
+        columnTitles.put(column, title);
         table.getColumns().add(column);
         return this;
     }
@@ -173,6 +186,7 @@ public final class DataTable<T> extends VBox {
     /** Adds a pre-built column (for chip cells, action buttons, custom sorting). */
     public DataTable<T> column(TableColumn<T, ?> column) {
         if (column.getText() != null && !column.getText().isEmpty()) {
+            columnTitles.put(column, column.getText());
             heading(column, column.getText());
         }
         table.getColumns().add(column);
@@ -480,6 +494,79 @@ public final class DataTable<T> extends VBox {
             int at = toolbar.getChildren().isEmpty() ? 0 : 1;
             toolbar.getChildren().addAll(at, List.of(countLabel, Buttons.spacer()));
         }
+        return this;
+    }
+
+    /**
+     * Puts a column chooser on the toolbar: one checkbox per column, off the table's own
+     * titles (2026-08-30, wave 6, U-36).
+     *
+     * <h2>Why a table needs one at all</h2>
+     *
+     * <p>The truncation guard's first run found the question bank's eight columns sharing
+     * 449px beside a fixed detail pane on a 1024px window, which is a width no ratio can
+     * rescue: a 47-character stem is unreadable at 60px however the share is divided, and the
+     * cell tooltip is a fallback rather than an answer. The columns a reader does not need
+     * every time are the ones that should give way, and which ones those are is hers to say.
+     *
+     * <p>An icon button opening a {@link ContextMenu} of {@link CheckMenuItem}s rather than
+     * JavaFX's own table menu button: that one is an unstyled default that ignores the theme
+     * tokens, and this app's context menus were made theme-aware for exactly this reason
+     * (U-29). Each item is bound <b>bidirectionally</b> to its column's
+     * {@code visibleProperty}, so a column hidden by {@link #hideColumns(String...)} opens
+     * with its box already clear and a tick puts it straight back.
+     *
+     * <p>{@code CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS} shares the table's width among the
+     * <em>visible</em> columns, so hiding one widens the rest in the ratio
+     * {@link #columnWidths(double...)} already set. Nothing else has to be re-tuned.
+     *
+     * <p>Only columns that were given a title appear: a chooser row with no name on it could
+     * not be read, and an action column has no name by design.
+     */
+    public DataTable<T> columnChooser() {
+        if (chooser != null) {
+            return this;
+        }
+        ContextMenu menu = new ContextMenu();
+        for (Map.Entry<TableColumn<T, ?>, String> entry : columnTitles.entrySet()) {
+            CheckMenuItem item = new CheckMenuItem(entry.getValue());
+            item.selectedProperty().bindBidirectional(entry.getKey().visibleProperty());
+            menu.getItems().add(item);
+        }
+        chooser = Buttons.icon(Icons.COLUMNS, COLUMN_CHOOSER_TOOLTIP);
+        chooser.getStyleClass().add("table-column-chooser");
+        // On the button rather than only shown from the handler: it is then the button's own
+        // menu, so a right-click opens it too and a reader of this class can find it.
+        chooser.setContextMenu(menu);
+        chooser.setOnAction(event -> menu.show(chooser, Side.BOTTOM, 0, 4));
+        if (toolbar.getChildren().isEmpty()) {
+            // The chooser belongs on the right edge, over the columns it governs, and a
+            // toolbar holding nothing else has no other way to get it there.
+            toolbar.getChildren().add(Buttons.spacer());
+        }
+        toolbar.getChildren().add(chooser);
+        return this;
+    }
+
+    /**
+     * Starts with these columns hidden; the chooser brings them back (U-36).
+     *
+     * <p>Hidden rather than dropped, and that distinction is the whole feature: the data is
+     * still on the row, the column is still in the sort order the moment it is ticked back on,
+     * and no screen has to decide for good what a reader will want to see. Titles are matched
+     * exactly, as they were passed to {@link #column(String, Function)}; a name no column has
+     * is ignored rather than thrown, so renaming a column cannot crash a screen on the visit
+     * after.
+     *
+     * @param titles the column headings to hide at first paint
+     */
+    public DataTable<T> hideColumns(String... titles) {
+        List<String> wanted = List.of(titles);
+        columnTitles.forEach((column, title) -> {
+            if (wanted.contains(title)) {
+                column.setVisible(false);
+            }
+        });
         return this;
     }
 

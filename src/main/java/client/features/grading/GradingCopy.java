@@ -71,6 +71,21 @@ public final class GradingCopy {
     /** Column heading: the adjusted marker. */
     public static final String COLUMN_ADJUSTED = "";
 
+    /**
+     * Column heading over the checkboxes: deliberately blank (2026-08-30, live session, U-46).
+     *
+     * <p>Same reasoning as {@link #COLUMN_REVIEW}. A checkbox says what it is, the button below
+     * the heading row is already called "Approve selected", and a kicker reading TICK would be
+     * the only heading on this table naming a control rather than a fact about the student.
+     */
+    public static final String COLUMN_TICK = "";
+
+    /** What one checkbox is for, on its tooltip and in its accessible name. */
+    public static final String TICK_HINT = "Choose this grade for Approve selected";
+
+    /** The button that ticks every grade still waiting on her. */
+    public static final String SELECT_ALL = "Select all";
+
     /** The button that publishes every selected grade. */
     public static final String APPROVE_SELECTED = "Approve selected";
 

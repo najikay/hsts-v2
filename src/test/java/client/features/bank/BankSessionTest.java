@@ -476,6 +476,222 @@ class BankSessionTest {
         }
     }
 
+    // ===================== U-49, the version the pane holds ===============
+
+    /**
+     * {@link BankSession#refreshDetail()} and its one-shot (2026-08-30, Findings.txt, U-49).
+     *
+     * <p>The bank's detail is a snapshot of one version, and it is also the staleness token
+     * every write built from this screen carries. Nothing re-read it: {@code load} re-asked for
+     * the list, {@code select} declined to re-ask for the question already showing, and the
+     * teacher who saved a new version came back to a pane drawing the version she had replaced
+     * and an Edit that was refused for a conflict nobody caused.
+     *
+     * <p>{@code BankScreenInteractionTest} walks the whole sequence through the router, because
+     * the object that goes stale crosses two screens. What is provable here is the rule
+     * underneath it: a re-read happens, it does not blank the pane while it is in flight, and no
+     * write can be built from a version that is being replaced.
+     */
+    @Nested
+    @DisplayName("re-reading the open question (U-49)")
+    class Refreshing {
+
+        @BeforeEach
+        void serverAnswers() {
+            serverHasTheBank();
+        }
+
+        /** A wire whose QUESTION_GET answers whatever the test last put in the box. */
+        private QuestionDetail[] servesTheOpenQuestion(QuestionDetail first) {
+            QuestionDetail[] onServer = {first};
+            connection.respondTo(Verb.QUESTION_GET,
+                    request -> Message.ok(request, onServer[0]));
+            return onServer;
+        }
+
+        private long questionGets() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.QUESTION_GET)
+                    .count();
+        }
+
+        @Test
+        @DisplayName("⚑ coming back to the bank re-reads the open question, not only the list")
+        void loadReReadsTheOpenQuestion() {
+            QuestionDetail[] onServer = servesTheOpenQuestion(detail("11001", false, 1, 1));
+            session.load();
+            session.select("11001");
+            assertThat(session.detail().versionNo()).isEqualTo(1);
+
+            onServer[0] = detail("11001", false, 2, 2);
+            session.load();
+
+            assertThat(session.detail().versionNo())
+                    .as("this is the path the editor comes back down after writing a version, "
+                            + "and the pane it returns to was still holding the old one")
+                    .isEqualTo(2);
+            assertThat(questionGets()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a reload moves the question as well as the row")
+        void reloadReReadsTheOpenQuestion() {
+            QuestionDetail[] onServer = servesTheOpenQuestion(detail("11001", false, 1, 1));
+            session.load();
+            session.select("11001");
+
+            onServer[0] = detail("11001", false, 3, 3);
+            session.reload();
+
+            assertThat(session.detail().versionNo()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("nothing open, nothing to re-read")
+        void refreshingAnEmptyPaneIsANoOp() {
+            servesTheOpenQuestion(detail("11001", false, 1, 1));
+            session.load();
+
+            session.refreshDetail();
+
+            assertThat(questionGets()).isZero();
+            assertThat(session.detail()).isNull();
+        }
+
+        @Test
+        @DisplayName("clicking the row that is already open still costs no round trip")
+        void selectingTheOpenQuestionStillShortCircuits() {
+            servesTheOpenQuestion(detail("11001", false, 1, 1));
+            session.load();
+            session.select("11001");
+
+            session.select("11001");
+
+            assertThat(questionGets())
+                    .as("the table's selection listener fires on every render, and a re-fetch "
+                            + "per render is what that shortcut exists to prevent")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("⚑ the version on screen stays there while the re-read is in flight")
+        void thePaneDoesNotBlankWhileRefreshing() {
+            // No responder: the test answers by hand, so the in-flight moment is observable.
+            session.load();
+            connection.clearSent();
+            session.select("11001");
+            connection.deliver(Message.ok(connection.sentMessages().get(0),
+                    detail("11001", false, 1, 1)));
+
+            session.refreshDetail();
+
+            assertThat(session.detail())
+                    .as("blanking to 'no question selected' beside a row that is still "
+                            + "highlighted is the screen contradicting itself")
+                    .isNotNull();
+            assertThat(session.detail().versionNo()).isEqualTo(1);
+            assertThat(session.isDetailSettled())
+                    .as("but it is not a settled read, and the screen shuts Edit and Delete on "
+                            + "that: a write built from it would carry the token of the version "
+                            + "being replaced")
+                    .isFalse();
+
+            connection.deliver(Message.ok(connection.sentMessages().get(1),
+                    detail("11001", false, 2, 2)));
+
+            assertThat(session.detail().versionNo()).isEqualTo(2);
+            assertThat(session.isDetailSettled()).isTrue();
+        }
+
+        @Test
+        @DisplayName("⚑ the one-shot is handed the answer to a fresh QUESTION_GET")
+        void theOneShotGetsTheFreshVersion() {
+            QuestionDetail[] onServer = servesTheOpenQuestion(detail("11001", false, 1, 1));
+            session.load();
+            session.select("11001");
+
+            onServer[0] = detail("11001", false, 2, 2);
+            List<QuestionDetail> opened = new java.util.ArrayList<>();
+            session.refreshDetailThen(opened::add);
+
+            assertThat(opened)
+                    .as("this is what Edit opens the editor on, and it is never the copy the "
+                            + "pane happened to be drawing")
+                    .singleElement()
+                    .extracting(QuestionDetail::versionNo)
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ it waits for the illustration, which the editor cannot be built without")
+        void theOneShotWaitsForTheBytes() {
+            // No QUESTION_GET responder: the test answers by hand, so the moment between the
+            // question landing and its bytes landing is a moment this test can stand in.
+            session.load();
+            connection.clearSent();
+            session.select("11005");
+            connection.deliver(Message.ok(connection.sentMessages().get(0),
+                    detail("11005", true, 2, 2)));
+            connection.deliver(Message.ok(connection.sentMessages().get(1),
+                    new QuestionImage("11005", 2, "image/png", new byte[] {1, 2})));
+
+            List<QuestionDetail> opened = new java.util.ArrayList<>();
+            session.refreshDetailThen(opened::add);
+            connection.deliver(Message.ok(connection.sentMessages().get(2),
+                    detail("11005", true, 3, 3)));
+
+            assertThat(opened)
+                    .as("QuestionEditorSession.forEdit takes the bytes as a required argument "
+                            + "and throws without them, so firing between the two answers would "
+                            + "make pressing Edit an exception")
+                    .isEmpty();
+
+            connection.deliver(Message.ok(connection.sentMessages().get(3),
+                    new QuestionImage("11005", 3, "image/png", new byte[] {3, 4})));
+
+            assertThat(opened).singleElement()
+                    .extracting(QuestionDetail::versionNo).isEqualTo(3);
+            assertThat(session.image()).containsExactly(3, 4);
+        }
+
+        @Test
+        @DisplayName("a re-read that fails drops the one-shot rather than deferring it")
+        void theOneShotIsDroppedOnAFailure() {
+            connection.respondTo(Verb.QUESTION_GET,
+                    request -> Message.ok(request, detail("11001", false, 1, 1)));
+            session.load();
+            session.select("11001");
+
+            connection.replyError(Verb.QUESTION_GET, ErrorCode.NOT_FOUND, "gone");
+            List<QuestionDetail> opened = new java.util.ArrayList<>();
+            session.refreshDetailThen(opened::add);
+
+            assertThat(opened)
+                    .as("an editor opened on a question the server has just declined to hand "
+                            + "over is an editor whose save cannot land")
+                    .isEmpty();
+            assertThat(session.detailState()).isEqualTo(AsyncViewState.ERROR);
+        }
+
+        @Test
+        @DisplayName("a delete clears the pane, so its reload has nothing stale to re-read")
+        void deleteLeavesNothingToRefresh() {
+            servesTheOpenQuestion(detail("11005", false, 1, 1));
+            session.load();
+            session.select("11005");
+            connection.replyOk(Verb.QUESTION_DELETE, DeleteOutcome.succeeded());
+
+            session.deleteSelected();
+
+            assertThat(session.selectedId())
+                    .as("the question the pane described no longer exists, and the third write "
+                            + "the finding asks about is safe for that reason rather than for "
+                            + "the reason the other two are")
+                    .isNull();
+            assertThat(session.detail()).isNull();
+        }
+    }
+
     // ===================== The teeth ======================================
 
     @Nested

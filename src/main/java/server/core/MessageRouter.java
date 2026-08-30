@@ -64,6 +64,20 @@ public class MessageRouter {
     public static final String GENERIC_INTERNAL_MESSAGE =
             "Something went wrong on the server. Please try again.";
 
+    /**
+     * The only sentence a verb this server has no handler for is ever allowed to say
+     * (2026-08-30, wave 6, B-35).
+     *
+     * <p>It used to be {@code "Unsupported operation: " + verb}, and several client sessions
+     * render {@link Message#errorMessage()} straight into a label, so a protocol constant was
+     * reachable copy on a reader's screen: the same class of thing as B-12's array literal. The
+     * verb is a fact about the wire and not about anything the reader did, so it stays in the
+     * {@code WARN} line beside the return and never in the sentence. Fixed, like
+     * {@link #GENERIC_INTERNAL_MESSAGE}, so no call site can widen it.
+     */
+    public static final String UNSUPPORTED_VERB_MESSAGE =
+            "That action is not available on this server. Please try again.";
+
     /** A unit of server work: pure in, pure out - no sockets, no OCSF. */
     @FunctionalInterface
     public interface Handler {
@@ -164,7 +178,7 @@ public class MessageRouter {
         Handler handler = handlers.get(verb);
         if (handler == null) {
             log.warn("Unsupported verb {} from {}", verb, caller);
-            return Message.error(request, ErrorCode.BAD_REQUEST, "Unsupported operation: " + verb);
+            return Message.error(request, ErrorCode.BAD_REQUEST, UNSUPPORTED_VERB_MESSAGE);
         }
 
         if (!openVerbs.contains(verb) && !caller.isAuthenticated()) {

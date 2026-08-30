@@ -14,6 +14,8 @@ import client.features.data.DataQuestionView;
 import client.features.data.DataSittingView;
 import client.features.bot.BotChatView;
 import client.features.exam.ExecutionMonitorView;
+import client.features.approval.ExamPreviewView;
+import client.features.exambuild.ExamBuildRoutes;
 import client.features.exambuild.ExamBuilderView;
 import client.features.grading.GradeReviewView;
 import client.features.home.StudentHomeSession;
@@ -207,6 +209,9 @@ class TruncatedTextGuardTest extends ApplicationTest {
     void coordinatorScreensReadInFull() {
         List<Stop> stops = new ArrayList<>(teachingStops(Role.COORDINATOR));
         stops.add(new Stop(Routes.APPROVALS.id(), NavParams.empty()));
+        // The preview is walked by teachingStops since U-53. It is walked again here without a
+        // "from", which is the coordinator's own door: the footer reads "Back to approvals" on
+        // this visit and "Back to the exam" on that one, and both sentences have to fit.
         stops.add(new Stop(Routes.EXAM_PREVIEW.id(),
                 NavParams.of("examVersionId", CALCULUS_V1)));
         assertNothingIsTruncated(RINA, this::coordinatingServer, stops);
@@ -274,7 +279,16 @@ class TruncatedTextGuardTest extends ApplicationTest {
                                 GradeReviewView.PARAM_EXAM, "Algebra midterm · 11")),
                 new Stop(Routes.EXAMS.id(), NavParams.empty()),
                 new Stop(Routes.EXAM_BUILD.id(),
-                        NavParams.of(ExamBuilderView.PARAM_COURSE, "11")));
+                        NavParams.of(ExamBuilderView.PARAM_COURSE, "11")),
+                // The preview, on both teaching rails since 2026-08-30 (Findings.txt, U-53):
+                // the builder's Preview opens it on the version she is composing. Walked with
+                // the parameter that door carries, because a detail screen visited with an
+                // empty bag renders its "could not be opened" panel and would exempt itself.
+                // The "from" is here too, because it decides the footer's wording and a stop
+                // that omitted it would leave the author's own sentence unwalked.
+                new Stop(Routes.EXAM_PREVIEW.id(),
+                        NavParams.of("examVersionId", CALCULUS_V1,
+                                ExamPreviewView.PARAM_FROM, ExamBuildRoutes.BUILDER)));
     }
 
     /**
@@ -390,12 +404,9 @@ class TruncatedTextGuardTest extends ApplicationTest {
                 List.of(new BotActivityPoint(LocalDate.of(2026, 8, 19), 4),
                         new BotActivityPoint(LocalDate.of(2026, 8, 20), 8)),
                 List.of(new BotTopQuestion("How do I complete the square?", 5))));
-    }
-
-    private void coordinatingServer(FakeClientConnection connection) {
-        teachingServer(connection);
-        connection.replyOk(Verb.APPROVALS_QUEUE_GET,
-                new ApprovalQueue(List.of(pendingApproval()), true));
+        // The preview answers on the teaching server rather than the coordinating one since
+        // U-53: the route is on both teaching rails now, and a walk with no answer scripted
+        // would render the "could not be opened" panel and prove nothing about the paper.
         connection.replyOk(Verb.EXAM_PREVIEW_GET, new ExamPreview(pendingApproval(),
                 "Answer every question. Calculators are not allowed.",
                 List.of(previewQuestion(1), previewQuestion(2)),
@@ -403,6 +414,12 @@ class TruncatedTextGuardTest extends ApplicationTest {
                         "Dana Cohen",
                         List.of(new PreviewAnswerRow(901, 1, (byte) 2),
                                 new PreviewAnswerRow(902, 2, (byte) 2)))));
+    }
+
+    private void coordinatingServer(FakeClientConnection connection) {
+        teachingServer(connection);
+        connection.replyOk(Verb.APPROVALS_QUEUE_GET,
+                new ApprovalQueue(List.of(pendingApproval()), true));
     }
 
     private void studentServer(FakeClientConnection connection) {

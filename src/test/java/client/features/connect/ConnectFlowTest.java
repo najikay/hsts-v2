@@ -411,8 +411,54 @@ class ConnectFlowTest {
                             ConnectFlow.changeServerRequested().message(),
                             ConnectFlow.afterFailedConnect(ROOM_12, new java.net.ConnectException())
                                     .message(),
-                            ConnectFlow.decide(pinnedToRoom12(), List.of(ROOM_12_REPLACED)).message()))
+                            ConnectFlow.decide(pinnedToRoom12(), List.of(ROOM_12_REPLACED)).message(),
+                            ConnectFlow.RECONNECTED_SIGN_IN_AGAIN,
+                            ConnectFlow.retryFailed(ROOM_12, new java.net.ConnectException())))
                     .allSatisfy(message -> assertThat(message).doesNotContain("—"));
+        }
+    }
+
+    @Nested
+    @DisplayName("reconnecting after the client lost the network (⚑ U-52)")
+    class Reconnecting {
+
+        @Test
+        @DisplayName("a failed Retry names the address and says what to check")
+        void retryFailedNamesTheAddress() {
+            String message = ConnectFlow.retryFailed(ROOM_12, new java.net.ConnectException());
+
+            assertThat(message)
+                    .contains(ROOM_12.display())
+                    .contains(ConnectFlow.UNREACHABLE_REFUSED)
+                    // The client lost the network, so the thing to check is the client.
+                    .contains("this computer is on the network");
+        }
+
+        @Test
+        @DisplayName("and never a class name, wherever the throwable came from ⚑ (B-37)")
+        void retryFailedLeaksNothing() {
+            String message = ConnectFlow.retryFailed(ROOM_12,
+                    new java.util.concurrent.CompletionException(new IllegalStateException()));
+
+            assertThat(message)
+                    .doesNotContain("IllegalStateException")
+                    .doesNotContain("CompletionException")
+                    .doesNotContain("(");
+        }
+
+        @Test
+        @DisplayName("an unknown address still produces a whole sentence")
+        void retryFailedWithoutAnEndpoint() {
+            assertThat(ConnectFlow.retryFailed(null, null))
+                    .isEqualTo("Could not reach the server. Check this computer is on the "
+                            + "network, then try again.");
+        }
+
+        @Test
+        @DisplayName("the sentence Login carries after a reconnect says both facts")
+        void theSignInAgainSentence() {
+            assertThat(ConnectFlow.RECONNECTED_SIGN_IN_AGAIN)
+                    .isEqualTo("Reconnected. Sign in again.");
         }
     }
 

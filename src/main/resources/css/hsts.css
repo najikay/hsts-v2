@@ -543,6 +543,21 @@
     -fx-max-width: 520px;
     -fx-effect: dropshadow(gaussian, rgba(31, 35, 40, 0.14), 16, 0.08, 0, 4);
 }
+/* 2026-08-30, live session, U-47: one width more than the reading measure.
+
+   520px is the right cap for a dialog that is mostly a sentence, and the wrong one
+   for a dialog whose row is a date picker plus two clock spinners: the row does not
+   fit, so JavaFX shrinks every control in it to its minimum and the hour and minute
+   digits are clipped by their own arrows. The teacher's words were "too smooshed
+   together, I can't see the numbers clearly".
+
+   Opt-in by style class rather than a wider cap for everything, because a
+   confirmation whose explanation runs to 720px is a paragraph nobody reads. The
+   height is untouched: the card still keeps its preferred height per U-24. */
+.hsts-dialog.wide {
+    -fx-min-width: 560px;
+    -fx-max-width: 720px;
+}
 .hsts-dialog .dialog-title       { -fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
 .hsts-dialog .dialog-explanation { -fx-font-size: 14px; -fx-text-fill: -hsts-muted; -fx-wrap-text: true; }
 .hsts-dialog .dialog-buttons     { -fx-spacing: 8px; }
@@ -768,6 +783,10 @@
 }
 .hsts-table-toolbar .table-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
 .hsts-table-toolbar .table-count { -fx-font-size: 12px; -fx-text-fill: -hsts-faint; }
+/* The column chooser (2026-08-30, wave 6, U-36): a ghost icon button that sits on the
+   toolbar's trailing edge, above the columns it governs. Padded tighter than a ghost
+   button in a form row, because it is a control on a strip and not an action on a page. */
+.hsts-table-toolbar .table-column-chooser { -fx-padding: 4px 6px; }
 
 /* =====================================================================
    13. APP SHELL — navbar + side rail  (E4.10)
@@ -1313,7 +1332,29 @@
     -fx-text-fill: -hsts-accent;
 }
 
-.release-create-dialog .release-moment { -fx-alignment: center-left; }
+/* The Opens / Closes rows (U-47). Each is a caption above its own controls rather
+   than a caption beside them: side by side, the label ate the width the date picker
+   and the two spinners needed, and every one of the four controls paid for it.
+
+   The widths themselves are set in Java, next to the spinners they size, because
+   the fix is a MINIMUM the layout may not shrink past and the dialog is also built
+   in tests that carry no stylesheet. What is here is the spacing and the colon. */
+.release-create-dialog .release-moment-row { -fx-spacing: 6px; }
+/* The caption is not inside a `.hsts-field`, so it does not inherit that block's
+   label treatment. Repeated here rather than moved, so an Opens caption and a
+   Code caption are the same size and weight in the same dialog. */
+.release-create-dialog .release-moment-row .field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-muted;
+}
+.release-create-dialog .release-moment { -fx-alignment: center-left; -fx-spacing: 10px; }
+.release-create-dialog .release-moment-colon {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -hsts-muted;
+    -fx-padding: 0 2px 0 2px;
+}
 
 /* The code field (F5.3). Monospaced and wide-tracked in its own right: a teacher
    proof-reads what she typed here before thirty people have to type it back. */

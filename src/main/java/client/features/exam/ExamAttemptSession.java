@@ -313,21 +313,30 @@ public final class ExamAttemptSession {
      * <p>The reconnect path, and the "screen reopened" path. Everything is replaced from
      * the answer, so nothing the client believed while it was disconnected survives.
      *
-     * @return a future completing when the model has been updated, or when the attempt
-     *         failed (the model is then unchanged)
+     * <p><b>The future says whether it worked ⚑</b> (2026-08-30, Findings.txt, U-52).
+     * It used to complete with {@code null} on every path, which was fine while the only
+     * caller hid a banner afterwards. It is not fine now: after the client lost the
+     * network and re-dialled, the server has freed the session (F1.4) and this resume
+     * comes back refused on a socket that is perfectly healthy. The screen has to be able
+     * to tell that apart from a resume that worked, because the answer to it is the login
+     * screen and not a hidden banner.
+     *
+     * @return a future completing with {@code true} when the model has been replaced from
+     *         the server's answer, and {@code false} when the attempt failed or was
+     *         refused (the model is then unchanged)
      */
-    public CompletableFuture<Void> resume() {
-        CompletableFuture<Void> settled = new CompletableFuture<>();
+    public CompletableFuture<Boolean> resume() {
+        CompletableFuture<Boolean> settled = new CompletableFuture<>();
         dispatcher.send(Verb.ATTEMPT_RESUME, new AttemptResumeRequest(executionId))
                 .whenComplete((response, failure) -> poster.run(() -> {
                     if (failure != null) {
                         log.warn("Resume failed: {}", failure.toString());
-                        settled.complete(null);
+                        settled.complete(false);
                         return;
                     }
                     if (response.isError() || !(response.getPayload() instanceof AttemptForm form)) {
                         log.warn("Resume refused: {} {}", response.getErrorCode(), response.errorMessage());
-                        settled.complete(null);
+                        settled.complete(false);
                         return;
                     }
                     boolean wasLive = !model.isFinished();
@@ -341,7 +350,7 @@ public final class ExamAttemptSession {
                         // discard the absence it is in the middle of.
                         attention.start();
                     }
-                    settled.complete(null);
+                    settled.complete(true);
                 }));
         return settled;
     }

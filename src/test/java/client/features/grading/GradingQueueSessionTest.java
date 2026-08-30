@@ -298,6 +298,80 @@ class GradingQueueSessionTest {
         }
     }
 
+    // ===================== Choosing rows ==================================
+
+    @Nested
+    @DisplayName("Choosing rows (2026-08-30, live session, U-46)")
+    class ChoosingRows {
+
+        /** One paper already published among two still waiting: what Select all is about. */
+        private void givenOneAlreadyApproved() {
+            connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of(summary(3, 1))));
+            session.load();
+            connection.replyOk(Verb.GRADING_EXECUTION_GET,
+                    new ExecutionGrades(summary(3, 1), List.of(
+                            row(1, "מאיה לוי", 100, GradeState.AUTO),
+                            row(2, "עומר כץ", 40, GradeState.APPROVED),
+                            row(3, "יעל אזולאי", 80, GradeState.AUTO))));
+            session.openExecution(summary(3, 1));
+        }
+
+        @Test
+        @DisplayName("Select all ticks every row still waiting, and only those")
+        void ticksTheApprovable() {
+            givenOneAlreadyApproved();
+
+            session.selectAllApprovable();
+
+            // The published one is skipped rather than ticked and refused. Re-approving is
+            // harmless by contract, but the confirmation counts ticks and would overstate.
+            assertThat(session.selection()).containsExactly(1L, 3L);
+        }
+
+        @Test
+        @DisplayName("it replaces what was ticked rather than adding to it")
+        void replacesRatherThanAdds() {
+            givenOneAlreadyApproved();
+            session.select(3, true);
+
+            session.selectAllApprovable();
+
+            // "Select all" twice is still all of them, not two of some of them.
+            assertThat(session.selection()).containsExactly(1L, 3L);
+        }
+
+        @Test
+        @DisplayName("with no sitting open it ticks nothing rather than throwing")
+        void nothingOpen() {
+            session.selectAllApprovable();
+
+            assertThat(session.selection()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("it redraws, because the checkboxes are drawn from here")
+        void redraws() {
+            givenOneAlreadyApproved();
+            int before = renders;
+
+            session.selectAllApprovable();
+
+            assertThat(renders).isGreaterThan(before);
+        }
+
+        @Test
+        @DisplayName("isSelected answers per row, which is what one checkbox asks")
+        void isSelectedIsPerRow() {
+            givenOpenSitting();
+            session.select(2, true);
+
+            // The column renders itself from the session rather than remembering its own ticks,
+            // so a re-read that clears the selection empties the boxes with it.
+            assertThat(session.isSelected(2)).isTrue();
+            assertThat(session.isSelected(1)).isFalse();
+        }
+    }
+
     // ===================== Overriding =====================================
 
     @Nested

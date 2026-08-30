@@ -1,6 +1,8 @@
 package client.core;
 
 import client.events.ClientEventBus;
+import client.events.ConnectionLostEvent;
+import client.events.ConnectionWatcher;
 import client.net.IClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.anim.Animations;
@@ -19,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Owns the primary {@link Stage} and turns navigation events into scene changes
@@ -60,6 +63,31 @@ public final class ScreenManager {
     private RequestDispatcher dispatcher;
     private LoginResult signedInUser;
 
+    /**
+     * The drop that killed the connection currently held, or {@code null} when
+     * the client has not been declared dead since it was installed ⚑.
+     *
+     * <p>2026-08-30, Findings.txt, U-52. {@code IClientConnection.isConnectionOpen()}
+     * is not enough on its own: {@code HSTSClient} answers it from OCSF's
+     * {@code isConnected()}, which only flips once a read actually fails, so a
+     * client whose machine lost the network went on reporting an open socket. The
+     * login screen believed it and said Connected while every sign-in was refused.
+     * A recorded loss is the second, honest source of truth, and it is cleared
+     * only by {@link #setClient(IClientConnection)} installing a new one.
+     */
+    private ConnectionLostEvent lastLoss;
+
+    /**
+     * The subscriber that marks the client dead on a drop.
+     *
+     * <p>Registered for the life of the process rather than for the life of a
+     * shell: the drop this exists for can land on the login screen, where there is
+     * no shell at all. That is the difference between it and
+     * {@code ShellBoot}'s own watcher, which paints a banner and therefore only
+     * lives as long as the banner does.
+     */
+    private ConnectionWatcher deathWatch;
+
     private ScreenManager() {
     }
 
@@ -89,6 +117,13 @@ public final class ScreenManager {
      * first; {@code client.core.FxTestHarness} does both.
      */
     static synchronized void resetForTests() {
+        if (instance != null && instance.deathWatch != null && instance.eventBus != null) {
+            // The bus outlives the manager (it is a Singleton of its own), so a
+            // discarded manager left registered on it would go on closing the next
+            // test's connection.
+            instance.eventBus.unregister(instance.deathWatch);
+            instance.deathWatch = null;
+        }
         if (instance != null && instance.lifecycle != null) {
             try {
                 instance.lifecycle.hideCurrent();
@@ -110,6 +145,8 @@ public final class ScreenManager {
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.themeManager = Objects.requireNonNull(themeManager, "themeManager");
         this.lifecycle = new ScreenLifecycle(eventBus);
+
+        watchForConnectionLoss(eventBus);
 
         primaryStage.setTitle("HSTS · High School Test System");
         primaryStage.setMinWidth(1024);
@@ -149,12 +186,82 @@ public final class ScreenManager {
         return primaryStage;
     }
 
+    /**
+     * Installs the connection every screen talks through.
+     *
+     * <p>Also clears the recorded loss: a new client object <b>is</b> a fresh
+     * attempt, and whether it works is then a question for
+     * {@link IClientConnection#isConnectionOpen()} alone. A connect that fails
+     * leaves a closed client behind, so {@link #isConnectionAlive()} still answers
+     * false without the loss having to be re-recorded.
+     */
     public void setClient(IClientConnection client) {
         this.client = client;
+        this.lastLoss = null;
     }
 
     public IClientConnection getClient() {
         return client;
+    }
+
+    /**
+     * Subscribes the "a drop kills the client" listener (U-52).
+     *
+     * <p>Called by {@link #init}, and public only because it is separate from it:
+     * a test that drives the drop has to register the production subscriber on its
+     * own bus, and {@code init} wants a {@link Stage} it has no use for.
+     *
+     * @param bus the bus a {@link ConnectionLostEvent} arrives on
+     */
+    public void watchForConnectionLoss(ClientEventBus bus) {
+        if (deathWatch != null) {
+            bus.unregister(deathWatch);
+        }
+        deathWatch = new ConnectionWatcher(this::markConnectionLost);
+        bus.register(deathWatch);
+    }
+
+    /**
+     * Retires the connection a {@link ConnectionLostEvent} has just condemned
+     * (2026-08-30, Findings.txt, U-52).
+     *
+     * <p>Two things happen, and both matter. The socket is closed, so the adapter
+     * stops claiming to be open however OCSF feels about it; and the loss is
+     * recorded, so that even an implementation that lies about its own state
+     * cannot talk anything into trusting it again. Nothing here re-dials: what to
+     * do about a dead connection is the banner's Retry, not a side effect of the
+     * bad news arriving.
+     *
+     * @param event the drop, as posted by {@code ConnectWiring}'s handler
+     */
+    public void markConnectionLost(ConnectionLostEvent event) {
+        this.lastLoss = event == null ? new ConnectionLostEvent(null, null) : event;
+        IClientConnection dead = this.client;
+        if (dead == null) {
+            return;
+        }
+        try {
+            dead.disconnect();
+        } catch (Exception e) {
+            // The socket is already gone; this is the tidy-up, not the news.
+            log.debug("Closing the lost connection failed: {}", e.toString());
+        }
+        log.warn("Connection to {} marked dead; nothing may use it again",
+                this.lastLoss.serverLabel());
+    }
+
+    /**
+     * @return {@code true} only when there is a client, it says it is open, and no
+     *         drop has been recorded against it. The status row on Login reads this
+     *         rather than the adapter alone (U-52)
+     */
+    public boolean isConnectionAlive() {
+        return lastLoss == null && client != null && client.isConnectionOpen();
+    }
+
+    /** @return the drop that retired the current client, empty when none has. */
+    public Optional<ConnectionLostEvent> lastLoss() {
+        return Optional.ofNullable(lastLoss);
     }
 
     public void setDispatcher(RequestDispatcher dispatcher) {

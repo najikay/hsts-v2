@@ -1,23 +1,31 @@
 package client.features.login;
 
+import client.core.ConnectPrefs;
+import client.core.NavParams;
 import client.core.Routes;
 import client.core.ScreenManager;
+import client.core.ServerEndpoint;
 import client.core.SessionRoutes;
 import client.events.ConnectionWatcher;
+import client.features.connect.ConnectFlow;
+import client.features.connect.Reconnector;
 import client.features.notify.NotificationPresenter;
 import client.features.notify.NotificationsModel;
 import client.features.notify.NotificationsPanel;
 import client.features.notify.NotificationsSession;
 import client.net.RequestDispatcher;
+import client.ui.components.ReconnectBanner;
 import client.ui.shell.AppShell;
 import client.ui.shell.RoleNav;
 import client.ui.shell.ShellState;
 import common.dto.auth.LoginResult;
+import common.dto.auth.Role;
 import common.protocol.Verb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The two moments that bracket a session: entering the shell and leaving it
@@ -65,6 +73,15 @@ public final class ShellBoot {
      */
     private static NotificationsSession notifications;
 
+    /**
+     * How many times Retry has been pressed on the current banner (⚑ U-52).
+     *
+     * <p>Only the wording uses it — "Reconnecting… (attempt 3)" is the difference
+     * between waiting and force-quitting — and it resets with the banner, which is
+     * to say with the shell.
+     */
+    private static int retryAttempt;
+
     private ShellBoot() {
     }
 
@@ -92,7 +109,16 @@ public final class ShellBoot {
         // because the pairing is role-independent and this is the one place every shell
         // is assembled.
         ShellState state = shell.state();
-        state.alias(Routes.EXAM_PREVIEW.id(), Routes.APPROVALS.id());
+        // The preview's rail parent depends on who is looking, since 2026-08-30 (Findings.txt,
+        // U-53) ⚑. It was Approvals unconditionally, which was right while only a coordinator
+        // could reach the screen. A teacher now reaches it from her builder's Preview, and
+        // Approvals is not on her rail: ShellState.activeItem looks the alias up IN the rail and
+        // answers empty for an item that is not there, so the navbar Back fell through to the
+        // first rail item and offered her "Dashboard" on the way out of her own exam. My exams
+        // is the item her builder already hangs off, which makes the whole builder-to-preview
+        // trip one branch of one rail item.
+        state.alias(Routes.EXAM_PREVIEW.id(), login.role() == Role.COORDINATOR
+                ? Routes.APPROVALS.id() : Routes.EXAMS.id());
         state.alias(Routes.BOT_HISTORY.id(), Routes.BOT_CHAT.id());
         state.alias(Routes.BOT_ANALYTICS.id(), Routes.BOT_MANAGER.id());
         state.alias(Routes.CHECKED_FORM.id(), Routes.MY_GRADES.id());
@@ -142,6 +168,27 @@ public final class ShellBoot {
             });
         }
 
+        endSessionLocally(manager, NavParams.empty());
+        log.info("Signed out; back to the login screen");
+    }
+
+    /**
+     * Everything a sign-out does on this side of the socket, without the verb
+     * (⚑ U-52).
+     *
+     * <p>Split out of {@link #logout} because a reconnect needs exactly this half
+     * and none of the other: the server already freed the session when the socket
+     * dropped (F1.4), so sending {@code LOGOUT} down the brand-new anonymous
+     * connection would ask a server that has never heard of her to forget her.
+     *
+     * <p>The order is {@link #logout}'s and is the part that has bitten this
+     * project before: evict the cached screens first, then drop the shell and the
+     * user, and only then navigate.
+     *
+     * @param params what the login screen is shown with; a reconnect carries her
+     *               username and a sentence, an ordinary sign-out carries nothing
+     */
+    private static void endSessionLocally(ScreenManager manager, NavParams params) {
         stopWatchingConnection(manager);
         stopNotifications(manager);
         // Nothing of this session survives into the next one: every cached screen
@@ -149,8 +196,7 @@ public final class ShellBoot {
         manager.screens().evictAll();
         manager.clearShell();
         manager.setSignedInUser(null);
-        manager.navigator().reset(Routes.LOGIN.id());
-        log.info("Signed out; back to the login screen");
+        manager.navigator().reset(Routes.LOGIN.id(), params);
     }
 
     /**
@@ -197,12 +243,77 @@ public final class ShellBoot {
         }
     }
 
-    /** Subscribes the banner-raiser for this shell, replacing any previous one. */
+    /**
+     * Subscribes the banner-raiser for this shell, replacing any previous one, and
+     * gives its Retry something to do (⚑ U-52).
+     *
+     * <p>2026-08-30, Findings.txt, U-52. The banner has offered a Retry button
+     * since E4.6 and nothing was ever wired to it here, so pressing it did
+     * literally nothing on every screen except Take Exam, which wires its own.
+     * That is the defect: the one affordance the product offers for a dropped
+     * connection was decoration.
+     */
     private static void watchConnection(ScreenManager manager, AppShell shell) {
         stopWatchingConnection(manager);
+        retryAttempt = 0;
+        ReconnectBanner banner = shell.reconnectBanner();
+        banner.setOnRetry(() -> retryConnection(manager, banner));
         connectionWatcher = new ConnectionWatcher(event ->
-                shell.reconnectBanner().showDisconnected(event.serverLabel()));
+                banner.showDisconnected(event.serverLabel()));
         manager.eventBus().register(connectionWatcher);
+    }
+
+    /**
+     * Re-dials the server the banner is complaining about (⚑ U-52).
+     *
+     * <p>The address is not asked for, because it has not changed: the client lost
+     * the network, not the server. {@link Reconnector} resolves it from the pin,
+     * the remembered endpoint or the dead client, rebuilds the stack around the
+     * dispatcher the app already holds (U-17), and opens the socket off the FX
+     * thread. With no endpoint to dial at all there is nothing to guess, and the
+     * connect screen is where a person supplies one.
+     */
+    static void retryConnection(ScreenManager manager, ReconnectBanner banner) {
+        Reconnector reconnector =
+                new Reconnector(manager, manager.eventBus(), ConnectPrefs.userHome());
+        Optional<ServerEndpoint> target = reconnector.endpoint();
+        if (target.isEmpty()) {
+            banner.hide();
+            manager.navigator().navigate(Routes.CONNECT.id());
+            return;
+        }
+        ServerEndpoint endpoint = target.get();
+
+        banner.showReconnecting(++retryAttempt);
+        reconnector.redial(
+                () -> afterReconnect(manager),
+                failure -> banner.showRetryFailed(ConnectFlow.retryFailed(endpoint, failure)));
+    }
+
+    /**
+     * The socket is back, and she is not signed in on it (⚑ U-52).
+     *
+     * <p>F1.4: the server frees a session when its connection drops, so the new
+     * socket is anonymous whatever the shell still has on screen. Pretending
+     * otherwise would leave her clicking a dashboard whose every request comes back
+     * refused, which is the shape of the original defect rather than a fix for it.
+     * So the shell signs her out locally and Login says what happened, with her
+     * username already in the field.
+     *
+     * <p>Public because the exam screen reaches the same conclusion by a different
+     * road: it re-dials, resumes, and the server answers that it has never heard of
+     * this attempt. One session end, one sentence, one route.
+     *
+     * @param manager the app's screen manager
+     */
+    public static void afterReconnect(ScreenManager manager) {
+        Objects.requireNonNull(manager, "manager");
+        String username = manager.signedInUser() == null ? "" : manager.signedInUser().username();
+        log.info("Reconnected; the session is gone, so {} signs in again",
+                username.isBlank() ? "the user" : username);
+        endSessionLocally(manager, NavParams.of(
+                LoginView.PARAM_USERNAME, username,
+                LoginView.PARAM_NOTICE, ConnectFlow.RECONNECTED_SIGN_IN_AGAIN));
     }
 
     private static void stopWatchingConnection(ScreenManager manager) {

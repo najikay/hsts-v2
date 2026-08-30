@@ -156,6 +156,59 @@ class StylesheetParseTest {
     }
 
     /**
+     * The wider dialog is a rule that parsed, and it still beats the cap it overrides ⚑
+     * (2026-08-30, live session, U-47).
+     *
+     * <p>{@code .hsts-dialog} caps every dialog in the app at a 520px reading measure, which
+     * is right for a dialog that is mostly a sentence and wrong for one whose row is a date
+     * picker and two clock spinners. {@code .hsts-dialog.wide} is the opt-out, and it is worth
+     * asserting for the same reason U-29's menu block is: a declaration JavaFX gave up on is
+     * in the file and not in the stylesheet, and the failure mode is the defect still being
+     * there with a green build behind it.
+     *
+     * <p>Two classes beat one, so this wins on specificity wherever it sits in the file. The
+     * assertion is that both caps are still declared and that the wider one is the wider one,
+     * which is the part a careless edit could quietly reverse.
+     */
+    @Test
+    @DisplayName("⚑ U-47: .hsts-dialog.wide survives parsing and is wider than the base cap")
+    void theWideDialogRuleIsApplied() {
+        List<String> selectors = parse("/css/hsts.css").getRules().stream()
+                .map(Rule::getSelectors)
+                .flatMap(List::stream)
+                .map(StylesheetParseTest::normalise)
+                .collect(Collectors.toList());
+
+        assertThat(selectors).as("the create-release dialog's own width").contains(
+                canonical(".hsts-dialog.wide"),
+                canonical(".release-create-dialog .release-moment-row"),
+                canonical(".release-create-dialog .release-moment-colon"));
+
+        double base = maxWidthOf(".hsts-dialog");
+        double wide = maxWidthOf(".hsts-dialog.wide");
+        assertThat(base).as("the reading measure every other dialog keeps").isEqualTo(520);
+        assertThat(wide)
+                .as("a `wide` that is not wider is a style class that does nothing")
+                .isGreaterThan(base);
+    }
+
+    /**
+     * @return the {@code -fx-max-width} declared on the given selector, in px
+     */
+    private static double maxWidthOf(String selector) {
+        return parse("/css/hsts.css").getRules().stream()
+                .filter(rule -> rule.getSelectors().stream()
+                        .map(StylesheetParseTest::normalise)
+                        .anyMatch(canonical(selector)::equals))
+                .flatMap(rule -> rule.getDeclarations().stream())
+                .filter(declaration -> "-fx-max-width".equals(declaration.getProperty()))
+                .map(declaration -> (Number) declaration.getParsedValue().convert(null))
+                .mapToDouble(Number::doubleValue)
+                .max()
+                .orElseThrow(() -> new AssertionError(selector + " declares no -fx-max-width"));
+    }
+
+    /**
      * The menu rules come AFTER the button rules, which is what breaks the tie ⚑ (U-29).
      *
      * <p>{@code .context-menu .menu-item .label} and {@code .button.primary .label} are both

@@ -46,8 +46,17 @@ import java.util.List;
  *
  * <p>It is a non-rail route reached from the bank list, and it takes its question through
  * {@link NavParams}: {@code "detail"} carries the {@code QuestionDetail} and {@code "image"} the
- * bytes of that version's illustration. The bank screen already holds both, because its detail
- * pane is showing them, so the editor never re-asks for what the previous screen has in hand.
+ * bytes of that version's illustration, so the editor makes no read of its own.
+ *
+ * <p><b>What it is handed is a fresh read, not the pane's copy</b> (2026-08-30, Findings.txt,
+ * U-49). This javadoc used to say the bank "already holds both, because its detail pane is
+ * showing them", and that was the defect written down as a design. {@code detail.versionNo()} is
+ * the staleness token this editor's next save carries, and a pane can be showing a version the
+ * teacher herself replaced one visit ago; the editor then opened on it and the server refused
+ * her own save as somebody else's. So Edit now goes through
+ * {@code BankSession.refreshDetailThen}, which re-issues {@code QUESTION_GET} and hands over
+ * what comes back. Nothing here changed, and that is the point: the parameter this screen takes
+ * is the same one, and the guarantee about it belongs to the screen that fills it in.
  *
  * <p>That is also what keeps the components report's one remaining screen-level trap unreachable.
  * {@link QuestionEditorSession#forEdit} takes the bytes as a required argument, so an editor
