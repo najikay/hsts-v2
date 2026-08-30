@@ -4,7 +4,9 @@
 walks all 21 **in the outline's order**, as one continuous story: what mark 2 creates, mark 3
 builds, mark 4 approves, mark 5 releases, mark 6 sits, mark 8 grades and mark 12 reports. Every
 step names the account, the exact clicks, the text to paste, what the panel must see, and one
-sentence to say. Tick the box when you have rehearsed it and it behaved.
+sentence to say. Tick the box when you have rehearsed it and it behaved. **Situations with
+two or more users acting at once** are collected in the appendix at the end, since the panel
+asked for those specifically last time.
 
 **How it relates to the other docs.** `DEMO_DAY.md` makes the machines ready (do it first).
 `DEMO_SCRIPT.md` is the 25-minute narrated performance; this file is the complete, ordered
@@ -617,6 +619,68 @@ explicit checks.
       collapses to icons. Show a Hebrew question and an English one in the bank side by side.
 
 ---
+
+## Appendix — two or more at a time
+
+The panel asked last time for situations with **two users acting at once**. Every one below is
+runnable on the two machines (A staff, B students; open a second client window on either
+machine when a situation needs three). Each says who, where, what to do, and what must happen
+**on the other person's screen without anyone touching it**. The ones marked ★ are already
+inside the walkthrough at the step named; run the rest when asked, or as a block after mark 21.
+
+**Two students**
+
+| # | Situation | Who / where | Do | Must happen |
+|---|---|---|---|---|
+| ★ S1 | Same exam, one hands in, one does not | `maya.levi` on B, `omer.katz` on A (second window) | Both join `7301`. Omer answers all and **Hands in**; Maya keeps working until the clock ends (mark 6–7) | Monitor: Started 2 / Handed in 1 / Timed out 0, then 2 / 1 / 1. Omer's Handed in screen; Maya's **Time is up** takeover. Each later gets her own grade card only |
+| ★ S2 | Extension reaches both at once | same two, both mid-exam | Dana: **Add time 1** (mark 7.3) | Both chips flash and both bells get TIME_EXTENDED in the same second; Omer, if already handed in, gets nothing |
+| S3 | Answers are isolated | same two, both mid-exam | Maya picks option 1 on question 1; Omer picks option 3 on question 1 | Each sees only her own chips; kill Maya's client, sign in again, re-enter the code: her three answers, not his |
+| S4 | One sits, one studies | Maya mid-exam on `2075`; `omer.katz` on the Algebra study bot | Omer asks the Algebra bot while Maya is sitting the Algebra exam | Omer is answered; only the sitting student is locked (the lock is per student, not per course) |
+| S5 | Two sittings of one exam | `7301` (demo) and `2075` (seeded) both live | Maya on `2075`, Omer on `7301` | Two rows in Releases, two separate monitors, separate counts and codes; S-2 |
+| S6 | Same student twice | `maya.levi` on B, then `maya.levi` on A | Second sign-in | Refused "This account is already signed in elsewhere."; her attempt on B is untouched |
+| S7 | Two students, one bot, same second | Maya and Omer both on the Databases bot | Both send a question at the same time | Two separate conversations, two answers, two histories; the teacher's Bot activity counts 2 and names nobody |
+| S8 | Re-entering after the other handed in | Omer handed in, Maya still sitting | Maya enters `7301` again from the dashboard | She resumes her own attempt with her own clock; Omer's hand-in changed nothing for her |
+
+**Two teachers**
+
+| # | Situation | Who / where | Do | Must happen |
+|---|---|---|---|---|
+| ★ T1 | Same question, same time | `avi.mizrahi` on A, `tamar.shani` on B | Avi: Question Bank → Java 21 → 21003 → **Edit**. Tamar: same row (mark 13.5) | Tamar's row shows **Editing … Avi Mizrahi**; her editor is read-only with the banner. Avi **Cancel** → her badge clears by itself; Avi signs out with it open → clears; Avi's window killed → clears within seconds |
+| T2 | Take over and the stale save | same two | Tamar uses **take over** on the banner, changes the stem, **Save as a new version**. Avi, still on his old editor, tries to save | Avi gets the conflict dialog "This was changed by someone else while you were editing. Reload the latest version?" → **Reload** shows Tamar's version; nothing of his overwrote hers |
+| ★ T3 | Same bot source | same two | Avi **Edit** on a text source, Tamar opens the same source (mark 13.4) | Banner for Tamar; Avi saves → Tamar's bell **BOT_SOURCE_CHANGED**, her list updates, her banner clears |
+| T4 | Co-teachers, one bot | same two | Tamar opens Study Bot → Java 21 | She gets **Manage** on Avi's bot, never Create; adds a source; Avi's bell rings, his list grows without a click |
+| T5 | Two teachers, one sitting to grade | same two on `7390` | Avi approves one row; Tamar has the same Grading screen open | Tamar's row shows approved when she next acts on it; approving it again is refused with a sentence, not applied twice (idempotent) |
+| T6 | Same exam released twice by two teachers | Avi and Tamar, Java Fundamentals Exam v1 | Each does **Release an exam** with a different code | Two Live rows, two codes, separate participants and statistics; the exam in the drawer is untouched |
+| T7 | Scope is per teacher | `dana.cohen` on A, `avi.mizrahi` on B | Both open Question Bank at once | Dana sees Algebra/Calculus, Avi sees Java; neither picker offers the other's course; typing the other's question id in the URL-less client is impossible, and the server refuses it anyway |
+| T8 | Same teacher twice | `dana.cohen` on A, `dana.cohen` on B | Second sign-in; then close A's window without signing out; retry on B | Refused, then succeeds within a second of the drop (mark 16); locks she held are released with the session |
+
+**Teacher and coordinator**
+
+| # | Situation | Who / where | Do | Must happen |
+|---|---|---|---|---|
+| ★ C1 | Submit while the queue is open | `rina.barak` on B with Approvals open, `dana.cohen` on A | Dana **Submit for approval** (mark 4) | Rina's queue gains the row and her bell rings, no click |
+| ★ C2 | Decision lands on the author | same | Rina **Send back** / **Approve** | Dana's card shows the reason / the chip flips to APPROVED, no click |
+| C3 | Resubmit while the coordinator has v1 open | same | Rina opens v1's paper; Dana edits and resubmits (v2) | Rina's bell **APPROVAL_SUPERSEDED**; her queue shows v2 only; approving the stale v1 is refused |
+| C4 | Dual hat, both sides at once | `michal.sharon` on A, `dana.cohen` on B | Michal submits her own Databases exam and, on the same screen set, approves it | Allowed, badge "You wrote this one", one WARN line on the server terminal; Dana's Mathematics exams never appear in Michal's queue |
+
+**Teacher and student**
+
+| # | Situation | Who / where | Do | Must happen |
+|---|---|---|---|---|
+| ★ P1 | Extend mid-exam | Dana on A, Maya on B | mark 7.3 | Chip, "+1:00", toast, bell on B at once |
+| ★ P2 | Close early mid-exam | Dana on A, Maya on B sitting `2075` | mark 14.7 | Maya's screen goes to Time is up; monitor freezes |
+| ★ P3 | Publish while My Grades is open | Dana on A, Maya on B on My Grades | mark 8.4 | Maya's card appears and her bell rings, no click |
+| ★ P4 | Cross-course bot mid-exam | Maya on B sitting Algebra, Dana on A | mark 14.5–14.6 | Dana's bell INTEGRITY_ALERT and Maya's monitor row flagged the moment Maya clicks Continue |
+| P5 | Focus loss mid-exam | same | Maya clicks another window (mark 7.2) | Dana's row shows the attention text; Maya sees nothing |
+| P6 | Teacher toggles the bot while a student is on it | Avi on A, Maya on B on the Java bot | Avi switches **Students can use this bot** off, then on | Maya's next question gets the switched-off sentence, then is answered again, on the same screen |
+| P7 | Grades are private across students | Dana approves; Maya and Omer both on My Grades | mark 8.4 | Each sees only her own card; replaying the other's grade id is refused server-side |
+
+**Whole room**
+
+| # | Situation | Who / where | Do | Must happen |
+|---|---|---|---|---|
+| ★ R1 | Four roles at once | `dana.cohen`, `rina.barak` on A; `maya.levi`, `principal.avia` on B | mark 16.4 | A's console lists four connected clients with user, role, IP and uptime; each screen works independently |
+| R2 | Server restart under everyone | all of the above signed in | Ctrl+C the server, start it again | Every client shows the banner; **Retry** lands each on Login with the username filled; sign in works in the same window; a student's attempt resumes with the correct remaining time |
 
 ## The order, on one line
 
