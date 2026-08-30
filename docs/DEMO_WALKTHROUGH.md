@@ -149,6 +149,10 @@ design).
       → **Done**. Points `40` / `30` / `20`: the sum reads **90** and **Create exam is
       disabled**. *Say: "Blocked, not warned; nothing is stored until the total is 100."*
       Change the last to `30` → enabled.
+- [ ] 3.3b **Add from the bank** once more → tick **11009** (it already sits in Midterm:
+      Algebra) → **Done** → accepted. Adjust points back to 100. *Say: "A question may
+      belong to any number of exams; what an exam cannot do is hold the same question
+      twice, even through two versions."*
 - [ ] 3.4 **Move up** on the last row, **Move down** on the first, **Remove** one and add it
       back. Click **Show answers** on a row → the four options with the correct one marked
       → **Hide answers**. The edited question shows "The bank has a newer version" →
@@ -163,7 +167,8 @@ design).
       author recorded from the session, not from a field."*
 - [ ] 3.7 Open it again: duration `0` → refused; `481` → refused; blank name → refused. Set
       `2` back. Click **Preview** → the paper as a student sees it, with the teacher-only
-      panel and the answer key, **no Approve button** → **Back to the exam**.
+      panel, **the author's name (Dana Cohen)** and the answer key, **no Approve button**
+      → **Back to the exam**.
 - [ ] 3.8 **Submit for approval** → chip **PENDING_APPROVAL**.
 - [ ] 3.9 Select Midterm: Algebra → **Edit** on v2 → the builder says it is making **v3** →
       **Save draft** → the list shows v2 still APPROVED and v3 DRAFT. *Say: "Editing an
@@ -181,7 +186,8 @@ both on screen: sign Maya out on B first and back in after 4.6.)
       Dashboard "Waiting for you" counts it.
 - [ ] 4.2 **Approvals.** The queue lists Demo Quick Check and Midterm: Calculus, her subject
       only. Open Demo Quick Check: the paper **exactly as a student sees it**, the
-      **Teacher only** panel with Dana's note, the **Answer key** panel. *Say: "This was the
+      **Teacher only** panel with Dana's note and **the author's name**, the **Answer key**
+      panel. *Say: "This was the
       v1 failure. The student's wire type has no field a correct answer could travel in; the
       key is a separate staff-only block."*
 - [ ] 4.3 **Send back** with an empty reason → refused. Reason `Add one more question before
@@ -219,13 +225,15 @@ chip and the queue change on the other machine without anyone touching it (that 
       (Demo Quick Check v2, Midterm: Algebra v2, Midterm: Calculus v1); the draft and the
       rejected version are not listed. *Say: "Enforced twice: the picker never offers them,
       and the server refuses them anyway."*
-- [ ] 5.3 Pick Demo Quick Check v2. Exam code `R3Q` → refused (four characters); `R3Q!` →
-      refused; **Generate for me** → four characters appear; overwrite with `DQ2X`.
+- [ ] 5.3 Pick Demo Quick Check v2. Exam code `730` → refused (four characters); `73O!` →
+      refused; **Generate for me** → four characters appear; overwrite with `7301`.
+      *(The outline says "4 digits"; the spec says digits and letters. The system accepts
+      both; the demo uses digits so nobody has to argue the point.)*
       Set Closes **before** Opens → a complaint. Set **Opens now**, **Closes now + 8
       minutes** → **Release it** → "Read this code out" → **Copy code** → **Done**. The row
-      is **Live**. *Say: "Four alphanumerics, read out by the teacher; the code is never
-      shown to a student anywhere in the app."*
-- [ ] 5.4 **Release an exam** again: Midterm: Algebra v2, code `SCHD`, Opens now + 20
+      is **Live**. *Say: "Four characters, digits or letters, read out by the teacher; the code is
+      never shown to a student anywhere in the app."*
+- [ ] 5.4 **Release an exam** again: Midterm: Algebra v2, code `7302`, Opens now + 20
       minutes, Closes + 40 → **Scheduled**. On its row **Cancel release** → "Cancel this
       release?" → **Cancel it** → gone. A Live row offers **Close early**, never Cancel.
       (Close early is shown in mark 14.)
@@ -237,9 +245,9 @@ chip and the queue change on the other machine without anyone touching it (that 
 ## Mark 6 — Exam execution (ביצוע מבחן) · T-6
 
 **Covers:** F6.1–F6.10, S-15, S-18, S-19, C-4. **Where:** B as `maya.levi`; a second student
-client on A (or a third window on B) as `omer.katz`. Start within the 8-minute window of `DQ2X`.
+client on A (or a third window on B) as `omer.katz`. Start within the 8-minute window of `7301`.
 
-- [ ] 6.1 **B, `maya.levi`:** Dashboard → **Take an exam** card → type `DQ2X` → **Enter** →
+- [ ] 6.1 **B, `maya.levi`:** Dashboard → **Take an exam** card → type `7301` → **Enter** →
       "Confirm your exam" with the code read-only → **Confirm and continue**.
 - [ ] 6.2 "Confirm it is you": summary reads Demo Quick Check, 2 minutes, N questions.
       ID `385612098` (Noam's) → refused on the field, **no clock started**. ID `374301851`
@@ -247,19 +255,22 @@ client on A (or a third window on B) as `omer.katz`. Start within the 8-minute w
       timer starts here, at id entry, on the server."*
 - [ ] 6.3 The countdown runs. Answer question 1 → **Saving** → **All changes saved**; its
       chip changes. **Next** / **Previous**. **Do not hand in.**
-- [ ] 6.4 **Second student, `omer.katz`, ID `361489206`:** Take Exam → `DQ2X` → confirm →
+- [ ] 6.4 **Second student, `omer.katz`, ID `361489206`:** Take Exam → `7301` → confirm →
       ID → paper. Answer everything. **Hand in** → the dialog shows the answer grid, the
       remaining time, the note that unanswered questions score 0 → **Keep working** once →
       **Hand in** → **Hand in** → the **Handed in** screen: time, minutes, summary, one
-      button **Back to my dashboard**. Enter `DQ2X` again → "already handed in".
+      button **Back to my dashboard**. Enter `7301` again → "already handed in".
 - [ ] 6.5 **Refusals (any student window, quick):** as `noam.peretz`: `2075` → "not enrolled";
       `5164` → "not open yet"; `ZZZZ` → "unknown code"; `12` → "Codes are 4 letters or
       digits." *Say: "Four different sentences for four different mistakes."*
 - [ ] 6.6 **Wire honesty (say, do not click):** *"The take-exam DTO has ten fields and none
       of them is a correct answer. It is absent from the data, not hidden by the UI."*
-- [ ] 6.7 Continue directly to mark 7 while Maya's clock is still running.
+- [ ] 6.7 *(Outline note: "the bot is unavailable during the exam")* → shown live in
+      mark 14.5 on the seeded sitting `2075`. *(Outline note: "time is measured and the
+      exam closes when it runs out")* → mark 7.4.
+- [ ] 6.8 Continue directly to mark 7 while Maya's clock is still running.
 
-*If it goes wrong:* the window closed before Maya joined → release again with code `DQ2Y`,
+*If it goes wrong:* the window closed before Maya joined → release again with code `7303`,
 Opens now, Closes + 10.
 
 ---
@@ -284,7 +295,10 @@ Opens now, Closes + 10.
       **Timed out**; counts **2 / 1 / 1**. Dana's bell: **GRADING_DUE**. Within a few
       minutes the Releases row is **Closed** and the counts are frozen. *Say: "The server
       force-submitted what was saved at the bell; the client only found out."*
-- [ ] 7.5 Maya: **Back to my dashboard**. Enter `DQ2X` → "already handed in".
+      The sitting's record (Releases row and the Results header): **date and time, the
+      duration actually allotted (2 + 1 minutes), started 2, finished on their own 1, did
+      not make it 1**, exactly the five things §4 of the spec asks to be recorded.
+- [ ] 7.5 Maya: **Back to my dashboard**. Enter `7301` → "already handed in".
 - [ ] 7.6 *(Optional, S-20 proof)* Exams → Midterm: Algebra v2 still says its original
       duration; a new release of the same version would start from it.
 
@@ -334,7 +348,8 @@ Opens now, Closes + 10.
 - [ ] 9.4 *(Say, do not click)* *"Replaying another student's grade id is refused server-side;
       the gate is ownership by query, not a missing link."*
 - [ ] 9.5 On the second student's window (`omer.katz`): his card and paper arrived by push
-      too.
+      too, and his **My Grades lists only his own** sittings; Maya's 40 is nowhere on his
+      screens. *(Outline note: "a student cannot see other students' grades".)*
 
 ---
 
@@ -402,7 +417,8 @@ B as `tamar.shani` (sign Maya out on B first).
 
 - [ ] 13.1 **A, Avi: Study Bot.** One card per course he teaches; **Java 21** → **Manage**:
       name, the toggle **Students can use this bot**, Information sources. *Say: "One bot per
-      course; a co-teacher extends the same bot."*
+      course; a co-teacher extends the same bot. The course's own question bank is always
+      part of what the bot may answer from; files and free text are added here."*
 - [ ] 13.2 **Add text** → paste:
       `A LEFT JOIN returns every row of the left table and the matching rows of the right table; where there is no match the right side is NULL.`
       → listed with its character count and author. **Add a file** → a small PDF → "Reading
@@ -421,7 +437,9 @@ B as `tamar.shani` (sign Maya out on B first).
 - [ ] 13.6 A: sign Avi back in. **Remove** one source → "Remove this source?" → **Remove
       it**. **Delete the study bot** → refused while conversations exist (the sentence says
       so). Study Bot → a course card with **No study bot yet** (for Dana: Calculus 12) →
-      **Create the study bot** → name it → created.
+      **Create the study bot** → name `Calculus Helper` → created → **Add text** → paste
+      `The derivative of a function at a point is the slope of the tangent line there.`
+      → listed. *(Outline 13.1: create a bot for a course and define its sources.)*
 - [ ] 13.7 **Grade Avi's sitting now (feeds mark 12 and mark 18):** Grading → `7390` →
       **Select all** → **Approve selected**.
 - [ ] 13.8 Switch **Students can use this bot** off on Java 21 (mark 14 uses it).
@@ -522,6 +540,9 @@ explicit checks.
       the auto-compose refusal, **exams in every state**, **sittings live / scheduled /
       closed / graded**, bot sources and conversations, notifications, teacher comments.
 - [ ] 17.3 Every screen the panel has seen so far was populated; nothing looked fake.
+- [ ] 17.4 *Say:* "Users, roles, permissions, subjects and courses come from external
+      systems (spec §3.1, §8), so they are seeded and read-only here: there is no user or
+      course editor anywhere, by design."
 
 ---
 
@@ -555,6 +576,10 @@ explicit checks.
 - [ ] 19.3 **Swap the bot provider:** open `server/features/bot/ProviderChain.java`.
       *"A `BotProvider` interface, two adapters, a chain with no vendor type in it; keys stay
       server-side in a file that is not in git."*
+- [ ] 19.4 **Phase 2, internet access (spec §10):** *"The client talks to one interface
+      and the server authorises every verb by session, not by network; moving from LAN to
+      internet is a transport and deployment change (TLS, a public address), not a
+      redesign. The server id becomes a certificate fingerprint (ADR-019)."*
 
 ---
 
@@ -595,13 +620,13 @@ explicit checks.
 
 ## The order, on one line
 
-1 login → 2 bank → 3 build → 4 approve → 5 release `DQ2X` → 6 sit (Maya + Omer) → 7 extend,
+1 login → 2 bank → 3 build → 4 approve → 5 release `7301` → 6 sit (Maya + Omer) → 7 extend,
 time up → 8 grade (+ `3318`) → 9 Maya's card and paper → 10 results → 11 principal data →
 12 reports → 13 bots and locks (+ approve `7390`) → 14 use the bot, C-4, close `2075` early →
 15 machines and reconnect → 16 double login → 17 seed → 18 no refresh → 19–20 code → 21 UI.
 
 **Fixed points:** grade (8) before reports (12). Mark 14's C-4 needs the seeded live sitting
-`2075`, so do not close it early before mark 14. The 8-minute window of `DQ2X` starts at 5.3;
+`2075`, so do not close it early before mark 14. The 8-minute window of `7301` starts at 5.3;
 marks 6 and 7 must run inside it.
 
 ## If the demo has to be short
