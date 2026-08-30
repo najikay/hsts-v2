@@ -34,6 +34,9 @@ class NotificationCatalogTest {
             NotificationCatalog.timeExtended("Algebra Midterm", 10, 3L),
             NotificationCatalog.releaseOpeningSoon("Algebra Midterm", 15, 3L),
             NotificationCatalog.botSourceChanged("Java Programming 21", "Dana Cohen", 4L),
+            // U-39: the second sentence under BOT_SOURCE_CHANGED. A type may have more than
+            // one, and everyTypeHasASentence checks coverage rather than a one-to-one map.
+            NotificationCatalog.botDeleted("Java Programming 21", "Avi Mizrahi", 4L),
             NotificationCatalog.integrityAlert("Java Programming 21", 3L),
             // Both added under B-11, and everyTypeHasASentence is what required them: the seed had
             // been writing GRADING_DUE and EXECUTION_CLOSED into notifications.type since E2.15
@@ -86,6 +89,22 @@ class NotificationCatalogTest {
                 .collect(Collectors.toCollection(() -> EnumSet.noneOf(NotificationType.class)));
 
         assertThat(covered).containsExactlyInAnyOrderElementsOf(EnumSet.allOf(NotificationType.class));
+    }
+
+    @Test
+    @DisplayName("⚑ U-39: the delete notice says what happened, not that sources changed")
+    void botDeletedSaysTheBotIsGone() {
+        NotificationCatalog.Draft draft =
+                NotificationCatalog.botDeleted("Java 21", "Avi Mizrahi", 4L);
+
+        assertThat(draft.body())
+                .as("a colleague told the sources 'changed' would go looking for a table "
+                        + "that is not there any more")
+                .isEqualTo("Avi Mizrahi deleted the study bot for Java 21.");
+        assertThat(draft.type())
+                .as("no new type: the reaction to both is to open the manager and look")
+                .isEqualTo(NotificationType.BOT_SOURCE_CHANGED);
+        assertThat(draft.title()).isEqualTo("Study bot deleted");
     }
 
     @Test

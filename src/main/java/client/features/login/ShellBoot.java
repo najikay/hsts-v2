@@ -24,7 +24,8 @@ import java.util.Objects;
  * (Presentation tier, E5.4 / E5.7).
  *
  * <p>Both are sequences, not decisions — every decision inside them belongs to a
- * class that is tested on its own ({@link RoleNav} for the rail,
+ * class that is tested on its own ({@link RoleNav} for the rail, which since U-41
+ * reads the sign-in answer's courses as well as its role,
  * {@link SessionRoutes} for the routes, {@link Routes#home} for the landing
  * screen). What is left here is the order, and the order is the part that has
  * bitten this project before:
@@ -80,7 +81,11 @@ public final class ShellBoot {
         manager.setSignedInUser(login);
 
         AppShell shell = new AppShell(manager.navigator(), new ShellState());
-        shell.setNavItems(RoleNav.itemsFor(login.role()));
+        // Role and courses, not role alone (2026-08-30, live session, U-41): F1.2 derives
+        // the shell from both, and a coordinator who teaches nothing was being handed six
+        // rail items that could only open an empty screen. The list is the one the sign-in
+        // answer already carries, so this costs no round trip and no new verb.
+        shell.setNavItems(RoleNav.itemsFor(login.role(), login.courses()));
         // Drill-in routes name their rail parent (2026-08-28, manual round 1, U-8): the
         // shell's navbar Back falls back to it on a cold deep link with no history, and the
         // breadcrumb shows the parent crumb. Registered here, beside the rail itself,
@@ -91,6 +96,7 @@ public final class ShellBoot {
         state.alias(Routes.BOT_HISTORY.id(), Routes.BOT_CHAT.id());
         state.alias(Routes.BOT_ANALYTICS.id(), Routes.BOT_MANAGER.id());
         state.alias(Routes.CHECKED_FORM.id(), Routes.MY_GRADES.id());
+        state.alias(Routes.GRADE_REVIEW.id(), Routes.GRADING.id());
         state.alias(Routes.QUESTION_EDIT.id(), Routes.QUESTIONS.id());
         state.alias(Routes.EXAM_BUILD.id(), Routes.EXAMS.id());
         shell.setUser(login.displayName(), login.role());

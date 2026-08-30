@@ -1,0 +1,21 @@
+Live session 2026-08-29 (after 0df6edd), Naji browsing with the lead. Scans only, no cross-user work yet.
+
+dana.cohen
+- question bank: "looking clean and nice, I really really like this". Small: Version history sits next to Edit and Delete is far right; centre Edit between them.
+- my exams: "flawless".
+- grading: "we have a list of approvals to give but we need to open their exam and see it to review it too so this is missing" - a per-student paper review before approving.
+- study bot: "really good but still missing the option to delete the bot".
+
+maya.levi
+- quick scan: "flawless gj".
+
+rina.barak
+- question bank: same button note as Dana's (U-37).
+- "looks like we're treating coordinators as both teachers and coords, most data here is empty may need seeding" - she teaches nothing (pure coordinator by the 2026-08-20 roster decision), so the teaching screens are empty for her.
+- approve and send back tried from the coordinator's side: "looks like it worked".
+- Approvals screen: a big "Approvals" title with its description, then a second "Approvals" below it that does not belong, sitting too far left; the search bar too far right; "both have 0 padding or margins".
+- coordinator's bank access checked against BANK contract 7.3/7.7: reads every course of her subject, writes only courses she teaches (Rina: read Algebra+Calculus, write nothing). Intended.
+
+principal.avia
+- Reports: By teacher / By course / By student all give the exact same data; changing the subject gives the same data or nothing. "big bug".
+- Data tab: nothing opens; a principal wanting to read an exam, a question or results has no detail screen or modal.

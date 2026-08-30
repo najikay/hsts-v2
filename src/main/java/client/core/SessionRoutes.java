@@ -17,6 +17,7 @@ import client.features.home.CoordinatorHomeView;
 import client.features.home.PrincipalHomeView;
 import client.features.home.StudentHomeView;
 import client.features.home.TeacherHomeView;
+import client.features.grading.GradeReviewView;
 import client.features.grading.GradingQueueView;
 import client.features.release.ReleaseManagerView;
 import client.features.reports.ReportsView;
@@ -100,6 +101,13 @@ public final class SessionRoutes {
             // exams the caller wrote and re-checks ownership on every sitting she opens, so this
             // list decides what is offered and never what is permitted.
             routes.add(Routes.GRADING);
+            // E12.6's review screen, registered with the queue rather than on its own rail
+            // item: it is a view of one paper, reached from a row's Review button, and a rail
+            // item that needed a grade chosen first would be a dead end. Both teaching roles,
+            // because both have the queue that opens it; the server re-checks ownership of the
+            // execution on all three of its verbs, so this list decides what is offered and
+            // never what is permitted (2026-08-30, live session, U-38).
+            routes.add(Routes.GRADE_REVIEW);
             // E7.10's exam list. Every teacher gets it, coordinators included: it is the
             // surface F4.2's "the reason is visible on the exam" needs, and it is where the
             // rejection notification's reference points. It lists the exams the caller wrote
@@ -246,6 +254,9 @@ public final class SessionRoutes {
         }
         if (Routes.GRADING.id().equals(route.id())) {
             return GradingQueueView::new;
+        }
+        if (Routes.GRADE_REVIEW.id().equals(route.id())) {
+            return GradeReviewView::new;
         }
         if (Routes.REPORTS.id().equals(route.id())) {
             return ReportsView::new;

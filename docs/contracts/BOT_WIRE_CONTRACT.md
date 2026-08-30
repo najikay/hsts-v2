@@ -68,6 +68,7 @@ reachable from `BotAnalytics` and fails on any identity-shaped component name.
 | `BOT_MANAGER_GET` | teacher | `BotCourseRequest` | `BotManagerPage` |
 | `BOT_CREATE` | teacher | `BotCreateRequest` | `BotManagerPage` |
 | `BOT_ACTIVE_SET` | teacher | `BotActiveRequest` | `BotManagerPage` |
+| `BOT_DELETE` *(A3)* | teacher | `BotCourseRequest` | `BotManagerPage` |
 | `BOT_SOURCE_ADD` | teacher | `SourceAddRequest` | `BotManagerPage` |
 | `BOT_SOURCE_UPDATE` *(A1)* | teacher | `SourceUpdateRequest` | `BotManagerPage` |
 | `BOT_SOURCE_REMOVE` | teacher | `SourceRemoveRequest` | `BotManagerPage` |
@@ -191,7 +192,8 @@ hers. The provider is recorded per row and in one structured log line per ask
   `DOCX`; `isEditable()` is what the screen switches on.
 - `BotManagerPage(BotProfile bot, List<BotSourceRow> sources)` — `bot` is **null** for a course
   with no bot, which is an empty state the screen draws, not an error.
-- `BotCourseRequest(String courseCode)`, `BotCreateRequest(String courseCode, String name)`,
+- `BotCourseRequest(String courseCode)` — also the payload of `BOT_DELETE` **(A3)**,
+  `BotCreateRequest(String courseCode, String name)`,
   `BotActiveRequest(String courseCode, boolean active)`,
   `SourceRemoveRequest(String courseCode, long sourceId)`,
   `SourceUpdateRequest(String courseCode, long sourceId, BotSourceKind kind, String title,
@@ -342,3 +344,90 @@ a client record, deliberately not in `common/dto/bot`, because nothing about it 
 **If the shape ever changes**, the trigger to watch is a teacher with enough courses for n reads
 to be felt on show. Nothing in the seed or in the demo is near it, and a summary verb would be
 additive under §10's rules if it ever is.
+
+### A3 — `BOT_DELETE` (F12.1, U-39, added 2026-08-30, lead-ruled)
+
+**The ask.** A teacher who creates a bot on the wrong course, or names it wrongly, or makes one
+during a training session, has no way to get rid of it. `BOT_CREATE` is idempotent (§8) so she
+cannot create over it, `BOT_ACTIVE_SET` hides it from students but leaves it on her own list
+forever, and the sources verbs empty it without removing it. The screen U-26 built made that
+visible: the manager is now a list of every taught course, so a bot she did not mean to make is
+a card she has to look at every time she opens it. **Ruled 2026-08-30: build the verb, and make
+what it refuses the point of it.**
+
+**The verb.**
+
+| Verb | Caller | Request payload | OK payload |
+|---|---|---|---|
+| `BOT_DELETE` | teacher | `BotCourseRequest` | `BotManagerPage` |
+
+**No new payload type, and that is the considered choice.** A1 argued that an add and an update
+must not share a record because they answer to different rules; the reasoning does not carry
+here, because there is nothing for a second record to carry. §2's rule is that every teacher verb
+is addressed by course code and that one bot belongs to one course (S-30), so the whole request
+is the course code, which is what `BotCourseRequest` already is — the record whose own javadoc
+says it exists because a bot id and a user id could only be redundant or somebody else's. A
+`BotDeleteRequest(String courseCode)` would have been the same one field under a second name,
+differing from the read only in the verb that carries it, and the verb is what the router
+dispatches on. **No change to `common/dto/bot`: no record added, none altered.**
+
+**Semantics.**
+
+1. **Authorised exactly as `BOT_CREATE` is.** `requireRole(TEACHER, COORDINATOR)` plus
+   `teaches(caller, course)` resolved from `CourseRepository`, never from the payload. A
+   co-teacher may delete a bot a colleague created, for the same reason she may add sources to
+   it: the bot belongs to the course, not to whoever pressed Create first (S-30, §8).
+2. **Refused with `CONFLICT` when any student has talked to it ⚑.** `bot_sessions` holds the
+   transcripts and S-33 makes those the students' own records, so they are not collateral in
+   somebody else's tidy-up. The sentence counts them and names the alternative:
+
+   > This bot has 4 student conversations, which are those students' own records. Switch it off
+   > instead of deleting it.
+
+   Singular reads "This bot has 1 student conversation, which is that student's own record."
+   The count is in the sentence deliberately: "this bot has been used" is a claim a teacher can
+   argue with, and a number is one she can go and check. `BotMessages.botHasConversations(long)`.
+   V6 says the same thing in the schema — `bot_sessions.bot_id` is `ON DELETE RESTRICT`, and its
+   own comment gives this reason — so the refusal is the readable half of a rule the database
+   would enforce anyway.
+3. **Otherwise the bot and its sources go together, in one transaction.** `bot_sources.bot_id`
+   is `ON DELETE CASCADE` in V6, and the delete does **not** lean on it: the two tables are not
+   mapped as an association, so that cascade is the engine's rather than Hibernate's, which
+   would make "what does deleting a bot delete" a question about the DDL instead of about the
+   code. `BotData.deleteBot` removes the sources explicitly and then the bot, which is one
+   behaviour on both engines and one an in-memory store can reproduce.
+4. **The advisory edit lock is consulted over every source (E18.5, F10.4).** `BOT_SOURCE_REMOVE`
+   refuses one row a colleague is holding; this would take all of them at once, so a colleague
+   holding **any** source of the bot answers `CONFLICT` with the same sentence naming her,
+   `BotMessages.sourceLockedBy(name)`, which reads as the plain `SOURCE_LOCKED` wording when the
+   lock service cannot say who. Deleting the bot out from under an open editor is worse than
+   deleting her row: she would come back to a screen with no bot on it at all.
+5. **Gate order is E6.14's, the one A1 fixed.** Course, then scope, then the bot, then the
+   conversations, then the locks, then the write — all inside the transaction. A teacher who
+   does not teach the course is refused before anything about it is read or reported, so no
+   `CONFLICT` can tell an outsider that a source exists or who is holding it.
+6. **Co-teachers are told, with a `BOT_SOURCE_CHANGED` notification and no new type.**
+   `NotificationCatalog.botDeleted` writes its own sentence — *"Avi Mizrahi deleted the study
+   bot for Java 21."* — under the existing `NotificationType.BOT_SOURCE_CHANGED`. The type is
+   what the panel switches on for an icon and what an aggregate would group by, and a
+   co-teacher's reaction to both events is the same: open the manager and look. The sentence is
+   stored per row, which is where the two differ. The deleter is not told about her own delete.
+7. **The answer is the refreshed page, which is the empty one.** `BotManagerPage.none()` — `bot`
+   is null, `sources` empty — the same shape `BOT_MANAGER_GET` answers for a course that never
+   had a bot, and the empty state the screen already draws (§3's "every mutating teacher verb
+   answers with a whole `BotManagerPage`"). The client needs no new shape and no special case.
+
+**Error codes**, all reusing §4's sentences except the new one: `VALIDATION` malformed ·
+`FORBIDDEN` not your course · `NOT_FOUND` unknown course, or the course has no bot ·
+`CONFLICT` the bot has student conversations (`BotMessages.botHasConversations`, new) ·
+`CONFLICT` a colleague holds the advisory lock on one of its sources (`sourceLockedBy`).
+
+**The client side** is one button and one confirmation, both on the course's own card:
+**Delete the study bot** (`Buttons.danger`) on the card that carries Manage, on its own
+right-aligned row under it rather than on the same line — the label is the longest thing on a
+280px card and a destructive action sharing a line with the ordinary one is a mis-click waiting
+to happen (`TruncatedTextGuardTest` walks both window sizes). Then a `danger` `WarnConfirm`
+naming the course and saying the sources go with the bot, and on success the card flips to
+**Create the study bot** because the page came back empty. The `CONFLICT` sentence is drawn on
+that card through the session's existing error path, which is why `BotCourseSummary` gained a
+`status` component (a client record, still not on the wire — A2's rule, unchanged).

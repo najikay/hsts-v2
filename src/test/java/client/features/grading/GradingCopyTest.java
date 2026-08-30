@@ -153,15 +153,79 @@ class GradingCopyTest {
 
     // ===================== The scan ======================================
 
+    // ===================== The review screen (U-38) =======================
+
+    @Nested
+    @DisplayName("The review screen")
+    class Review {
+
+        @Test
+        @DisplayName("the score line carries both numbers, so a moved score cannot hide")
+        void scoreLineCarriesBothNumbers() {
+            // A teacher opening a paper is comparing the machine's answer with her own. A line
+            // showing only the effective score hides that somebody already moved it.
+            assertThat(GradingCopy.scoreLine(row(71, null, GradeState.AUTO)))
+                    .isEqualTo("Auto 71 · Score 71 / 100 · Awaiting approval");
+            assertThat(GradingCopy.scoreLine(row(71, 85, GradeState.AUTO)))
+                    .isEqualTo("Auto 71 · Score 85 / 100 · Awaiting approval · Adjusted");
+            assertThat(GradingCopy.scoreLine(row(71, 71, GradeState.APPROVED)))
+                    .as("approving sets a final score equal to the auto one, which is not an "
+                            + "adjustment and must not be labelled as one")
+                    .isEqualTo("Auto 71 · Score 71 / 100 · Approved");
+        }
+
+        @Test
+        @DisplayName("an absent reason and an absent note are null, not empty boxes")
+        void absencesAreNull() {
+            // The screen hides the box rather than showing a heading with nothing under it: a
+            // label with no value reads as data that failed to load.
+            StudentGradeRow bare = row(71, null, GradeState.AUTO);
+            assertThat(GradingCopy.overrideReason(bare)).isNull();
+            assertThat(GradingCopy.teacherNote(bare)).isNull();
+            assertThat(GradingCopy.overrideReason(withText(" ", " "))).isNull();
+            assertThat(GradingCopy.teacherNote(withText(" ", " "))).isNull();
+        }
+
+        @Test
+        @DisplayName("the reason and the note are read off their own fields, never swapped")
+        void reasonAndNoteAreNotSwapped() {
+            // They have different readers: one is the audit trail (S-23), one is the only free
+            // text a student ever sees (S-22). Swapping them writes each to the wrong one.
+            StudentGradeRow row = withText("Marked generously.", "Strong work.");
+            assertThat(GradingCopy.overrideReason(row)).isEqualTo("Marked generously.");
+            assertThat(GradingCopy.teacherNote(row)).isEqualTo("Strong work.");
+        }
+
+        @Test
+        @DisplayName("the approved sentence names the consequence, not the rule")
+        void approvedSentenceNamesTheConsequence() {
+            assertThat(GradingCopy.REVIEW_APPROVED)
+                    .contains("the student can see it")
+                    .contains("cannot be changed");
+        }
+
+        @Test
+        @DisplayName("the chosen-option tag is in the third person, because the reader changed")
+        void theTagIsWrittenForTheTeacher() {
+            assertThat(GradingCopy.STUDENT_ANSWER).doesNotContain("Your");
+        }
+    }
+
+    private static StudentGradeRow withText(String reason, String note) {
+        return new StudentGradeRow(1, 11, "מאיה לוי", 71, 85, 85, GradeState.AUTO,
+                reason, note, null);
+    }
+
     /**
      * Every public String constant that is copy, found by scanning rather than by list.
      *
-     * <p>Two constants on this class are not copy and are skipped, each for a stated reason
-     * rather than because it was inconvenient. {@code STYLE_CLASS} is a CSS selector — it is
-     * lower case because that is what a class name is, and asking it to start with a capital
-     * would be asking the stylesheet to read like a sentence. {@code COLUMN_ADJUSTED} is
-     * <b>deliberately empty</b>: the adjusted column's heading is blank so the marker column
-     * carries no title above a mostly-empty column.
+     * <p>Some constants on this class are not copy and are skipped, each for a stated reason
+     * rather than because it was inconvenient. The two {@code …STYLE_CLASS} names are CSS
+     * selectors — lower case because that is what a class name is, and asking one to start with
+     * a capital would be asking the stylesheet to read like a sentence; they are skipped by
+     * suffix so a third screen's does not have to be remembered here. {@code COLUMN_ADJUSTED}
+     * and {@code COLUMN_REVIEW} are <b>deliberately empty</b>: neither column wants a heading,
+     * one because it is a marker and one because its buttons say the word themselves.
      *
      * <p>A scan rather than a list, for the reason {@code ReleaseCopyTest} is one: a rule that
      * only checks the strings somebody remembered to enumerate is a rule a new string walks
@@ -173,7 +237,7 @@ class GradingCopyTest {
             if (!Modifier.isPublic(field.getModifiers())
                     || !Modifier.isStatic(field.getModifiers())
                     || field.getType() != String.class
-                    || "STYLE_CLASS".equals(field.getName())) {
+                    || field.getName().endsWith("STYLE_CLASS")) {
                 continue;
             }
             try {
@@ -195,6 +259,10 @@ class GradingCopyTest {
         assertThat(allCopy())
                 .as("the amendment's two new strings are in the scan, not beside it")
                 .contains(GradingCopy.COMMENT_LABEL, GradingCopy.COMMENT_PROMPT);
+        assertThat(allCopy())
+                .as("and U-38's review vocabulary, which is the newest thing here")
+                .contains(GradingCopy.REVIEW, GradingCopy.REVIEW_TITLE,
+                        GradingCopy.STUDENT_ANSWER, GradingCopy.REVIEW_APPROVED);
     }
 
     @ParameterizedTest
@@ -275,5 +343,11 @@ class GradingCopyTest {
                 .isThrownBy(() -> GradingCopy.state(null));
         assertThatExceptionOfType(NullPointerException.class)
                 .isThrownBy(() -> GradingCopy.closedAt(summary(8, 8, 0), null));
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(() -> GradingCopy.scoreLine(null));
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(() -> GradingCopy.overrideReason(null));
+        assertThatExceptionOfType(NullPointerException.class)
+                .isThrownBy(() -> GradingCopy.teacherNote(null));
     }
 }

@@ -200,7 +200,11 @@ public final class BotManagerListSession {
                 page.exists(),
                 bot != null && bot.active(),
                 page.sourceCount(),
-                session.isLoaded());
+                session.isLoaded(),
+                // U-39: the session's own error path, carried onto the card it belongs to. A
+                // refusal addressed to one course was already folded into that course's
+                // session; this is what lets the screen put it where the teacher clicked.
+                session.status());
     }
 
     private static String key(String courseCode) {

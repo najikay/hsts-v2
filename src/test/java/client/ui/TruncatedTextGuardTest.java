@@ -12,6 +12,7 @@ import client.features.bank.QuestionEditorView;
 import client.features.bot.BotChatView;
 import client.features.exam.ExecutionMonitorView;
 import client.features.exambuild.ExamBuilderView;
+import client.features.grading.GradeReviewView;
 import client.features.home.StudentHomeSession;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
@@ -52,6 +53,7 @@ import common.dto.grading.AnswerReviewRow;
 import common.dto.grading.CheckedForm;
 import common.dto.grading.ExecutionGrades;
 import common.dto.grading.ExecutionGradingSummary;
+import common.dto.grading.GradeReview;
 import common.dto.grading.GradeState;
 import common.dto.grading.GradingQueue;
 import common.dto.grading.MyGrades;
@@ -248,6 +250,13 @@ class TruncatedTextGuardTest extends ApplicationTest {
                 new Stop(Routes.BOT_ANALYTICS.id(), NavParams.of("courseCode", "11")),
                 new Stop(Routes.RESULTS.id(), NavParams.empty()),
                 new Stop(Routes.GRADING.id(), NavParams.empty()),
+                // The review screen, walked with a grade id exactly as the student's
+                // grades.checked is: both are a view of one paper and both render nothing
+                // at all without one, so an empty bag would walk an empty screen and prove
+                // nothing (2026-08-30, live session, U-38).
+                new Stop(Routes.GRADE_REVIEW.id(),
+                        NavParams.of(GradeReviewView.PARAM_GRADE, GRADE,
+                                GradeReviewView.PARAM_EXAM, "Algebra midterm · 11")),
                 new Stop(Routes.EXAMS.id(), NavParams.empty()),
                 new Stop(Routes.EXAM_BUILD.id(),
                         NavParams.of(ExamBuilderView.PARAM_COURSE, "11")));
@@ -348,6 +357,7 @@ class TruncatedTextGuardTest extends ApplicationTest {
         connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of(gradingSummary())));
         connection.replyOk(Verb.GRADING_EXECUTION_GET, new ExecutionGrades(gradingSummary(),
                 List.of(gradeRow(1, "Maya Levi", 100), gradeRow(2, "Omer Katz", 40))));
+        connection.replyOk(Verb.GRADE_REVIEW_GET, new GradeReview(teacherGrade(), markedPaper()));
         connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of(
                 new ExamResultRow(1, "101101", "Algebra midterm", "11", "Algebra 11",
                         List.of(closedSitting())))));
@@ -456,6 +466,38 @@ class TruncatedTextGuardTest extends ApplicationTest {
     private static StudentGradeRow gradeRow(long gradeId, String name, int auto) {
         return new StudentGradeRow(gradeId, gradeId, name, auto, null, auto, GradeState.AUTO,
                 null, null, null);
+    }
+
+    /**
+     * The teacher's shape of one grade: the justification is on it and the exam name is not.
+     *
+     * <p>Both halves are the wire's, not this test's. {@code GradeReviewService.teacherRow}
+     * carries the override reason because this is the staff wire, and leaves {@code examName}
+     * null because a teacher reading one sitting already has it above the table — which is why
+     * the stop above passes the exam label in as a nav parameter.
+     */
+    private static StudentGradeRow teacherGrade() {
+        return new StudentGradeRow(GRADE, 2001, "Maya Levi", 71, 78, 78, GradeState.AUTO,
+                "Question 3 was ambiguous and marked generously for the whole class.",
+                "Strong work on the inequalities.", null, null, null, "Dana Cohen");
+    }
+
+    private static List<AnswerReviewRow> markedPaper() {
+        return List.of(
+                new AnswerReviewRow(1, "11001",
+                        "What are the roots of x squared minus 5x plus 6?",
+                        "1 and 6", "2 and 3", "minus 2 and minus 3", "0 and 5",
+                        15, (byte) 2, (byte) 2, true, 15),
+                new AnswerReviewRow(2, "11002",
+                        "Factor the quadratic expression completely",
+                        "(x minus 1)(x minus 6)", "(x minus 2)(x minus 3)",
+                        "(x plus 2)(x plus 3)", "(x minus 5)(x plus 6)",
+                        15, (byte) 1, (byte) 2, false, 0),
+                new AnswerReviewRow(3, "11003",
+                        "Complete the square for x squared plus 6x plus 5",
+                        "(x plus 3) squared minus 4", "(x plus 3) squared plus 4",
+                        "(x plus 6) squared minus 31", "(x minus 3) squared minus 4",
+                        15, null, (byte) 1, false, 0));
     }
 
     private static StudentGradeRow studentGrade() {

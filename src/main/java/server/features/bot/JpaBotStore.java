@@ -159,6 +159,31 @@ public final class JpaBotStore implements BotStore {
         }
 
         @Override
+        public boolean deleteBot(long botId) {
+            Bot bot = session.get(Bot.class, botId);
+            if (bot == null) {
+                return false;
+            }
+            // The sources first, and explicitly. V6 cascades them from bots, but the two
+            // tables are not mapped as an association here, so that cascade belongs to the
+            // engine and not to Hibernate: relying on it would make "what does deleting a bot
+            // delete" a question about the DDL rather than about this method. The bulk delete
+            // also runs immediately rather than being queued, so the children are gone before
+            // the parent's own delete is enqueued.
+            int sources = bots.deleteSourcesOf(session, botId);
+            session.remove(bot);
+            session.flush();
+            log.info("Deleted study bot {} for course {} with {} sources",
+                    botId, bot.getCourseCode(), sources);
+            return true;
+        }
+
+        @Override
+        public long sessionCount(long botId) {
+            return bots.countSessions(session, botId);
+        }
+
+        @Override
         public List<BotSourceInfo> sourceInfos(long botId) {
             return bots.findSourceInfos(session, botId);
         }

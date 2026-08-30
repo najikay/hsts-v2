@@ -219,6 +219,26 @@ public final class Routes {
     public static final Route GRADING = Route.shell("grading", "Grading", "Grading");
 
     /**
+     * One student's marked paper, opened by the teacher grading it (E12.6, F8.2, T-8).
+     *
+     * <p>Added 2026-08-30 (live session, U-38), which is when F8.2 stopped being a PARTIAL: the
+     * queue could approve a paper and change its score and could not open it. Not on any rail,
+     * for the reason {@link #CHECKED_FORM} is not and {@link #EXAM_PREVIEW} before it: a view of
+     * one paper, reached from the queue's Review action, which carries the grade id. Its rail
+     * parent is {@link #GRADING}, aliased in {@code ShellBoot} so the navbar Back and the
+     * breadcrumb both know where a cold deep link came from.
+     *
+     * <p>The id follows the convention every drill-in in this table uses, the parent's id and a
+     * dotted suffix: {@code approvals.preview}, {@code grades.checked}, {@code questions.edit},
+     * {@code exams.build}, and now this.
+     *
+     * <p>Both teaching roles get it, because both get {@link #GRADING} and the queue that opens
+     * it is the same queue. The server decides what is permitted either way: every verb behind
+     * this screen resolves the caller's ownership of the execution from the session.
+     */
+    public static final Route GRADE_REVIEW = Route.shell("grading.review", "Marked paper");
+
+    /**
      * The principal's comparison reports (E15.4, F9.4, S-37).
      *
      * <p>The id is {@code "reports"} because that is what {@code RoleNav.ROUTE_REPORTS} has
@@ -274,7 +294,7 @@ public final class Routes {
                 HOME_PRINCIPAL, SETTINGS, QUESTIONS, TAKE_EXAM, RELEASES, MONITOR,
                 APPROVALS, EXAM_PREVIEW, EXAMS, EXAM_BUILD,
                 BOT_CHAT, BOT_HISTORY, BOT_MANAGER, BOT_ANALYTICS, RESULTS, MY_GRADES,
-                CHECKED_FORM, GRADING, REPORTS, DATA, QUESTION_EDIT);
+                CHECKED_FORM, GRADING, GRADE_REVIEW, REPORTS, DATA, QUESTION_EDIT);
     }
 
     /** Registers Connect and Login — everything the client needs at startup. */

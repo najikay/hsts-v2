@@ -1,6 +1,7 @@
 package client.ui.shell;
 
 import client.core.Routes;
+import common.dto.auth.CourseRef;
 import common.dto.auth.Role;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,6 +22,10 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
  * asserted literally: exact items, exact order, and exactly which of them are
  * live in this epic. A future epic enabling its screen has to come here and say
  * so, which is the point.
+ *
+ * <p>Since U-41 the matrix has five rows rather than four, because F1.2 derives the
+ * shell from the role <i>and</i> the course relations and the coordinator is the role
+ * where that second half changes the answer. {@link PureCoordinator} is that row.
  */
 class RoleNavTest {
 
@@ -37,8 +42,10 @@ class RoleNavTest {
         }
 
         @Test
-        @DisplayName("coordinator — the teacher's rail plus Approvals")
+        @DisplayName("coordinator, courses unknown — the teacher's rail plus Approvals")
         void coordinatorRail() {
+            // The one-argument form means "this caller has no course list", which is not
+            // the same as an empty one and must not narrow anything (U-41).
             assertThat(labels(Role.COORDINATOR)).containsExactly(
                     "Dashboard", "Question Bank", "Exams", "Approvals", "Releases",
                     "Live Monitor", "Grading", "Results", "Study Bot", "Settings");
@@ -82,6 +89,105 @@ class RoleNavTest {
         @DisplayName("a rail cannot be built without a role")
         void roleIsRequired() {
             assertThatNullPointerException().isThrownBy(() -> RoleNav.itemsFor(null));
+        }
+    }
+
+    @Nested
+    @DisplayName("⚑ U-41: the coordinator's rail also reads her courses (F1.2)")
+    class PureCoordinator {
+
+        /** {@code rina.barak}: coordinates Mathematics 10, zero {@code course_teachers} rows. */
+        private static final List<CourseRef> TEACHES_NOTHING = List.of();
+
+        /** {@code michal.sharon}: coordinates Computer Science 20 and teaches Databases 22. */
+        private static final List<CourseRef> DUAL_HAT = List.of(new CourseRef("22", "Databases 22"));
+
+        @Test
+        @DisplayName("teaches nothing — Dashboard, Question Bank, Approvals, Settings")
+        void pureCoordinatorGetsFourItems() {
+            // The six that are gone are the six scoped to courses she teaches, and each of
+            // them opened an empty screen on this account. Question Bank stays because the
+            // bank's read scope is her whole coordinated subject (BANK contract §7.3).
+            assertThat(labels(Role.COORDINATOR, TEACHES_NOTHING)).containsExactly(
+                    "Dashboard", "Question Bank", "Approvals", "Settings");
+            assertThat(labels(Role.COORDINATOR, TEACHES_NOTHING)).doesNotContain(
+                    "Exams", "Releases", "Live Monitor", "Grading", "Results", "Study Bot");
+        }
+
+        @Test
+        @DisplayName("teaches nothing — Approvals is still there, because it never needed a course")
+        void approvalsSurvive() {
+            assertThat(routeOf(Role.COORDINATOR, TEACHES_NOTHING, "Approvals"))
+                    .isEqualTo(Routes.APPROVALS.id());
+            assertThat(routeOf(Role.COORDINATOR, TEACHES_NOTHING, "Question Bank"))
+                    .isEqualTo(Routes.QUESTIONS.id());
+            assertThat(routeOf(Role.COORDINATOR, TEACHES_NOTHING, "Dashboard"))
+                    .isEqualTo(Routes.HOME_COORDINATOR.id());
+        }
+
+        @Test
+        @DisplayName("teaches something — the full rail, unchanged")
+        void dualHatCoordinatorKeepsEverything() {
+            assertThat(labels(Role.COORDINATOR, DUAL_HAT)).containsExactly(
+                    "Dashboard", "Question Bank", "Exams", "Approvals", "Releases",
+                    "Live Monitor", "Grading", "Results", "Study Bot", "Settings");
+        }
+
+        @Test
+        @DisplayName("no course list is not an empty course list")
+        void anAbsentListNarrowsNothing() {
+            // The failure this guards against is silent: a call site that forgets the
+            // argument would take six items off a real coordinator's rail and nothing
+            // would throw.
+            assertThat(labels(Role.COORDINATOR, null))
+                    .isEqualTo(labels(Role.COORDINATOR))
+                    .hasSize(10);
+        }
+
+        @Test
+        @DisplayName("the other three roles do not read the list at all")
+        void otherRolesAreUnchanged() {
+            for (Role role : List.of(Role.TEACHER, Role.STUDENT, Role.PRINCIPAL)) {
+                assertThat(labels(role, TEACHES_NOTHING))
+                        .as("%s with no courses", role)
+                        .isEqualTo(labels(role));
+                assertThat(labels(role, DUAL_HAT))
+                        .as("%s with courses", role)
+                        .isEqualTo(labels(role));
+            }
+        }
+
+        @Test
+        @DisplayName("the narrowed rail is as well formed as every other one")
+        void theNarrowedRailIsWellFormed() {
+            List<NavItem> items = RoleNav.itemsFor(Role.COORDINATOR, TEACHES_NOTHING);
+            List<String> known = Routes.all().stream().map(client.core.Route::id).toList();
+
+            assertThat(items).isNotEmpty();
+            assertThat(items).extracting(NavItem::routeId).doesNotHaveDuplicates();
+            assertThat(items).allSatisfy(item -> {
+                assertThat(item.enabled()).as("%s is live", item.label()).isTrue();
+                assertThat(item.label()).isNotBlank();
+                assertThat(item.icon()).isNotBlank();
+                assertThat(known).contains(item.routeId());
+            });
+        }
+
+        @Test
+        @DisplayName("a rail cannot be built without a role, list or no list")
+        void roleIsStillRequired() {
+            assertThatNullPointerException()
+                    .isThrownBy(() -> RoleNav.itemsFor(null, TEACHES_NOTHING));
+            assertThatNullPointerException()
+                    .isThrownBy(() -> RoleNav.itemsFor(null, null));
+        }
+
+        private String routeOf(Role role, List<CourseRef> courses, String label) {
+            return RoleNav.itemsFor(role, courses).stream()
+                    .filter(item -> item.label().equals(label))
+                    .map(NavItem::routeId)
+                    .findFirst()
+                    .orElseThrow();
         }
     }
 
@@ -209,6 +315,10 @@ class RoleNavTest {
 
     private static List<String> labels(Role role) {
         return RoleNav.itemsFor(role).stream().map(NavItem::label).toList();
+    }
+
+    private static List<String> labels(Role role, List<CourseRef> courses) {
+        return RoleNav.itemsFor(role, courses).stream().map(NavItem::label).toList();
     }
 
     private static List<String> enabledLabels(Role role) {

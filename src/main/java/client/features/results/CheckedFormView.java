@@ -18,8 +18,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
-import java.util.List;
-
 /**
  * The student's checked exam (Presentation tier, E13.4 ⚑ — T-9.2, S-36).
  *
@@ -29,6 +27,14 @@ import java.util.List;
  *
  * <p>Thin by the usual rule, and on the coverage exclusion list by name: every marking decision
  * is in {@link CheckedFormCopy} and every load decision is in the session, both measured.
+ *
+ * <h2>The paper itself is drawn elsewhere</h2>
+ *
+ * <p>Each question card comes from {@link MarkedPaper}, which is where the card and option
+ * builders went on 2026-08-30 (live session, U-38), when the teacher's
+ * {@code GradeReviewView} needed the same paper. Nothing about the drawing changed; what
+ * changed is that there is one of it, so a teacher approving a paper and the student
+ * reading it afterwards cannot be shown two different renderings of the same marks.
  *
  * <h2>Three outcomes per question, not two</h2>
  *
@@ -151,71 +157,9 @@ public final class CheckedFormView extends AbstractScreen {
 
         questions.getChildren().clear();
         for (AnswerReviewRow row : form.answers()) {
-            questions.getChildren().add(questionCard(row));
+            questions.getChildren().add(
+                    MarkedPaper.card(row, CheckedFormCopy.YOUR_ANSWER));
         }
-    }
-
-    /** One marked question: its text, its four options, and how it was marked. */
-    private static VBox questionCard(AnswerReviewRow row) {
-        Label number = new Label(row.ordinal() + ". " + row.questionText());
-        number.setWrapText(true);
-        number.getStyleClass().add("checked-form-question");
-
-        Label outcome = new Label(CheckedFormCopy.outcome(row));
-        outcome.getStyleClass().addAll("hsts-chip", CheckedFormCopy.outcomeStyle(row));
-
-        Label points = new Label(CheckedFormCopy.points(row));
-        points.getStyleClass().addAll("small", "muted");
-
-        Label displayId = new Label(row.displayId());
-        displayId.getStyleClass().addAll("small", "muted");
-
-        HBox marks = new HBox(8, outcome, points, spacer(), displayId);
-        marks.setAlignment(Pos.CENTER_LEFT);
-
-        VBox card = new VBox(6, number, marks);
-        card.getStyleClass().addAll("hsts-card", "checked-form-card",
-                CheckedFormCopy.outcomeStyle(row));
-
-        List<String> options = List.of(row.answer1(), row.answer2(), row.answer3(), row.answer4());
-        int chosen = CheckedFormCopy.chosenOption(row);
-        for (int i = 0; i < options.size(); i++) {
-            card.getChildren().add(optionRow(i + 1, options.get(i), chosen, row.correct()));
-        }
-        return card;
-    }
-
-    /**
-     * One option, tagged when it was chosen and when it was right.
-     *
-     * <p>Both tags are shown even when they are the same option: "your answer" and "correct
-     * answer" together is how a student sees she got it right, and dropping one of them on a
-     * correct question would make the two cases render inconsistently.
-     */
-    private static HBox optionRow(int index, String text, int chosen, byte correct) {
-        Label label = new Label(index + ") " + text);
-        label.setWrapText(true);
-        HBox.setHgrow(label, Priority.ALWAYS);
-
-        HBox line = new HBox(8, label);
-        line.setAlignment(Pos.CENTER_LEFT);
-        line.getStyleClass().add("checked-form-option");
-
-        if (index == chosen) {
-            line.getChildren().add(tag(CheckedFormCopy.YOUR_ANSWER, "neutral"));
-            line.getStyleClass().add("chosen");
-        }
-        if (index == correct) {
-            line.getChildren().add(tag(CheckedFormCopy.CORRECT_ANSWER, "success"));
-            line.getStyleClass().add("correct");
-        }
-        return line;
-    }
-
-    private static Label tag(String text, String variant) {
-        Label chip = new Label(text);
-        chip.getStyleClass().addAll("hsts-chip", variant);
-        return chip;
     }
 
     private void applyPrintLayout(boolean printing) {

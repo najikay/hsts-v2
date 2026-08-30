@@ -288,10 +288,12 @@ class BotInteractionTest extends ApplicationTest {
     // ===================== Manager (E16.12) ==============================
 
     @Test
-    @DisplayName("clicking a source takes its lock, and a colleague's lock renders the banner")
+    @DisplayName("editing a source takes its lock, and a colleague's lock renders the banner")
     void managerShowsTheLockBanner() {
-        ScreenManager manager = signIn(DANA, connection -> {
-            connection.replyOk(Verb.BOT_MANAGER_GET, MANAGER_PAGE);
+        // 2026-08-30, U-33 reopened: the row no longer takes the lock on click; Edit does.
+        // So the fixture is the Calculus page, whose one source is TEXT and carries Edit.
+        ScreenManager manager = signIn(DANA_TWO_COURSES, connection -> {
+            managerPages(connection, Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE));
             // Somebody else is holding this source: the acquire is refused, and the
             // banner is what tells the teacher why the row is read only (E18.5).
             connection.respondTo(Verb.LOCK_ACQUIRE, request -> Message.ok(request,
@@ -300,11 +302,11 @@ class BotInteractionTest extends ApplicationTest {
                             Instant.now().plusSeconds(45))));
             connection.replyOk(Verb.LOCK_RELEASE, LockResponse.free(
                     new common.dto.lock.EntityRef(
-                            common.dto.lock.EntityRef.BOT_SOURCE, 5L)));
+                            common.dto.lock.EntityRef.BOT_SOURCE, 31L)));
         });
 
         interact(() -> manager.navigator().navigate(Routes.BOT_MANAGER.id(),
-                NavParams.of("courseCode", "22")));
+                NavParams.of("courseCode", "12")));
         WaitForAsyncUtils.waitForFxEvents();
 
         client.features.bot.BotManagerView view =
@@ -312,10 +314,17 @@ class BotInteractionTest extends ApplicationTest {
                         .get(Routes.BOT_MANAGER.id());
         assertThat(labelTexts(manager.scene()))
                 .as("the sources table rendered from the server's page")
-                .contains("Week 3 handout");
+                .contains("Chain rule notes");
 
         Node row = view.sourcesBox().getChildren().get(0);
-        clickOn(row);
+        assertThat(row.getOnMouseClicked())
+                .as("the row itself does nothing on click (U-33)")
+                .isNull();
+        Node edit = row.lookupAll(".button").stream()
+                .filter(n -> n instanceof javafx.scene.control.Button b
+                        && BotCopy.EDIT.equals(b.getText()))
+                .findFirst().orElseThrow(() -> new AssertionError("no Edit on the text row"));
+        clickOn(edit);
         WaitForAsyncUtils.waitForFxEvents();
 
         assertThat(view.lockBanner().isShowing())
@@ -432,6 +441,84 @@ class BotInteractionTest extends ApplicationTest {
                         + "BotManagerSessionTest, whose naming dialog is modal and so is "
                         + "kept off the robot (house precedent, ExecutionMonitorInteractionTest)")
                 .contains(BotCopy.ACTIVE_CHIP, "Calculus study bot", "1 source");
+    }
+
+    // ===================== Deleting a bot (U-39) =========================
+
+    /**
+     * The Delete affordance, on the card and nowhere else ⚑ (2026-08-30, live session, U-39).
+     *
+     * <p><b>No test presses it.</b> The confirmation is a modal {@code WarnConfirm} blocking on
+     * {@code showAndWait}, which in a headless run is a hang rather than a failure — the house
+     * precedent {@code ExamListInteractionTest} and {@code ExecutionMonitorInteractionTest} both
+     * record. What is checkable here is the half a session test cannot see: that the button is
+     * on the right card, wearing the right severity, and absent from the card that has nothing
+     * to delete. What it then sends and what comes back is {@code BotManagerSessionTest}'s
+     * {@code deleteBot} and {@code deletingFlipsOneCard}, which drive the session directly; the
+     * dialog's own words are {@code BotCopyTest.deleteCopy}. The seam between the three is the
+     * click handler, and it is one line.
+     */
+    @Test
+    @DisplayName("⚑ U-39: Delete sits on the card that has a bot, and not on the one that does not")
+    void deleteIsOfferedOnTheCardWithABot() {
+        ScreenManager manager = signIn(DANA_TWO_COURSES,
+                connection -> managerPages(connection, Map.of("11", ALGEBRA_PAGE)));
+        BotManagerView view = openManager(manager, null);
+
+        Node withBot = view.courseCardsBox().getChildren().get(0);
+        Node withoutBot = view.courseCardsBox().getChildren().get(1);
+
+        assertThat(buttonsIn(withBot))
+                .as("the manager is a list, so which bot is answered by where the button is")
+                .contains(BotCopy.MANAGE, BotCopy.DELETE_BOT);
+        assertThat(buttonsIn(withoutBot))
+                .as("a course with no bot is offered the create and nothing to destroy")
+                .contains(BotCopy.CREATE_BOT)
+                .doesNotContain(BotCopy.DELETE_BOT);
+
+        Button delete = withBot.lookupAll(".button").stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> BotCopy.DELETE_BOT.equals(button.getText()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(delete.getStyleClass())
+                .as("the only action on this screen that destroys something a second press "
+                        + "cannot rebuild, so it is dressed as one")
+                .contains("danger");
+        assertThat(lastSent(manager).getVerb())
+                .as("nothing is sent by drawing the button: the delete is behind a confirm")
+                .isEqualTo(Verb.BOT_MANAGER_GET);
+    }
+
+    /**
+     * A course's own refusal, drawn on that course's own card ⚑ (U-39).
+     *
+     * <p>The card had no place to put a sentence before this, so a refusal aimed at one course
+     * could only appear in the detail pane, which shows whichever course is selected. The
+     * delete's {@code CONFLICT} is what made that a defect — "This bot has 4 student
+     * conversations" is about the bot she pressed Delete on — and the fix is general, so this
+     * drives it with the refusal that is easiest to script.
+     */
+    @Test
+    @DisplayName("⚑ U-39: a refusal for one course is drawn on that course's card")
+    void aRefusalLandsOnItsOwnCard() {
+        ScreenManager manager = signIn(DANA_TWO_COURSES, connection ->
+                connection.respondTo(Verb.BOT_MANAGER_GET, request ->
+                        "11".equals(((BotCourseRequest) request.getPayload()).courseCode())
+                                ? Message.ok(request, ALGEBRA_PAGE)
+                                : Message.error(request, common.protocol.ErrorCode.CONFLICT,
+                                        "This bot has 4 student conversations, which are those "
+                                                + "students' own records. Switch it off instead "
+                                                + "of deleting it.")));
+        BotManagerView view = openManager(manager, null);
+
+        assertThat(labelsIn(view.courseCardsBox().getChildren().get(1)))
+                .as("the server's sentence, on the course it is about")
+                .anyMatch(text -> text.startsWith("This bot has 4 student conversations"));
+        assertThat(labelsIn(view.courseCardsBox().getChildren().get(0)))
+                .as("and not on the course that answered perfectly well")
+                .noneMatch(text -> text.startsWith("This bot has"));
     }
 
     // ===================== History (E16.14) ==============================

@@ -177,6 +177,37 @@ class BotCopyTest {
     }
 
     @Test
+    @DisplayName("⚑ U-39: the delete copy names the object and the consequence")
+    void deleteCopy() {
+        assertThat(BotCopy.DELETE_BOT)
+                .as("a bare 'Delete' beside Manage would not say what it deletes")
+                .isEqualTo("Delete the study bot");
+        assertThat(BotCopy.DELETE_CONFIRM)
+                .as("a verb on the button, never OK")
+                .isEqualTo("Delete it");
+        assertThat(BotCopy.DELETE_CANCEL)
+                .as("the cancel is the other choice, not an escape")
+                .isEqualTo("Keep it");
+        assertThat(BotCopy.DELETE_TITLE).endsWith("?");
+
+        String explanation = BotCopy.deleteExplanation("Java 21");
+        assertThat(explanation)
+                .as("the manager is a list, so the dialog names which bot")
+                .contains("Java 21")
+                .as("and the part that is not obvious: the material goes too")
+                .containsIgnoringCase("goes with it")
+                .containsIgnoringCase("create a new one")
+                .doesNotContain("—")
+                .doesNotContain("–");
+        assertThat(explanation)
+                .as("the conversations rule is the server's, and it writes its own sentence")
+                .doesNotContainIgnoringCase("conversation");
+        assertThat(BotCopy.deleteExplanation(null))
+                .as("still a sentence when the course has no name to give")
+                .contains("this course");
+    }
+
+    @Test
     @DisplayName("every source kind has an icon, and no two share one")
     void everyKindHasItsOwnIcon() {
         List<String> icons = new ArrayList<>();

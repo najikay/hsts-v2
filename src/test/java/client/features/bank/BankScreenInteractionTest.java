@@ -314,6 +314,38 @@ class BankScreenInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("the detail card's three actions are spread evenly across it (U-37)")
+    void detailActionsAreEvenlySpaced() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, new QuestionDetail("11001", "11", "Algebra",
+                    1, 1, "Solve the linear equation", List.of("A", "B", "C", "D"), 0,
+                    "Equations", Difficulty.EASY, false, "Dana Cohen", SPRING));
+        });
+
+        clickOn(rowShowing(scene, "Solve the linear equation"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Node actions = scene.getRoot().lookup(".bank-actions");
+        assertThat(actions).isNotNull();
+        List<javafx.scene.Node> children = ((javafx.scene.layout.HBox) actions).getChildren();
+        List<String> shape = children.stream()
+                .map(node -> node instanceof javafx.scene.control.Button button
+                        ? button.getText() : "spacer")
+                .toList();
+        assertThat(shape)
+                .as("history left, edit in the middle, delete on the right edge - a spacer "
+                        + "either side of Edit rather than all three bunched to the left")
+                .containsExactly(BankCopy.HISTORY_OPEN, "spacer", BankCopy.EDIT,
+                        "spacer", BankCopy.DELETE);
+        children.stream()
+                .filter(node -> !(node instanceof javafx.scene.control.Button))
+                .forEach(spacer -> assertThat(javafx.scene.layout.HBox.getHgrow(spacer))
+                        .as("both gaps must grow at the same rate or the spacing is not even")
+                        .isEqualTo(javafx.scene.layout.Priority.ALWAYS));
+    }
+
+    @Test
     @DisplayName("⚑ an empty blob is not a picture, so Edit stays shut rather than crashing")
     void editIsClosedOnAnEmptyBlob() {
         Scene scene = openBank(connection -> {

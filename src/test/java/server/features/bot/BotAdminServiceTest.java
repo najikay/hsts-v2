@@ -262,6 +262,230 @@ class BotAdminServiceTest {
         }
     }
 
+    // ===================== Deleting (U-39) ===============================
+
+    /**
+     * Deleting a course's bot ⚑ (2026-08-30, live session, U-39 — F12.1, S-33).
+     *
+     * <p>The verb is small and the refusal is the requirement, so most of these are about what
+     * does <b>not</b> happen. A bot a student has talked to holds her transcript, and S-33
+     * makes that her record; the delete therefore has to be refusable by a fact about somebody
+     * who is not in the room, and it has to say how many of them there are.
+     */
+    @Nested
+    @DisplayName("⚑ U-39: deleting a bot, and the conversations that refuse it")
+    class Deleting {
+
+        @BeforeEach
+        void createTheBot() {
+            create(DANA, DATABASES, "Databases study bot");
+            notifier.sent.clear();
+        }
+
+        private Message delete(long teacherId, String course) {
+            return service.delete(teacher(teacherId),
+                    Message.request(Verb.BOT_DELETE, new BotCourseRequest(course)));
+        }
+
+        /** Puts one student conversation on the Databases bot, the way an ask would. */
+        private void oneConversation(String question) {
+            store.runInTx(data -> data.appendExchange(null, store.botIdOf(DATABASES), MAYA,
+                    question, "an answer", "stub", NOW));
+        }
+
+        @Test
+        @DisplayName("a bot nobody has used is deleted, and its sources go with it")
+        void deletesTheBotAndItsSources() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            long botId = store.botIdOf(DATABASES);
+            assertThat(store.sourceInfos(botId)).hasSize(1);
+
+            Message response = delete(DANA, DATABASES);
+
+            BotManagerPage page = (BotManagerPage) response.getPayload();
+            assertThat(response.isError()).isFalse();
+            assertThat(page.exists())
+                    .as("the same empty page BOT_MANAGER_GET answers for a course with no bot")
+                    .isFalse();
+            assertThat(page.bot()).isNull();
+            assertThat(page.sources()).isEmpty();
+            assertThat(store.sourceInfos(botId))
+                    .as("the sources go in the same transaction, not by a cascade nobody wrote")
+                    .isEmpty();
+            assertThat(managerPage(DANA, DATABASES).getPayload())
+                    .isEqualTo(BotManagerPage.none());
+        }
+
+        @Test
+        @DisplayName("⚑ a bot with student conversations is refused, with the count (S-33)")
+        void conversationsRefuseTheDelete() {
+            oneConversation("what is a foreign key");
+            oneConversation("what is normalisation");
+            oneConversation("what is an index");
+            oneConversation("what is a join");
+
+            Message response = delete(DANA, DATABASES);
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+            assertThat(response.errorMessage())
+                    .as("the number is the part she can check, and the part that says how "
+                            + "much of somebody else's record was at stake")
+                    .isEqualTo("This bot has 4 student conversations, which are those "
+                            + "students' own records. Switch it off instead of deleting it.")
+                    .contains("Switch it off");
+            assertThat(store.botForCourse(DATABASES))
+                    .as("refused means nothing happened, not that it half happened")
+                    .isPresent();
+        }
+
+        @Test
+        @DisplayName("one conversation reads as one, not as '1 conversations'")
+        void oneConversationReadsAsOne() {
+            oneConversation("what is a foreign key");
+
+            Message response = delete(DANA, DATABASES);
+
+            assertThat(response.errorMessage())
+                    .isEqualTo("This bot has 1 student conversation, which is that student's "
+                            + "own record. Switch it off instead of deleting it.");
+        }
+
+        @Test
+        @DisplayName("a teacher of another course cannot delete this one's bot (P-5)")
+        void anotherCoursesTeacherIsRefused() {
+            Message response = delete(OTHER_TEACHER, DATABASES);
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+            assertThat(response.errorMessage()).isEqualTo(BotMessages.NOT_YOUR_COURSE);
+            assertThat(store.botForCourse(DATABASES)).isPresent();
+        }
+
+        @Test
+        @DisplayName("a student is refused by the role gate before anything else runs")
+        void studentsAreRefused() {
+            CallerContext student = CallerContext.authenticated(null, MAYA, Role.STUDENT);
+
+            assertThatThrownBy(() -> service.delete(student,
+                    Message.request(Verb.BOT_DELETE, new BotCourseRequest(DATABASES))))
+                    .isInstanceOf(AuthorizationException.class);
+        }
+
+        @Test
+        @DisplayName("a course with no bot says to create one rather than reporting a void")
+        void deletingWithoutABot() {
+            Message response = service.delete(teacher(OTHER_TEACHER),
+                    Message.request(Verb.BOT_DELETE, new BotCourseRequest(JAVA)));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+            assertThat(response.errorMessage()).isEqualTo(BotMessages.BOT_NOT_CREATED);
+        }
+
+        @Test
+        @DisplayName("an unknown course is not found, and a malformed payload is validation")
+        void unknownCourseAndMalformedPayload() {
+            assertThat(delete(DANA, "99").getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+            assertThat(delete(DANA, "99").errorMessage()).isEqualTo(BotMessages.NO_SUCH_COURSE);
+
+            Message malformed = service.delete(teacher(DANA),
+                    Message.request(Verb.BOT_DELETE, "not a request"));
+            assertThat(malformed.getErrorCode()).isEqualTo(ErrorCode.VALIDATION);
+            assertThat(malformed.errorMessage()).isEqualTo(BotMessages.MALFORMED_REQUEST);
+        }
+
+        @Test
+        @DisplayName("⚑ a source a colleague is editing refuses the whole delete (E18.5)")
+        void anEditLockRefusesTheDelete() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            BotAdminService locked = newService(heldBy("Avi Mizrahi"));
+
+            Message response = locked.delete(teacher(MICHAL),
+                    Message.request(Verb.BOT_DELETE, new BotCourseRequest(DATABASES)));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+            assertThat(response.errorMessage())
+                    .as("BOT_SOURCE_REMOVE refuses one held row; this would take all of them, "
+                            + "so it refuses with the same sentence naming the holder")
+                    .isEqualTo(BotMessages.sourceLockedBy("Avi Mizrahi"));
+            assertThat(store.botForCourse(DATABASES)).isPresent();
+            assertThat(store.sourceInfos(store.botIdOf(DATABASES))).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("the scope check runs before the lock, so an outsider learns nothing")
+        void scopeIsCheckedBeforeTheLock() {
+            service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
+                    new SourceAddRequest(DATABASES, BotSourceKind.TEXT, "Week 3",
+                            text("A foreign key points at a primary key."))));
+            BotAdminService locked = newService(heldBy("Avi Mizrahi"));
+
+            Message response = locked.delete(teacher(OTHER_TEACHER),
+                    Message.request(Verb.BOT_DELETE, new BotCourseRequest(DATABASES)));
+
+            assertThat(response.getErrorCode())
+                    .as("FORBIDDEN, not CONFLICT: a lock refusal would tell a teacher of "
+                            + "another course that a source exists and who is holding it")
+                    .isEqualTo(ErrorCode.FORBIDDEN);
+        }
+
+        @Test
+        @DisplayName("co-teachers are told the bot is gone, and the deleter is not")
+        void notifiesCoTeachers() {
+            Message response = delete(DANA, DATABASES);
+
+            assertThat(response.isError()).isFalse();
+            assertThat(notifier.sent).hasSize(1);
+            assertThat(notifier.recipients())
+                    .as("the course's other teacher, and not the one who pressed the button")
+                    .containsExactly(MICHAL);
+            assertThat(notifier.sent.get(0).type())
+                    .as("no new NotificationType: a co-teacher opens the manager either way")
+                    .isEqualTo(NotificationType.BOT_SOURCE_CHANGED);
+            assertThat(notifier.sent.get(0).body())
+                    .isEqualTo("Dana Cohen deleted the study bot for Databases 22.");
+        }
+
+        @Test
+        @DisplayName("a refused delete tells nobody anything")
+        void aRefusedDeleteNotifiesNobody() {
+            oneConversation("what is a foreign key");
+
+            delete(DANA, DATABASES);
+
+            assertThat(notifier.sent)
+                    .as("a notification for something that did not happen is a lie")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a co-teacher may delete a bot a colleague created (S-30)")
+        void aCoTeacherMayDeleteIt() {
+            Message response = delete(MICHAL, DATABASES);
+
+            assertThat(response.isError())
+                    .as("the bot belongs to the course, not to whoever pressed Create first")
+                    .isFalse();
+            assertThat(store.botForCourse(DATABASES)).isEmpty();
+            assertThat(notifier.recipients()).containsExactly(DANA);
+        }
+
+        @Test
+        @DisplayName("deleting one course's bot leaves another course's alone")
+        void otherCoursesAreUntouched() {
+            store.bot(JAVA, "Java study bot", true);
+
+            delete(DANA, DATABASES);
+
+            assertThat(store.botForCourse(DATABASES)).isEmpty();
+            assertThat(store.botForCourse(JAVA))
+                    .as("every teacher verb is addressed by course code (contract §2)")
+                    .isPresent();
+        }
+    }
+
     // ===================== Sources =======================================
 
     @Nested
@@ -651,13 +875,13 @@ class BotAdminServiceTest {
     }
 
     @Test
-    @DisplayName("all seven teacher verbs register, and none of them is open")
+    @DisplayName("all eight teacher verbs register, and none of them is open")
     void registersItsVerbs() {
         MessageRouter router = new MessageRouter(new SessionManager());
 
         service.registerOn(router);
 
-        List.of(Verb.BOT_MANAGER_GET, Verb.BOT_CREATE, Verb.BOT_ACTIVE_SET,
+        List.of(Verb.BOT_MANAGER_GET, Verb.BOT_CREATE, Verb.BOT_ACTIVE_SET, Verb.BOT_DELETE,
                 Verb.BOT_SOURCE_ADD, Verb.BOT_SOURCE_UPDATE, Verb.BOT_SOURCE_REMOVE,
                 Verb.BOT_ANALYTICS_GET)
                 .forEach(verb -> {

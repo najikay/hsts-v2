@@ -109,6 +109,27 @@ public final class BotMessages {
     // ===================== Composed sentences ============================
 
     /**
+     * The refusal that protects the students' transcripts ⚑ (U-39, S-33, F12.4).
+     *
+     * <p>Counts them, because "this bot has been used" is a fact a teacher can argue with and
+     * "this bot has 4 student conversations" is one she can check. The number is also what
+     * makes the second half honest: switching the bot off is not a lesser version of deleting
+     * it, it is the operation that does what she wanted without taking four students' records
+     * with it. {@code bot_sessions}' foreign key is {@code RESTRICT} for the same reason, so
+     * this sentence is the readable half of a rule the database would enforce anyway.
+     *
+     * @param conversations how many stored conversations the bot has; always at least one when
+     *                      this is called
+     * @return the sentence to answer {@code CONFLICT} with
+     */
+    public static String botHasConversations(long conversations) {
+        String noun = conversations == 1
+                ? "1 student conversation, which is that student's own record"
+                : conversations + " student conversations, which are those students' own records";
+        return "This bot has " + noun + ". Switch it off instead of deleting it.";
+    }
+
+    /**
      * The same refusal, naming the colleague who is holding it (F10.4, B-21).
      *
      * <p>Used by {@code BOT_SOURCE_UPDATE}, where the lock is consulted after the scope check

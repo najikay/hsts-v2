@@ -471,7 +471,13 @@ public final class BankView extends AbstractScreen {
         // components report's trap unreachable from this screen: the editor takes the bytes as a
         // required argument, so a button that could open it early would be the only way in.
         edit.setDisable(!canEdit(detail));
-        HBox actions = new HBox(10, historyToggle, edit, Buttons.spacer(), delete);
+        // 2026-08-30, live session, U-37: the three were bunched left with only Delete
+        // pushed away, which read as "two controls and an afterthought". A spacer either
+        // side of Edit spreads them evenly across the card - history left, edit in the
+        // middle, delete on the right edge - while each button keeps its min-width pin
+        // (Buttons sets USE_PREF_SIZE), so nothing is squeezed to fit the thirds.
+        HBox actions = new HBox(10, historyToggle, Buttons.spacer(), edit,
+                Buttons.spacer(), delete);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.getStyleClass().add("bank-actions");
         nodes.add(actions);

@@ -59,7 +59,10 @@ public final class ApprovalQueueView extends AbstractScreen {
                 ApprovalCopy.QUEUE_EMPTY_TITLE, ApprovalCopy.QUEUE_EMPTY_HINT);
 
         buildColumns();
-        table.title(ApprovalCopy.QUEUE_TITLE)
+        // 2026-08-30, live session, U-40: no DataTable.title() here. The page header two
+        // lines below already says "Approvals", and printing it again on the toolbar
+        // named the same screen twice within 40px of itself.
+        table.showCount()
                 .searchable("Search exam, course or teacher", ApprovalQueueView::matches)
                 .emptyState(empty)
                 .onRetry(ApprovalCopy.QUEUE_LOAD_FAILED, () -> session.load());
@@ -68,7 +71,7 @@ public final class ApprovalQueueView extends AbstractScreen {
 
         root.getStyleClass().add("approval-queue");
         root.setTop(buildHeader());
-        root.setCenter(table);
+        root.setCenter(buildBody());
         return root;
     }
 
@@ -114,7 +117,14 @@ public final class ApprovalQueueView extends AbstractScreen {
                 .column(statusColumn())
                 // Exam and Status carry their own widths above; the rest are sized
                 // to their content so a teacher's name and a date are never clipped.
-                .columnWidths(260, 150, 190, 110, 170, 220)
+                //
+                // 2026-08-30, live session, U-40: the table moved inside the page's 28px
+                // gutter, which costs it 56px of width, and at 1024px the exam column was
+                // the one that could not absorb the loss - "101201 · Calculus Midterm (v1)"
+                // came up 2px short. The shares are re-cut in the exam column's favour,
+                // taking the slack from Teacher and Submitted, which had far more room than
+                // a name and a date need.
+                .columnWidths(300, 140, 120, 120, 180, 220)
                 // UI wave 2: a question count is a number, so it is right
                 // aligned in tabular figures like every other number in the app.
                 .numericColumns(3);
@@ -173,6 +183,25 @@ public final class ApprovalQueueView extends AbstractScreen {
     }
 
     // ===================== Layout ========================================
+
+    /**
+     * The table under the header, in the page's own gutter (2026-08-30, live session,
+     * U-40).
+     *
+     * <p>The queue was the one screen putting its {@code DataTable} straight into the
+     * {@code BorderPane}'s centre, so the toolbar's search box and the table's first
+     * column both ran into the window edge while the title above them sat 28px in. The
+     * gutter belongs to the page, not to the component: every other table in the app is
+     * already inside a padded container, and pushing the padding down into
+     * {@code hsts-table-toolbar} would have indented eight toolbars away from the tables
+     * they belong to. This is the shape {@code ExamListView} uses, with the same numbers.
+     */
+    private VBox buildBody() {
+        VBox body = new VBox(table);
+        body.setPadding(new Insets(0, 28, 24, 28));
+        VBox.setVgrow(table, Priority.ALWAYS);
+        return body;
+    }
 
     private VBox buildHeader() {
         Label title = new Label(ApprovalCopy.QUEUE_TITLE);

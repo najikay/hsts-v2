@@ -395,7 +395,7 @@ five new entries, one reopening.
 
 ### U-33 · COSMETIC · bot source rows look pressable and only jitter
 **Fix:** the hover/press treatment removed from rows that carry no action; Edit and Remove untouched. Agent H.
-**Status:** `DONE` — built, suites green, pending eyes.
+**Status:** `DONE` — 2026-08-30: the row has no click handler; Edit and Remove are the only actions; the lock-banner test drives the lock through Edit on a text source.
 
 ### U-34 · FUNCTIONAL/SEED · the grading screen is empty for the demo teacher
 **In Naji's words:** "grading screen still empty, looks like a real bug or unseeded, either way I want it fixed"
@@ -410,5 +410,58 @@ five new entries, one reopening.
 ### U-36 · COSMETIC · the question bank's eight columns beside a fixed detail pane
 **Found by:** the truncation guard's first run (2026-08-29): at 1024x700 the bank's eight columns share 449px next to the 420px detail pane, so long stems can only be read from the cell tooltip.
 **Ruling:** logged, not taken now: candidates are a collapsible detail pane, fewer default columns (hide Written / Version behind a column chooser), or a wider minimum window. Naji's call on the next round.
+**Status:** `NEW`.
+
+## Live session (2026-08-29, after 0df6edd) — Naji browsing with the lead, `docs/manual-round-4-notes.txt`
+
+### U-37 · COSMETIC · the bank card's three buttons: centre Edit
+**In Naji's words:** "the buttons versions history is next to edit and delete is way to the right, maybe center edit in the middle it'd look nicer"
+**Ruling:** fix (Low): Version history left, Edit centred, Delete right, evenly spaced.
+**Status:** `DONE` — Version history left, Edit centred, Delete right (two spacers), verify green.
+
+### U-38 · FUNCTIONAL · grading needs a per-student paper review before approving
+**In Naji's words:** "we have a list of approvals to give but we need to open their exam and see it to review it too so this is missing"
+**Restated:** the Grading screen lists rows with auto score, state and the override dialog; there is no way to open one student's marked paper (answers, correct answers, points) before approving. `TRACEABILITY.md` already carried F8.2 as PARTIAL "no-review-screen" and E12.6's "paper review" was accepted as a v1 gap on 2026-08-23; the manual round now asks for it. The server side exists: `GradeReviewService` answers `GradeReview(StudentGradeRow grade, List<AnswerReviewRow> answers)` for a teacher (the same shape the student's checked form renders).
+**Ruling:** build it: a **Review** action on a grading row opening the teacher's view of that paper (read-only checked form with the answer key, the auto score, and Approve / Change score on the same screen), navbar Back to Grading. Closes the F8.2 gap.
+**Status:** `DONE` — route `grading.review` (Marked paper): Review on every grading row opens the student's paper with the answer key, auto score, current score, note, and Approve / Change score on the paper; `GRADE_REVIEW_GET` reused, no wire change; F8.2 PARTIAL closed in TRACEABILITY. Pending eyes.
+
+### U-39 · FUNCTIONAL · "still missing the option to delete the bot"
+**In Naji's words:** as quoted.
+**Restated:** there is no `BOT_DELETE` on the wire; the product retires a bot with the active toggle (F12.4), because a bot owns persisted student conversations (S-33) that a delete would destroy or that the database would refuse to cascade. The PDF asks for create, sources add/edit/remove, active/inactive; not delete.
+**Ruling (Naji, 2026-08-30):** build (b): a **Delete the study bot** button on every bot card beside Manage, confirmed, removing the bot and its sources; refused with a sentence when the bot has student conversations (their records, S-33), pointing at the active toggle. BOT contract amendment A3, verb `BOT_DELETE`. Wave 4 agent M.
+**Status:** `DONE` — `BOT_DELETE` (BOT contract A3): Delete the study bot under Manage on every bot card, confirmed; refused with "This bot has N student conversations, which are those students' own records. Switch it off instead of deleting it." when conversations exist; sources go with the bot; co-teachers notified. On the seed every bot has conversations, so the refusal is what you will see; the clean path needs a bot with no chats. Pending eyes.
+
+### U-40 · COSMETIC · the Approvals screen repeats its title and its toolbar hugs the edges
+**In Naji's words:** "a big Approvals on top with a small description below it but another Approvals below that which doesn't belong there and is off to the left too much ... the search bar is also too much to the right both have 0 padding or margins"
+**Restated:** the page header says Approvals, and the `DataTable` below it carries its own title "Approvals" in its toolbar with the search box on the far right, and the toolbar has no horizontal padding. The same page-title-plus-table-title doubling may exist on other list screens (Exams, Releases, Grading, Results) and is worth one sweep.
+**Ruling:** fix (Low): no table title where the page already has one; toolbar padding aligned with the page's 28px gutter; sweep the other list screens for the same doubling.
+**Status:** `DONE` — no duplicated table title on Approvals or Exams; the Approvals table sits in the page gutter; the count survives as its own control. Pending eyes.
+
+### U-41 · FLOW · a pure coordinator sees the whole teacher rail, empty
+**In Naji's words:** "looks like we're treating coordinators as both teachers and coords, most data here is empty may need seeding"
+**Restated:** `rina.barak` is deliberately the pure coordinator (roster decision 2026-08-20: she coordinates Mathematics and teaches nothing, which is what proves the role is derived from the coordinators table and not from course_teachers). Her rail is the teacher's plus Approvals, so Question Bank, Exams, Releases, Live Monitor, Grading, Results and Study Bot are all empty for her. PRD F1.2 says the shell derives from role **and course relations**.
+**Ruling (Naji, 2026-08-30): (b).** The rail derives from role and course relations: a coordinator with no taught course gets Dashboard, Question Bank (her subject, read-only), Approvals, Settings; the teaching items appear the day she teaches. `michal.sharon` keeps the full rail. Coordinators stay per subject (S-1); the school-wide view is the principal's. Wave 4 agent N.
+**Status:** `DONE` — rail derived from role + taught courses: `rina.barak` gets Dashboard, Question Bank, Approvals, Settings; `michal.sharon` keeps the full rail; coordinator dashboard drops the empty courses card. Pending eyes.
+
+### U-42 · SEED · two subjects is thin
+**In Naji's words:** "we might need to do things other than CS and math, like bio, chem, physics maybe the seeding is a little lacking"
+**Ruling:** a later seed wave: three more subjects with a course each, a teacher and a coordinator per subject, enrollments, and a handful of questions per course so pickers, reports and the data browser show breadth; no new exams or sittings unless the demo needs them.
+**Status:** `NEW` — after the interaction round.
+
+### U-43 · SEED/FUNCTIONAL · reports show the same figures whatever the dimension or subject
+**In Naji's words:** "by teacher by course by students, all of them give the exact same data, same within each category, changing course or teacher or student give one out of two situations, the exact same data or nothing at all ... big bug"
+**Restated:** by design a report reads only closed sittings whose statistics were **frozen** at the last grade approval (F8.5, C-5), and the seed has exactly **one** such sitting (`4821`, Algebra, Dana). So every dimension and every subject resolves to that one row or to nothing: By teacher → Dana → 4821; By course → Algebra → 4821; By student → any Algebra student → 4821's class statistics (the by-student dimension compares the classes a student sat in, never her own marks, by the strategy's own javadoc and F9.4). `7390` and `3318` are unfrozen on purpose (they are the grading demos). The screen is working; the data cannot show it.
+**Ruling:** (1) seed at least three frozen sittings across two subjects (a second Algebra sitting, a Java one, and one for a new subject from U-42) so each dimension has something to compare; (2) the report's empty and single-row states say why ("one closed and graded sitting so far"); (3) a note in DEMO_SCRIPT: approve 3318 and 7390 before act 6, which is B-18's rule already. Not a code defect in the strategies.
+**Status:** `NEW` — seed wave with U-42.
+
+### U-44 · FUNCTIONAL · the principal's Data tab opens nothing
+**In Naji's words:** "in the data tab, nothing opens, so if a principal wants to read an exam or question or results should there be a modal or a screen to display those things?"
+**Restated:** F9.3 gives the principal a read-only browse of bank, exams and results; the browser lists rows and stops there. A row should open a read-only detail: a question (the bank's detail card, no actions), an exam version (the coordinator's student-identical preview, no Approve/Send back), a sitting's results (the teacher's results table and statistics, read-only, no print restriction).
+**Ruling:** build it: `data.detail` routes off the rail, reusing the existing read-only renderers; every mutating control absent (S-7 stays structurally true: the principal has no mutating verbs either way).
+**Status:** `NEW` — next wave.
+
+### U-45 · TEST HYGIENE · the bot interaction suite trips a teardown race under the full build
+**Found by:** three full verifies on 2026-08-29/30, each with exactly one error in `BotInteractionTest` (`aWriteOnOneCourseNeverMovesAnother`, then `selectingACardLoadsThatCoursesBot`): `NullPointerException ... AbstractScreen.eventBus() is null` while a screen builds; the class passes alone every time. `FxTestHarness`'s own javadoc documents the race: `resetGlobalState` after one test can land while a queued FX runnable from it still builds a screen against the emptied `ScreenManager`.
+**Ruling:** fix the harness, not the tests: `resetGlobalState` drains the FX queue (`WaitForAsyncUtils.waitForFxEvents()` twice, then reset), and screens built during teardown must not throw on a null bus. Until then a sole red of this shape is rerun once.
 **Status:** `NEW`.
 

@@ -432,6 +432,78 @@ abstract class BotFeatureRepositoryContract extends RepositoryTestBase {
         assertThat(remaining).isEmpty();
     }
 
+    /**
+     * Deleting a bot takes its sources and nothing else ⚑ (2026-08-30, U-39).
+     *
+     * <p>Here rather than in the service tests for the reason the dual write is: "the sources
+     * go and the other course's do not" is a claim about what the statements actually did to
+     * the tables, and V6 puts a {@code CASCADE} behind one of them that an in-memory store
+     * cannot reproduce. Run on both engines, because the cascade is the engine's own.
+     */
+    @Test
+    @DisplayName("⚑ deleting a bot deletes its sources, and only its own (U-39)")
+    void deleteBotTakesItsSources() {
+        JpaBotStore store = new JpaBotStore(factory());
+        long algebra = store.inTx(data -> data.createBot(COURSE_ALGEBRA, "bot").botId());
+        long java = store.inTx(data -> data.createBot(COURSE_JAVA, "bot").botId());
+        store.inTx(data -> data.addSource(algebra, BotSourceKind.TEXT, "Pasted",
+                new byte[0], "Material.", danaId, WHEN));
+        store.inTx(data -> data.addSource(algebra, BotSourceKind.TEXT, "Also pasted",
+                new byte[0], "More material.", danaId, WHEN));
+        long keptSource = store.inTx(data -> data.addSource(java, BotSourceKind.TEXT, "Kept",
+                new byte[0], "Java material.", danaId, WHEN));
+
+        boolean deleted = store.inTx(data -> data.deleteBot(algebra));
+
+        Optional<BotData.BotRecord> goneBot = store.inTx(data -> data.botForCourse(COURSE_ALGEBRA));
+        Optional<BotData.BotRecord> keptBot = store.inTx(data -> data.botForCourse(COURSE_JAVA));
+        List<BotSourceInfo> goneSources = store.inTx(data -> data.sourceInfos(algebra));
+        List<BotSourceInfo> keptSources = store.inTx(data -> data.sourceInfos(java));
+        boolean deletedTwice = store.inTx(data -> data.deleteBot(algebra));
+
+        assertThat(deleted).isTrue();
+        assertThat(goneBot).isEmpty();
+        assertThat(goneSources)
+                .as("the sources go with the bot, in the same transaction")
+                .isEmpty();
+        assertThat(keptSources)
+                .as("and one course's delete never reaches another's material")
+                .extracting(BotSourceInfo::sourceId)
+                .containsExactly(keptSource);
+        assertThat(keptBot).isPresent();
+        assertThat(deletedTwice)
+                .as("a bot that is already gone is false, not an exception")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("⚑ the session count is per bot, and it is what refuses a delete (U-39)")
+    void sessionCountIsPerBot() {
+        JpaBotStore store = new JpaBotStore(factory());
+        long algebra = store.inTx(data -> data.createBot(COURSE_ALGEBRA, "bot").botId());
+        long java = store.inTx(data -> data.createBot(COURSE_JAVA, "bot").botId());
+
+        long beforeAnyAsk = store.inTx(data -> data.sessionCount(algebra));
+
+        store.inTx(data -> data.appendExchange(null, algebra, mayaId,
+                "what is a foreign key", "an answer", "stub", WHEN));
+        long sessionId = store.inTx(data -> data.appendExchange(null, algebra, mayaId,
+                "what is normalisation", "an answer", "stub", WHEN));
+        store.inTx(data -> data.appendExchange(sessionId, algebra, mayaId,
+                "and why", "an answer", "stub", WHEN));
+
+        long conversations = store.inTx(data -> data.sessionCount(algebra));
+        long otherCourse = store.inTx(data -> data.sessionCount(java));
+
+        assertThat(beforeAnyAsk)
+                .as("a bot nobody has used counts zero, which is what makes it deletable")
+                .isZero();
+        assertThat(conversations)
+                .as("conversations, not messages: a record is a conversation (S-33)")
+                .isEqualTo(2);
+        assertThat(otherCourse).isZero();
+    }
+
     @Test
     @DisplayName("display names come back per id, and unknown ids are simply absent")
     void displayNames() {

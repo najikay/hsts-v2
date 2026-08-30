@@ -83,7 +83,10 @@ public final class ExamListView extends AbstractScreen {
                 .subscribeTo(eventBus());
 
         buildColumns();
-        table.title(ExamListCopy.TITLE)
+        // 2026-08-30, live session, U-40: no DataTable.title(). buildHeader() below prints
+        // ExamListCopy.TITLE as the page's h1, and the toolbar was printing the same word
+        // again directly under it.
+        table.showCount()
                 .emptyState(new EmptyState(Icons.EXAMS,
                         ExamListCopy.EMPTY_TITLE, ExamListCopy.EMPTY_HINT))
                 .onRetry(ExamListCopy.LOAD_FAILED, () -> session.load());

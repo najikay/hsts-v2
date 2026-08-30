@@ -172,6 +172,27 @@ public final class BotCopy {
     /** The button on a card whose course already has a bot (U-26). */
     public static final String MANAGE = "Manage";
 
+    // ---- Deleting a bot (2026-08-30, live session, U-39) ----------------
+
+    /**
+     * The danger button on a card whose course has a bot ⚑ (U-39).
+     *
+     * <p>Names the object, and it has to: the card also carries Manage, and a bare "Delete"
+     * beside it would leave a teacher working out whether she is about to delete the bot, the
+     * course or the card. It is the exact inverse of {@link #CREATE_BOT}, which is what the
+     * card flips back to once the delete lands.
+     */
+    public static final String DELETE_BOT = "Delete the study bot";
+
+    /** The delete confirmation's title (U-39). */
+    public static final String DELETE_TITLE = "Delete this study bot?";
+
+    /** Its confirm button. */
+    public static final String DELETE_CONFIRM = "Delete it";
+
+    /** Its cancel button, worded as the choice it is rather than as "Cancel". */
+    public static final String DELETE_CANCEL = "Keep it";
+
     /** The chip on a card whose bot students can use right now (F12.4). */
     public static final String ACTIVE_CHIP = "Active";
 
@@ -359,6 +380,29 @@ public final class BotCopy {
             case 1 -> "1 source";
             default -> count + " sources";
         };
+    }
+
+    /**
+     * The delete confirmation's explanation ⚑ (U-39).
+     *
+     * <p>Names the course, because the manager is a list since U-26 and a dialog that said
+     * "this bot" would be asking her to remember which card she pressed. Names the sources
+     * too, because they are the part of the answer that is not obvious: a teacher thinking
+     * about a bot is thinking about a name and a switch, not about the eleven files she
+     * uploaded in March.
+     *
+     * <p>What it does <b>not</b> say is anything about student conversations. The server
+     * refuses that case outright and writes its own sentence with the count in it
+     * ({@code BotMessages.botHasConversations}), so promising here that transcripts are safe
+     * would be this screen guessing at a rule it does not enforce.
+     *
+     * @param courseName the course whose bot is about to go
+     * @return the sentence under the dialog's title
+     */
+    public static String deleteExplanation(String courseName) {
+        String course = courseName == null || courseName.isBlank() ? "this course" : courseName;
+        return "The study bot for " + course + " will be removed, and the material you added "
+                + "to it goes with it. You can create a new one afterwards.";
     }
 
     /**

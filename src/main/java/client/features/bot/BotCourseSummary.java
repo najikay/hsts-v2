@@ -26,6 +26,12 @@ import java.util.Objects;
  * @param active      whether students may use it right now (F12.4); {@code false} without a bot
  * @param sourceCount how many pieces of material it answers from (F12.2)
  * @param loaded      whether this course's page has actually arrived
+ * @param status      what the server last said about this course, or empty ⚑ (U-39). The
+ *                    session already keeps a per-course status line and the list already keeps
+ *                    a session per course; what was missing is that the card never showed it,
+ *                    so a refusal aimed at one course had nowhere to appear except the detail
+ *                    pane. The delete refusal is the one that made that a defect: "This bot has
+ *                    4 student conversations" is about the card she pressed
  */
 public record BotCourseSummary(String courseCode,
                                String courseName,
@@ -33,11 +39,13 @@ public record BotCourseSummary(String courseCode,
                                boolean hasBot,
                                boolean active,
                                int sourceCount,
-                               boolean loaded) {
+                               boolean loaded,
+                               String status) {
 
     public BotCourseSummary {
         Objects.requireNonNull(courseCode, "courseCode");
         courseName = courseName == null || courseName.isBlank() ? courseCode : courseName;
+        status = status == null ? "" : status;
         if (!hasBot) {
             // A card cannot claim a name, a state or a count for a bot that does not exist.
             // Enforced here rather than trusted to three call sites (S-30).
@@ -45,6 +53,24 @@ public record BotCourseSummary(String courseCode,
             active = false;
             sourceCount = 0;
         }
+    }
+
+    /**
+     * The seven-component constructor, retained (U-26's shape).
+     *
+     * <p>Same rule the wire records follow when a component is appended: the older shape keeps
+     * working and delegates, so a caller that has nothing to say about status does not have to
+     * say it. Kept because the card's status is a property of the session, not of the course,
+     * and a summary built without one is a perfectly honest summary.
+     */
+    public BotCourseSummary(String courseCode, String courseName, String botName,
+                            boolean hasBot, boolean active, int sourceCount, boolean loaded) {
+        this(courseCode, courseName, botName, hasBot, active, sourceCount, loaded, "");
+    }
+
+    /** @return {@code true} when this card has a sentence from the server to show (U-39). */
+    public boolean hasStatus() {
+        return !status.isBlank();
     }
 
     /** @return the course line a card leads with, {@code "11 · Algebra 11"}. */

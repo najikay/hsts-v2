@@ -121,6 +121,70 @@ public final class GradingCopy {
     /** Refusal shown when the score is outside 0..100. */
     public static final String SCORE_OUT_OF_RANGE = "A score must be between 0 and 100.";
 
+    // ===================== The review screen (E12.6, U-38) ===============
+
+    /** The per-row action that opens one student's paper (2026-08-30, live session, U-38). */
+    public static final String REVIEW = "Review";
+
+    /**
+     * Column heading over the Review buttons: deliberately blank.
+     *
+     * <p>The buttons say the word themselves, and a kicker repeating it would be the only
+     * heading on this table that names an action rather than a fact about the student.
+     */
+    public static final String COLUMN_REVIEW = "";
+
+    /** The review screen's heading. */
+    public static final String REVIEW_TITLE = "Marked paper";
+
+    /** The style class the review screen's root carries. */
+    public static final String REVIEW_STYLE_CLASS = "grade-review";
+
+    /**
+     * What the option the student picked is tagged with.
+     *
+     * <p>The student's own screen says "Your answer". This is the same paper read by someone
+     * else, and the person changes with the reader: a teacher told "your answer" would be being
+     * told something untrue about a paper she did not sit.
+     */
+    public static final String STUDENT_ANSWER = "Student's answer";
+
+    /** The button that approves the one paper on screen. */
+    public static final String APPROVE_ONE = "Approve";
+
+    /** Heading over the note the teacher has already written to this student (S-22). */
+    public static final String REVIEW_NOTE_HEADING = "Your note to the student";
+
+    /** Heading over the justification stored with an adjusted score (S-23). */
+    public static final String REVIEW_REASON_HEADING = "Reason on record";
+
+    /** Shown when one paper could not be opened; says nothing about why (F1.1's discipline). */
+    public static final String REVIEW_FAILED =
+            "That paper could not be opened. Please try again.";
+
+    /** Shown when the server refused this one approval, which the re-read cannot report. */
+    public static final String APPROVE_REFUSED =
+            "This grade was not approved. Please reopen the grading queue and try again.";
+
+    /**
+     * Shown in place of the two actions once a paper is approved.
+     *
+     * <p>States the consequence rather than the rule: the student can see it, and that is why
+     * it can no longer be changed. A disabled button with no sentence beside it is the version
+     * of this screen that gets a teacher asking what she did wrong.
+     */
+    public static final String REVIEW_APPROVED =
+            "This grade is approved and the student can see it. An approved grade cannot be "
+                    + "changed.";
+
+    /** Title of the review screen's empty state, for a paper that pinned no questions. */
+    public static final String REVIEW_EMPTY_TITLE = "No questions on this paper";
+
+    /** The empty state, explained, so it is not mistaken for a load that failed. */
+    public static final String REVIEW_EMPTY_HINT =
+            "The exam this grade belongs to has no questions pinned to it, so there is nothing "
+                    + "to mark up.";
+
     /** "20 Aug 14:30" — when a sitting closed, as a teacher reads it off a schedule. */
     private static final DateTimeFormatter CLOSED_AT =
             DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH);
@@ -236,5 +300,49 @@ public final class GradingCopy {
     public static boolean canOverride(StudentGradeRow row) {
         Objects.requireNonNull(row, "row");
         return row.state() == common.dto.grading.GradeState.AUTO;
+    }
+
+    /**
+     * The one line that carries every number on the review screen.
+     *
+     * <p>Both scores, not only the one that counts. A teacher opening a paper to decide whether
+     * to approve it is comparing the machine's answer with her own, and a screen that showed
+     * only the effective score would hide the fact that somebody had already moved it.
+     *
+     * @param row the grade being reviewed
+     * @return for example {@code "Auto 71 · Score 78 / 100 · Awaiting approval · Adjusted"}
+     */
+    public static String scoreLine(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        String line = "Auto " + row.autoScore() + " · Score " + row.effectiveScore()
+                + " / 100 · " + state(row);
+        return wasAdjusted(row) ? line + " · Adjusted" : line;
+    }
+
+    /**
+     * The justification stored with an adjusted score, when there is one (S-23).
+     *
+     * <p>Shown here and nowhere a student can reach: this is the teacher wire, and
+     * {@code StudentGradeRow.withoutJustification} is what keeps it off the other one.
+     *
+     * @param row the grade being reviewed
+     * @return the reason, or {@code null} when the score was never changed
+     */
+    public static String overrideReason(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        String reason = row.overrideReason();
+        return reason == null || reason.isBlank() ? null : reason;
+    }
+
+    /**
+     * The note the teacher wrote for the student, when she wrote one (S-22).
+     *
+     * @param row the grade being reviewed
+     * @return the note, or {@code null} when there is none
+     */
+    public static String teacherNote(StudentGradeRow row) {
+        Objects.requireNonNull(row, "row");
+        String note = row.teacherComment();
+        return note == null || note.isBlank() ? null : note;
     }
 }

@@ -135,6 +135,13 @@ public final class DataTable<T> extends VBox {
         toolbar.getStyleClass().add("hsts-table-toolbar");
         toolbar.setAlignment(Pos.CENTER_LEFT);
         countLabel.getStyleClass().add("table-count");
+        // 2026-08-30, live session, U-40: a table given neither a title, a count nor a
+        // search box was still reserving the toolbar's 8px bottom padding above its first
+        // column heading. An empty strip is not a strip; it stops being laid out until
+        // something is put on it.
+        toolbar.getChildren().addListener((javafx.collections.ListChangeListener<Node>)
+                change -> setShown(toolbar, !toolbar.getChildren().isEmpty()));
+        setShown(toolbar, false);
 
         affordance.getStyleClass().add("row-open-affordance");
         affordance.setVisible(false);
@@ -441,11 +448,38 @@ public final class DataTable<T> extends VBox {
         affordance.setVisible(false);
     }
 
-    /** Puts a title on the toolbar strip above the table. */
+    /**
+     * Puts a title on the toolbar strip above the table.
+     *
+     * <p>2026-08-30, live session, U-40: only where the title says something the page
+     * header does not. A screen whose {@code h1} already names the list was printing that
+     * name twice, a few pixels apart, and the second one read as a heading for a section
+     * that was not there. Those screens call {@link #showCount()} instead, which keeps the
+     * "N items" the title used to bring with it.
+     */
     public DataTable<T> title(String text) {
         Label title = new Label(text);
         title.getStyleClass().add("table-title");
-        toolbar.getChildren().addAll(title, countLabel, Buttons.spacer());
+        toolbar.getChildren().add(0, title);
+        showCount();
+        return this;
+    }
+
+    /**
+     * Puts the row count on the toolbar without a title (2026-08-30, live session, U-40).
+     *
+     * <p>The count used to arrive as part of {@link #title(String)}, so a screen dropping a
+     * duplicated title lost the count as well. It is its own control now: a queue is worth
+     * counting whether or not the strip above it needs a name.
+     */
+    public DataTable<T> showCount() {
+        if (!toolbar.getChildren().contains(countLabel)) {
+            // Straight after the title when there is one, so the count reads as part of
+            // the heading rather than as a stray label further along the strip. The
+            // trailing spacer is what keeps a search box on the right edge.
+            int at = toolbar.getChildren().isEmpty() ? 0 : 1;
+            toolbar.getChildren().addAll(at, List.of(countLabel, Buttons.spacer()));
+        }
         return this;
     }
 

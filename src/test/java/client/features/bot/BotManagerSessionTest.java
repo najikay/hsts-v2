@@ -221,6 +221,50 @@ class BotManagerSessionTest {
     }
 
     @Test
+    @DisplayName("⚑ U-39: deleting names the course, and the empty page comes back")
+    void deleteBot() {
+        connection.replyOk(Verb.BOT_MANAGER_GET, WITH_BOT);
+        session.refresh().join();
+        connection.replyOk(Verb.BOT_DELETE, BotManagerPage.none());
+
+        session.deleteBot().join();
+
+        assertThat(connection.lastSent().getVerb()).isEqualTo(Verb.BOT_DELETE);
+        assertThat(((BotCourseRequest) connection.lastSent().getPayload()).courseCode())
+                .as("a course code and nothing else: one bot per course (S-30, contract A3)")
+                .isEqualTo("22");
+        assertThat(session.hasBot())
+                .as("the server's own empty page, so nothing here had to clear anything")
+                .isFalse();
+        assertThat(session.sources()).isEmpty();
+        assertThat(session.isLoaded())
+                .as("still loaded: a course with no bot is a page to draw, not an absence")
+                .isTrue();
+        assertThat(session.status()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("⚑ U-39: a refused delete keeps the server's count and the page she had")
+    void deleteRefusedByConversations() {
+        connection.replyOk(Verb.BOT_MANAGER_GET, WITH_BOT);
+        session.refresh().join();
+        connection.replyError(Verb.BOT_DELETE, ErrorCode.CONFLICT,
+                "This bot has 4 student conversations, which are those students' own records. "
+                        + "Switch it off instead of deleting it.");
+
+        session.deleteBot().join();
+
+        assertThat(session.status())
+                .as("the count is the part she can act on, so the client does not replace it")
+                .startsWith("This bot has 4 student conversations")
+                .contains("Switch it off");
+        assertThat(session.hasBot())
+                .as("a refusal leaves the bot exactly where it was")
+                .isTrue();
+        assertThat(session.sources()).hasSize(1);
+    }
+
+    @Test
     @DisplayName("a dropped connection is a status line, and the page it had survives")
     void networkFailureKeepsThePage() {
         connection.replyOk(Verb.BOT_MANAGER_GET, WITH_BOT);
@@ -450,6 +494,70 @@ class BotManagerSessionTest {
             assertThat(calculus.hasBot()).isTrue();
             assertThat(calculus.botLabel()).isEqualTo("Calculus study bot");
             assertThat(calculus.actionLabel()).isEqualTo(BotCopy.MANAGE);
+        }
+
+        @Test
+        @DisplayName("⚑ U-39: deleting flips that card to Create and leaves the other alone")
+        void deletingFlipsOneCard() {
+            answerWith(Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE));
+            list.refreshAll().join();
+            assertThat(list.summaries().get(0).actionLabel()).isEqualTo(BotCopy.MANAGE);
+
+            connection.respondTo(Verb.BOT_DELETE, request -> Message.ok(request,
+                    "11".equals(((BotCourseRequest) request.getPayload()).courseCode())
+                            ? BotManagerPage.none()
+                            : CALCULUS_PAGE));
+
+            list.sessionFor("11").orElseThrow().deleteBot().join();
+
+            BotCourseSummary algebra = list.summaries().get(0);
+            assertThat(algebra.hasBot()).isFalse();
+            assertThat(algebra.botLabel()).isEqualTo(BotCopy.NO_BOT_YET);
+            assertThat(algebra.actionLabel())
+                    .as("the card offers the inverse of what it just did")
+                    .isEqualTo(BotCopy.CREATE_BOT);
+            assertThat(algebra.sourcesLabel())
+                    .as("no bot, nothing to count")
+                    .isEmpty();
+            assertThat(algebra.loaded())
+                    .as("she is not told the screen is still looking; it looked and it is gone")
+                    .isTrue();
+
+            BotCourseSummary calculus = list.summaries().get(1);
+            assertThat(calculus.hasBot())
+                    .as("each course holds its own page, so a delete addressed to one has "
+                            + "nothing shared to reach the other through")
+                    .isTrue();
+            assertThat(calculus.botLabel()).isEqualTo("Calculus study bot");
+            assertThat(calculus.hasStatus()).isFalse();
+        }
+
+        @Test
+        @DisplayName("⚑ U-39: a refused delete puts the count on that card, and only that card")
+        void aRefusedDeleteLandsOnItsOwnCard() {
+            answerWith(Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE));
+            list.refreshAll().join();
+
+            connection.respondTo(Verb.BOT_DELETE, request -> Message.error(request,
+                    ErrorCode.CONFLICT, "This bot has 4 student conversations, which are those "
+                            + "students' own records. Switch it off instead of deleting it."));
+
+            list.sessionFor("11").orElseThrow().deleteBot().join();
+
+            BotCourseSummary algebra = list.summaries().get(0);
+            assertThat(algebra.hasStatus()).isTrue();
+            assertThat(algebra.status())
+                    .as("the sentence is about the bot she pressed Delete on, so it belongs "
+                            + "on that bot's card and not in whichever pane is selected")
+                    .startsWith("This bot has 4 student conversations");
+            assertThat(algebra.hasBot())
+                    .as("and the bot is still there, because the server said no")
+                    .isTrue();
+            assertThat(algebra.actionLabel()).isEqualTo(BotCopy.MANAGE);
+
+            assertThat(list.summaries().get(1).hasStatus())
+                    .as("the other course was not asked anything and is told nothing")
+                    .isFalse();
         }
 
         @Test

@@ -51,6 +51,8 @@ class BotMessagesTest {
         all.add(BotMessages.lockedOut("Databases", "Databases Midterm"));
         all.add(BotMessages.integrityNotice("Databases"));
         all.add(BotMessages.sourceAdded("Week 3 handout", 4200));
+        all.add(BotMessages.botHasConversations(4));
+        all.add(BotMessages.botHasConversations(1));
 
         assertThat(all).allSatisfy(sentence ->
                 assertThat(sentence).doesNotContain("—").doesNotContain("–"));
@@ -147,6 +149,27 @@ class BotMessagesTest {
                 .startsWith("Another teacher is editing this source");
         assertThat(BotMessages.sourceLockedBy("   "))
                 .startsWith("Another teacher is editing this source");
+    }
+
+    @Test
+    @DisplayName("⚑ the delete refusal counts the records it is protecting (U-39, S-33)")
+    void botHasConversations() {
+        String many = BotMessages.botHasConversations(4);
+
+        assertThat(many)
+                .as("the number is the part a teacher can check")
+                .contains("4 student conversations")
+                .containsIgnoringCase("those students' own records")
+                .as("and a refusal has to say what to do instead (PRD §4.1)")
+                .containsIgnoringCase("Switch it off")
+                .endsWith(".")
+                .doesNotContain("—")
+                .doesNotContain("–");
+        assertThat(BotMessages.botHasConversations(1))
+                .as("one conversation reads as one, and belongs to one student")
+                .contains("1 student conversation,")
+                .contains("that student's own record")
+                .doesNotContain("conversations");
     }
 
     @Test

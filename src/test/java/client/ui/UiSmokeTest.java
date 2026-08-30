@@ -11,6 +11,8 @@ import client.features.connect.ConnectWiring;
 import client.features.login.ShellBoot;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
+import client.ui.shell.NavItem;
+import common.dto.approval.ApprovalQueue;
 import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
 import common.dto.auth.Role;
@@ -319,6 +321,46 @@ class UiSmokeTest extends ApplicationTest {
                 .as("only the freshly rebuilt login screen survives a logout")
                 .isEqualTo(1);
         assertThat(lookupOne(manager.scene(), ".hsts-brand-panel")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("\u2691 U-41: a coordinator who teaches nothing gets four rail items, not ten")
+    void pureCoordinatorGetsTheNarrowRail() {
+        launchApp(AppArgs.none());
+        ScreenManager manager = ScreenManager.getInstance();
+        // rina.barak coordinates Mathematics and has zero course_teachers rows, so the
+        // sign-in answer carries an empty course list. That empty list is the whole signal
+        // (F1.2: role AND course relations); nothing here asks the server a second question.
+        LoginResult rina = new LoginResult(3, "rina.barak", "Rina Barak", Role.COORDINATOR,
+                List.of());
+
+        interact(() -> {
+            FakeClientConnection connection = attachFakeConnection(manager);
+            connection.replyOk(Verb.LOGIN, rina);
+            // Her dashboard's two cards are one read of the queue she signs in for.
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET, ApprovalQueue.empty());
+            manager.navigator().replace(Routes.LOGIN.id());
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        signIn(manager.scene(), "rina.barak", "demo123");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        Scene scene = manager.scene();
+        assertThat(manager.navigator().currentRouteId()).isEqualTo(Routes.HOME_COORDINATOR.id());
+        // Read from the shell's own state rather than from a .nav-label lookup: a rail
+        // collapsed by the window width renders icons only, and the assertion would then
+        // be measuring the breakpoint instead of the ruling.
+        assertThat(manager.shell().state().items()).extracting(NavItem::label).containsExactly(
+                // The six that are gone were every rail item scoped to a course she
+                // teaches, and each of them opened an empty screen. Question Bank stays:
+                // the bank's read scope is her whole coordinated subject (BANK 7.3).
+                "Dashboard", "Question Bank", "Approvals", "Settings");
+        assertThat(scene.getRoot().lookupAll(".nav-item")).hasSize(4);
+        // And the dashboard drops its courses card on the same rule: "No courses are
+        // assigned to you yet." reads as a missing seed rather than as the truth about
+        // her job.
+        assertThat(labelTexts(scene)).doesNotContain("Your courses");
     }
 
     /**

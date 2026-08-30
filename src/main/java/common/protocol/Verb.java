@@ -1163,6 +1163,21 @@ public enum Verb {
     BOT_ACTIVE_SET,
 
     /**
+     * Delete a taught course's bot and its sources (F12.1 ⚑, U-39, amendment A3).
+     * Request payload: {@code BotCourseRequest}; response: {@code BotManagerPage},
+     * which is the empty one a course with no bot answers with.
+     * Refused with {@code CONFLICT} when any student has talked to the bot: those
+     * transcripts are the students' own records (S-33) and {@code bot_sessions}'
+     * foreign key is {@code RESTRICT} for exactly that reason, so the sentence
+     * counts the conversations and points at the F12.4 switch instead. Refused with
+     * the same {@code CONFLICT} when a colleague holds the advisory edit lock on one
+     * of the sources, since deleting the bot would take her row out from under her
+     * ({@link #BOT_SOURCE_REMOVE}'s rule, applied to all of them at once).
+     * Co-teachers of the course get a {@code BOT_SOURCE_CHANGED} notification.
+     */
+    BOT_DELETE,
+
+    /**
      * Add one piece of material to a taught course's bot (F12.2/F12.3).
      * Request payload: {@code SourceAddRequest}; response: {@code BotManagerPage}.
      * The file is parsed server-side <b>before</b> the row is written, so a PDF

@@ -133,6 +133,35 @@ class ApprovalInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("the screen names itself once, and its table sits in the page gutter (U-40)")
+    void queueNamesItselfOnce() {
+        ScreenManager manager = signIn(connection ->
+                connection.replyOk(Verb.APPROVALS_QUEUE_GET,
+                        new ApprovalQueue(List.of(PENDING), true)));
+        openQueue(manager);
+
+        Scene scene = manager.scene();
+        // Scoped to the screen: the side rail names every route, and "Approvals" appearing
+        // on the nav is the rail doing its job, not the doubling U-40 is about.
+        javafx.scene.Node page = scene.getRoot().lookup(".approval-queue");
+        assertThat(page).isNotNull();
+        assertThat(labelsReading(page, ApprovalCopy.QUEUE_TITLE))
+                .as("the page header names the screen; the table toolbar must not say it again")
+                .isEqualTo(1);
+        assertThat(page.lookupAll(".table-title"))
+                .as("no table title where the page header already carries the name")
+                .isEmpty();
+
+        javafx.scene.Node table = page.lookup(".hsts-table-wrapper");
+        assertThat(table).isNotNull();
+        javafx.scene.layout.Region body = (javafx.scene.layout.Region) table.getParent();
+        assertThat(body.getPadding().getLeft())
+                .as("the table lines up with the 28px gutter the page header uses")
+                .isEqualTo(28d);
+        assertThat(body.getPadding().getRight()).isEqualTo(28d);
+    }
+
+    @Test
     @DisplayName("an empty queue explains which kind of empty it is (PRD §4.1)")
     void emptyQueueExplainsItself() {
         ScreenManager manager = signIn(connection ->
@@ -346,6 +375,20 @@ class ApprovalInteractionTest extends ApplicationTest {
                 .filter(button -> text.equals(button.getText()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no button labelled " + text));
+    }
+
+    /**
+     * How many labels on the screen read exactly this (2026-08-30, live session, U-40).
+     *
+     * <p>{@link #labelTexts} is a {@code Set}, so it cannot tell one "Approvals" from two.
+     * The duplication U-40 reported is invisible to every assertion built on it.
+     */
+    private static long labelsReading(javafx.scene.Node root, String text) {
+        return root.lookupAll(".label").stream()
+                .filter(Label.class::isInstance)
+                .map(node -> ((Label) node).getText())
+                .filter(text::equals)
+                .count();
     }
 
     private static Set<String> labelTexts(Scene scene) {

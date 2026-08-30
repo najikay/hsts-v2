@@ -149,6 +149,35 @@ public interface BotData {
     void setActive(long botId, boolean active);
 
     /**
+     * Deletes a bot and the sources that belong to it, in the caller's transaction ⚑
+     * (U-39, F12.1).
+     *
+     * <p><b>The sources go explicitly, not by cascade.</b> V6 does declare
+     * {@code bot_sources.bot_id} as {@code ON DELETE CASCADE}, but nothing in this stack maps
+     * the two tables as an association, so Hibernate would issue the parent delete alone and
+     * leave the engine to clean up behind it. That works and it is invisible, which is the
+     * problem: the in-memory store could not reproduce it, and a reader of this interface would
+     * have no way to tell that deleting a bot deletes anything else. One method, both deletes,
+     * both testable.
+     *
+     * <p>Its counterpart {@code bot_sessions.bot_id} is {@code RESTRICT} and stays that way.
+     * The caller checks {@link #sessionCount} first and refuses, so this is never reached with
+     * a conversation in the way; if it ever were, the database would refuse rather than take a
+     * student's transcript with it (S-33).
+     *
+     * @param botId the bot to delete
+     * @return {@code true} when a bot was deleted; {@code false} when there was none
+     */
+    boolean deleteBot(long botId);
+
+    /**
+     * @param botId the bot
+     * @return how many stored conversations students have had with it (S-33), which is what
+     *         makes a delete refusable and countable (U-39)
+     */
+    long sessionCount(long botId);
+
+    /**
      * @param botId the bot
      * @return its sources for the manager's table, oldest first; no bytes
      */

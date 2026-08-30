@@ -199,6 +199,21 @@ final class InMemoryBotStore implements BotStore, BotData {
     }
 
     @Override
+    public boolean deleteBot(long botId) {
+        // Faithful about the one thing U-39's rules turn on: the sources go with the bot, in
+        // the same call. A fixture that dropped only the bot row would let a service that
+        // forgot its sources pass here and orphan them against the real schema.
+        boolean removed = bots.values().removeIf(bot -> bot.botId() == botId);
+        sources.removeIf(source -> source.botId() == botId);
+        return removed;
+    }
+
+    @Override
+    public long sessionCount(long botId) {
+        return sessions.stream().filter(session -> session.botId() == botId).count();
+    }
+
+    @Override
     public List<BotSourceInfo> sourceInfos(long botId) {
         return sources.stream()
                 .filter(source -> source.botId() == botId)

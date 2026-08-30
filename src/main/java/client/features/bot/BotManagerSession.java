@@ -136,6 +136,26 @@ public final class BotManagerSession {
     }
 
     /**
+     * Deletes this course's bot and its sources ⚑ (U-39, 2026-08-30, live session).
+     *
+     * <p>Answers with the same {@link BotManagerPage} every other manager verb answers with,
+     * which for a course that now has no bot is the empty one. So there is nothing to patch
+     * and nothing to clear: {@link #hasBot()} goes false because the server said so, and the
+     * card flips to Create off the same page the detail pane redraws from.
+     *
+     * <p>The failure sentence is deliberately not overridden, for {@link #addSource}'s reason
+     * and one more. The server's {@code CONFLICT} for a bot with student conversations counts
+     * them ("This bot has 4 student conversations..."), and the count is the whole point of the
+     * refusal: it tells her how many records she was about to take and what to do instead. A
+     * generic client sentence would throw away the only part she can act on.
+     *
+     * @return a future completing when the answer has been applied
+     */
+    public CompletableFuture<Void> deleteBot() {
+        return send(Verb.BOT_DELETE, new BotCourseRequest(courseCode), null);
+    }
+
+    /**
      * Switches the bot on or off (F12.4).
      *
      * @param active the state to put it in

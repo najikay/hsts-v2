@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
  * Managing a course's study bot, server-side (Logic tier, E16.9/E16.10 —
  * F12.1/F12.2/F12.3/F12.4/F12.11).
  *
- * <p>The teacher's half of the feature. Seven verbs, one authorisation rule, and one
+ * <p>The teacher's half of the feature. Eight verbs, one authorisation rule, and one
  * rule about what a teacher-facing aggregate is allowed to contain.
  *
  * <h2>Authorisation: role plus ownership, on every verb (P-5)</h2>
@@ -61,6 +61,14 @@ import java.util.stream.Collectors;
  * sources to it. That is the requirement read literally, and it also removes a
  * whole class of race: two co-teachers creating at once cannot produce two bots,
  * because the unique key would not allow it and this path does not try.
+ *
+ * <h2>And what "delete" really means ⚑ (U-39)</h2>
+ *
+ * <p>{@code BOT_DELETE} is the counterpart, and it is deliberately not the mirror image.
+ * Creating is idempotent and cheap; deleting is neither, because a bot that students have
+ * used holds their transcripts (S-33). So a bot with any conversation is refused with the
+ * count and pointed at the F12.4 switch, and only a bot nobody has talked to actually goes.
+ * See {@link #delete}.
  *
  * <h2>Parse first, store second (F12.2)</h2>
  *
@@ -151,12 +159,13 @@ public final class BotAdminService {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** Registers the seven teacher verbs; all authenticated, none open. */
+    /** Registers the eight teacher verbs; all authenticated, none open. */
     public void registerOn(server.core.MessageRouter router) {
         Objects.requireNonNull(router, "router");
         router.register(Verb.BOT_MANAGER_GET, this::managerPage);
         router.register(Verb.BOT_CREATE, this::create);
         router.register(Verb.BOT_ACTIVE_SET, this::setActive);
+        router.register(Verb.BOT_DELETE, this::delete);
         router.register(Verb.BOT_SOURCE_ADD, this::addSource);
         router.register(Verb.BOT_SOURCE_UPDATE, this::updateSource);
         router.register(Verb.BOT_SOURCE_REMOVE, this::removeSource);
@@ -224,6 +233,104 @@ public final class BotAdminService {
                     teacherId, ask.courseCode(), ask.active() ? "on" : "off");
             return Message.ok(request, page(data, ask.courseCode()));
         });
+    }
+
+    // ===================== BOT_DELETE ====================================
+
+    /**
+     * Deletes a course's bot and everything it answered from ⚑ (F12.1, U-39, amendment A3).
+     *
+     * <p>The lead's ruling of 2026-08-30, and the whole of it is in what this refuses. A bot
+     * that no student has ever talked to is a mistake a teacher made and should be able to
+     * unmake: the wrong name, the wrong course, a demo bot from a training session. A bot that
+     * students <em>have</em> talked to is something else, because {@code bot_sessions} holds
+     * their transcripts and S-33 makes those the students' own records. Nobody's record is
+     * collateral in somebody else's tidy-up, so the second case answers {@code CONFLICT} with
+     * the count and points at the switch that does what she actually wanted (F12.4). V6 says
+     * the same thing in the schema: {@code bot_sessions.bot_id} is {@code RESTRICT} while
+     * {@code bot_sources.bot_id} is {@code CASCADE}, and this handler is that pair of rules
+     * written where a teacher can read the reason.
+     *
+     * <p><b>The gate order is E6.14's, the one {@code BOT_SOURCE_UPDATE} established:</b> the
+     * course, then the scope, then the bot, then the conversations, then the advisory locks,
+     * then the write. Scope first means a teacher who does not teach the course learns nothing
+     * about it, not even that somebody is editing something in it.
+     *
+     * <p>The lock consult runs over <b>every</b> source, because that is what the delete
+     * touches. {@code BOT_SOURCE_REMOVE} refuses one held row; this would remove all of them at
+     * once, so a colleague holding any one of them is the same refusal with the same sentence
+     * naming her (B-21). Deleting the bot out from under an open editor is exactly the outcome
+     * E18.5's advisory lock exists to prevent, and it is worse here than on a single row: she
+     * would come back to a screen with no bot on it at all.
+     *
+     * <p>The answer is the refreshed {@link BotManagerPage} every mutating verb here answers
+     * with, which for a course that now has no bot is {@link BotManagerPage#none()} — the empty
+     * state the screen already draws, offering Create. So the client needs no new shape and no
+     * special case: it replaces the page it holds, exactly as it does after a toggle.
+     */
+    Message delete(CallerContext caller, Message request) {
+        Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
+        if (!(request.getPayload() instanceof BotCourseRequest ask) || !ask.isWellFormed()) {
+            return Message.error(request, ErrorCode.VALIDATION, BotMessages.MALFORMED_REQUEST);
+        }
+        long teacherId = caller.userId();
+
+        Outcome outcome = store.inTx(data -> {
+            if (data.courseName(ask.courseCode()).isEmpty()) {
+                return Outcome.refused(ErrorCode.NOT_FOUND, BotMessages.NO_SUCH_COURSE);
+            }
+            if (!data.teaches(teacherId, ask.courseCode())) {
+                return Outcome.refused(ErrorCode.FORBIDDEN, BotMessages.NOT_YOUR_COURSE);
+            }
+            Optional<BotData.BotRecord> bot = data.botForCourse(ask.courseCode());
+            if (bot.isEmpty()) {
+                return Outcome.refused(ErrorCode.NOT_FOUND, BotMessages.BOT_NOT_CREATED);
+            }
+            BotData.BotRecord record = bot.get();
+            long conversations = data.sessionCount(record.botId());
+            if (conversations > 0) {
+                // S-33. The transcripts are the students' records, so the bot stays and the
+                // sentence counts them.
+                return Outcome.refused(ErrorCode.CONFLICT,
+                        BotMessages.botHasConversations(conversations));
+            }
+            String held = heldSourceMessage(data, record.botId(), teacherId);
+            if (held != null) {
+                return Outcome.refused(ErrorCode.CONFLICT, held);
+            }
+            // Read before the delete: after it there is no bot to ask who else teaches its
+            // course, and a notification about something that rolled back would be a lie.
+            List<Long> recipients = data.otherTeachersOf(ask.courseCode(), teacherId);
+            String editorName = data.displayNames(Set.of(teacherId))
+                    .getOrDefault(teacherId, "A colleague");
+            data.deleteBot(record.botId());
+            return Outcome.done(page(data, ask.courseCode()), record, recipients, editorName);
+        });
+        if (outcome.refusal() != null) {
+            return Message.error(request, outcome.refusalCode(), outcome.refusal());
+        }
+        notifyDeleted(outcome);
+        log.info("Teacher {} deleted the {} study bot", teacherId, ask.courseCode());
+        return Message.ok(request, outcome.page());
+    }
+
+    /**
+     * The advisory-lock consult for a whole bot's worth of sources (E18.5, U-39).
+     *
+     * @param data      the open transaction
+     * @param botId     the bot about to be deleted
+     * @param teacherId the teacher asking; her own holds do not block her
+     * @return the refusal sentence naming the first colleague found holding one, or
+     *         {@code null} when nobody else is holding anything
+     */
+    private String heldSourceMessage(BotData data, long botId, long teacherId) {
+        for (BotSourceInfo info : data.sourceInfos(botId)) {
+            Optional<LockHolder> holder = locks.heldByAnother(info.sourceId(), teacherId);
+            if (holder.isPresent()) {
+                return BotMessages.sourceLockedBy(holder.get().displayName());
+            }
+        }
+        return null;
     }
 
     // ===================== BOT_SOURCE_ADD ================================
@@ -538,6 +645,27 @@ public final class BotAdminService {
             return;
         }
         notifier.notify(outcome.recipients(), NotificationCatalog.botSourceChanged(
+                outcome.bot().courseName(), outcome.editorName(), outcome.bot().botId()));
+    }
+
+    /**
+     * Tells the course's other teachers that the bot itself is gone (U-39).
+     *
+     * <p>Its own sentence rather than the source one, because "Dana Cohen changed the study bot
+     * sources for Java 21" said of a bot that no longer exists would send a colleague looking
+     * for a table that is not there. Not its own {@code NotificationType}, because a
+     * co-teacher does the same thing about both, which is open the manager and look; the
+     * reasoning is on {@code NotificationCatalog.botDeleted}.
+     *
+     * <p>Outside the transaction and after it, on the same rule {@link #notifyCoTeachers}
+     * obeys.
+     */
+    private void notifyDeleted(Outcome outcome) {
+        if (outcome.recipients().isEmpty()) {
+            log.debug("No co-teachers to tell that a study bot was deleted");
+            return;
+        }
+        notifier.notify(outcome.recipients(), NotificationCatalog.botDeleted(
                 outcome.bot().courseName(), outcome.editorName(), outcome.bot().botId()));
     }
 

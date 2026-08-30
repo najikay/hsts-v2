@@ -1,6 +1,7 @@
 package client.features.grading;
 
 import client.core.NavParams;
+import client.core.Routes;
 import client.ui.components.Buttons;
 import client.ui.components.DataTable;
 import client.ui.components.EmptyState;
@@ -15,20 +16,17 @@ import javafx.scene.Parent;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Button;
-import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
-import javafx.scene.control.Separator;
-import javafx.scene.control.Spinner;
-import javafx.scene.control.TextArea;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -79,9 +77,18 @@ public final class GradingQueueView extends AbstractScreen {
         return root;
     }
 
+    /**
+     * Re-reads the queue and, when one is open, the sitting under it.
+     *
+     * <p>{@code load()} alone was right while this screen was the only one that could change a
+     * grade. Since 2026-08-30 (live session, U-38) it is not: {@link GradeReviewView} approves
+     * and overrides too, and coming back from it with the rail refreshed and the table still
+     * showing the score she has just changed is the drift the session's re-read rule exists to
+     * prevent. See {@link GradingQueueSession#refresh()}.
+     */
     @Override
     public void onShow(NavParams params) {
-        session.load();
+        session.refresh();
     }
 
     @Override
@@ -146,9 +153,11 @@ public final class GradingQueueView extends AbstractScreen {
                 .column(GradingCopy.COLUMN_SCORE, row -> row.effectiveScore() + " / 100")
                 .column(GradingCopy.COLUMN_STATE, GradingCopy::state)
                 .column(GradingCopy.COLUMN_ADJUSTED, GradingCopy::adjustedMarker)
+                .column(reviewColumn())
                 // F-9: "Auto" and "Score" hold two or three digits; the student name
-                // holds a full name and was clipping at the default window size.
-                .columnWidths(260, 110, 130, 150, 60)
+                // holds a full name and was clipping at the default window size. The Review
+                // column is sized to its button rather than to a heading it does not have.
+                .columnWidths(260, 110, 130, 150, 60, 110)
                 .numericColumns(1, 2);
 
         // Selection drives the bulk approve. Multiple selection rather than a checkbox column:
@@ -167,6 +176,65 @@ public final class GradingQueueView extends AbstractScreen {
                         }
                     }
                 });
+    }
+
+    /**
+     * The column that opens one student's paper (E12.6 — U-38).
+     *
+     * <p>A button per row rather than the table's own {@code openOnClick} gesture, and the
+     * reason is this table's other job: rows are <b>multi-selected</b> here to drive the bulk
+     * approve, so a click that navigated away would fight the click that ticks a row. A button
+     * is the one affordance that can say "open this one" on a surface where the row itself
+     * already means something else.
+     *
+     * @return the column, ready to hand to the table
+     */
+    private TableColumn<StudentGradeRow, StudentGradeRow> reviewColumn() {
+        TableColumn<StudentGradeRow, StudentGradeRow> column =
+                new TableColumn<>(GradingCopy.COLUMN_REVIEW);
+        column.setCellValueFactory(cell ->
+                new javafx.beans.property.SimpleObjectProperty<>(cell.getValue()));
+        column.setPrefWidth(110);
+        column.setSortable(false);
+        column.setCellFactory(unused -> new TableCell<>() {
+            private final Button open = new Button(GradingCopy.REVIEW);
+
+            {
+                open.getStyleClass().add("ghost");
+                open.setOnAction(event -> {
+                    StudentGradeRow row = getItem();
+                    if (row != null) {
+                        openReview(row);
+                    }
+                });
+            }
+
+            @Override
+            protected void updateItem(StudentGradeRow row, boolean empty) {
+                super.updateItem(row, empty);
+                setGraphic(empty || row == null ? null : open);
+            }
+        });
+        return column;
+    }
+
+    /**
+     * Opens one paper on the review screen.
+     *
+     * <p>Carries the exam label as well as the grade id, because the teacher shape of
+     * {@code StudentGradeRow} leaves {@code examName} null by design and this screen is already
+     * showing the name above the table. {@link GradeReviewView#PARAM_EXAM} explains why that is
+     * a nav parameter rather than a wire amendment.
+     *
+     * @param row the student whose paper she pressed Review on
+     */
+    private void openReview(StudentGradeRow row) {
+        String exam = session.openExecution()
+                .map(open -> GradingCopy.examLabel(open.summary()))
+                .orElse(null);
+        navigator().navigate(Routes.GRADE_REVIEW.id(),
+                NavParams.of(GradeReviewView.PARAM_GRADE, row.gradeId(),
+                        GradeReviewView.PARAM_EXAM, exam));
     }
 
     // ===================== Rendering =====================================
@@ -281,62 +349,17 @@ public final class GradingQueueView extends AbstractScreen {
     }
 
     /**
-     * The override dialog: a score, the reason that must accompany it (S-23), and the optional
-     * comment for the student (S-22).
+     * The override, on the row she has selected.
      *
-     * <p><b>Two boxes, not one, and they are separated on purpose.</b> They are written at the
-     * same moment about the same paper, but they have different readers: the reason is the
-     * audit trail and never leaves the staff room, the comment is the only free text the
-     * student ever sees. Merging them would mean either a teacher writing for the record in
-     * front of a student, or writing for the student in the audit log — and each label says
-     * which one this box is, because a box's placement cannot.
-     *
-     * <p>The comment box opens <b>empty even when the grade already has a comment</b>, and the
-     * label says that leaving it empty keeps what is saved. Pre-filling would be friendlier
-     * until the first teacher cleared the box expecting the comment to go away, which on this
-     * wire it does not (the contract's A3 null-preserves rule).
+     * <p>The dialog itself moved to {@link OverrideDialog} on 2026-08-30 (live session, U-38),
+     * when {@link GradeReviewView} gained the same action. It carries S-23's required
+     * justification and S-22's optional comment, and the reasoning for every part of its shape
+     * moved with it.
      */
     private void openOverrideDialog() {
-        Optional<StudentGradeRow> target = selectedRow();
-        if (target.isEmpty()) {
-            return;
-        }
-        StudentGradeRow row = target.get();
-
-        Spinner<Integer> score = new Spinner<>(0, 100, row.effectiveScore());
-        score.setEditable(true);
-
-        TextArea reason = new TextArea();
-        reason.setPromptText(GradingCopy.JUSTIFICATION_PROMPT);
-        reason.setWrapText(true);
-        reason.setPrefRowCount(3);
-
-        Label reasonLabel = new Label(GradingCopy.JUSTIFICATION_LABEL);
-        reasonLabel.setWrapText(true);
-        reasonLabel.getStyleClass().addAll("small", "muted");
-
-        TextArea comment = new TextArea();
-        comment.setPromptText(GradingCopy.COMMENT_PROMPT);
-        comment.setWrapText(true);
-        comment.setPrefRowCount(3);
-
-        Label commentLabel = new Label(GradingCopy.COMMENT_LABEL);
-        commentLabel.setWrapText(true);
-        commentLabel.getStyleClass().addAll("small", "muted");
-
-        Separator between = new Separator();
-
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle(GradingCopy.OVERRIDE_TITLE);
-        dialog.setHeaderText(row.studentName());
-        dialog.getDialogPane().setContent(
-                new VBox(8, score, reasonLabel, reason, between, commentLabel, comment));
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, ButtonType.OK);
-
-        dialog.showAndWait()
-                .filter(button -> button == ButtonType.OK)
-                .ifPresent(button -> session.override(row.gradeId(), score.getValue(),
-                        reason.getText(), comment.getText()));
+        selectedRow().ifPresent(row -> OverrideDialog.show(row).ifPresent(outcome ->
+                session.override(row.gradeId(), outcome.score(), outcome.justification(),
+                        outcome.teacherComment())));
     }
 
     // ===================== Cells =========================================

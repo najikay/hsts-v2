@@ -366,6 +366,16 @@
                         <exclude>client/features/results/MyGradesView*</exclude>
                         <exclude>client/features/results/CheckedFormView*</exclude>
                         <exclude>client/features/grading/GradingQueueView*</exclude>
+                        <!-- E12.6's review screen and the two node-owning helpers the
+                             U-38 change lifted out of the screens that had them: the
+                             override dialog, now shared by the queue and the review, and
+                             the marked-question card, now shared by the review and the
+                             student's checked form. All three own nodes and decide
+                             nothing; GradingCopy, CheckedFormCopy and the two sessions
+                             carry every rule and all four are measured. -->
+                        <exclude>client/features/grading/GradeReviewView*</exclude>
+                        <exclude>client/features/grading/OverrideDialog*</exclude>
+                        <exclude>client/features/results/MarkedPaper*</exclude>
                         <exclude>client/features/approval/ApprovalQueueView*</exclude>
                         <exclude>client/features/approval/ExamPreviewView*</exclude>
                         <exclude>client/features/approval/RejectDialog*</exclude>

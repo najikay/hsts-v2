@@ -178,8 +178,10 @@ class AppArgsAndRoutesTest {
             // removed the interim id "bank": the versioned bank moved onto "questions", which
             // is the id that was already here and which the rail has spelled since E5.4, so
             // the table lost a row rather than gaining one. E7.11 added the exam builder
-            // behind the list's Edit, View and New buttons. Per-role registration and the
-            // role→home mapping are covered in SessionRoutesTest.
+            // behind the list's Edit, View and New buttons. E12.6 added the teacher's review
+            // of one marked paper, 2026-08-30 (live session, U-38), on the drill-in spelling
+            // every other view-of-one-thing here uses: the parent's id and a dotted suffix.
+            // Per-role registration and the role→home mapping are covered in SessionRoutesTest.
             assertThat(Routes.all())
                     .extracting(Route::id)
                     .containsExactly("connect", "login", "home.teacher", "home.coordinator",
@@ -187,7 +189,8 @@ class AppArgsAndRoutesTest {
                             "attempt", "release", "monitor",
                             "approvals", "approvals.preview", "exams", "exams.build",
                             "bot.chat", "bot.history", "bot.manager", "bot.analytics", "results",
-                            "grades", "grades.checked", "grading", "reports", "data",
+                            "grades", "grades.checked", "grading", "grading.review",
+                            "reports", "data",
                             "questions.edit");
         }
 

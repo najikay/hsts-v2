@@ -271,6 +271,35 @@ public final class NotificationCatalog {
     }
 
     /**
+     * A course's study bot was deleted (→ the other teachers of that course) ⚑ (U-39).
+     *
+     * <p><b>{@link NotificationType#BOT_SOURCE_CHANGED} on purpose, and no new constant.</b>
+     * The type is what the panel switches on for an icon and what a future aggregate would
+     * group by; a co-teacher's reaction to "the material changed" and to "the bot is gone" is
+     * the same one, which is to open the manager and look. The sentence is where the two
+     * differ, and the sentence is stored on the row. Adding a constant for one event that
+     * nothing would route differently is how a small stable vocabulary stops being either.
+     *
+     * <p>The reference carries the id of the bot that is gone, exactly as
+     * {@link #botSourceChanged} carries the id of one that is not. {@link NavRef} is documented
+     * as holding no foreign key for this reason: notifications outlive what they point at, and
+     * this route ignores the id anyway ({@code NotificationPresenter} deliberately leaves
+     * {@code bot.manager} out of its parameter table, since the manager wants a course code).
+     * The teacher lands on her list of bots, which since U-26 is where "it is not there any
+     * more" is a thing she can see rather than a screen that says nothing.
+     *
+     * @param courseName the course whose bot went
+     * @param editorName the teacher who deleted it
+     * @param botId      the bot that was deleted
+     */
+    public static Draft botDeleted(String courseName, String editorName, long botId) {
+        return new Draft(NotificationType.BOT_SOURCE_CHANGED,
+                "Study bot deleted",
+                editorName + " deleted the study bot for " + courseName + ".",
+                NavRef.to(ROUTE_BOT_MANAGER, botId));
+    }
+
+    /**
      * A student used another course's bot during an attempt (C-4).
      *
      * <p>Worded as something to look at, not as an accusation: the server cannot

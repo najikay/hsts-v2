@@ -195,6 +195,50 @@ public final class BotRepository {
     }
 
     /**
+     * Deletes every source of one bot ⚑ (E16.9, U-39).
+     *
+     * <p>A bulk delete rather than a load-and-remove loop, and the reason is the same one that
+     * gives this class three shapes of source read: {@code raw} is a {@code MEDIUMBLOB} that
+     * loads with its row, so removing entities would drag every uploaded PDF into memory to
+     * throw it away again. Nothing here needs to see a byte of what it deletes.
+     *
+     * <p>V6 would also do this by cascade, and that is deliberately not what is relied on:
+     * {@code bot_sources} and {@code bots} are not mapped as an association, so the cascade is
+     * the engine's and not Hibernate's. Issuing the delete makes it one behaviour on both
+     * engines and one that {@code BotFeatureRepositoryContract} can watch.
+     *
+     * <p>Consumer: {@code BOT_DELETE}, through {@code JpaBotStore.deleteBot}.
+     *
+     * @param session the current session
+     * @param botId   the bot whose material is going
+     * @return how many source rows were deleted
+     */
+    public int deleteSourcesOf(Session session, long botId) {
+        return session.createMutationQuery("delete from BotSource where botId = :botId")
+                .setParameter("botId", botId)
+                .executeUpdate();
+    }
+
+    /**
+     * How many conversations students have had with one bot (E16.10, S-33 ⚑, U-39).
+     *
+     * <p>A count over {@code bot_sessions} and not over {@code bot_messages}: the question
+     * {@code BOT_DELETE} asks is how many students' <em>records</em> a delete would take, and a
+     * record is a conversation. Counting messages would answer a different question and put a
+     * number in the refusal that no screen anywhere shows.
+     *
+     * @param session the current session
+     * @param botId   the bot
+     * @return the number of stored conversations; zero for a bot nobody has used
+     */
+    public long countSessions(Session session, long botId) {
+        return session.createQuery(
+                        "select count(s) from BotSession s where s.botId = :botId", Long.class)
+                .setParameter("botId", botId)
+                .getSingleResult();
+    }
+
+    /**
      * One student's conversations with one bot, newest first (E16.10, F12.10).
      *
      * <p><b>Scoped in the query, not by the caller.</b> {@code student_id} is a

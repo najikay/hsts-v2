@@ -82,6 +82,18 @@ import java.util.Optional;
  * course closes the lock first, for the same reason leaving the screen does: a lock held on a
  * row nobody can see is a colleague blocked by a ghost.
  *
+ * <h2>Deleting a bot lives on its card ⚑ (U-39)</h2>
+ *
+ * <p>2026-08-30, the lead's ruling. A teacher can delete a course's bot, and the affordance is
+ * a {@code danger} button on that course's card, under the Manage it is the opposite of. On a
+ * screen that lists every taught course, "which bot" has to be answered by where the button is
+ * rather than by what the teacher remembers selecting a moment ago, and the same goes for the
+ * refusal: a bot that students have used answers {@code CONFLICT} with the count of their
+ * conversations, and that sentence is drawn on the card it is about. Everything else is the
+ * shape the screen already had, because the server answers a delete with the same
+ * {@code BotManagerPage} it answers a toggle with: the card flips to Create because the page
+ * says there is no bot, not because this class patched it.
+ *
  * <h2>Empty states are states, not gaps</h2>
  *
  * <p>A course with no bot gets a card offering Create and, when it is selected, an empty state
@@ -345,8 +357,73 @@ public final class BotManagerView extends AbstractScreen {
             HBox bottom = new HBox(10, sources, Buttons.spacer(), action);
             bottom.setAlignment(Pos.CENTER_LEFT);
             box.getChildren().add(bottom);
+
+            // ⚑ 2026-08-30, live session, U-39. Delete goes on the card that carries Manage,
+            // not in the detail pane: the manager is a list, so "which bot" has to be answered
+            // by where the button is rather than by what the teacher remembers selecting a
+            // moment ago.
+            //
+            // Its own row under the actions rather than in them. The label is the longest thing
+            // on the card and the column is 280px wide at the narrow window, so the two on one
+            // line is the shape TruncatedTextGuardTest exists to catch; and a destructive
+            // action sharing a line with the ordinary one is a mis-click waiting for a teacher
+            // in a hurry. Right-aligned so it still reads as this card's action.
+            if (summary.hasBot()) {
+                Button delete = Buttons.styled(BotCopy.DELETE_BOT, Buttons.DANGER, Buttons.SMALL);
+                delete.setOnAction(e -> {
+                    selectCourse(summary.courseCode());
+                    confirmDeleteBot(summary);
+                });
+                HBox dangerRow = new HBox(Buttons.spacer(), delete);
+                dangerRow.setAlignment(Pos.CENTER_RIGHT);
+                box.getChildren().add(dangerRow);
+            }
+        }
+        // The course's own refusal, on the course's own card (U-39). It is the session's
+        // existing error path and nothing new: what is new is that the delete's CONFLICT
+        // counts the student conversations it is protecting, and a sentence about this bot
+        // shown only in the detail pane is a sentence about whichever bot is selected.
+        if (summary.hasStatus()) {
+            Label cardStatus = new Label(summary.status());
+            cardStatus.getStyleClass().add("bot-status");
+            cardStatus.setWrapText(true);
+            cardStatus.setMaxWidth(Double.MAX_VALUE);
+            box.getChildren().add(cardStatus);
         }
         return box;
+    }
+
+    /**
+     * Asks before deleting one course's bot ⚑ (U-39, 2026-08-30).
+     *
+     * <p>A {@code danger} confirm rather than a {@code warn} one: this is the only action on
+     * the screen that destroys something a teacher cannot rebuild by pressing the button again,
+     * and the dialog names the course for the reason the button lives on the card at all.
+     *
+     * <p>It deliberately does <b>not</b> pre-check whether students have used the bot. The
+     * server owns that rule, counts the conversations and writes the sentence; a client that
+     * guessed at it would either hide a button that would have worked or promise one that will
+     * not, and both would be guessing from a page that is as old as the last read. The refusal
+     * comes back on this course's own session and lands on this course's own card.
+     */
+    private void confirmDeleteBot(BotCourseSummary summary) {
+        Optional<BotManagerSession> maybe = list == null
+                ? Optional.empty()
+                : list.sessionFor(summary.courseCode());
+        if (maybe.isEmpty()) {
+            return;
+        }
+        boolean confirmed = WarnConfirm.show(window(), WarnConfirm.spec(BotCopy.DELETE_TITLE)
+                .explanation(BotCopy.deleteExplanation(summary.courseName()))
+                .confirmText(BotCopy.DELETE_CONFIRM)
+                .cancelText(BotCopy.DELETE_CANCEL)
+                .danger());
+        if (confirmed) {
+            // Any advisory lock this teacher is holding belongs to a source that is about to
+            // stop existing, so it goes back first. E18.3's rule, applied one level up.
+            releaseLock();
+            maybe.get().deleteBot();
+        }
     }
 
     /** Draws the selected course's bot, which is the screen E16.12 shipped. */
@@ -440,18 +517,11 @@ public final class BotManagerView extends AbstractScreen {
         line.setAlignment(Pos.CENTER_LEFT);
         line.getStyleClass().add("source-row");
         // ⚑ 2026-08-29, manual round 3, U-33. The row's pressable TREATMENT is gone from
-        // hsts.css - it carried the same accent hover border as a history row, which is
-        // openable, and this one is not. What a teacher got for taking that offer was the lock
-        // banner sliding in and straight back out again as the acquire was granted, which reads
-        // as a twitch rather than as an outcome, because taking an advisory lock has no visible
-        // result of its own.
-        //
-        // The handler stays, and deliberately: it is what surfaces a COLLEAGUE's hold on a row
-        // that has no Edit button of its own (a PDF source cannot be edited, so editText's own
-        // openLockFor never runs for one), which is E18.5's whole point on this screen. It is
-        // bookkeeping rather than an action, so it is no longer advertised as one. The row's
-        // actions are Edit and Remove, and neither is touched.
-        line.setOnMouseClicked(e -> openLockFor(row));
+         // 2026-08-30, live session, U-33 reopened: the row itself does nothing on click.
+        // The wave before this one kept a click that took the advisory lock (to surface a
+        // colleague's hold on a file row), and the banner sliding in and out as the lock was
+        // granted read as a twitch. Naji's ruling: Edit and Remove are the only actions; a
+        // colleague's hold is met on those, not by pressing the row.
         return line;
     }
 

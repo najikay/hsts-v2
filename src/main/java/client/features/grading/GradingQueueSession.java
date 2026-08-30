@@ -95,6 +95,25 @@ public final class GradingQueueSession {
                 .whenComplete((response, failure) -> poster.run(() -> settleQueue(response, failure)));
     }
 
+    /**
+     * Re-reads the queue <b>and</b> the sitting under it (2026-08-30, live session, U-38).
+     *
+     * <p>What {@code onShow} calls now. {@link #load} alone was enough while this screen was
+     * the only place a grade could change; {@link GradeReviewView} approves and overrides too,
+     * and a teacher returning from it would otherwise find the rail's counts updated and the
+     * table still showing the score she had just moved. Re-reading both is the same rule the
+     * write paths already follow, applied to the one arrival that is not a write.
+     *
+     * <p>The first visit has no open sitting, so this is exactly {@link #load} until she has
+     * chosen one.
+     */
+    public void refresh() {
+        load();
+        if (open != null) {
+            requestExecution(open.summary().executionId());
+        }
+    }
+
     private void settleQueue(Message response, Throwable failure) {
         if (!isOk(response, failure)) {
             queue = List.of();

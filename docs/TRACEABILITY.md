@@ -145,7 +145,7 @@ Scenario 8 is walked and green — all seven cases, 2026-08-23, four bugs found 
 | Id | Claim | Implemented in | Guarded by | Acceptance | Status |
 |---|---|---|---|---|---|
 | F8.1 | Auto-check on submission: per-question points, correct ⇔ the single correct answer | `server.features.grading.AutoGrader`, `GradingOnSubmit` | `AutoGraderTest`, `GradingOnSubmitTest` | 8.1 ✅ | **LIVE** |
-| F8.2 | Teacher reviews per-student results, approves singly and in bulk, may comment to the student | `GradeApprovalService`, `GradingQueueService`, `OverrideService`; `client.features.grading.GradingQueueView` | `GradeApprovalServiceTest`, `GradingQueueServiceTest`, `GradingHandlersTest`, `GradingQueueSessionTest`, `TeacherCommentFlowContract` | 8.5 ✅ | **PARTIAL — no-review-screen** *(id uncited)* |
+| F8.2 | Teacher reviews per-student results, approves singly and in bulk, may comment to the student | `GradeApprovalService`, `GradingQueueService`, `OverrideService`, `GradeReviewService`; `client.features.grading.GradingQueueView`, **`GradeReviewView`** over `GradeReviewSession` (route `grading.review`), with `OverrideDialog` and `client.features.results.MarkedPaper` shared with the student's checked form | `GradeApprovalServiceTest`, `GradingQueueServiceTest`, `GradingHandlersTest`, `GradingQueueSessionTest`, `TeacherCommentFlowContract`, **`GradeReviewSessionTest`**, **`GradingInteractionTest`** (Review → the paper with the key → Approve → the row follows), `GradeReviewServiceTest` | 8.5 ✅ | **LIVE** *(the review screen landed 2026-08-30, live session, U-38; the id is now cited in `GradeReviewView`, `GradeReviewSession`, `MarkedPaper` and `Routes.GRADE_REVIEW`)* |
 | F8.3 | A manual grade change requires a justification; auto score, new score, reason and actor all stored | `OverrideService` | `OverrideServiceTest`, `TeacherCommentFlowContract`, `GradingHandlersTest` | 8.3 ✅, 8.4 ✅ | **LIVE** |
 | F8.4 | Only after approval does the student see grade + checked form + comments, with a push notification | `server.features.results.CheckedFormService`, `ResultsService`, `GradeApprovalService` | `CheckedFormServiceTest` (mutation-tested), `GradeApprovalServiceTest`, `ExecutionRepositoryContract` | 8.2 ✅, 8.6 ✅, 9.1 ✅, 18.4 | **LIVE** |
 | F8.5 | On completion, stats stored per execution: avg, median, **population σ (divisor n)**, min/max, **pass rate at ≥ 55**, deciles. Never visible to students | `server.features.grading.ScoreStatistics`, frozen by `GradeApprovalService`; read via `server.features.results.FrozenStatistics` | `ScoreStatisticsTest` (hand-computed against seeded 4821), `JpaTeacherResultsStoreContract` (stored-not-recomputed), `ReportEngineTest` | 8.7 ✅, 10.3, 12.4 | **LIVE-unwalked** (computed and stored; the σ / pass-rate figures have not been read off a screen) |
@@ -307,14 +307,19 @@ LIVE-unwalked, in one place, with an owner.
 
 | Status | Count |
 |---|---|
-| LIVE (walked and passed) | 16 |
+| LIVE (walked and passed) | 17 |
 | LIVE-unwalked | 105 |
-| PARTIAL | 11 |
+| PARTIAL | 10 |
 | GAP | 3 |
 | N/A (documented non-goal) | 1 |
 
 *Counts corrected 2026-08-26 (batch A): **F3.1** moved PARTIAL → LIVE-unwalked when the
 `exams.build` route landed. Nothing else moved column.*
+
+*Counts corrected 2026-08-30 (live session, U-38): **F8.2** moved PARTIAL → LIVE when the
+`grading.review` route landed. It goes to LIVE rather than LIVE-unwalked because its acceptance
+case 8.5 was already walked green; what was missing was the screen the row claimed, not the
+evidence. Nothing else moved column.*
 
 Three further gaps carry epic ids rather than requirement ids (**E7.14**, **E7.16**, **E1.11**) and
 are listed in the table below with the rest, because a defense does not care which numbering
@@ -395,7 +400,7 @@ walked below a screen even in principle, which is why they are last rather than 
 | F3.3 | PARTIAL — no-UI | Server auto-composer is complete and property-tested; E7.13's auto tab (criteria form, infeasibility report rendering) is unbuilt. In flight as **PR24** | A |
 | — | **GAP** (E7.14) | The "question has a newer version" **update action**. The badge renders (`Line.hasNewerVersion()`); nothing lets a teacher act on it. In flight as PR24 | A |
 | — | **GAP** (E7.16) | E7's session + integration tests — manual, auto, infeasible, Σ≠100, versioning. In flight as PR24 | A |
-| F8.2 | PARTIAL — no-review-screen | E12.6: grading is still a queue table plus an override dialog, not a per-student paper the teacher can read. The comment box and the marked-paper assembler both exist server-side | B |
+| ~~F8.2~~ | ~~PARTIAL — no-review-screen~~ **CLOSED 2026-08-30 (live session, U-38)** | E12.6's per-student paper is built. `GradeReviewView` renders the grade the queue's new per-row Review action opens, over `GRADE_REVIEW_GET` — the verb and the assembler had been there since E12.6 and only the screen was missing. It shows the student's answer against the key with three outcomes per question, the auto and current scores, the state, the stored justification and the note to the student, and carries both of the queue's actions on the paper itself: Approve (`GRADES_APPROVE`, one id) and Change score (`GRADE_OVERRIDE`, whose refreshed `GradeReview` it adopts). The question cards come from `MarkedPaper`, lifted out of `CheckedFormView` so the teacher approves the same drawing her student will read | B (done) |
 | F10.4 | PARTIAL — two-of-five | E18.5: locks are wired for questions and exams (server) and the question editor and bot manager (client). **Release-schedule editing and grading review are not lock-wired at all** | L |
 | F12.6 | PARTIAL — keys-unverified | E16.17 live E2E against real DeepSeek and real Anthropic keys. Never run | L |
 | F14.1 | PARTIAL — unverified-on-Windows | E20.2 (double-click on a clean Windows box) and E20.4b (JARs **must** be built on Windows for the JavaFX natives). Instructions written in `DEMO_DAY.md` §1.2/§2; execution pending | L |
@@ -415,7 +420,9 @@ walked below a screen even in principle, which is why they are last rather than 
 Not functional gaps. Each is one Javadoc line away from being closed, and each is a question an
 examiner can ask that the grep answer alone does not survive.
 
-`F6.5` · `F8.2` · `F10.1` · `F10.2` · `S-26` · `S-29` · `S-40` · `S-41` · `S-44` · `S-45` ·
+`F6.5` · ~~`F8.2`~~ *(closed 2026-08-30, U-38: cited in `GradeReviewView`, `GradeReviewSession`,
+`OverrideDialog`, `MarkedPaper` and `Routes.GRADE_REVIEW`)* · `F10.1` · `F10.2` · `S-26` · `S-29` ·
+`S-40` · `S-41` · `S-44` · `S-45` ·
 `NFR-16` · ~~`NFR-20`~~ *(closed 2026-08-26, batch D: the id is now cited in `MessageRouter`'s Command section and in the `server.db.repos` package javadoc, and B-34's four missing pattern names are written at their boundaries)* · `X-COV`
 
 Two more are structural rather than cited and are fine as they stand, but should be *said* that way

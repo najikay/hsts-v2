@@ -155,7 +155,18 @@ like a school rather than a fixture. Notable ones, expanded:
 - **Throttle demo:** type a wrong password 5 times for `maya.levi`; the 6th attempt, even with
   the right password, answers "Too many attempts, try again shortly." for 30 seconds.
 - **Role tour:** `maya.levi` (student rail: Dashboard / Take Exam / My Grades / Study Bot /
-  Settings) → `dana.cohen` (teacher rail, no Approvals) → `rina.barak` (same plus Approvals) →
-  `principal.avia` (Dashboard / Data / Reports / Settings, nothing mutating).
+  Settings) → `dana.cohen` (teacher rail, no Approvals) → `rina.barak` (Dashboard / Question Bank
+  / Approvals / Settings) → `principal.avia` (Dashboard / Data / Reports / Settings, nothing
+  mutating).
+  - *Amended 2026-08-30 (live session, U-41, lead's ruling):* Rina's rail is **not** "the teacher
+    rail plus Approvals" any more. F1.2 derives the shell from the role **and the course
+    relations**, and she teaches nothing, so Exams, Releases, Live Monitor, Grading, Results and
+    Study Bot are gone from her rail — every one of them was a click that ended in an empty
+    screen. Question Bank stays because the bank's read scope is her whole coordinated subject
+    (BANK contract §7.3). Her dashboard drops the "Your courses" card for the same reason and
+    keeps both approval cards. The routes are all still registered, so a deep link or a
+    notification still opens any of them. **The dual-hat coordinator `michal.sharon` still gets
+    the full ten-item rail** — she is the account to sign in as if the tour needs a coordinator
+    who is also a teacher.
 - **Coordinator demo:** `rina.barak` sees the Mathematics approval queue only. The Calculus exam
   `101201` is seeded PENDING and waiting for her.

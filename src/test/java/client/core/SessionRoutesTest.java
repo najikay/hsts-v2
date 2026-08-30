@@ -87,7 +87,8 @@ class SessionRoutesTest {
     class PerRole {
 
         @Test
-        @DisplayName("a teacher gets home, settings, the bank, the monitor, the bot, results and her exams")
+        @DisplayName("a teacher gets home, settings, the bank, the monitor, the bot, results, "
+                + "the grading pair and her exams")
         void teacher() {
             // One bank route, not two. Routes.QUESTIONS is the versioned bank since the
             // retirement PR: the id stayed and the screen behind it changed, so the interim
@@ -96,7 +97,7 @@ class SessionRoutesTest {
                     .containsExactly(Routes.HOME_TEACHER, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
-                            Routes.EXAMS, Routes.EXAM_BUILD);
+                            Routes.GRADE_REVIEW, Routes.EXAMS, Routes.EXAM_BUILD);
         }
 
         @Test
@@ -106,7 +107,8 @@ class SessionRoutesTest {
                     .containsExactly(Routes.HOME_COORDINATOR, Routes.SETTINGS, Routes.QUESTIONS, Routes.QUESTION_EDIT,
                             Routes.RELEASES, Routes.MONITOR, Routes.BOT_MANAGER,
                             Routes.BOT_ANALYTICS, Routes.RESULTS, Routes.GRADING,
-                            Routes.EXAMS, Routes.EXAM_BUILD, Routes.APPROVALS, Routes.EXAM_PREVIEW);
+                            Routes.GRADE_REVIEW, Routes.EXAMS, Routes.EXAM_BUILD,
+                            Routes.APPROVALS, Routes.EXAM_PREVIEW);
         }
 
         @Test
@@ -133,8 +135,10 @@ class SessionRoutesTest {
                             Routes.BOT_MANAGER, Routes.BOT_ANALYTICS,
                             // The teacher's results screen is a different route from her own
                             // grades, and only one of them is hers (E13.1 vs E14). Grading is
-                            // hers to do, not hers to receive.
-                            Routes.RESULTS, Routes.GRADING);
+                            // hers to do, not hers to receive, and the review screen behind it
+                            // carries the answer key (U-38) — CHECKED_FORM is her version of
+                            // that paper and it is a different route on a different verb.
+                            Routes.RESULTS, Routes.GRADING, Routes.GRADE_REVIEW);
         }
 
         @Test

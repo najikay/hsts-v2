@@ -581,7 +581,6 @@ The full drill is `docs/DEFENSE_QA.md` §4.
 | Not done | Why | The sentence |
 |---|---|---|
 | Show an illustrated question | **B-8 is open.** Ten seeded questions are flagged as illustrated and carry no bytes, three of them on the demo paper | "The image path works end to end and the seed ships no image bytes. It is a fixture gap with a ticket, not a feature gap." |
-| Open a student's marked paper from the grading screen | **F8.2 is PARTIAL.** E12.6's review screen is not built; the assembler exists and the student's checked form uses it | "A teacher changes a score from the table today and cannot read the paper first. The assembler is shared with the student's form; only the screen is missing." |
 | Drive the login throttle to five | Case 1.4 is partial: the throttle is unit-tested and never walked | "Five wrong passwords, thirty seconds, and the lockout answers before any lookup so it cannot confirm a password. It is unit-tested and not yet walked at a keyboard." |
 | Promise the timed-out student's screen as rehearsed | Case 9.5 passed below the screen; the render is a manual-pass item | Show it if the dry run rehearsed it, and say "proved through the assembler and the database; the render is on our polish list" if not |
 
