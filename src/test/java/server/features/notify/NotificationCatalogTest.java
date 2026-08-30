@@ -44,7 +44,13 @@ class NotificationCatalogTest {
             // every staff bell answered INTERNAL. A type with no sentence is a type nothing can
             // send, and a seed row that writes one anyway is exactly how that happened.
             NotificationCatalog.gradingDue("Java Midterm", 8, 3L),
-            NotificationCatalog.executionClosed("Algebra Midterm", 8, 72.5, 3L));
+            NotificationCatalog.executionClosed("Algebra Midterm", 8, 72.5, 3L),
+            // U-63 (BOT amendment A4): the two bot events that announced nothing at all. Three
+            // sentences under one type, because a create and the two directions of a toggle are
+            // the same thing to a co-teacher, which is a bot she shares having changed.
+            NotificationCatalog.botCreated("Java Programming 21", "Dana Cohen", 4L),
+            NotificationCatalog.botToggled("Java Programming 21", "Dana Cohen", true, 4L),
+            NotificationCatalog.botToggled("Java Programming 21", "Dana Cohen", false, 4L));
 
     @Test
     @DisplayName("no user-visible sentence contains an em dash (PRD §4.1)")
@@ -89,6 +95,42 @@ class NotificationCatalogTest {
                 .collect(Collectors.toCollection(() -> EnumSet.noneOf(NotificationType.class)));
 
         assertThat(covered).containsExactlyInAnyOrderElementsOf(EnumSet.allOf(NotificationType.class));
+    }
+
+    @Test
+    @DisplayName("⚑ U-63: a toggle says which way it went, in the sentence and not only the type")
+    void theToggleSentenceCarriesTheState() {
+        NotificationCatalog.Draft on =
+                NotificationCatalog.botToggled("Java Programming 21", "Dana Cohen", true, 4L);
+        NotificationCatalog.Draft off =
+                NotificationCatalog.botToggled("Java Programming 21", "Dana Cohen", false, 4L);
+
+        assertThat(on.title()).isEqualTo("Study bot switched on");
+        assertThat(off.title()).isEqualTo("Study bot switched off");
+        assertThat(on.body())
+                .as("whether students can talk to it right now is the fact a co-teacher needs, "
+                        + "and making her open the manager to learn it is half a notification")
+                .contains("switched on")
+                .contains("Java Programming 21");
+        assertThat(off.body()).contains("switched off");
+        assertThat(on.type()).isEqualTo(NotificationType.BOT_CHANGED);
+        assertThat(off.type()).isEqualTo(NotificationType.BOT_CHANGED);
+    }
+
+    @Test
+    @DisplayName("⚑ U-63: a create is BOT_CHANGED, not the source sentence")
+    void theCreateNoticeIsItsOwnSentence() {
+        NotificationCatalog.Draft created =
+                NotificationCatalog.botCreated("Java Programming 21", "Dana Cohen", 4L);
+
+        assertThat(created.type())
+                .as("a toggle is not a source change, and neither is a bot appearing; a "
+                        + "colleague told the material moved would go looking for a table that "
+                        + "is exactly as she left it")
+                .isEqualTo(NotificationType.BOT_CHANGED)
+                .isNotEqualTo(NotificationType.BOT_SOURCE_CHANGED);
+        assertThat(created.title()).isEqualTo("Study bot created");
+        assertThat(created.body()).contains("Dana Cohen").contains("Java Programming 21");
     }
 
     @Test

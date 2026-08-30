@@ -49,19 +49,60 @@ public abstract class AbstractServer implements Runnable {
      */
     public final void listen() throws IOException {
         if (!isListening()) {
-            if (serverSocket == null) {
+            // A closed socket counts as no socket: stopListening() closes the one
+            // it had, so Start listening after a Stop must bind a fresh one rather
+            // than call setSoTimeout on a corpse (B-49).
+            if (serverSocket == null || serverSocket.isClosed()) {
                 serverSocket = new ServerSocket(port);
             }
             serverSocket.setSoTimeout(timeout);
-            readyToStop = false;
+            // Register the replacement BEFORE clearing the stop flag. A Stop followed at
+            // once by a Start races the outgoing thread's finally block: registered first,
+            // that block's own guard sees it has been superseded and touches nothing;
+            // flag first, the old thread could still pass the guard between the two writes
+            // and raise the stop flag under the listener that just started (seen as
+            // StopListeningSocketTest.startListeningAfterStopWorks timing out).
             connectionListener = new Thread(this);
+            readyToStop = false;
             connectionListener.start();
         }
     }
 
-    /** Stops accepting new connections (existing clients stay connected). */
+    /**
+     * Stops accepting new connections and closes the listening socket, leaving
+     * every already-connected client attached.
+     *
+     * <p><b>The socket is closed here, and that is the fix ⚑ (B-49).</b> This
+     * used to raise the stop flag and nothing else. The accept loop did end, but
+     * the {@link ServerSocket} stayed bound, so the operating system went on
+     * completing the TCP handshake for new clients into the accept backlog. A
+     * client dialling a "stopped" server therefore connected successfully and
+     * then waited forever for a server that was never going to read that socket:
+     * the console said stopped, the client said {@code Connecting...}, and only
+     * closing the console window — which calls {@link #close()} — ever told the
+     * client the truth. Closing the socket turns "stopped listening" from a flag
+     * the server keeps to itself into a refusal the client sees on its first
+     * round trip.
+     *
+     * <p><b>Client connections are deliberately untouched.</b> That is the whole
+     * difference between this method and {@link #close()}, and it is the promise
+     * the server console's Stop listening button makes to an operator: new
+     * clients are refused, and a student already sitting an exam keeps their
+     * socket, their attempt and their deadline.
+     */
     public final void stopListening() {
         readyToStop = true;
+        ServerSocket listening = serverSocket;
+        if (listening != null) {
+            try {
+                listening.close();
+            } catch (IOException e) {
+                // Nothing to recover and nobody to tell: the socket is being
+                // discarded either way, the accept loop is already told to stop,
+                // and listen() rebinds a fresh one because it treats a closed
+                // socket as no socket.
+            }
+        }
     }
 
     /**
@@ -136,11 +177,17 @@ public abstract class AbstractServer implements Runnable {
     /** Runs the connection-accept loop. Not called directly by user code. */
     @Override
     public final void run() {
+        // The socket this thread owns ⚑. A listener is bound to one socket for the
+        // whole of its life: stopListening() closes it and listen() binds a fresh
+        // one, so a thread that finds the field pointing elsewhere has been
+        // superseded by a restart and must stop rather than go on accepting
+        // clients on its successor's socket.
+        final ServerSocket mine = serverSocket;
         serverStarted();
         try {
-            while (!readyToStop) {
+            while (!readyToStop && mine != null && serverSocket == mine) {
                 try {
-                    Socket clientSocket = serverSocket.accept();
+                    Socket clientSocket = mine.accept();
                     synchronized (clientConnections) {
                         ConnectionToClient client =
                                 new ConnectionToClient(this, clientSocket);
@@ -151,15 +198,26 @@ public abstract class AbstractServer implements Runnable {
                 } catch (java.net.SocketTimeoutException ste) {
                     // expected — lets the loop re-check readyToStop
                 } catch (IOException e) {
-                    if (!readyToStop) {
+                    // A close during a stop or a restart is how this loop is meant
+                    // to end, not a fault to report.
+                    if (!readyToStop && serverSocket == mine) {
                         listeningException(e);
                     }
                 }
             }
         } finally {
-            readyToStop = true;
-            connectionListener = null;
-            serverStopped();
+            // Only the thread that is still the registered listener may declare
+            // this server stopped ⚑. Stop listening now closes the socket, so a
+            // Stop immediately followed by a Start can leave this thread finishing
+            // after listen() has already registered a replacement — and raising
+            // the stop flag then would kill the listener that just started, while
+            // clearing the field would make isListening() deny one that is
+            // running. A superseded thread has nothing left to announce.
+            if (connectionListener == Thread.currentThread() && serverSocket == mine) {
+                readyToStop = true;
+                connectionListener = null;
+                serverStopped();
+            }
         }
     }
 

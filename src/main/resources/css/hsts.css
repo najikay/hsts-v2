@@ -729,8 +729,11 @@
     -fx-text-fill: -hsts-faint;
     -fx-alignment: center-left;
 }
-.hsts-table .column-header .hsts-kicker.numeric { -fx-alignment: center-right; }
-.hsts-table .column-header.numeric > .label { -fx-alignment: center-right; }
+/* 2026-08-31, U-59 (Naji, round 5): numeric headings used to sit right while the rest sat
+   left, which read as a mix of directions. Every heading is left-aligned now; numeric
+   CELLS keep their right alignment and tabular figures so columns of scores still line up. */
+.hsts-table .column-header .hsts-kicker.numeric { -fx-alignment: center-left; }
+.hsts-table .column-header.numeric > .label { -fx-alignment: center-left; }
 
 .hsts-table .table-row-cell {
     -fx-background-color: -hsts-surface;
@@ -1713,8 +1716,10 @@
 
 /* The keyboard ring. Arrow keys move selection through this group, so the
    focused option must be visible without hunting for a 1px outline. */
+/* 2026-08-31, U-55: focus used to paint the same soft fill as :selected, so tabbing into
+   the group made "Answer 1" look chosen while nothing was. Focus is the ring only; the
+   fill belongs to :selected alone. */
 .hsts-radio-group .radio-option:focused {
-    -fx-background-color: -hsts-accent-soft;
     -fx-border-color: -hsts-accent;
     -fx-border-width: 1.5px;
     -fx-border-radius: 8px;

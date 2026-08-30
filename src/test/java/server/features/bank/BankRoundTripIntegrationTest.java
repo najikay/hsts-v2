@@ -121,7 +121,11 @@ class BankRoundTripIntegrationTest extends RepositoryTestBase {
         writes = new BankHandlers(factory(),
                 new QuestionService(new QuestionRepository(), new CourseRepository(),
                         new UserRepository(), new QuestionIdAllocator(), clock,
-                        new EditLockGuard(locks)));
+                        new EditLockGuard(locks)),
+                // U-63's push channel. Nobody is connected in this test, so findBankReaderIds
+                // runs for real against the schema and the gateway skips every recipient as
+                // offline, which is exactly the production path for a school at night.
+                new CourseRepository(), new PushGateway(new SessionManager()));
         reads = new BankReadHandlers(factory(),
                 new BankBrowseService(new QuestionRepository(), new CourseRepository(),
                         new UserRepository()));

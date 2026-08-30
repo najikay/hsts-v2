@@ -1,13 +1,19 @@
 package client.features.data;
 
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
+import common.dto.bank.BankChanged;
 import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
 import common.dto.bank.Difficulty;
+import common.dto.notify.NavRef;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.dto.report.DataExamRow;
 import common.dto.report.DataExams;
 import common.dto.report.DataResults;
@@ -45,13 +51,14 @@ class DataSessionTest {
     private static final Instant SUMMER = Instant.parse("2026-08-07T06:00:00Z");
 
     private FakeClientConnection connection;
+    private RequestDispatcher dispatcher;
     private DataSession session;
     private int renders;
 
     @BeforeEach
     void setUp() {
         connection = new FakeClientConnection();
-        RequestDispatcher dispatcher = new RequestDispatcher(connection);
+        dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
         session = new DataSession(dispatcher, new DirectFxThreadPoster())
                 .onChange(() -> renders++);
@@ -74,6 +81,11 @@ class DataSessionTest {
     /** The one row with a null topic: the filter must survive it (real bank data does this). */
     private static final BankQuestionRow Q_LIMIT =
             question("12001", "12", "חדו\"א", "Evaluate the limit", null, Difficulty.HARD);
+
+    /** The question a colleague writes while she is reading the screen (U-63). */
+    private static final BankQuestionRow Q_NEW =
+            question("11003", "11", "אלגברה", "Complete the square", "Equations",
+                    Difficulty.MEDIUM);
 
     private static final DataExamRow EXAM_ALGEBRA = new DataExamRow("101101",
             "מבחן אמצע: אלגברה", "11", "אלגברה", "דנה כהן", 2, SUMMER, 1102L);
@@ -611,6 +623,194 @@ class DataSessionTest {
                         + "this is the client end of the same rule")
                 .containsExactlyInAnyOrder(Verb.BANK_LIST, Verb.DATA_EXAMS_GET,
                         Verb.DATA_RESULTS_GET);
+    }
+
+    // ===================== It updates itself (U-63) =======================
+
+    /**
+     * The principal half of Omar's finding 11, which is the half with a client-side defect
+     * underneath it.
+     *
+     * <p>Reported as: "when a teacher adds a new question it does not appear for a teacher or
+     * coordinator who already has the bank open; changing the filter made it appear. For the
+     * principal even changing the course filter did not help, only re-login."
+     *
+     * <p>Both halves are one missing push, and the principal's extra half is this class's two
+     * design decisions meeting: {@code loadIfNeeded} loads a tab exactly once, and both filters
+     * are applied in the client over the rows already in hand. So no filter change on this
+     * screen has ever produced a round trip, and re-login was the only thing that built a new
+     * session. The first test below pins that cache as intended behaviour so nobody "fixes" it
+     * by making the filters re-query; the rest pin the push that makes it correct.
+     */
+    @Nested
+    @DisplayName("it updates itself ⚑ (U-63, finding 11)")
+    class UpdatesItself {
+
+        private ClientEventBus eventBus;
+
+        @BeforeEach
+        void subscribe() {
+            // A real bus, so these tests exercise the registration and not a method call.
+            eventBus = new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+            // setPushListener, NOT setServerMessageHandler: the dispatcher stays the connection's
+            // handler so responses still settle, and it forwards the pushes to the bridge.
+            dispatcher.setPushListener(new PushEventBridge(eventBus));
+            session.subscribeTo(eventBus);
+        }
+
+        private long bankReads() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.BANK_LIST)
+                    .count();
+        }
+
+        /** The server now holds a fourth question that was not there on the first load. */
+        private void serverGrowsAQuestion() {
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request,
+                    new BankPage(List.of(Q_LINEAR, Q_QUADRATIC, Q_LIMIT, Q_NEW), 0,
+                            BankListRequest.MAX_PAGE_SIZE, 4, 1)));
+        }
+
+        @Test
+        @DisplayName("⚑ changing a filter asks the server nothing: the defect's other half")
+        void filtersNeverReQuery() {
+            serverHasEverything();
+            session.load();
+            connection.clearSent();
+
+            session.selectCourse("11");
+            session.setFilter("quad");
+            session.clearFilters();
+
+            assertThat(connection.sentCount())
+                    .as("the filters narrow what is already held, by design (section 4 of the "
+                            + "reports contract). That is why a new question could not appear "
+                            + "for the principal however she filtered")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("⚑ a PUSH_BANK_CHANGED re-reads the bank, with no user action at all")
+        void aBankPushRefreshesTheQuestionsTab() {
+            serverHasEverything();
+            session.load();
+            assertThat(session.questions()).hasSize(3);
+            serverGrowsAQuestion();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.created("11", "11003"));
+
+            assertThat(bankReads())
+                    .as("she pressed nothing, and there is no timer: NFR-18")
+                    .isEqualTo(2);
+            assertThat(session.questions())
+                    .as("the question a colleague wrote while she was reading")
+                    .contains(Q_NEW);
+        }
+
+        @Test
+        @DisplayName("⚑ and it arrives even for a course her filter is currently hiding")
+        void aPushForAnotherCourseStillReReads() {
+            serverHasEverything();
+            session.load();
+            session.selectCourse("11");
+            serverGrowsAQuestion();
+
+            // Calculus, while she is narrowed to Algebra. BankSession would skip this; this
+            // screen must not, because it holds every course's rows and narrows afterwards.
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.created("12", "12002"));
+
+            assertThat(bankReads()).isEqualTo(2);
+            session.clearFilters();
+            assertThat(session.questions())
+                    .as("skipping the re-read here would put the defect straight back the "
+                            + "moment she cleared the filter")
+                    .contains(Q_NEW);
+        }
+
+        @Test
+        @DisplayName("the rows stay on screen while the re-read is in flight, no skeleton")
+        void aLiveReReadDoesNotBlankTheTable() {
+            serverHasEverything();
+            session.load();
+            // Nothing answers BANK_LIST from here on, so the re-read stays in flight.
+            connection.respondTo(Verb.BANK_LIST, request -> null);
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.updated("11", "11001"));
+
+            assertThat(session.state())
+                    .as("a tab that blanked every time any teacher saved any question would be "
+                            + "a screen nobody can read")
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.isReloading(DataTab.QUESTIONS)).isTrue();
+            assertThat(session.questions()).containsExactly(Q_LINEAR, Q_QUADRATIC, Q_LIMIT);
+        }
+
+        @Test
+        @DisplayName("a live re-read that fails leaves the rows she had, not an error panel")
+        void aFailedLiveReReadKeepsTheRows() {
+            serverHasEverything();
+            session.load();
+            connection.replyError(Verb.BANK_LIST, ErrorCode.INTERNAL, "boom");
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.updated("11", "11001"));
+
+            assertThat(session.state())
+                    .as("correct data a few seconds old beats no data, for a re-read she never "
+                            + "asked for")
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.questions()).containsExactly(Q_LINEAR, Q_QUADRATIC, Q_LIMIT);
+            assertThat(session.error()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a tab that has never loaded is not woken by a push about it")
+        void anUnopenedTabIsLeftAlone() {
+            serverHasEverything();
+            // Never loaded at all: no load() call.
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.created("11", "11003"));
+
+            assertThat(bankReads())
+                    .as("a first load is what opening the tab is for; a push must not fetch a "
+                            + "list nobody is looking at")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("⚑ an EXECUTION_CLOSED re-reads the sittings tab")
+        void aClosedSittingRefreshesTheResultsTab() {
+            serverHasEverything();
+            session.load();
+            session.selectTab(DataTab.RESULTS);
+            assertThat(session.sittings()).hasSize(2);
+            connection.clearSent();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .containsExactly(Verb.DATA_RESULTS_GET);
+        }
+
+        @Test
+        @DisplayName("an unrelated notification moves nothing")
+        void anUnrelatedNotificationIsIgnored() {
+            serverHasEverything();
+            session.load();
+            session.selectTab(DataTab.RESULTS);
+            connection.clearSent();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_REQUESTED));
+
+            assertThat(connection.sentCount())
+                    .as("a type-filtered re-read, not a re-read on anything that arrives")
+                    .isZero();
+        }
+
+        private NotificationDto notification(NotificationType type) {
+            return new NotificationDto(1L, type, "Something happened", "",
+                    NavRef.none(), SUMMER, null);
+        }
     }
 
     @Test

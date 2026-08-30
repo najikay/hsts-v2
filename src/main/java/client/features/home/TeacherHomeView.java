@@ -36,7 +36,11 @@ public final class TeacherHomeView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new TeacherDashboardSession(dispatcher(), onFxThread()).onChange(this::render);
+        session = new TeacherDashboardSession(dispatcher(), onFxThread())
+                .onChange(this::render)
+                // The live card re-read (U-63, NFR-18): sittings in progress and awaiting
+                // grading both move while she is looking at them.
+                .subscribeTo(eventBus());
 
         return DashboardPage.page(
                 headerHost,

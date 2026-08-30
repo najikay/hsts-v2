@@ -114,7 +114,12 @@ public final class TeacherResultsView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new TeacherResultsSession(dispatcher(), onFxThread()).onChange(this::render);
+        session = new TeacherResultsSession(dispatcher(), onFxThread())
+                .onChange(this::render)
+                // The live re-read when a sitting closes or its grades are published (U-63,
+                // NFR-18). The statistics panel is why this matters most here: a mean over half
+                // the marked papers looks exactly like a mean over all of them.
+                .subscribeTo(eventBus());
 
         root.getStyleClass().add("teacher-results");
         root.setLeft(buildExamRail());

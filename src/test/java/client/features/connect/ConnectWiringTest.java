@@ -244,6 +244,41 @@ class ConnectWiringTest {
         }
     }
 
+    @Nested
+    @DisplayName("abandoning a connection that did not prove itself (B-49)")
+    class Abandoning {
+
+        @Test
+        @DisplayName("closes the connection")
+        void closesIt() throws IOException {
+            FakeClientConnection client = new FakeClientConnection(ENDPOINT.host(), ENDPOINT.port());
+            client.connect();
+
+            ConnectWiring.abandon(client);
+
+            assertThat(client.isConnectionOpen()).isFalse();
+        }
+
+        @Test
+        @DisplayName("⚑ raises no connection-lost event: nothing was lost, because nothing connected")
+        void staysOffTheBus() {
+            ConnectWiring.Wiring wiring = ConnectWiring.forEndpoint(ENDPOINT, eventBus);
+
+            ConnectWiring.abandon(wiring.client());
+
+            assertThat(collector.losses)
+                    .as("the reconnect banner must not offer to retry a connect the "
+                            + "connect screen is already reporting")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a null connection is nothing to close, not a crash")
+        void tolerantOfNull() {
+            ConnectWiring.abandon(null);   // must not throw
+        }
+    }
+
     /** Stands in for the screens and the shell subscribing to the bus. */
     public static class Collector {
 

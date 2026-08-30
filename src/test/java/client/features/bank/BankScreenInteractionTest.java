@@ -331,8 +331,8 @@ class BankScreenInteractionTest extends ApplicationTest {
     }
 
     @Test
-    @DisplayName("the detail card's three actions are spread evenly across it (U-37)")
-    void detailActionsAreEvenlySpaced() {
+    @DisplayName("the detail card keeps History and Edit together, Delete alone on the right (U-54)")
+    void detailActionsKeepEditBesideHistory() {
         Scene scene = openBank(connection -> {
             bankHasTwoQuestions(connection);
             connection.replyOk(Verb.QUESTION_GET, new QuestionDetail("11001", "11", "Algebra",
@@ -351,14 +351,13 @@ class BankScreenInteractionTest extends ApplicationTest {
                         ? button.getText() : "spacer")
                 .toList();
         assertThat(shape)
-                .as("history left, edit in the middle, delete on the right edge - a spacer "
-                        + "either side of Edit rather than all three bunched to the left")
-                .containsExactly(BankCopy.HISTORY_OPEN, "spacer", BankCopy.EDIT,
-                        "spacer", BankCopy.DELETE);
+                .as("U-54 reverted U-37: the two reading actions sit together on the left, "
+                        + "the one destructive action alone on the right edge")
+                .containsExactly(BankCopy.HISTORY_OPEN, BankCopy.EDIT, "spacer", BankCopy.DELETE);
         children.stream()
                 .filter(node -> !(node instanceof javafx.scene.control.Button))
                 .forEach(spacer -> assertThat(javafx.scene.layout.HBox.getHgrow(spacer))
-                        .as("both gaps must grow at the same rate or the spacing is not even")
+                        .as("the single gap must grow so Delete reaches the right edge")
                         .isEqualTo(javafx.scene.layout.Priority.ALWAYS));
     }
 

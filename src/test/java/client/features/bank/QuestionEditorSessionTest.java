@@ -397,6 +397,9 @@ class QuestionEditorSessionTest {
             // Opening the chooser and cancelling: the component defines null as "nothing
             // happened", which is the defect the server refuses and the client must not produce.
             session.imageLogic().choose(null, "cancelled.png");
+            // U-57: a cancelled chooser is not a change, so on its own this form is unchanged
+            // and Save is off. One real edit lets the save go, and the pair is still KEEP/null.
+            session.setText("Read the diagram and answer, then explain");
 
             session.save();
 

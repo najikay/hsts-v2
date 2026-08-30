@@ -288,7 +288,12 @@ class BankReadHandlersTest {
                             new server.features.locks.EditLockService(
                                     new server.realtime.PushGateway(
                                             new server.core.SessionManager()),
-                                    server.features.locks.DisplayNames.NONE))));
+                                    server.features.locks.DisplayNames.NONE))),
+                    // Nobody is signed in, so U-63's bank push has nowhere to go. That is the
+                    // honest fixture here too: the role gate refuses her long before a write
+                    // could announce anything.
+                    new server.db.repos.CourseRepository(),
+                    new server.realtime.PushGateway(new server.core.SessionManager()));
 
             assertThatExceptionOfType(AuthorizationException.class).isThrownBy(() ->
                     writes.delete(principal(), request(Verb.QUESTION_DELETE,

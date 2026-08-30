@@ -13,7 +13,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,14 +39,44 @@ class NotificationPresenterTest {
         assertThat(NotificationPresenter.toastFor(row(type, "Title", "Body"))).isNotNull();
     }
 
+    /**
+     * Types share an icon only in named families, so the panel still scans quickly.
+     *
+     * <p>Rewritten under U-63, and the rewrite is the point. This was
+     * {@code icons.size() >= values().length - 1}: a tolerance of exactly one collision,
+     * expressed as a magic number that said nothing about <em>which</em> one. Adding
+     * {@code BOT_CHANGED} made it two and turned a deliberate design decision into an
+     * arithmetic failure with no sentence attached. Spelled out rather than counted, on
+     * {@code NotifyDtoTest.theTypesExist}'s stated rule: a new collision should now fail with
+     * the two types named, and be either justified here or given its own icon.
+     *
+     * <p>Two families share, and both are events a reader groups anyway:
+     *
+     * <ul>
+     *   <li><b>grading</b> — a grade published to a student and papers due for a teacher are
+     *       the same subject seen from either side of the desk;</li>
+     *   <li><b>the study bot</b> — sources changed, a bot created, a bot switched on or off.
+     *       A reader scanning the panel is looking for "something about the study bot", and
+     *       the sentence beside the icon says which something (BOT amendment A4).</li>
+     * </ul>
+     */
     @Test
-    @DisplayName("distinct types mostly get distinct icons, so the panel scans quickly")
-    void iconsAreMostlyDistinct() {
-        Set<String> icons = new HashSet<>();
+    @DisplayName("icons are distinct except in two named families, so the panel scans quickly")
+    void iconsAreDistinctOutsideTheNamedFamilies() {
+        Map<String, Set<NotificationType>> byIcon = new HashMap<>();
         EnumSet.allOf(NotificationType.class).forEach(type ->
-                icons.add(NotificationPresenter.iconFor(type)));
+                byIcon.computeIfAbsent(NotificationPresenter.iconFor(type),
+                        icon -> EnumSet.noneOf(NotificationType.class)).add(type));
 
-        assertThat(icons).hasSizeGreaterThanOrEqualTo(NotificationType.values().length - 1);
+        Set<Set<NotificationType>> allowedFamilies = Set.of(
+                EnumSet.of(NotificationType.GRADE_PUBLISHED, NotificationType.GRADING_DUE),
+                EnumSet.of(NotificationType.BOT_SOURCE_CHANGED, NotificationType.BOT_CHANGED));
+
+        byIcon.forEach((icon, types) -> assertThat(types.size() == 1
+                || allowedFamilies.contains(types))
+                .as("%s share the icon %s and are not a named family. Give one of them its "
+                        + "own icon, or add the family here with the reason", types, icon)
+                .isTrue());
     }
 
     @Test

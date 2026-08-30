@@ -62,6 +62,10 @@ public final class NotificationPresenter {
             // new constant cannot reach the panel without somebody choosing what it looks like.
             case GRADING_DUE -> Icons.GRADING;
             case EXECUTION_CLOSED -> Icons.RESULTS;
+            // A bot was created or switched on or off (U-63). The same bot icon as
+            // BOT_SOURCE_CHANGED, because a reader scanning the panel is looking for "something
+            // about the study bot" and the sentence beside it says which something.
+            case BOT_CHANGED -> Icons.BOT;
         };
     }
 

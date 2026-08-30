@@ -186,7 +186,7 @@ and `ConnectView` (which now only logs).
 
 **Fix:** `afterFailedConnect` takes the `Throwable` itself, so **there is no longer a parameter a
 caller could pass a JDK string to** — the leak is unrepresentable rather than merely repaired.
-`ConnectFlow.reasonFor` walks the cause chain and maps the four causes the product has words for
+`ConnectFlow.reasonFor` walks the cause chain and maps the five causes the product has words for (the fifth, added 2026-08-31 with B-49: the transport handshake timing out against a bound but non-accepting server, landing on the existing "That address did not answer." sentence)
 to product sentences (refused → *"Nothing is listening on that address."*, timeout → *"That
 address did not answer."*, unknown host → *"That name could not be found on this network."*, no
 route → *"That address cannot be reached from this network."*), and answers `""` for everything
@@ -418,7 +418,7 @@ five new entries, one reopening.
 ### U-37 · COSMETIC · the bank card's three buttons: centre Edit
 **In Naji's words:** "the buttons versions history is next to edit and delete is way to the right, maybe center edit in the middle it'd look nicer"
 **Ruling:** fix (Low): Version history left, Edit centred, Delete right, evenly spaced.
-**Status:** `DONE` — Version history left, Edit centred, Delete right (two spacers), verify green.
+**Status:** `DONE` — Version history left, Edit centred, Delete right (two spacers), verify green. **Reverted by U-54 (2026-08-31).**
 
 ### U-38 · FUNCTIONAL · grading needs a per-student paper review before approving
 **In Naji's words:** "we have a list of approvals to give but we need to open their exam and see it to review it too so this is missing"
@@ -514,3 +514,89 @@ five new entries, one reopening.
 **Ruling:** two things: a picked row expands to show its four answers with the key (read-only, from a question read); and a **Preview** action on a saved draft opens the student-identical preview the coordinator uses (the author is already admitted to EXAM_PREVIEW_GET). Wave 6 agent U.
 **Status:** `DONE` — each picked row has a Show answers / Hide answers toggle over a read-only box (bank's own renderer, correct option marked). Answers come from QUESTION_VERSIONS (QUESTION_GET cannot ask for a pinned version, and a row carrying an older pin would otherwise show the newest version's options under the pinned stem); cache keyed by display id, cleared on load, generation-guarded. Preview button in the builder header (enabled once saved, any authored version, read-only or not) opens the approval paper with Approve/Send back hidden for a non-coordinator and Back returning to the builder. EXAM_PREVIEW moved to the teaching block; ApprovalService already admits the author. No wire change.
 
+### U-54 · COSMETIC · bank card buttons: Edit back beside Version history (reverts U-37)
+**In Naji's words:** "I told you to move edit to the center, I think it looked better the way it was next to version history"
+**Ruling:** revert U-37: Version history and Edit together on the left, Delete alone on the right.
+**Status:** `DONE` — one spacer again, between Edit and Delete.
+
+### U-55 · UX · new question: Answer 1 looked selected but was not
+**In Naji's words:** "the default for answer is Answer 1, if I want answer 1 and I don't change it I can't add the question, I have to pick a different answer and pick the answer 1 again, 3 tabs instead of 1"
+**Root cause:** `.radio-option:focused` painted the same soft fill as `:selected`, so tabbing into the group made Answer 1 look chosen while the session held null.
+**Ruling:** fix both halves: focus is a ring only; a new question starts with Answer 1 really marked (`QuestionEditorSession.DEFAULT_CORRECT_ANSWER`). C-8 unchanged, the server still checks.
+**Status:** `DONE`
+
+### U-56 · FUNCTIONAL · Edit question: difficulty has to be re-picked every time
+**In Naji's words:** "we have to re-pick difficulty each time we do an edit"
+**Root cause:** the session carried the difficulty and the view selected it, but `select()` before the ComboBox had a skin left the custom button cell blank (JavaFX quirk).
+**Ruling:** fix: `setValue` in the fill, re-applied in `onShow`; interaction test asserts the button cell text after show.
+**Status:** `DONE` (test pending in the round-5 verify)
+
+### U-57 · FUNCTIONAL · edit question: a save with nothing changed made a new version
+**In Naji's words:** "saving with 0 changes (question edit) counts as a new version, which I don't think should be the case"
+**Ruling:** fix (client gate): `canSave` is false while an existing question is unchanged against the baseline the editor opened on (`isUnchangedEdit`); the button carries "Nothing has changed yet. Edit something to save a new version." The server keeps writing n+1 for any accepted edit (C-2); the gate is where the teacher is.
+**Status:** `DONE`
+
+### U-58 · COSMETIC · approval queue: the two status chips were cut off
+**In Naji's words:** "the status has two badges and the sentences in them are cutoff pending approval and you wrote this"
+**Ruling:** fix: `StatusChip` (and the self-authored badge) pin their preferred width like buttons do; the Status column gets a 280 px minimum under the constrained resize policy.
+**Status:** `DONE`
+
+### U-59 · COSMETIC · table headings: some left, some right
+**In Naji's words:** "some titles in tables go right to left and some left to right, since we built everything in english, I want the titles to go left to right... either left or center but make sure it's uniform"
+**Root cause:** numeric columns' headings were right-aligned on purpose (to sit over right-aligned figures); beside left-aligned text headings it read as mixed direction.
+**Ruling:** all headings left-aligned; numeric cells keep right alignment and tabular figures.
+**Status:** `DONE`
+
+### U-60 · COSMETIC · release dialog: code box and Generate for me misaligned
+**In Naji's words:** "the exam code field is mis-aligned with the generate for me button, align them correctly"
+**Root cause:** the button was placed beside the whole FormField (label + box + hint) with bottom alignment, so it lined up with the hint, not the box.
+**Ruling:** fix: button inside the field, in one row with the text box, CENTER_LEFT; hint under both.
+**Status:** `DONE`
+
+### U-61 · FUNCTIONAL · principal client froze after clicking around Reports
+**In Naji's words:** "the histogram got stuck and the display on top the table got stuck too, also the table itself got stuck ... correction the whole principal dashboard, data, reports got bugged out ... nothing is working anymore"
+**Status:** `OPEN` — not reproduced in the harness (ReportsInteractionTest.clickingAroundNeverWedges, 3 passes, kept as a guard). Waiting for a jstack of the frozen client and the two terminals' text. Candidates: an FX-thread loop, a request that never returns, a dead socket without a banner.
+**Also (Naji, same session):** "the reports are the same for all students, it just gives the same exact report" - consistent with the data no longer changing after the first report (the picker's selection not reaching the session, or the request never returning); to be confirmed against the seed once the freeze is understood: BY_STUDENT for `noa.friedman` (three sittings) and `noam.peretz` (none) must differ.
+
+### U-62 · FUNCTIONAL · bot manager did not update on the co-teacher's screen
+**In Naji's words:** "bot info isn't being updated in both screens I had to press the notification for it to work"
+**Ruling:** fix: `BotManagerView.listensToEvents()` true and a subscriber on PUSH_NOTIFICATION filtered on the bot types (source changed, bot deleted) that calls `list.refreshAll()`.
+**Status:** `DONE` in full. U-63 (agent W) added `NotificationType.BOT_CHANGED` (BOT contract A4) for toggle and create, and the subscriber here follows both types.
+
+### U-63 · FUNCTIONAL · every screen updates itself: the audit (NFR-18)
+**In Naji's words:** "make sure that the updating happens in all screens nothing needs refreshes"
+**Finding:** sessions with a push subscription today: approvals, exams list, releases, live monitor, take exam, my grades, notifications, bank row locks. **Without one:** the four dashboards (counts and cards), Grading queue (GRADING_DUE arrives at the bell only), Question Bank list (a colleague's add/edit/delete), Teacher Results, and the bot manager on toggle/create (no notification is sent for those; needs BOT amendment A4: a BOT_CHANGED notification to co-teachers on create, rename, toggle).
+**Ruling:** wave item after round 5: each of those re-reads on the relevant push; the bank list and results re-read on a new lightweight push or on the notification types that already imply the change.
+**Status:** `DONE` (agent W, 61 files, 766 tests green). All four dashboards, the Grading queue, the Question Bank list, the principal's Data browser and Teacher Results now re-read on the pushes that imply their content changed, underneath the rows on screen (no skeleton flicker). Two contract amendments: BANK A3 `PUSH_BANK_CHANGED` (a notice carrying courseCode and displayId5, recipients = the bank read scope inverted: the course's teachers, its subject coordinator, principals; the actor included so her second window follows; never students) and BOT A4 `BOT_CHANGED` for toggle and create. **The principal's staleness had its own root cause:** `DataSession` loads each tab exactly once per session and applies both filters client-side over the cache, so no filter change ever produced a round trip and only a re-login could show a new question; the push now invalidates that cache. Four existing guards (verb counts, notification icons) were updated, not silenced.
+
+### U-64 · UX · grading queue: Change score with everything ticked opened an arbitrary row
+**In Omar's words:** "select all then change grade opens for the first one ticked"
+**Ruling:** an override is a one-student act: with more than one row ticked, Change score is off and its tooltip says "Change score works on one student at a time. Click that student's row."
+**Status:** `DONE`
+
+### U-65 · FUNCTIONAL · bank course picker: filtering to one course hid the others
+**In Omar's words:** "when she chooses database, when she clicks again oop disappears until she chooses show all"
+**Root cause:** the picker's options were derived from the current page's rows, which the course filter had just narrowed.
+**Ruling:** the session remembers every course a page has ever shown (fresh per sign-in) and the picker unions that with her own courses.
+**Status:** `DONE`
+
+### U-66 · RULED · usernames are not case-sensitive
+**In Omar's words:** "usernames are not case-sensitive."
+**Ruling (Naji's lane):** by design and kept: the username lookup runs under the database's case-insensitive collation, which matches how usernames behave in the systems students know; the password is checked byte-for-byte through BCrypt and is fully case-sensitive. Recorded for the defence Q&A rather than changed.
+**Status:** `CLOSED - by design`
+
+### U-67 · FUNCTIONAL · bank topic filter had no picker
+**In Omar's words:** "question bank doesn't filter by topic"
+**Root cause:** the wire and `selectTopic` have worked since E6; `availableTopics()` returned an empty list, so the picker never showed.
+**Ruling:** options are the topics seen for the selected course (a page is 40 rows, larger than any course's bank, so the set is complete); no course selected means no topic picker, since one topic name can live in two courses.
+**Status:** `DONE`
+
+### U-68 · UX · adding a question required setting the bank's course filter first
+**In Omar's words:** "when adding a question, it should have its own field to pick the course rather than having to chose the course from the question bank filter"
+**Ruling:** the create form owns a required Course picker (her writable courses), pre-filled from the bank's filter when that names a writable course. Edit mode shows no picker: the course is a fact of the stored question.
+**Status:** `DONE`
+
+### U-69 · RULED · coordinator preview: mark questions used in other exams
+**In Omar's words:** "might be overkill : should the questions in the exam the coordinator is looking at to approve show if they've been used in other exams?"
+**Ruling:** not for the defence. The signal exists in the delete-block list and the builder's newer-version badge; adding cross-exam usage to the approval paper is new wire surface a week before the defence for a judgement the spec does not ask the coordinator to make.
+**Status:** `CLOSED - not now`

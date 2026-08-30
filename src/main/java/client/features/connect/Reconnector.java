@@ -164,10 +164,15 @@ public final class Reconnector {
         worker.execute(() -> {
             try {
                 wiring.client().connect();
+                // Same proof the first connect demands ⚑ (B-49): a re-dial that
+                // lands in a stopped server's backlog would otherwise turn the
+                // banner green and strand every screen behind it.
+                ConnectHandshake.prove(wiring.dispatcher());
                 LOG.info("Re-dialled {}", endpoint.display());
                 poster.run(onOpen);
             } catch (Exception e) {
                 LOG.warn("Re-dial of {} failed", endpoint.display(), e);
+                ConnectWiring.abandon(wiring.client());
                 poster.run(() -> onFailed.accept(e));
             }
         });

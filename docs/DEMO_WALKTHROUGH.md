@@ -110,9 +110,9 @@ design).
       - Stem: `Solve: 4x - 8 = 12`
       - Answers: `x = 5` · `x = 5` · `x = 3` · `x = 20` (two the same), mark the first correct
         → **Add question** → refused: answers must differ.
-      - Change the second to `x = 4`. Unmark all → refused: mark exactly one correct. The
-        control is a radio, so two correct cannot be expressed.
-      - Mark `x = 5`. Topic `Linear equations`. Difficulty **Easy**. **Choose image** → any
+      - Change the second to `x = 4`. Answer 1 is already marked correct (the default for
+        a new question); the control is a radio, so "none" and "two" cannot be
+        expressed. *Say: "Exactly one, by construction; the server checks it again."* Topic `Linear equations`. Difficulty **Easy**. **Choose image** → any
         PNG → "Illustration attached".
       - **Add question** → the list shows it with a five-digit id starting `11` that nobody
         typed. Write it here: `11___`. *Say: "Two-digit course code plus a server serial;
@@ -457,7 +457,9 @@ B as `tamar.shani` (sign Maya out on B first).
       Biology 31. Pick **Java 21** → ask anything → the bot-is-off sentence. **A, Avi:** switch it on.
       **B:** ask again on the same screen → answered. *Say: "Enrolled and active and not
       locked out; three different refusals."*
-- [ ] 14.2 **B:** pick **Databases 22** → `What does a LEFT JOIN return when there is no match?`
+- [ ] 14.2 **B:** stay on **Java 21** (the Databases bot is seeded switched off; that is 14.4's
+      refusal) → `What does a LEFT JOIN return when there is no match?` (the source Avi pasted
+      in 13.2)
       → "The bot is thinking", typing indicator, then a grounded answer citing the source.
       `Who won the 2022 World Cup?` → `The bot could not answer that. Try rephrasing, or ask your teacher.`
       Three questions within seconds → the "too fast" sentence. *Say: "Course sources and
@@ -468,7 +470,7 @@ B as `tamar.shani` (sign Maya out on B first).
       right now" sentence. `noam.peretz` → Databases bot → "not enrolled" sentence.
 - [ ] 14.5 **C-4, live. B, Maya:** Take Exam → `2075` → confirm → ID `374301851` → the seeded
       Algebra paper; answer one; leave it open. **Study Bot → Algebra 11** → ask → the locked
-      sentence naming Midterm: Algebra, box still usable. **Databases 22** → ask → "You are
+      sentence naming Midterm: Algebra, box still usable. **Java 21** → ask → "You are
       taking an exam" notice → **Continue and notify** → answered; no second notice.
 - [ ] 14.6 **A, `dana.cohen`:** bell **INTEGRITY_ALERT** naming Maya; **Live Monitor** →
       `2075` → her row: "Opened another course's study bot at …". *Say: "The same course's

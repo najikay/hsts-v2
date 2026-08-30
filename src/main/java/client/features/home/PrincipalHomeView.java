@@ -32,7 +32,11 @@ public final class PrincipalHomeView extends AbstractScreen {
     @Override
     protected Parent build() {
         session = new PrincipalDashboardSession(dispatcher(), onFxThread())
-                .onChange(this::render);
+                .onChange(this::render)
+                // The live card re-read (U-63, NFR-18): a sitting finishing is the one event
+                // this read-only role is ever told about, and it is what her sittings card
+                // counts.
+                .subscribeTo(eventBus());
 
         return DashboardPage.page(headerHost, cards);
     }

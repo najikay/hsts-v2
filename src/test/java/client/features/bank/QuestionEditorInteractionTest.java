@@ -219,6 +219,62 @@ class QuestionEditorInteractionTest extends ApplicationTest {
                 .isTrue();
     }
 
+    // ===================== Round 5 (U-55, U-56, U-57) ======================
+
+    @Test
+    @DisplayName("a new question starts with Answer 1 really marked, not merely focused (U-55)")
+    void newQuestionStartsOnAnswerOne() {
+        Scene scene = openEditor(connection -> { },
+                NavParams.of(QuestionEditorView.PARAM_COURSE, "11"));
+
+        javafx.scene.control.RadioButton first = (javafx.scene.control.RadioButton)
+                scene.getRoot().lookup(".radio-option");
+        assertThat(first).isNotNull();
+        assertThat(first.isSelected())
+                .as("the fill on focus used to make Answer 1 look chosen while the session held "
+                        + "null; now it is chosen, so leaving it alone is one tab, not three")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("an edit opens with the difficulty showing in the box, not blank (U-56)")
+    void editShowsItsDifficulty() {
+        Scene scene = openEditor(connection -> { },
+                NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        @SuppressWarnings("unchecked")
+        javafx.scene.control.ComboBox<Difficulty> box = (javafx.scene.control.ComboBox<Difficulty>)
+                scene.getRoot().lookup(".question-difficulty");
+        assertThat(box).isNotNull();
+        assertThat(box.getValue()).isEqualTo(Difficulty.HARD);
+        assertThat(box.getButtonCell().getText())
+                .as("the value was in the session and the selection model, and the custom "
+                        + "button cell showed nothing until the skin existed")
+                .isEqualTo(BankCopy.difficulty(Difficulty.HARD));
+        assertThat(labelTexts(scene)).doesNotContain(QuestionEditorCopy.UNSAVED);
+    }
+
+    @Test
+    @DisplayName("Save as a new version is off until something changed (U-57)")
+    void unchangedEditCannotBeSaved() {
+        Scene scene = openEditor(connection -> { },
+                NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+
+        javafx.scene.control.Button save = buttonNamed(scene, QuestionEditorCopy.SAVE);
+        assertThat(save.isDisabled())
+                .as("every save writes version n+1, so a save with nothing changed is a copy")
+                .isTrue();
+        assertThat(save.getTooltip()).isNotNull();
+        assertThat(save.getTooltip().getText()).isEqualTo(QuestionEditorCopy.NOTHING_CHANGED);
+
+        clickOn(scene.getRoot().lookup(".text-area")).write("?");
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(save.isDisabled()).as("one real change and it is savable again").isFalse();
+        assertThat(save.getTooltip()).isNull();
+    }
+
     // ===================== E6.14, the edit lock ⚑ =========================
 
     @Test

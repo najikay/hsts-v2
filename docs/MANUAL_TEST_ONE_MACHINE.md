@@ -122,8 +122,8 @@ java -jar target\hsts-server.jar
       history**.
 - [ ] 2.6 Click **Add question**. Leave everything empty and try **Add question** — refused.
       Type stem `Round 3: what is 7 × 8?`, answers `56`, `56`, `54`, `64` (two the same),
-      mark the first correct → refused (answers must differ). Change the second to `48`,
-      unmark all → refused (one must be correct). Mark `56`. Topic: type `Round 3`
+      Answer 1 is marked correct by default → refused (answers must differ). Change the
+      second to `48`. Keep `56` marked. Topic: type `Round 3`
       (a brand-new topic). Difficulty Easy. **Choose image** → any PNG on your machine →
       "Illustration attached"; remove it; attach it again.
 - [ ] 2.7 Click **Cancel** → "Leave without saving?" → **Keep editing**. Now **Add question**.

@@ -150,7 +150,8 @@ public class ServerMain {
             public void stopListening() {
                 // stopListening, never close: close() would also drop every client
                 // already connected, and a student mid-exam is one of them. This
-                // stops NEW connections being accepted and nothing else.
+                // closes the listening socket so a new connect is refused at once
+                // (B-49) and touches nothing else.
                 server.stopListening();
             }
 

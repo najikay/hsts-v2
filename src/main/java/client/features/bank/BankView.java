@@ -128,7 +128,13 @@ public final class BankView extends AbstractScreen {
     protected Parent build() {
         session = new BankSession(dispatcher(), onFxThread(), coursesOfSignedInUser(),
                 eventBus(), signedInUserId())
-                .onChange(this::render);
+                .onChange(this::render)
+                // The live re-read when a colleague writes to a course on this list (U-63,
+                // finding 11, NFR-18). Subscribed by the SESSION rather than by this screen,
+                // the shape ApprovalQueueView uses and for its stated reason: the wiring then
+                // sits where a test can reach it, instead of behind a listensToEvents override
+                // only the shell can exercise.
+                .subscribeTo(eventBus());
 
         root.getStyleClass().addAll("hsts-page", "bank-screen");
         root.setPadding(new Insets(24, 28, 24, 24));
@@ -494,13 +500,12 @@ public final class BankView extends AbstractScreen {
         // components report's trap unreachable from this screen: the editor takes the bytes as a
         // required argument, so a button that could open it early would be the only way in.
         edit.setDisable(!canEdit(detail));
-        // 2026-08-30, live session, U-37: the three were bunched left with only Delete
-        // pushed away, which read as "two controls and an afterthought". A spacer either
-        // side of Edit spreads them evenly across the card - history left, edit in the
-        // middle, delete on the right edge - while each button keeps its min-width pin
-        // (Buttons sets USE_PREF_SIZE), so nothing is squeezed to fit the thirds.
-        HBox actions = new HBox(10, historyToggle, Buttons.spacer(), edit,
-                Buttons.spacer(), delete);
+        // 2026-08-30, U-37 centred Edit between two spacers; 2026-08-31, U-54 (Naji, round
+        // 5): "I think it looked better the way it was next to version history". Reverted:
+        // Version history and Edit sit together on the left as the two reading actions,
+        // Delete alone on the right edge as the one destructive action. Each button keeps
+        // its min-width pin (Buttons sets USE_PREF_SIZE).
+        HBox actions = new HBox(10, historyToggle, edit, Buttons.spacer(), delete);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.getStyleClass().add("bank-actions");
         nodes.add(actions);
@@ -715,25 +720,17 @@ public final class BankView extends AbstractScreen {
      * her behalf.
      */
     private void openEditorForNewQuestion() {
+        // 2026-08-31, U-68 (Omar, round 5): the editor owns a course picker now, so the trip is
+        // always offered. A filter naming a writable course pre-fills the picker; any other
+        // filter (none, or a course she only reads) opens the editor with the choice open.
         String course = session.selectedCourse();
-        if (course == null) {
-            if (toasts() != null) {
-                toasts().info(QuestionEditorCopy.NEW_QUESTION, BankCopy.PICK_A_COURSE_FIRST);
-            }
-            return;
+        if (course != null && !session.canWriteIn(course)) {
+            course = null;
         }
-        // The filter can name a course she reads and does not teach, because the two scopes are
-        // different sets. QUESTION_CREATE would be refused with COURSE_NOT_TAUGHT, so the trip
-        // is not offered.
-        if (!session.canWriteIn(course)) {
-            if (toasts() != null) {
-                toasts().info(QuestionEditorCopy.NEW_QUESTION,
-                        BankCopy.readOnlyCourse(courseNameOf(course)));
-            }
-            return;
-        }
-        navigator().navigate(BankRoutes.EDITOR,
-                NavParams.of(QuestionEditorView.PARAM_COURSE, course));
+        NavParams params = course == null
+                ? NavParams.of(QuestionEditorView.PARAM_NEW, "true")
+                : NavParams.of(QuestionEditorView.PARAM_COURSE, course);
+        navigator().navigate(BankRoutes.EDITOR, params);
     }
 
     /** A tooltip that explains a disabled control, or clears one that no longer applies. */

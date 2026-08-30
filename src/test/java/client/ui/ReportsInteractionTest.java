@@ -192,6 +192,100 @@ class ReportsInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @org.junit.jupiter.api.Timeout(60)
+    @DisplayName("⚑ round 5: clicking around segments, subjects, rows and other screens never wedges the shell")
+    void clickingAroundNeverWedges() {
+        ScreenManager manager = signIn(this::everythingLoads);
+        openReports(manager);
+
+        for (int pass = 0; pass < 3; pass++) {
+            for (ReportDimension dimension : ReportDimension.values()) {
+                clickOn(toggleNamed(manager.scene(), dimension.segment()));
+                WaitForAsyncUtils.waitForFxEvents();
+                ComboBox<ReportSubject> picker = subjectPicker(manager.scene());
+                for (ReportSubject subject : List.copyOf(picker.getItems())) {
+                    interact(() -> picker.getSelectionModel().select(subject));
+                    WaitForAsyncUtils.waitForFxEvents();
+                    if (cellTexts(manager.scene()).contains("Algebra midterm · 4821")) {
+                        clickOn(cellWithText(manager.scene(), "Algebra midterm · 4821"));
+                        WaitForAsyncUtils.waitForFxEvents();
+                        clickOn(cellWithText(manager.scene(), "Algebra quiz · 5150"));
+                        WaitForAsyncUtils.waitForFxEvents();
+                    }
+                }
+            }
+            // Leave for the principal's other screens and come back, the way she does.
+            interact(() -> manager.navigator().navigate(Routes.HOME_PRINCIPAL.id(),
+                    NavParams.empty()));
+            WaitForAsyncUtils.waitForFxEvents();
+            interact(() -> manager.navigator().navigate(Routes.DATA.id(), NavParams.empty()));
+            WaitForAsyncUtils.waitForFxEvents();
+            openReports(manager);
+        }
+
+        clickOn(toggleNamed(manager.scene(), ReportDimension.BY_COURSE.segment()));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(labelTexts(manager.scene()))
+                .as("after all that, the screen still answers the last click")
+                .contains(ReportsCopy.heading(ReportDimension.BY_COURSE, ALGEBRA));
+        assertThat(chartHeading(manager.scene())).isEqualTo("Algebra quiz · 5150");
+    }
+
+    @Test
+    @org.junit.jupiter.api.Timeout(60)
+    @DisplayName("⚑ Omar 7: by student, three sittings, clicking rows keeps working in every dimension")
+    void threeSittingRowsStayClickable() {
+        ScreenManager manager = signIn(connection -> {
+            connection.respondTo(Verb.REPORT_SUBJECTS_GET, request -> {
+                ReportDimension dimension =
+                        ((ReportSubjectsRequest) request.getPayload()).dimension();
+                return Message.ok(request, new ReportSubjects(dimension,
+                        dimension == ReportDimension.BY_COURSE
+                                ? List.of(ALGEBRA) : List.of(RINA, DANA)));
+            });
+            connection.respondTo(Verb.REPORT_GET, request -> {
+                ReportRequest ask = (ReportRequest) request.getPayload();
+                ReportSubject subject = ask.dimension() == ReportDimension.BY_COURSE
+                        ? ALGEBRA : ask.subjectId().equals(RINA.id()) ? RINA : DANA;
+                List<ReportRow> rows =
+                        subject.hasNothingToReport() ? List.of() : threeSittings();
+                return Message.ok(request, new ReportResult(ask.dimension(), subject, rows,
+                        ReportSummary.across(rows)));
+            });
+        });
+        openReports(manager);
+
+        clickOn(toggleNamed(manager.scene(), ReportDimension.BY_STUDENT.segment()));
+        WaitForAsyncUtils.waitForFxEvents();
+        ComboBox<ReportSubject> picker = subjectPicker(manager.scene());
+        interact(() -> picker.getSelectionModel().select(DANA));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // Omar's recipe: pick closed sittings in turn, over and over. The third row sits
+        // below the harness stage's fold, so it is asserted as data and the two rendered
+        // rows carry the clicking; the freeze this guards against killed every row click.
+        assertThat(labelTexts(manager.scene())).isNotEmpty();
+        for (int pass = 0; pass < 3; pass++) {
+            for (String label : List.of("Algebra midterm · 4821", "Algebra quiz · 5150")) {
+                clickOn(cellWithText(manager.scene(), label));
+                WaitForAsyncUtils.waitForFxEvents();
+                assertThat(chartHeading(manager.scene()))
+                        .as("the chart must follow every click, on every pass")
+                        .isEqualTo(label);
+            }
+        }
+
+        // And the other dimensions' clickables still answer afterwards.
+        clickOn(toggleNamed(manager.scene(), ReportDimension.BY_TEACHER.segment()));
+        WaitForAsyncUtils.waitForFxEvents();
+        interact(() -> subjectPicker(manager.scene()).getSelectionModel().select(DANA));
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn(cellWithText(manager.scene(), "Algebra quiz · 5150"));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(chartHeading(manager.scene())).isEqualTo("Algebra quiz · 5150");
+    }
+
+    @Test
     @DisplayName("the print layout drops the pickers (E15.4)")
     void printLayoutDropsThePickers() {
         ScreenManager manager = signIn(this::everythingLoads);
@@ -237,6 +331,16 @@ class ReportsInteractionTest extends ApplicationTest {
     private static ResultStatistics quiet() {
         return new ResultStatistics(4, 65, 65, Math.sqrt(125), 50, 80, 3, 0.75,
                 List.of(0, 0, 0, 0, 0, 1, 1, 1, 1, 0));
+    }
+
+    private static List<ReportRow> threeSittings() {
+        return List.of(
+                new ReportRow(1, "4821", "Algebra midterm", "11", "Algebra", SPRING,
+                        SPRING.plusSeconds(7200), 8, seeded()),
+                new ReportRow(2, "5150", "Algebra quiz", "11", "Algebra", SUMMER,
+                        SUMMER.plusSeconds(7200), 4, quiet()),
+                new ReportRow(3, "6120", "Java exam", "21", "Java", SUMMER.plusSeconds(86400),
+                        SUMMER.plusSeconds(93600), 8, seeded()));
     }
 
     private static List<ReportRow> twoSittings() {

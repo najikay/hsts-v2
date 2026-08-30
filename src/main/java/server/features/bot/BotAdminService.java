@@ -189,50 +189,115 @@ public final class BotAdminService {
 
     // ===================== BOT_CREATE ====================================
 
-    /** Creates the course's bot, or hands back the one that is already there (S-30). */
+    /**
+     * Creates the course's bot, or hands back the one that is already there (S-30).
+     *
+     * <p><b>Notifies the course's other teachers when it really was a create ⚑ (U-63).</b> A
+     * bot is shared, so the moment one teacher makes it her colleagues' Bot Manager stops
+     * offering Create and starts showing a bot they can load material into. Before U-63 that
+     * screen learned nothing: a co-teacher with the manager open kept an empty state offering
+     * a Create that the server would answer by handing her somebody else's bot.
+     *
+     * <p>The notification goes out <b>only when a bot was actually made</b>. S-30 makes this
+     * verb idempotent, so a second teacher pressing Create joins the existing bot, and telling
+     * the course "a study bot was created" every time somebody presses a button that created
+     * nothing is the notification equivalent of a lie. Whether it was a create is decided by
+     * reading {@link BotData#botForCourse} <em>before</em> the write, inside the same
+     * transaction, rather than by having the store report it: the store's contract is "make
+     * sure there is one", and that is the right contract for it to have.
+     */
     Message create(CallerContext caller, Message request) {
         Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
         if (!(request.getPayload() instanceof BotCreateRequest ask) || !ask.isWellFormed()) {
             return Message.error(request, ErrorCode.VALIDATION, BotMessages.MALFORMED_REQUEST);
         }
         long teacherId = caller.userId();
-        return store.inTx(data -> {
-            Message refusal = refuseUnlessTeaches(data, request, teacherId, ask.courseCode());
+
+        Outcome outcome = store.inTx(data -> {
+            Outcome refusal = refusalUnlessTeaches(data, teacherId, ask.courseCode());
             if (refusal != null) {
                 return refusal;
             }
             String courseName = data.courseName(ask.courseCode()).orElse(ask.courseCode());
+            boolean existed = data.botForCourse(ask.courseCode()).isPresent();
             String name = ask.name().isBlank() ? courseName + " study bot" : ask.name();
-            data.createBot(ask.courseCode(), name);
+            BotData.BotRecord record = data.createBot(ask.courseCode(), name);
             log.info("Teacher {} created or joined the study bot for course {}",
                     teacherId, ask.courseCode());
-            return Message.ok(request, page(data, ask.courseCode()));
+            BotManagerPage page = page(data, ask.courseCode());
+            if (existed) {
+                // Joined, not created: nothing changed for anybody else, so nobody is told.
+                return Outcome.done(page, record, List.of(), "");
+            }
+            // Read inside the transaction, for notifyDeleted's stated reason: these are the
+            // facts the sentence needs, and after the commit this data handle is gone.
+            return Outcome.done(page, record,
+                    data.otherTeachersOf(ask.courseCode(), teacherId),
+                    data.displayNames(Set.of(teacherId))
+                            .getOrDefault(teacherId, "A colleague"));
         });
+        if (outcome.refusal() != null) {
+            return Message.error(request, outcome.refusalCode(), outcome.refusal());
+        }
+        notifyCreated(outcome);
+        return Message.ok(request, outcome.page());
     }
 
     // ===================== BOT_ACTIVE_SET ================================
 
-    /** Switches the bot on or off (F12.4, S-31). */
+    /**
+     * Switches the bot on or off (F12.4, S-31).
+     *
+     * <p><b>Notifies the course's other teachers ⚑ (U-63).</b> Whether the bot is answering
+     * students right now is the single most consequential fact about it, and it is the one a
+     * colleague was least able to see: before U-63 the server pushed nothing at all for a
+     * toggle, so a co-teacher watched a switch that said "on" while students were being
+     * refused. {@code BOT_SOURCE_CHANGED} was not reused for it, and the reasoning is on
+     * {@link common.dto.notify.NotificationType#BOT_CHANGED}: a toggle is not a source change,
+     * and a colleague told that the material moved would go looking for a table that is
+     * exactly as she left it.
+     *
+     * <p>Nothing is sent when the switch was already where she put it. The verb is naturally
+     * idempotent, a double-click is a normal thing to do, and a notification per click would
+     * make a colleague's screen re-read for a state that never moved. That is the rule
+     * {@code GradingHandlers.approve} states from the other side, where a re-approve publishes
+     * nothing.
+     */
     Message setActive(CallerContext caller, Message request) {
         Authorization.requireRole(caller, Role.TEACHER, Role.COORDINATOR);
         if (!(request.getPayload() instanceof BotActiveRequest ask) || !ask.isWellFormed()) {
             return Message.error(request, ErrorCode.VALIDATION, BotMessages.MALFORMED_REQUEST);
         }
         long teacherId = caller.userId();
-        return store.inTx(data -> {
-            Message refusal = refuseUnlessTeaches(data, request, teacherId, ask.courseCode());
+
+        Outcome outcome = store.inTx(data -> {
+            Outcome refusal = refusalUnlessTeaches(data, teacherId, ask.courseCode());
             if (refusal != null) {
                 return refusal;
             }
             Optional<BotData.BotRecord> bot = data.botForCourse(ask.courseCode());
             if (bot.isEmpty()) {
-                return Message.error(request, ErrorCode.NOT_FOUND, BotMessages.BOT_NOT_CREATED);
+                return Outcome.refused(ErrorCode.NOT_FOUND, BotMessages.BOT_NOT_CREATED);
             }
-            data.setActive(bot.get().botId(), ask.active());
+            BotData.BotRecord record = bot.get();
+            boolean moved = record.active() != ask.active();
+            data.setActive(record.botId(), ask.active());
             log.info("Teacher {} switched the {} study bot {}",
                     teacherId, ask.courseCode(), ask.active() ? "on" : "off");
-            return Message.ok(request, page(data, ask.courseCode()));
+            BotManagerPage page = page(data, ask.courseCode());
+            if (!moved) {
+                return Outcome.done(page, record, List.of(), "");
+            }
+            return Outcome.done(page, record,
+                    data.otherTeachersOf(ask.courseCode(), teacherId),
+                    data.displayNames(Set.of(teacherId))
+                            .getOrDefault(teacherId, "A colleague"));
         });
+        if (outcome.refusal() != null) {
+            return Message.error(request, outcome.refusalCode(), outcome.refusal());
+        }
+        notifyToggled(outcome, ask.active());
+        return Message.ok(request, outcome.page());
     }
 
     // ===================== BOT_DELETE ====================================
@@ -584,6 +649,33 @@ public final class BotAdminService {
                 .orElse(BotMessages.SOURCE_LOCKED);
     }
 
+    /**
+     * The same two gates as {@link #refuseUnlessTeaches}, in the shape the verbs that notify
+     * need (U-63).
+     *
+     * <p>Its own method rather than a second caller of that one, because the two answer with
+     * different things and neither can build the other. {@code refuseUnlessTeaches} needs the
+     * request to answer against and produces a finished {@link Message}; the notifying verbs
+     * run their whole transaction as an {@link Outcome} so that the refusal and the success
+     * come out of the lambda as one value, and turn it into a {@code Message} after the commit.
+     * The gate order is identical and deliberately so: the course, then the scope, so a teacher
+     * who does not teach it learns nothing about it. {@code BOT_DELETE} established this shape.
+     *
+     * @param data       the open transaction
+     * @param teacherId  the caller
+     * @param courseCode the course she named
+     * @return the refusal, or {@code null} when she teaches it
+     */
+    private Outcome refusalUnlessTeaches(BotData data, long teacherId, String courseCode) {
+        if (data.courseName(courseCode).isEmpty()) {
+            return Outcome.refused(ErrorCode.NOT_FOUND, BotMessages.NO_SUCH_COURSE);
+        }
+        if (!data.teaches(teacherId, courseCode)) {
+            return Outcome.refused(ErrorCode.FORBIDDEN, BotMessages.NOT_YOUR_COURSE);
+        }
+        return null;
+    }
+
     /** @return a refusal message, or {@code null} when the caller teaches the course. */
     private Message refuseUnlessTeaches(BotData data, Message request, long teacherId, String courseCode) {
         if (data.courseName(courseCode).isEmpty()) {
@@ -667,6 +759,46 @@ public final class BotAdminService {
         }
         notifier.notify(outcome.recipients(), NotificationCatalog.botDeleted(
                 outcome.bot().courseName(), outcome.editorName(), outcome.bot().botId()));
+    }
+
+    /**
+     * Tells the course's other teachers that a bot now exists (U-63).
+     *
+     * <p>Outside the transaction and after it, on the rule {@link #notifyCoTeachers} states.
+     * An {@link Outcome} with no recipients is the normal answer here rather than an unusual
+     * one: it means either that she is the only teacher of the course, or that S-30 joined her
+     * to a bot somebody else had already made, and neither is an event anybody needs told
+     * about.
+     */
+    private void notifyCreated(Outcome outcome) {
+        if (outcome.recipients().isEmpty()) {
+            log.debug("No co-teachers to tell that a study bot was created");
+            return;
+        }
+        notifier.notify(outcome.recipients(), NotificationCatalog.botCreated(
+                outcome.bot().courseName(), outcome.editorName(), outcome.bot().botId()));
+    }
+
+    /**
+     * Tells the course's other teachers that the bot was switched on or off (U-63, F12.4).
+     *
+     * <p>Outside the transaction and after it, on the same rule. The state comes from the
+     * request rather than from {@link Outcome#bot()}, and that is not an accident: the record
+     * in the outcome was read <em>before</em> the write, so it still holds the state the bot
+     * was in, which is exactly the opposite of what the sentence should say.
+     *
+     * @param outcome the committed toggle
+     * @param active  the state the bot is in now
+     */
+    private void notifyToggled(Outcome outcome, boolean active) {
+        if (outcome.recipients().isEmpty()) {
+            log.debug("No co-teachers to tell that a study bot was switched {}",
+                    active ? "on" : "off");
+            return;
+        }
+        notifier.notify(outcome.recipients(), NotificationCatalog.botToggled(
+                outcome.bot().courseName(), outcome.editorName(), active,
+                outcome.bot().botId()));
     }
 
     /**

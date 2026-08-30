@@ -431,3 +431,57 @@ naming the course and saying the sources go with the bot, and on success the car
 **Create the study bot** because the page came back empty. The `CONFLICT` sentence is drawn on
 that card through the session's existing error path, which is why `BotCourseSummary` gained a
 `status` component (a client record, still not on the wire — A2's rule, unchanged).
+
+---
+
+### A4 — `NotificationType.BOT_CHANGED` for toggle and create (U-63, added 2026-08-30)
+
+**The gap.** `BOT_ACTIVE_SET` and `BOT_CREATE` were the two mutating verbs in §3 that told
+nobody anything. `BOT_SOURCE_ADD/UPDATE/REMOVE` notify the course's other teachers (F12.3) and
+A3's `BOT_DELETE` does too; the toggle and the create were silent, so a co-teacher with the Bot
+Manager open could not learn either of the two facts that matter most about a bot she shares:
+that it now exists, and whether students can talk to it right now. NFR-18 forbids answering that
+with a refresh button, and there was nothing else to answer it with.
+
+**No verb changes, no payload changes.** This amendment adds one constant to
+`common.dto.notify.NotificationType` and two factories to `NotificationCatalog`. Every request
+and response shape in §3 and §7 is untouched, and no client that ignores notifications behaves
+differently than before.
+
+**The new type.**
+
+| Constant | Raised by | Recipients | Sentence |
+|---|---|---|---|
+| `BOT_CHANGED` | `BOT_CREATE`, `BOT_ACTIVE_SET` | the course's **other** teachers | "Study bot created" · "Study bot switched on" · "Study bot switched off" |
+
+**Why a new constant rather than reusing `BOT_SOURCE_CHANGED`.** A3 reused it for the delete and
+that reuse stands, on the reasoning in `NotificationCatalog.botDeleted`: a deleted bot and
+changed material both mean "open the manager and look", so one type serving both keeps the
+vocabulary small without lying. **A toggle is not a source change.** A colleague told that the
+material moved would go looking for a table that is exactly as she left it, and the type is what
+the notification panel picks an icon by and what an aggregate would group by. Create and toggle
+share the one constant because a co-teacher does the same thing about both, and the sentence,
+which is stored on the row, is where they differ.
+
+**Semantics.**
+
+1. **The actor is excluded**, as with every other bot notification: telling somebody what they
+   just did is noise, and noise is what makes people stop reading their notifications.
+   `BotData.otherTeachersOf(courseCode, actor)`.
+2. **Only when something actually moved.** `BOT_CREATE` is idempotent under S-30 (§8), so a
+   second teacher pressing Create joins the bot that is there and **nothing is sent** — the
+   handler decides by reading `botForCourse` before the write, inside the same transaction.
+   A toggle that sets the switch where it already was sends nothing either; a double-click is a
+   normal thing to do, and a notification per click would make a colleague's screen re-read for
+   a state that never changed. This is the rule `GradingHandlers.approve` states from the other
+   side, where a re-approve publishes nothing.
+3. **Raised after the commit and outside the transaction**, exactly as F12.3's notifications
+   are: a notification for a change that rolled back would be a lie, and a dead socket must not
+   be able to roll back a teacher's write.
+4. **A course with one teacher notifies nobody**, which is not an error. A rule that fired for
+   nobody is not a failure.
+
+**The client side** is one line: `BotManagerView.onServerPush` already refreshed every course
+card on `BOT_SOURCE_CHANGED` (U-62) and now does so on `BOT_CHANGED` as well. The icon is
+`Icons.BOT`, the same as the source events, because a reader scanning the panel is looking for
+"something about the study bot" and the sentence beside it says which something.

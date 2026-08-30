@@ -2,6 +2,7 @@ package server.features.bank;
 
 import common.dto.ErrorPayload;
 import common.dto.auth.Role;
+import common.dto.bank.BankChanged;
 import common.dto.bank.DeleteOutcome;
 import common.dto.bank.Difficulty;
 import common.dto.bank.ImageAction;
@@ -26,6 +27,8 @@ import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.core.SessionManager;
 import server.db.MockSessions;
+import server.db.repos.CourseRepository;
+import server.realtime.PushGateway;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -71,6 +74,10 @@ class BankHandlersTest {
     private Session session;
     @Mock
     private QuestionService questions;
+    @Mock
+    private CourseRepository courses;
+    @Mock
+    private PushGateway pushGateway;
 
     private BankHandlers handlers;
     private MockSessions.Wiring wiring;
@@ -78,7 +85,9 @@ class BankHandlersTest {
     @BeforeEach
     void setUp() {
         wiring = MockSessions.commitsOn(session);
-        handlers = new BankHandlers(wiring.factory(), questions);
+        // A mocked gateway rather than a real one over an empty SessionManager: U-63's push
+        // is a thing this class does, so the tests below assert on it by name.
+        handlers = new BankHandlers(wiring.factory(), questions, courses, pushGateway);
     }
 
     // ===================== Fixtures =======================================
@@ -566,6 +575,174 @@ class BankHandlersTest {
             assertThat(errorText(response))
                     .isEqualTo(BankMessages.lockedBy("Rina Barak"))
                     .isNotEqualTo(BankMessages.STALE_EDIT);
+        }
+    }
+
+    // ===================== The bank push (U-63) ===========================
+
+    /**
+     * {@code PUSH_BANK_CHANGED}, the notice that makes every bank screen able to update itself
+     * ⚑ (U-63, finding 11, NFR-18).
+     *
+     * <p>Until this there was no bank push at all, which is the whole of Omar's finding: a
+     * teacher with the bank open never saw a colleague's new question, and touching a filter
+     * was doing the job a push should have been doing. These tests pin the four rules that make
+     * the push safe to trust rather than merely present.
+     *
+     * <p><b>After the commit, only on success, addressed to readers, never fatal.</b> The
+     * ordering is {@code GradingHandlers.approve}'s, and the reason is the same: every
+     * subscriber answers this by re-reading, so a push that overtook its own commit would be
+     * answered from a database without the new version in it.
+     */
+    @Nested
+    @DisplayName("⚑ U-63: PUSH_BANK_CHANGED, after the commit and only on success")
+    class AnnouncingBankChanges {
+
+        /**
+         * Dana and a co-teacher, plus the principal: the course's readers as
+         * {@code findBankReaderIds} answers them.
+         *
+         * <p>Called by the tests that get as far as announcing, rather than stubbed in a
+         * {@code @BeforeEach}. Mockito's strict stubs are right to object to the other shape:
+         * a test proving that a refusal announces nothing must not also be declaring who
+         * would have been told, because then "nobody was told" could be true for the wrong
+         * reason.
+         */
+        private void theCourseHasReaders() {
+            when(courses.findBankReaderIds(any(), any())).thenReturn(List.of(501L, 502L, 900L));
+        }
+
+        @Test
+        @DisplayName("a create announces the course and the new question to its readers")
+        void createAnnounces() {
+            theCourseHasReaders();
+            when(questions.create(any(), any(), any())).thenReturn(aDetail());
+
+            handlers.create(teacher(), request(Verb.QUESTION_CREATE, aDraft()));
+
+            org.mockito.ArgumentCaptor<BankChanged> notice =
+                    org.mockito.ArgumentCaptor.forClass(BankChanged.class);
+            verify(pushGateway).toUsers(org.mockito.ArgumentMatchers.eq(List.of(501L, 502L, 900L)),
+                    org.mockito.ArgumentMatchers.eq(Verb.PUSH_BANK_CHANGED), notice.capture());
+            assertThat(notice.getValue().courseCode())
+                    .as("the detail's course, not the draft's: the service resolved and "
+                            + "stripped it, and the push must name where the row landed")
+                    .isEqualTo(COURSE);
+            assertThat(notice.getValue().displayId5()).isEqualTo(DISPLAY_ID);
+            assertThat(notice.getValue().change()).isEqualTo(BankChanged.Change.CREATED);
+        }
+
+        @Test
+        @DisplayName("an update announces, carrying the revised question")
+        void updateAnnounces() {
+            theCourseHasReaders();
+            when(questions.update(any(), any(), any())).thenReturn(new QuestionService.EditOutcome(
+                    QuestionService.EditStatus.UPDATED, aDetail()));
+
+            handlers.update(teacher(), request(Verb.QUESTION_UPDATE, anEdit()));
+
+            org.mockito.ArgumentCaptor<BankChanged> notice =
+                    org.mockito.ArgumentCaptor.forClass(BankChanged.class);
+            verify(pushGateway).toUsers(any(), org.mockito.ArgumentMatchers.eq(
+                    Verb.PUSH_BANK_CHANGED), notice.capture());
+            assertThat(notice.getValue().change()).isEqualTo(BankChanged.Change.UPDATED);
+            assertThat(notice.getValue().displayId5()).isEqualTo(DISPLAY_ID);
+        }
+
+        @Test
+        @DisplayName("a delete announces, so the row leaves everybody's list")
+        void deleteAnnounces() {
+            theCourseHasReaders();
+            when(questions.delete(any(), any(), any())).thenReturn(
+                    QuestionService.DeleteResolution.resolved(DeleteOutcome.succeeded(), COURSE));
+
+            handlers.delete(teacher(),
+                    request(Verb.QUESTION_DELETE, new QuestionDeleteRequest(DISPLAY_ID, 2)));
+
+            org.mockito.ArgumentCaptor<BankChanged> notice =
+                    org.mockito.ArgumentCaptor.forClass(BankChanged.class);
+            verify(pushGateway).toUsers(any(), org.mockito.ArgumentMatchers.eq(
+                    Verb.PUSH_BANK_CHANGED), notice.capture());
+            assertThat(notice.getValue().change()).isEqualTo(BankChanged.Change.DELETED);
+            assertThat(notice.getValue().courseCode()).isEqualTo(COURSE);
+        }
+
+        @Test
+        @DisplayName("⚑ a delete BLOCKED by the exams that pin it announces nothing")
+        void aBlockedDeleteIsSilent() {
+            // No theCourseHasReaders() here, deliberately: Mockito's strict stubs would flag it
+            // unused, and it is right to. Declaring who WOULD have been told, in the test that
+            // proves nobody was, is how "nobody was told" passes for the wrong reason.
+            when(questions.delete(any(), any(), any())).thenReturn(
+                    QuestionService.DeleteResolution.resolved(
+                            DeleteOutcome.blockedBy(List.of(
+                                    new common.dto.bank.BlockingExam("101101", "Algebra"))),
+                            COURSE));
+
+            Message response = handlers.delete(teacher(),
+                    request(Verb.QUESTION_DELETE, new QuestionDeleteRequest(DISPLAY_ID, 2)));
+
+            assertThat(response.isOk())
+                    .as("being told which exams pin it is a successful answer to 'may I'")
+                    .isTrue();
+            verify(pushGateway, never()).toUsers(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("every refusal announces nothing, because nothing was committed")
+        void refusalsAreSilent() {
+            when(questions.update(any(), any(), any())).thenReturn(
+                    new QuestionService.EditOutcome(QuestionService.EditStatus.STALE, null));
+            handlers.update(teacher(), request(Verb.QUESTION_UPDATE, anEdit()));
+
+            when(questions.delete(any(), any(), any())).thenReturn(
+                    new QuestionService.DeleteResolution(
+                            QuestionService.DeleteStatus.NOT_FOUND, null));
+            handlers.delete(teacher(),
+                    request(Verb.QUESTION_DELETE, new QuestionDeleteRequest(DISPLAY_ID, 2)));
+
+            verify(pushGateway, never()).toUsers(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a validation refusal never even asks who the readers are")
+        void aValidationRefusalReadsNothing() {
+            QuestionDraft noCourse = new QuestionDraft(null, "What is encapsulation?", ANSWERS,
+                    1, "OOP", Difficulty.MEDIUM, null);
+
+            handlers.create(teacher(), request(Verb.QUESTION_CREATE, noCourse));
+
+            verify(courses, never()).findBankReaderIds(any(), any());
+            verify(pushGateway, never()).toUsers(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("⚑ a push that blows up does not turn a saved question into an error")
+        void aFailedPushNeverFailsTheVerb() {
+            theCourseHasReaders();
+            when(questions.create(any(), any(), any())).thenReturn(aDetail());
+            when(pushGateway.toUsers(any(), any(), any()))
+                    .thenThrow(new IllegalStateException("the socket went away"));
+
+            Message response = handlers.create(teacher(), request(Verb.QUESTION_CREATE, aDraft()));
+
+            assertThat(response.isOk())
+                    .as("the version is committed by the time the push runs; telling her the "
+                            + "save failed would be a lie she has to act on")
+                    .isTrue();
+            assertThat(response.getPayload()).isEqualTo(aDetail());
+        }
+
+        @Test
+        @DisplayName("a course nobody staffs is a push to nobody, not a failure")
+        void noReadersIsNotAnError() {
+            when(courses.findBankReaderIds(any(), any())).thenReturn(List.of());
+            when(questions.create(any(), any(), any())).thenReturn(aDetail());
+
+            Message response = handlers.create(teacher(), request(Verb.QUESTION_CREATE, aDraft()));
+
+            assertThat(response.isOk()).isTrue();
+            verify(pushGateway, never()).toUsers(any(), any(), any());
         }
     }
 }

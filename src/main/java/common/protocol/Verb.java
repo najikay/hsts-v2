@@ -19,6 +19,21 @@ public enum Verb {
 
     // ===================== Connection & session (E1/E5) =====================
 
+    /**
+     * Prove a freshly opened socket is talking to a live HSTS server (B-49).
+     * Open (no session required): it is asked before anyone has signed in.
+     *
+     * <p>Answered with {@code OK} and a {@code null} payload, by
+     * {@code server.core.HelloResponder}, and by nothing else. It carries no
+     * information on purpose: the client is not asking the server anything, it is
+     * asking whether there is a server. A bare TCP connect cannot tell it that,
+     * because a bound socket nobody is accepting from still completes the
+     * handshake.
+     *
+     * <p>See {@code docs/contracts/CONNECT_WIRE_CONTRACT.md}.
+     */
+    HELLO,
+
     /** Authenticate a connection. Open (no session required) by definition. */
     LOGIN,
 
@@ -1292,7 +1307,28 @@ public enum Verb {
     PUSH_MONITOR_UPDATED,
 
     /** A grade was approved and published to the student (E11). */
-    PUSH_GRADE_PUBLISHED;
+    PUSH_GRADE_PUBLISHED,
+
+    /**
+     * A question was created, revised or deleted in a course's bank (E6, U-63 — NFR-18).
+     * Payload: {@code common.dto.bank.BankChanged}.
+     *
+     * <p>Carries the course and nothing else that matters: <b>a notice, not a delta</b>. The
+     * bank is paginated, filtered and sorted per caller, so a row shipped in a push would be a
+     * row the recipient's own filters may not admit, on a page she is not looking at. Every
+     * subscriber answers this by re-reading its own list with its own request, which is the
+     * only way two screens with different filters both end up correct. It is the same reasoning
+     * {@link #PUSH_EXECUTION_STATUS} states from the other side, where a whole row <em>is</em>
+     * the right payload because that list has one shape.
+     *
+     * <p>Recipients are the people who can read that course: its teachers, its subject
+     * coordinator and the principal. That set is the read scope
+     * {@code BankBrowseService.reachableCourseCodes} already defines, inverted — so nobody
+     * learns from a push that a course exists which a {@code BANK_LIST} would have hidden from
+     * her. The actor is included rather than excluded, unlike the bot notifications: her own
+     * second window is a screen that has to follow too.
+     */
+    PUSH_BANK_CHANGED;
 
     /**
      * @return {@code true} for the server-initiated push verbs, i.e. the ones

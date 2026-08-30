@@ -107,7 +107,12 @@ public final class DataView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new DataSession(dispatcher(), onFxThread()).onChange(this::render);
+        session = new DataSession(dispatcher(), onFxThread())
+                .onChange(this::render)
+                // The live re-read that makes this screen able to show a question written after
+                // she opened it (U-63, finding 11). Without it her tabs load once and her
+                // filters narrow what they loaded, so only a re-login could bring in a new one.
+                .subscribeTo(eventBus());
 
         root.getStyleClass().addAll("hsts-page", "principal-data");
         root.setPadding(new Insets(24, 28, 24, 24));

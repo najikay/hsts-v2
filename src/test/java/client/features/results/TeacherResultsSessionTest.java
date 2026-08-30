@@ -1,6 +1,8 @@
 package client.features.results;
 
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
@@ -9,6 +11,9 @@ import client.ui.components.logic.StatChartLogic;
 import common.dto.grading.GradeState;
 import common.dto.exam.AttemptState;
 import common.dto.grading.StudentGradeRow;
+import common.dto.notify.NavRef;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.dto.results.ExamResultRow;
 import common.dto.results.ExecutionResultRow;
 import common.dto.results.ExecutionResults;
@@ -50,13 +55,14 @@ class TeacherResultsSessionTest {
     private static final long LIVE_EXECUTION = 11;
 
     private FakeClientConnection connection;
+    private RequestDispatcher dispatcher;
     private TeacherResultsSession session;
     private int renders;
 
     @BeforeEach
     void setUp() {
         connection = new FakeClientConnection();
-        RequestDispatcher dispatcher = new RequestDispatcher(connection);
+        dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
         session = new TeacherResultsSession(dispatcher, new DirectFxThreadPoster())
                 .onChange(() -> renders++);
@@ -580,5 +586,167 @@ class TeacherResultsSessionTest {
         session.load();
 
         assertThat(renders).isGreaterThanOrEqualTo(2);
+    }
+
+    // ===================== It updates itself (U-63) =======================
+
+    /**
+     * The results screen re-reads itself when a sitting closes (U-63, NFR-18).
+     *
+     * <p><b>Why this screen mattered most.</b> It is where a teacher watches a sitting finish,
+     * and it was the screen least able to notice one: it drew whatever it had loaded on arrival
+     * and never asked again. The statistics panel is the worst of it, because a mean over half
+     * the marked papers looks exactly like a mean over all of them, so the stale screen is not
+     * obviously stale.
+     *
+     * <p>The second half of what these pin is the part a naive fix gets wrong: {@code load()}
+     * re-chooses a default exam and a default sitting from the answer, so refreshing on a push
+     * by calling it would move a teacher off the histogram she was reading because a colleague's
+     * grade was approved elsewhere in the school.
+     */
+    @Nested
+    @DisplayName("it updates itself ⚑ (U-63)")
+    class UpdatesItself {
+
+        private ClientEventBus eventBus;
+
+        @BeforeEach
+        void subscribe() {
+            eventBus = new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+            dispatcher.setPushListener(new PushEventBridge(eventBus));
+            session.subscribeTo(eventBus);
+        }
+
+        private NotificationDto notification(NotificationType type) {
+            return new NotificationDto(1L, type, "A sitting finished", "",
+                    NavRef.to("results", GRADED_EXECUTION), CLOSED, null);
+        }
+
+        private long listReads() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.RESULTS_EXAMS_GET)
+                    .count();
+        }
+
+        @Test
+        @DisplayName("⚑ a closing sitting re-reads the exams, with no user action")
+        void aClosingSittingRefreshesTheList() {
+            serverHasEverything();
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_EXECUTION_STATUS, "a release row");
+
+            assertThat(listReads())
+                    .as("PUSH_EXECUTION_STATUS already reaches the release's owners; this "
+                            + "screen is the author reading her own exam's sittings")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ GRADING_DUE re-reads too: it moves the unfinished-grading warning")
+        void gradingDueRefreshesTheList() {
+            serverHasEverything();
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+
+            assertThat(listReads()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ the sitting she is reading is still the one she is reading afterwards")
+        void aLiveReReadKeepsHerWhereSheWas() {
+            serverHasEverything();
+            session.load();
+            // Move off the default: the graded sitting is the SECOND row of the algebra exam.
+            session.openExecution(graded());
+            assertThat(session.selectedExecution()).contains(graded());
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(session.selectedExecution())
+                    .as("calling load() here would re-run defaultExam and move her to the live "
+                            + "sitting, because a colleague's grade was approved elsewhere")
+                    .contains(graded());
+            assertThat(session.selectedExam()).contains(algebraExam());
+        }
+
+        @Test
+        @DisplayName("the table does not blank to a skeleton for a re-read she never asked for")
+        void aLiveReReadDoesNotBlankTheScreen() {
+            serverHasEverything();
+            session.load();
+            // Nothing answers from here on, so the re-read stays in flight.
+            connection.respondTo(Verb.RESULTS_EXAMS_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(session.state())
+                    .as("a readable table one second out of date beats a shimmer")
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.exams()).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("⚑ two pushes a second apart cost one re-read, not two racing ones")
+        void aSecondPushWhileInFlightIsIgnored() {
+            serverHasEverything();
+            session.load();
+            // Nothing answers from here, so the first re-read stays outstanding.
+            connection.respondTo(Verb.RESULTS_EXAMS_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_EXECUTION_STATUS, "a release row");
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(listReads())
+                    .as("a live re-read does not set LOADING, so without its own flag the "
+                            + "in-flight guard would not hold for this path at all and three "
+                            + "identical requests could settle in any order")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("an approval notification is not this screen's business")
+        void anUnrelatedNotificationIsIgnored() {
+            serverHasEverything();
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_REQUESTED));
+
+            assertThat(listReads()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an exam that has left her list does not strand the screen on it")
+        void anExamThatDisappearedFallsBackToTheDefault() {
+            serverHasEverything();
+            session.load();
+            session.openExecution(graded());
+            // The next answer no longer contains the algebra exam at all.
+            connection.replyOk(Verb.RESULTS_EXAMS_GET,
+                    new TeacherResults(List.of(drawerExam())));
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(session.selectedExam())
+                    .as("leaving her pointed at an exam the answer no longer has would be a "
+                            + "header with nothing under it")
+                    .contains(drawerExam());
+        }
+
+        @Test
+        @DisplayName("a null bus is refused rather than silently not subscribing")
+        void aNullBusIsRefused() {
+            org.assertj.core.api.Assertions.assertThatNullPointerException()
+                    .isThrownBy(() -> session.subscribeTo(null));
+        }
     }
 }

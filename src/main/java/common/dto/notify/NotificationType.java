@@ -85,5 +85,25 @@ public enum NotificationType {
      * notification the principal has, and S-7 makes her read-only, so it is the only thing that
      * can ever populate her panel. Nothing else in this enum describes an execution ending.
      */
-    EXECUTION_CLOSED
+    EXECUTION_CLOSED,
+
+    /**
+     * A course's study bot was switched on or off, or created
+     * (→ the other teachers of that course, U-63 / finding 11).
+     *
+     * <p><b>Its own constant rather than {@link #BOT_SOURCE_CHANGED}, and that is the whole of
+     * the decision.</b> {@code BOT_SOURCE_CHANGED} says the material behind the answers moved;
+     * a toggle says the bot is now answering students, or has stopped. A co-teacher who reads
+     * "the sources changed" and finds a bot that is switched off has been told the wrong thing,
+     * and the type is what the panel picks an icon by. {@code BOT_DELETE} reuses
+     * {@code BOT_SOURCE_CHANGED} deliberately (see {@code NotificationCatalog.botDeleted}) and
+     * that reuse stands: a deleted bot and changed material both mean "open the manager and
+     * look". A toggle means "it is live now", which is a different fact about a bot that is
+     * still there.
+     *
+     * <p>The sentence is where a create and a toggle differ, and the sentence is stored on the
+     * row, so both share this constant on the rule the class javadoc sets out: the type is the
+     * small stable vocabulary, not the text.
+     */
+    BOT_CHANGED
 }

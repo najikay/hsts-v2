@@ -1,28 +1,36 @@
 package client.features.data;
 
+import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
+import common.dto.bank.BankChanged;
 import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.dto.report.DataExamRow;
 import common.dto.report.DataExams;
 import common.dto.report.DataResults;
 import common.dto.report.ReportRow;
 import common.protocol.Message;
 import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -55,6 +63,23 @@ import java.util.function.Function;
  * to put on this role's wire. The one filter that <em>could</em> have been a server filter is the
  * bank's course code, and it is not one, so that all three tabs narrow the same way.
  *
+ * <h2>Those two decisions had a defect between them ⚑ (U-63, finding 11)</h2>
+ *
+ * <p><b>Read together, "each tab loads once" and "the filters are applied here" said that this
+ * screen could never show a question written after she opened it.</b> That is exactly how it was
+ * reported: for a teacher, changing the course filter made a colleague's new question appear,
+ * because {@code BankSession}'s filters re-query; for the principal, "even changing the course
+ * filter did not help, only re-login." Re-login was the only cure because it was the only thing
+ * that built a new {@code DataSession}. Neither half was wrong on its own, and neither is
+ * changed here: the caching still stands and the filters still narrow in the client.
+ *
+ * <p>What was missing is the third thing NFR-18 assumes and this screen did not have: something
+ * that invalidates the cache when the server knows it is stale. {@link #onServerPush} is that,
+ * and it is a push rather than a timer or a re-read on tab switch, both of which would be a
+ * poll wearing a different hat. A tab is re-read only when a push says the data behind that
+ * particular tab moved, so switching tabs still costs nothing and the screen still has no
+ * refresh button on it.
+ *
  * <h2>The bank arrives a page at a time and is shown as one list</h2>
  *
  * <p>{@code BANK_LIST} is paginated because a teacher's bank browse is (E6.5); this screen is not
@@ -85,6 +110,19 @@ public final class DataSession {
     private final Map<DataTab, String> filters = new EnumMap<>(DataTab.class);
     private final Map<DataTab, String> courseFilters = new EnumMap<>(DataTab.class);
     private final Map<DataTab, String> errors = new EnumMap<>(DataTab.class);
+
+    /**
+     * The tabs being re-read underneath rows that are already on screen (U-63).
+     *
+     * <p>Distinct from {@link AsyncViewState#LOADING} on purpose, and the distinction is what
+     * keeps the live re-read from being worse than the staleness it fixes. {@code LOADING}
+     * means "there is nothing to draw yet" and the view answers it with a skeleton; membership
+     * here means "what is drawn is correct but a newer answer is coming", which the view must
+     * not answer at all. Without the two being separate, this screen would blank to a skeleton
+     * every time any teacher in the school saved any question, which on a busy afternoon is a
+     * screen nobody can read.
+     */
+    private final Set<DataTab> reloading = EnumSet.noneOf(DataTab.class);
 
     private List<BankQuestionRow> questions = List.of();
     private boolean bankTruncated;
@@ -152,6 +190,18 @@ public final class DataSession {
         states.put(asked, AsyncViewState.LOADING);
         errors.remove(asked);
         onChange.run();
+        dispatch(asked);
+    }
+
+    /**
+     * Issues one tab's read, and nothing else.
+     *
+     * <p>Split out of {@link #loadIfNeeded} when the live re-read arrived (U-63) so that the
+     * two entry points share one statement of how each tab is fetched. They differ only in what
+     * they do to the view state before this runs: a first load shows a skeleton, a re-read
+     * leaves the rows alone.
+     */
+    private void dispatch(DataTab asked) {
         switch (asked) {
             case QUESTIONS -> requestBankPage(0, new ArrayList<>());
             case EXAMS -> dispatcher.send(Verb.DATA_EXAMS_GET, null)
@@ -188,12 +238,27 @@ public final class DataSession {
             return;
         }
         List<?> rows = adopt.apply(type.cast(response.getPayload()));
+        reloading.remove(asked);
         errors.remove(asked);
         states.put(asked, AsyncViewState.forResult(rows));
         onChange.run();
     }
 
+    /**
+     * A tab's read came back unusable.
+     *
+     * <p><b>A failed live re-read leaves the tab exactly as it was</b> (U-63). The rows on
+     * screen are real rows the server gave her; throwing them away for an error panel because a
+     * background re-read hit a blip would replace correct data that is a few seconds old with
+     * no data at all, and she never asked for the re-read in the first place. The next push
+     * asks again. A failed <em>first</em> load has nothing to keep and shows the panel, which
+     * is the path {@link #loadIfNeeded} documents as the only way back from a dropped
+     * connection on a screen with no reload button.
+     */
     private void fail(DataTab asked) {
+        if (reloading.remove(asked)) {
+            return;
+        }
         errors.put(asked, DataCopy.loadFailed(asked));
         states.put(asked, AsyncViewState.ERROR);
         onChange.run();
@@ -223,9 +288,119 @@ public final class DataSession {
         // Truncated only when the server says there is more and the bound stopped us asking.
         bankTruncated = payload.hasNextPage();
         questions = List.copyOf(gathered);
+        reloading.remove(DataTab.QUESTIONS);
         errors.remove(DataTab.QUESTIONS);
         states.put(DataTab.QUESTIONS, AsyncViewState.forResult(questions));
         onChange.run();
+    }
+
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes this screen to the app bus (NFR-18, U-63).
+     *
+     * <p>Called from the view's {@code build()}, the placement {@code ApprovalQueueSession}
+     * argues for: the live refresh then sits somewhere a test can reach rather than behind a
+     * {@code listensToEvents} override only the shell can exercise.
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>, for
+     * the reason that class spells out: the bus invokes reflectively, and a subscriber it
+     * cannot reach registers happily and then fails silently on every delivery.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public DataSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read the tab it moved, if any.
+     *
+     * <p>Two verbs, and the pairing is one tab each:
+     *
+     * <ul>
+     *   <li>{@code PUSH_BANK_CHANGED} moves the Questions tab. <b>The course filter is not
+     *       consulted here, and that is the difference between this screen and the teacher's.</b>
+     *       {@code BankSession} narrows on the wire, so a push for another course provably
+     *       cannot change its page; this screen holds every course's rows and narrows them
+     *       afterwards, so a question added to a course she is not looking at right now still
+     *       belongs in the list she is holding, and skipping the re-read would put the defect
+     *       straight back the first time she cleared the filter;</li>
+     *   <li>{@code EXECUTION_CLOSED} moves the Results tab, which lists closed sittings. It is
+     *       the one notification this role receives at all (see that constant), so it is the
+     *       one this screen can act on.</li>
+     * </ul>
+     *
+     * <p>The Exams tab has no trigger and is left alone deliberately rather than re-read on
+     * anything that arrives: there is no push today that says an exam was authored, and
+     * re-reading it on an unrelated event would be a poll with extra steps. It is named here so
+     * that the next person adding an exam push knows where it goes.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null) {
+            return;
+        }
+        if (event.verb() == Verb.PUSH_BANK_CHANGED && event.payload() instanceof BankChanged) {
+            reload(DataTab.QUESTIONS);
+            return;
+        }
+        if (event.verb() == Verb.PUSH_NOTIFICATION
+                && event.payload() instanceof NotificationDto item
+                && item.type() == NotificationType.EXECUTION_CLOSED) {
+            reload(DataTab.RESULTS);
+        }
+    }
+
+    /**
+     * Re-reads one tab, whatever it is already holding (U-63).
+     *
+     * <p>The cache-invalidating half of {@link #loadIfNeeded}, and its own method because the
+     * two answer opposite questions: that one asks "has this ever loaded", this one has already
+     * been told the answer no longer matters. Both go through {@link #dispatch}, so there is
+     * one statement of how each tab is fetched.
+     *
+     * <p><b>The rows already on screen stay there while the answer is in flight</b>, which is
+     * what {@link #reloading} exists for. A tab that blanked to a skeleton every time any
+     * teacher in the school saved any question would flicker at her while she is reading it,
+     * and unlike a first load there is something correct to show in the meantime. A tab that
+     * has never loaded, or whose load failed, has nothing to keep and takes the ordinary
+     * skeleton path instead.
+     *
+     * <p>A tab with a request already in flight is left alone: it is about to be answered with
+     * data at least as new as this push, and a second request could settle out of order and put
+     * the older list back.
+     *
+     * @param asked the tab whose data the server says has moved
+     */
+    public void reload(DataTab asked) {
+        Objects.requireNonNull(asked, "tab");
+        if (states.get(asked) == AsyncViewState.LOADING || reloading.contains(asked)) {
+            // Already in flight. That answer is at least as new as this push, and a second
+            // request behind it could settle out of order and put the older list back.
+            return;
+        }
+        if (states.get(asked) == AsyncViewState.IDLE || states.get(asked) == AsyncViewState.ERROR) {
+            // Never loaded, or loaded and failed: this is a first load, skeleton and all.
+            loadIfNeeded(asked);
+            return;
+        }
+        reloading.add(asked);
+        dispatch(asked);
+    }
+
+    /**
+     * @param asked a tab
+     * @return whether it is being re-read underneath rows that are still on screen. For tests
+     *         and for a future "updating" hint; the view draws nothing different for it today,
+     *         which is the entire point of the flag
+     */
+    public boolean isReloading(DataTab asked) {
+        return reloading.contains(Objects.requireNonNull(asked, "tab"));
     }
 
     // ===================== Filtering =====================================

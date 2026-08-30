@@ -1,6 +1,8 @@
 package client.features.results;
 
+import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import client.ui.components.logic.StatChartData;
@@ -11,8 +13,11 @@ import common.dto.results.ExecutionResults;
 import common.dto.results.ExecutionResultsRequest;
 import common.dto.results.ResultStatistics;
 import common.dto.results.TeacherResults;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.protocol.Message;
 import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.List;
 import java.util.Objects;
@@ -77,6 +82,28 @@ public final class TeacherResultsSession {
     private ExecutionResults results;
     private String detailError;
 
+    /**
+     * Whether the answer now in flight must put her back on the sitting she was reading (U-63).
+     *
+     * <p>Set only by {@link #refresh()}. {@link #settleList} otherwise re-chooses a default
+     * exam and a default sitting from the answer, which is right on a first load and is exactly
+     * wrong on a live one: a teacher reading one sitting's histogram would be moved to a
+     * different exam because a colleague's grade was approved somewhere else in the school.
+     */
+    private boolean preserveSelection;
+
+    /**
+     * Whether a live re-read is in flight underneath rows that are still on screen (U-63).
+     *
+     * <p>Its own flag rather than reusing {@link AsyncViewState#LOADING}, for the reason
+     * {@link #refresh()} gives: a live re-read must not blank the table, so it cannot announce
+     * itself through the state the view draws a skeleton from. Without a second flag the
+     * "ignored while a read is in flight" rule would simply not hold for the live path, and two
+     * pushes a second apart would put two identical requests on the wire that can settle in
+     * either order.
+     */
+    private boolean refreshing;
+
     private ResultsView view = ResultsView.TABLE;
     private boolean printLayout;
 
@@ -127,13 +154,19 @@ public final class TeacherResultsSession {
             detailState = AsyncViewState.IDLE;
             error = ResultsCopy.LOAD_FAILED;
             state = AsyncViewState.ERROR;
+            preserveSelection = false;
+            refreshing = false;
             onChange.run();
             return;
         }
+        refreshing = false;
         exams = payload.exams();
         error = null;
         state = AsyncViewState.forResult(exams);
-        ExamResultRow opening = defaultExam(exams);
+        ExamResultRow opening = reselect();
+        if (opening == null) {
+            opening = defaultExam(exams);
+        }
         if (opening == null) {
             selectedExam = null;
             selectedExecution = null;
@@ -143,6 +176,140 @@ public final class TeacherResultsSession {
             return;
         }
         selectExam(opening);
+    }
+
+    /**
+     * The exam and sitting she was reading, found again in a freshly arrived list (U-63).
+     *
+     * <p>Matched by id rather than by object, because these are records that came off the wire
+     * twice: the second answer's rows carry the same ids and different statistics, which is the
+     * whole reason the re-read happened. The sitting is re-selected inside the exam, so a
+     * teacher who was on the second of three sittings stays on the second of three.
+     *
+     * <p>Answers {@code null} when she was on nothing, or when what she was on is not in the
+     * new answer at all. The caller then falls back to {@link #defaultExam}, which is the right
+     * behaviour for the case that produces it: an exam that has left her list is one she can no
+     * longer read, and leaving the screen pointed at it would leave her looking at a header
+     * with nothing under it.
+     *
+     * @return the exam to open, with {@link #selectedExecution} adjusted to the matching
+     *         sitting, or {@code null} to let the default rule choose
+     */
+    private ExamResultRow reselect() {
+        if (!preserveSelection) {
+            return null;
+        }
+        preserveSelection = false;
+        if (selectedExam == null) {
+            return null;
+        }
+        long examId = selectedExam.examId();
+        for (ExamResultRow exam : exams) {
+            if (exam.examId() != examId) {
+                continue;
+            }
+            if (selectedExecution != null) {
+                long executionId = selectedExecution.executionId();
+                for (ExecutionResultRow execution : exam.executions()) {
+                    if (execution.executionId() == executionId) {
+                        selectedExecution = execution;
+                        return exam;
+                    }
+                }
+            }
+            // The exam is still hers but that sitting is gone. Let the default rule pick a
+            // sitting within it rather than keeping a row the answer no longer contains.
+            selectedExecution = null;
+            return exam;
+        }
+        return null;
+    }
+
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes the results screen to the app bus (NFR-18, U-63).
+     *
+     * <p><b>The defect this exists for.</b> This screen is where a teacher watches a sitting
+     * finish, and it was the screen least able to notice one: a sitting closing and grades
+     * being published both changed every number on it, and it went on drawing the numbers it
+     * had loaded on arrival. The statistics panel is the worst case, because a mean computed
+     * over half the marked papers looks exactly like a mean computed over all of them.
+     *
+     * <p>Called from {@code TeacherResultsView.build()}, the placement
+     * {@code ApprovalQueueSession} argues for.
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>: the
+     * bus invokes reflectively, and a subscriber it cannot reach registers happily and then
+     * fails silently on every delivery.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public TeacherResultsSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read if it changes what this screen would say.
+     *
+     * <ul>
+     *   <li>{@code PUSH_EXECUTION_STATUS} is already addressed to the teachers who own the
+     *       release ({@code ReleaseRows.ownersOf}), which on this screen is the author reading
+     *       her own exam's sittings, so it needs no filtering here. It is how a sitting closing
+     *       reaches her;</li>
+     *   <li>{@code GRADING_DUE} says a closed sitting now has papers to mark, which is what
+     *       {@link #isGradingUnfinished()} draws its warning from;</li>
+     *   <li>{@code EXECUTION_CLOSED} is the same event told to staff who watch rather than
+     *       run a sitting.</li>
+     * </ul>
+     *
+     * <p>{@code GRADE_PUBLISHED} is not here and that is not an oversight: it is addressed to
+     * the student whose grade it is, so it never arrives on a teacher's socket. What reaches
+     * her when her own approval publishes grades is her own write, which already re-reads.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null) {
+            return;
+        }
+        if (event.verb() == Verb.PUSH_EXECUTION_STATUS) {
+            refresh();
+            return;
+        }
+        if (event.verb() == Verb.PUSH_NOTIFICATION
+                && event.payload() instanceof NotificationDto item
+                && (item.type() == NotificationType.GRADING_DUE
+                    || item.type() == NotificationType.EXECUTION_CLOSED)) {
+            refresh();
+        }
+    }
+
+    /**
+     * Re-reads the exam list and the open sitting, keeping her where she was (U-63).
+     *
+     * <p>Two differences from {@link #load()}, and both are about the fact that she did not ask
+     * for this. <b>The screen does not blank to a skeleton</b>: the rows on it are correct and
+     * a newer answer is coming, so replacing a readable table with a shimmer for one round trip
+     * is a worse screen than a table that is a second out of date. And <b>the selection
+     * survives</b>, through {@link #preserveSelection}; without it a push about any sitting in
+     * the school would move her to whichever exam {@link #defaultExam} prefers.
+     *
+     * <p>Ignored while a read is in flight, for {@link #load()}'s stated reason: two identical
+     * requests could settle out of order and leave the older answer on screen.
+     */
+    public void refresh() {
+        if (state == AsyncViewState.LOADING || refreshing) {
+            return;
+        }
+        refreshing = true;
+        preserveSelection = true;
+        error = null;
+        dispatcher.send(Verb.RESULTS_EXAMS_GET, null)
+                .whenComplete((response, failure) -> poster.run(() -> settleList(response, failure)));
     }
 
     // ===================== Selection =====================================

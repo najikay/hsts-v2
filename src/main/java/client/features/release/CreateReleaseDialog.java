@@ -162,8 +162,13 @@ public final class CreateReleaseDialog {
             codeField.setPromptText(ReleaseCopy.CODE_PROMPT);
             codeField.setPrefColumnCount(6);
             codeField.getStyleClass().add("release-code-field");
-            code = new FormField(ReleaseCopy.CODE_LABEL, codeField).hint(ReleaseCopy.CODE_HINT);
             dice.getStyleClass().add("release-dice");
+            // 2026-08-31, U-60 (Naji, round 5): the button used to sit beside the whole
+            // field block (label, box, hint) aligned to its bottom, so it landed level with
+            // the hint, a line below the box. Inside the field, beside the box, they share
+            // one baseline and the hint runs under both.
+            code = new FormField(ReleaseCopy.CODE_LABEL, codeField).trailing(dice)
+                    .hint(ReleaseCopy.CODE_HINT);
 
             LocalDateTime suggestedOpen = LocalDateTime.ofInstant(now, zone)
                     .plusMinutes(DEFAULT_LEAD_MINUTES).withSecond(0).withNano(0);
@@ -317,10 +322,8 @@ public final class CreateReleaseDialog {
             body.getChildren().add(empty);
             confirm.setDisable(true);
         } else {
-            HBox codeRow = new HBox(10, code, dice);
-            codeRow.setAlignment(Pos.BOTTOM_LEFT);
             body.getChildren().addAll(new FormField(ReleaseCopy.VERSION_LABEL, versions),
-                    codeRow, opens.node(), closes.node(), complaint);
+                    code, opens.node(), closes.node(), complaint);
         }
         body.getChildren().add(Buttons.row(dismiss, confirm));
 

@@ -7,6 +7,7 @@ import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.auth.CourseRef;
+import common.dto.bank.BankChanged;
 import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
@@ -1844,5 +1845,166 @@ class BankSessionTest {
                 .as("the filter itself has been on the wire since the read-verbs PR, so the "
                         + "lookup landing changes this method and nothing else")
                 .isEqualTo("Geometry");
+    }
+
+    // ===================== It updates itself (U-63) =======================
+
+    /**
+     * The teacher and coordinator half of Omar's finding 11, driven through the REAL bus.
+     *
+     * <p>Reported as: "when a teacher adds a new question it does not appear for a teacher or
+     * coordinator who already has the bank open; changing the filter made it appear." Changing
+     * the filter made it appear because every filter here calls {@code requestPage}, so the
+     * filter was quietly doing the job a push should have been doing, and until U-63 there was
+     * no bank push at all. Nothing could have failed for that, which is why these tests post a
+     * real {@code BankChanged} onto a real bus rather than calling the method.
+     */
+    @Nested
+    @DisplayName("it updates itself ⚑ (U-63, finding 11)")
+    class UpdatesItself {
+
+        private long listReads() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.BANK_LIST)
+                    .count();
+        }
+
+        @BeforeEach
+        void subscribe() {
+            session.subscribeTo(eventBus);
+        }
+
+        @Test
+        @DisplayName("⚑ a colleague's new question re-reads the list, with no user action")
+        void aCreatePushReReadsTheList() {
+            serverHasTheBank();
+            session.load();
+            connection.respondTo(Verb.BANK_LIST, request -> Message.ok(request,
+                    page(List.of(ROW_LINEAR, ROW_QUADRATIC, ROW_GEOMETRY, ROW_LIMIT,
+                            row("11009", "11", "אלגברה", "Complete the square", "Equations",
+                                    Difficulty.MEDIUM, false)), 0, 5, 1)));
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.created("11", "11009"));
+
+            assertThat(listReads())
+                    .as("she pressed nothing and touched no filter: NFR-18")
+                    .isEqualTo(2);
+            assertThat(session.rows()).hasSize(5);
+        }
+
+        @Test
+        @DisplayName("an edit to a course on this list re-reads it too")
+        void anUpdatePushReReadsTheList() {
+            serverHasTheBank();
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.updated("11", "11001"));
+
+            assertThat(listReads()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ a push for a course her filter excludes changes nothing")
+        void aPushForAnotherCourseIsIgnored() {
+            serverHasTheBank();
+            session.load();
+            session.selectCourse("11");
+            long before = listReads();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.created("12", "12009"));
+
+            assertThat(listReads())
+                    .as("her filter travels, so the server could not have put a Calculus "
+                            + "question on this page however hard it tried")
+                    .isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("with no course filter, every course's push is hers to act on")
+        void anUnfilteredListReReadsForAnyCourse() {
+            serverHasTheBank();
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.created("12", "12009"));
+
+            assertThat(listReads()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("the open question is re-read as well, because an edit moves the pane")
+        void anUpdateReReadsTheOpenQuestion() {
+            serverHasTheBank();
+            session.load();
+            connection.replyOk(Verb.QUESTION_GET, detail("11005", false, 1, 1));
+            session.select("11005");
+            connection.clearSent();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.updated("11", "11005"));
+
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .as("a colleague's new version moves the pane as well as the row")
+                    .contains(Verb.QUESTION_GET);
+        }
+
+        @Test
+        @DisplayName("⚑ a delete of the OPEN question empties the pane rather than re-reading it")
+        void aDeleteOfTheOpenQuestionClearsThePane() {
+            serverHasTheBank();
+            session.load();
+            connection.replyOk(Verb.QUESTION_GET, detail("11005", false, 1, 1));
+            session.select("11005");
+            assertThat(session.selectedId()).isEqualTo("11005");
+            connection.clearSent();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.deleted("11", "11005"));
+
+            assertThat(session.selectedId())
+                    .as("re-reading a question that is gone would answer her with 'this could "
+                            + "not be opened' and a retry that can never work")
+                    .isNull();
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .doesNotContain(Verb.QUESTION_GET);
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .as("the list still re-reads: the row has to leave it")
+                    .contains(Verb.BANK_LIST);
+        }
+
+        @Test
+        @DisplayName("a delete of some OTHER question leaves the pane alone")
+        void aDeleteOfAnotherQuestionStillReReadsTheDetail() {
+            serverHasTheBank();
+            session.load();
+            connection.replyOk(Verb.QUESTION_GET, detail("11005", false, 1, 1));
+            session.select("11005");
+            connection.clearSent();
+
+            connection.pushToClient(Verb.PUSH_BANK_CHANGED, BankChanged.deleted("11", "11001"));
+
+            assertThat(session.selectedId()).isEqualTo("11005");
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .contains(Verb.BANK_LIST, Verb.QUESTION_GET);
+        }
+
+        @Test
+        @DisplayName("an unrelated push moves nothing")
+        void anUnrelatedPushIsIgnored() {
+            serverHasTheBank();
+            session.load();
+            long before = listReads();
+
+            connection.pushToClient(Verb.PUSH_GRADE_PUBLISHED, "not a bank notice");
+
+            assertThat(listReads()).isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("a subscription is optional: an unsubscribed session still works")
+        void subscribingIsOptional() {
+            BankSession bare = new BankSession(new RequestDispatcher(new FakeClientConnection()),
+                    new DirectFxThreadPoster(), List.of(),
+                    new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster()), DANA);
+
+            assertThat(bare.state()).isEqualTo(AsyncViewState.IDLE);
+        }
     }
 }

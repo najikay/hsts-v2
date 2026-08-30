@@ -1,6 +1,7 @@
 package server.features.bank;
 
 import common.dto.auth.Role;
+import common.dto.bank.BankChanged;
 import common.dto.bank.QuestionDeleteRequest;
 import common.dto.bank.QuestionDraft;
 import common.dto.bank.QuestionEdit;
@@ -15,7 +16,11 @@ import server.core.Authorization;
 import server.core.CallerContext;
 import server.core.MessageRouter;
 import server.db.Transactions;
+import server.db.repos.CourseRepository;
+import server.realtime.PushGateway;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -71,12 +76,73 @@ public class BankHandlers {
         Message apply(Session session, CallerContext caller, T payload);
     }
 
+    /**
+     * The same work, plus the one thing the push needs it to say (U-63).
+     *
+     * <p>Its own functional interface rather than a field the {@link AuthorWork} sets, because
+     * what the notice is <em>is</em> part of what each verb decided: a create knows its course
+     * from the answer it just built, an update from the version it just wrote, and a delete
+     * from the question it just stamped. A verb that ends without calling
+     * {@link Notice#announce} has said "nothing changed", which is what a blocked delete and
+     * every refusal mean, and that is a decision the verb should have to make out loud.
+     */
+    @FunctionalInterface
+    private interface AnnouncingWork<T> {
+        Message apply(Session session, CallerContext caller, T payload, Notice notice);
+    }
+
+    /**
+     * The one-slot collector a verb drops its {@link BankChanged} into (U-63).
+     *
+     * <p>Deliberately a collector handed <em>into</em> the transaction rather than something
+     * read out of the response afterwards. The push has to go out after the commit and it has
+     * to be addressed from inside it, and those two facts are what shape this class: the
+     * recipients are read while a session is open, and the write happens when there is no
+     * longer a transaction to roll back. It is {@code GradingHandlers.approve}'s
+     * {@code published} list with one element and a name.
+     */
+    private static final class Notice {
+
+        private BankChanged change;
+        private List<Long> recipients = List.of();
+
+        /**
+         * Records that a course's bank moved, and to whom it is worth saying so.
+         *
+         * @param session    the open transaction, for the recipient lookup
+         * @param courses    the directory
+         * @param changed    what happened; {@code null} announces nothing
+         */
+        void announce(Session session, CourseRepository courses, BankChanged changed) {
+            if (changed == null) {
+                return;
+            }
+            this.change = changed;
+            this.recipients = courses.findBankReaderIds(session, changed.courseCode());
+        }
+
+        boolean isEmpty() {
+            return change == null || recipients.isEmpty();
+        }
+    }
+
     private final SessionFactory sessionFactory;
     private final QuestionService questions;
+    private final CourseRepository courses;
+    private final PushGateway pushGateway;
 
-    public BankHandlers(SessionFactory sessionFactory, QuestionService questions) {
+    /**
+     * @param sessionFactory the transaction source
+     * @param questions      the write service, which owns the per-question scope guard
+     * @param courses        the directory, for {@code findBankReaderIds} (U-63)
+     * @param pushGateway    the push channel, for {@code PUSH_BANK_CHANGED} (U-63)
+     */
+    public BankHandlers(SessionFactory sessionFactory, QuestionService questions,
+                        CourseRepository courses, PushGateway pushGateway) {
         this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
         this.questions = Objects.requireNonNull(questions, "questions");
+        this.courses = Objects.requireNonNull(courses, "courses");
+        this.pushGateway = Objects.requireNonNull(pushGateway, "pushGateway");
     }
 
     /**
@@ -128,6 +194,65 @@ public class BankHandlers {
         return Transactions.inTx(sessionFactory, session -> work.apply(session, caller, checked));
     }
 
+    /**
+     * The same gate, with the {@code PUSH_BANK_CHANGED} step bolted on the end (U-63, NFR-18).
+     *
+     * <p><b>Ordering, and it is {@code GradingHandlers.approve}'s exactly.</b>
+     *
+     * <ul>
+     *   <li><b>After the commit.</b> Every subscriber answers this push by re-reading the bank,
+     *       and a re-read that overtook the commit would be answered from a database without
+     *       the new version in it, which would leave the screen looking exactly as stale as it
+     *       did before U-63 while now having been told twice. {@code Transactions.inTx}
+     *       returning is what "after the commit" means here.</li>
+     *   <li><b>Only on success.</b> A refusal announces nothing, and neither does a delete
+     *       blocked by the exams that pin it: nothing about that course's bank moved, and a
+     *       screen that re-read for it would have re-read for a button press that changed
+     *       nothing.</li>
+     *   <li><b>Never fails the verb.</b> The version is committed by the time this runs. A dead
+     *       socket is the gateway's business, and an unexpected failure is swallowed here,
+     *       because a teacher told her save failed when it did not is a worse outcome than a
+     *       colleague whose list is stale until she touches a filter.</li>
+     * </ul>
+     *
+     * @param work the verb's own transaction, which announces what it changed
+     */
+    private <T> Message asAnnouncingAuthor(Message request,
+                                           CallerContext caller,
+                                           Class<T> type,
+                                           Function<T, String> validate,
+                                           AnnouncingWork<T> work) {
+        Notice notice = new Notice();
+        Message response = asAuthor(request, caller, type, validate,
+                (session, author, payload) -> work.apply(session, author, payload, notice));
+        if (!response.isError()) {
+            announce(notice);
+        }
+        return response;
+    }
+
+    /**
+     * Pushes one bank notice to everybody who can read that course (U-63).
+     *
+     * @param notice what the committed verb decided to say, possibly nothing
+     */
+    private void announce(Notice notice) {
+        if (notice.isEmpty()) {
+            return;
+        }
+        try {
+            int delivered = pushGateway.toUsers(notice.recipients, Verb.PUSH_BANK_CHANGED,
+                    notice.change);
+            log.debug("Bank change in course {} announced to {} of {} reader(s)",
+                    notice.change.courseCode(), delivered, notice.recipients.size());
+        } catch (RuntimeException e) {
+            // The write is committed. Nothing about a failed push is worth turning a saved
+            // question into an error the author has to interpret.
+            log.warn("Announcing a bank change in course {} failed",
+                    notice.change.courseCode(), e);
+        }
+    }
+
     // ===================== QUESTION_CREATE ===============================
 
     /**
@@ -141,9 +266,16 @@ public class BankHandlers {
      * @return {@code OK} with the new question's detail; {@code VALIDATION} for a bad payload
      */
     Message create(CallerContext caller, Message request) {
-        return asAuthor(request, caller, QuestionDraft.class, BankHandlers::checkDraft,
-                (session, author, draft) ->
-                        Message.ok(request, questions.create(session, author, draft)));
+        return asAnnouncingAuthor(request, caller, QuestionDraft.class, BankHandlers::checkDraft,
+                (session, author, draft, notice) -> {
+                    var detail = questions.create(session, author, draft);
+                    // The detail's course rather than the draft's: the service resolved and
+                    // stripped it, and the push has to name the course the row actually landed
+                    // in, not the string she typed.
+                    notice.announce(session, courses,
+                            BankChanged.created(detail.courseCode(), detail.displayId5()));
+                    return Message.ok(request, detail);
+                });
     }
 
     // ===================== QUESTION_UPDATE ===============================
@@ -159,11 +291,16 @@ public class BankHandlers {
      *         or when another teacher holds the edit lock
      */
     Message update(CallerContext caller, Message request) {
-        return asAuthor(request, caller, QuestionEdit.class, BankHandlers::checkEdit,
-                (session, author, edit) -> {
+        return asAnnouncingAuthor(request, caller, QuestionEdit.class, BankHandlers::checkEdit,
+                (session, author, edit, notice) -> {
                     QuestionService.EditOutcome outcome = questions.update(session, author, edit);
                     return switch (outcome.status()) {
-                        case UPDATED -> Message.ok(request, outcome.detail());
+                        case UPDATED -> {
+                            notice.announce(session, courses,
+                                    BankChanged.updated(outcome.detail().courseCode(),
+                                            outcome.detail().displayId5()));
+                            yield Message.ok(request, outcome.detail());
+                        }
                         case NOT_FOUND -> Message.error(request, ErrorCode.NOT_FOUND,
                                 BankMessages.QUESTION_NOT_FOUND);
                         case STALE -> Message.error(request, ErrorCode.CONFLICT,
@@ -193,12 +330,21 @@ public class BankHandlers {
      *         lock
      */
     Message delete(CallerContext caller, Message request) {
-        return asAuthor(request, caller, QuestionDeleteRequest.class, BankHandlers::noExtraChecks,
-                (session, author, ask) -> {
+        return asAnnouncingAuthor(request, caller, QuestionDeleteRequest.class,
+                BankHandlers::noExtraChecks,
+                (session, author, ask, notice) -> {
                     QuestionService.DeleteResolution resolved =
                             questions.delete(session, author, ask);
                     return switch (resolved.status()) {
-                        case RESOLVED -> Message.ok(request, resolved.outcome());
+                        case RESOLVED -> {
+                            // Only a delete that actually happened. A blocked one is an OK
+                            // answer to "may I", and nothing in that course's bank moved.
+                            if (resolved.outcome().deleted() && resolved.courseCode() != null) {
+                                notice.announce(session, courses, BankChanged.deleted(
+                                        resolved.courseCode(), ask.displayId5()));
+                            }
+                            yield Message.ok(request, resolved.outcome());
+                        }
                         case NOT_FOUND -> Message.error(request, ErrorCode.NOT_FOUND,
                                 BankMessages.QUESTION_NOT_FOUND);
                         case STALE -> Message.error(request, ErrorCode.CONFLICT,

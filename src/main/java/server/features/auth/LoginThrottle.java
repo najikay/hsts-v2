@@ -30,6 +30,25 @@ import java.util.concurrent.ConcurrentHashMap;
  * again, so hammering a locked account never shortens the wait. An expired lock
  * is cleared on the next look, handing the user a fresh set of attempts.
  *
+ * <h2>What the counter does and does not look at (finding 8, 2026-08-30)</h2>
+ *
+ * <p>Reported as "too many attempts enforceable only when no change in
+ * username/password is made". Half of that is a misreading and half of it is this
+ * design, so both halves are now pinned by tests in {@code AuthServiceTest}:
+ *
+ * <ul>
+ *   <li><b>The password is never part of the key.</b> Five wrong guesses lock the
+ *       account whether they were five different guesses or the same one five
+ *       times. A counter that reset when the guess changed would be no throttle at
+ *       all, since varying the guess is the entire activity being throttled.</li>
+ *   <li><b>The username is the whole key</b>, so each one counts separately and
+ *       attempts on other usernames neither reset nor advance it. Trying five
+ *       different names once each therefore locks nobody, which is correct and is
+ *       what a tester varying both fields at once will see. It is not a bug: it is
+ *       the direct consequence of the first bullet above, and the alternative
+ *       keys are worse in both directions.</li>
+ * </ul>
+ *
  * <p>Thread-safe: every mutation goes through {@link ConcurrentHashMap#compute},
  * so two OCSF read threads racing on the same username cannot lose a failure.
  */

@@ -7,6 +7,11 @@ import common.dto.report.DataExams;
 import common.dto.report.DataResults;
 import common.protocol.Message;
 import common.protocol.Verb;
+import client.events.ClientEventBus;
+import client.events.ServerPushEvent;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.List;
 import java.util.Objects;
@@ -44,6 +49,9 @@ public final class PrincipalDashboardSession {
     private int examCount;
     private int sittingCount;
 
+    /** How many of {@link #load}'s reads are outstanding; the {@link #refresh} guard (U-63). */
+    private int pending;
+
     public PrincipalDashboardSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -72,6 +80,59 @@ public final class PrincipalDashboardSession {
         return DashboardSummary.principal(examCount, sittingCount, unloaded, allFailed);
     }
 
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes the dashboard to the app bus (NFR-18, U-63).
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>: the
+     * bus invokes reflectively, and a subscriber it cannot reach registers happily and then
+     * fails silently on every delivery.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public PrincipalDashboardSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read if it changes what these cards say (U-63).
+     *
+     * <p><b>{@code EXECUTION_CLOSED} is the only trigger, and that is a statement about this
+     * role rather than an omission.</b> S-7 makes the principal read-only, so the only
+     * notification the server ever addresses to her is a sitting finishing, which is what her
+     * sittings card counts. The exams card would want "an exam was authored" and no push says
+     * that today; it is named here so the next person to add one knows this is where it goes,
+     * rather than reaching for a timer.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_NOTIFICATION) {
+            return;
+        }
+        if (event.payload() instanceof NotificationDto item
+                && item.type() == NotificationType.EXECUTION_CLOSED) {
+            refresh();
+        }
+    }
+
+    /**
+     * Re-reads both cards (U-63).
+     *
+     * <p>Ignored while a read is in flight: those answers are at least as new as this push, and
+     * a second pair of requests could settle out of order and put the older counts back.
+     */
+    public void refresh() {
+        if (pending > 0) {
+            return;
+        }
+        load();
+    }
+
     /** Sends both catalogue reads. */
     public void load() {
         exams = loadingExams();
@@ -80,12 +141,25 @@ public final class PrincipalDashboardSession {
         sittingCount = 0;
         onChange.run();
 
+        pending = 2;
         dispatcher.send(Verb.DATA_EXAMS_GET, null)
                 .whenComplete((response, failure) ->
-                        poster.run(() -> settleExams(response, failure)));
+                        poster.run(() -> settled(() -> settleExams(response, failure))));
         dispatcher.send(Verb.DATA_RESULTS_GET, null)
                 .whenComplete((response, failure) ->
-                        poster.run(() -> settleSittings(response, failure)));
+                        poster.run(() -> settled(() -> settleSittings(response, failure))));
+    }
+
+    /**
+     * Runs one settle and counts it off (U-63).
+     *
+     * <p>The decrement is here rather than at the top of each settle, which returns early on
+     * its failure path: a counter that leaks on an error is a dashboard that stops refreshing
+     * after the first dropped connection.
+     */
+    private void settled(Runnable settle) {
+        pending = Math.max(pending - 1, 0);
+        settle.run();
     }
 
     private void settleExams(Message response, Throwable failure) {

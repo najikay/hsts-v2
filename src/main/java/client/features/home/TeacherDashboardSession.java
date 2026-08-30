@@ -22,6 +22,11 @@ import common.dto.results.ResultStatistics;
 import common.dto.results.TeacherResults;
 import common.protocol.Message;
 import common.protocol.Verb;
+import client.events.ClientEventBus;
+import client.events.ServerPushEvent;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -98,6 +103,15 @@ public final class TeacherDashboardSession {
 
     private int liveCount;
     private int gradingCount;
+
+    /**
+     * How many of {@link #load}'s reads have not answered yet (U-63).
+     *
+     * <p>The re-entrancy guard {@link #refresh} consults. Not a boolean, because the three
+     * reads are issued together and answer independently: a flag cleared by the first answer
+     * would let a push arriving between the first and the third start a second round.
+     */
+    private int pending;
 
     /**
      * One student on the live card.
@@ -201,6 +215,96 @@ public final class TeacherDashboardSession {
         return DashboardSummary.teacher(liveCount, gradingCount, unloaded, allFailed);
     }
 
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes the dashboard to the app bus (NFR-18, U-63).
+     *
+     * <p>Called from {@code TeacherHomeView.build()}, the placement
+     * {@code ApprovalQueueSession} argues for: the live refresh sits somewhere a test can
+     * reach rather than behind a {@code listensToEvents} override only the shell can exercise.
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>, for
+     * the reason that class spells out: the bus invokes reflectively, and a subscriber it
+     * cannot reach registers happily and then fails silently on every delivery.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public TeacherDashboardSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read the cards if it changes what any of them says (U-63).
+     *
+     * <p>Before this, a teacher's home screen was a photograph of the moment she opened it: a
+     * sitting could finish, a queue could fill and a release could open, and all four cards
+     * went on saying what they said until she navigated away and back. The bell told her; the
+     * numbers under it did not.
+     *
+     * <p>Filtered on what each card is actually built from, rather than refreshed on anything
+     * that arrives:
+     *
+     * <ul>
+     *   <li>{@code PUSH_EXECUTION_STATUS} rebuilds the live and next cards. It is already
+     *       delivered to exactly the right people, the owners of the release
+     *       ({@code ReleaseRows.ownersOf}), so no filtering is needed here;</li>
+     *   <li>{@code GRADING_DUE} is the awaiting-grading card, and it is the notification whose
+     *       arrival <em>is</em> that card going up by one;</li>
+     *   <li>{@code EXECUTION_CLOSED} moves the last-closed card and takes a sitting off the
+     *       live one;</li>
+     *   <li>{@code RELEASE_OPENING_SOON} moves the next-release card.</li>
+     * </ul>
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null) {
+            return;
+        }
+        if (event.verb() == Verb.PUSH_EXECUTION_STATUS) {
+            refresh();
+            return;
+        }
+        if (event.verb() == Verb.PUSH_NOTIFICATION
+                && event.payload() instanceof NotificationDto item
+                && affectsACard(item.type())) {
+            refresh();
+        }
+    }
+
+    /**
+     * @param type the notification's type
+     * @return whether a card on this dashboard is built from something this event changed
+     */
+    private static boolean affectsACard(NotificationType type) {
+        return type == NotificationType.GRADING_DUE
+                || type == NotificationType.EXECUTION_CLOSED
+                || type == NotificationType.RELEASE_OPENING_SOON;
+    }
+
+    /**
+     * Re-reads every card because the server said something behind one of them moved (U-63).
+     *
+     * <p>All four rather than only the card the push named, and that is deliberate: the four
+     * come from three reads that overlap (a sitting closing takes a row off the live card
+     * <em>and</em> puts one on the last-closed card <em>and</em> may add to the grading queue),
+     * so refreshing one card on one event is how two of them end up disagreeing.
+     *
+     * <p>Ignored while a read is still in flight. That answer is at least as new as this push,
+     * and a second set of requests behind it could settle out of order and put the older
+     * numbers back.
+     */
+    public void refresh() {
+        if (pending > 0) {
+            return;
+        }
+        load();
+    }
+
     /** Sends the three list reads. Called on every visit to the dashboard. */
     public void load() {
         live = loadingLive();
@@ -213,15 +317,31 @@ public final class TeacherDashboardSession {
         gradingCount = 0;
         onChange.run();
 
+        pending = 3;
         dispatcher.send(Verb.RELEASE_LIST_GET, null)
                 .whenComplete((response, failure) ->
-                        poster.run(() -> settleReleases(response, failure)));
+                        poster.run(() -> settled(() -> settleReleases(response, failure))));
         dispatcher.send(Verb.GRADING_QUEUE_GET, null)
                 .whenComplete((response, failure) ->
-                        poster.run(() -> settleGrading(response, failure)));
+                        poster.run(() -> settled(() -> settleGrading(response, failure))));
         dispatcher.send(Verb.RESULTS_EXAMS_GET, null)
                 .whenComplete((response, failure) ->
-                        poster.run(() -> settleResults(response, failure)));
+                        poster.run(() -> settled(() -> settleResults(response, failure))));
+    }
+
+    /**
+     * Runs one settle and counts it off (U-63).
+     *
+     * <p>The decrement is here rather than at the top of each settle method because those have
+     * early returns on every failure path, and a counter that leaks on the error path is a
+     * dashboard that stops refreshing after the first dropped connection. One wrapper cannot
+     * forget.
+     *
+     * @param settle the settle to run
+     */
+    private void settled(Runnable settle) {
+        pending = Math.max(pending - 1, 0);
+        settle.run();
     }
 
     // ===================== Releases: the live and next cards =============

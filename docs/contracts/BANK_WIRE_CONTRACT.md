@@ -604,3 +604,81 @@ drift detector afterwards. Alternatives rejected: a resolve verb (a round trip f
 row already knows) and retyping `QuestionPin` to `displayId5`+`versionNo` (loses the
 exact-version pin the composition model keys on). Version PKs already travel on the authoring
 wire (`ComposedQuestion`), so this adds no disclosure class and needs no guard licence.
+
+---
+
+### A3 — `PUSH_BANK_CHANGED`, the bank's first push (U-63, finding 11, added 2026-08-30)
+
+> **Letter check, 2026-08-30.** `A2` is taken by the search-normalisation reversal in §5, which
+> was itself renumbered from `A1` under B-7 for exactly this reason. Two amendments under one
+> letter is how a contract stops being citable, so this one is `A3`.
+
+**The defect.** There was no bank push at all. A teacher or coordinator with the bank open never
+saw a question a colleague had just written; the round-5 report puts it exactly:
+
+> "when a teacher adds a new question it doesn't appear for a teacher/coordinator who already has
+> the bank open; changing the filter made it appear. For the principal even changing the course
+> filter didn't help, only re-login. Same with editing."
+
+Changing the filter made it appear because every filter in `BankSession` calls `requestPage`, so
+a user action was quietly doing the job a push should have been doing — which is precisely what
+NFR-18 forbids. The principal's half is a second, client-side defect with the same root: her Data
+screen loads each tab once and applies both filters in the client (`DataSession`), so no filter
+change on that screen has ever produced a round trip and only a new session could show her a new
+question. Both halves are fixed by one push; the principal's screen needed the cache invalidation
+that a push is, not a re-query per filter.
+
+**The verb.**
+
+| Verb | Direction | Payload | Recipients |
+|---|---|---|---|
+| `PUSH_BANK_CHANGED` | server → client | `BankChanged` | everybody who can read that course |
+
+**The payload is a notice, not a delta ⚑.** `BankChanged(String courseCode, String displayId5,
+Change change)` where `Change` is `CREATED`/`UPDATED`/`DELETED`. It deliberately does **not**
+carry the question. This list is one page of a filtered, ordered, server-side query (§2, §3), so
+a row shipped in a push would be a row each recipient's own filters may or may not admit, on a
+page she may not be looking at; every client would have had to re-implement `BankQuery` to decide,
+and the first filter combination nobody thought about would have shown a row a `BANK_LIST` would
+never have returned. Every subscriber answers this by **re-reading its own list with its own
+request**. That is the opposite call to `PUSH_EXECUTION_STATUS`, which does carry a whole row, and
+the two are consistent: that list has one shape for every recipient and this one does not.
+
+**Recipients are the read scope, inverted.** `CourseRepository.findBankReaderIds(courseCode)`
+answers the course's teachers (S-5), the coordinator of its subject (§7.7's second scope) and
+every principal (F9.3, §7.2). That is the exact set `BankBrowseService.reachableCourseCodes`
+defines read the other way round, and the two must agree or the push becomes a disclosure: nobody
+may learn from a push that a course exists which a `BANK_LIST` would have hidden. **Students are
+absent**, and no student is ever a recipient. **The actor is included**, unlike the bot's F12.3
+notifications, because her own second window is a screen that has to follow too and this verb
+writes no notification row into anybody's bell.
+
+**No disclosure class is added.** The payload is a course code, a five-digit id and one of three
+words, all of them things a `BANK_LIST` already tells this recipient. No text, no topic, no answer
+key — so no new guard licence in `BankWireLeakGuardTest` or `WireDtoLeakGuardTest`, and the checks
+were run to confirm it.
+
+**Semantics.**
+
+1. **After the commit, and only on success.** Every subscriber answers by re-reading, so a push
+   that overtook its own commit would be answered from a database without the new version in it,
+   leaving the screen exactly as stale as before while having been told twice. The ordering is
+   `GradingHandlers.approve`'s and the comment there states it.
+2. **A delete blocked by the exams that pin it announces nothing.** That is an `OK` answer to
+   "may I delete this" (§5) and nothing in the bank moved. Neither does any refusal.
+3. **Never fails the verb.** The write is committed by the time the push runs; a dead socket is
+   the gateway's business and an unexpected failure is swallowed and logged, because a teacher
+   told her save failed when it did not is worse than a colleague whose list is briefly stale.
+4. **`QuestionService.DeleteResolution` gains a `courseCode` component**, so a delete can say
+   which course moved after the question has been soft-deleted. Server-internal: not on the wire,
+   no DTO changed. The existing two- and three-argument constructors are kept.
+
+**The client side.** `BankSession` re-reads its page and its open detail on this push, filtered on
+its own course filter through `BankChanged.concerns` — a teacher narrowed to Algebra does not
+re-read for a question written in History, because her filter travels and her page provably cannot
+have changed. The one exception is a `DELETED` of the question in the detail pane: re-reading it
+would answer her with "this question could not be opened" and a retry that can never work, so the
+pane returns to its empty state beside a list that no longer has the row. `DataSession` re-reads
+its Questions tab and **does not** consult its course filter, because it holds every course's rows
+and narrows them afterwards; skipping the re-read there would put the defect straight back the
+moment she cleared the filter.

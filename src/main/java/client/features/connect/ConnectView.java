@@ -375,8 +375,15 @@ public final class ConnectView extends AbstractScreen {
         Thread worker = new Thread(background(poster -> {
             try {
                 manager.getClient().connect();
+                // A connect that returned is not a server ⚑ (B-49). The kernel
+                // completes the handshake into a stopped server's backlog, so the
+                // socket has to answer a question before this screen will believe it.
+                ConnectHandshake.prove(manager.getDispatcher());
                 poster.run(() -> onConnected(endpoint, serverName, fingerprint));
             } catch (Exception e) {
+                // Open and unusable is worse than closed: discard it rather than
+                // leave the app holding a socket the user was just told failed.
+                ConnectWiring.abandon(manager.getClient());
                 poster.run(() -> onFailed(endpoint, e));
             }
         }), "hsts-connect");

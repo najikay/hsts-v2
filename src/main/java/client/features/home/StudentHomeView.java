@@ -46,7 +46,10 @@ public final class StudentHomeView extends AbstractScreen {
     protected Parent build() {
         session.onChange(this::refreshCodeCard);
         dashboard = new StudentDashboardSession(dispatcher(), onFxThread())
-                .onChange(this::renderCards);
+                .onChange(this::renderCards)
+                // The live card re-read (U-63, NFR-18): a grade published while she is on this
+                // screen should appear on it, not wait for her to navigate.
+                .subscribeTo(eventBus());
 
         codeField = FormField.text("Execution code", "e.g. 4B7Q");
         codeField.hint("Your teacher reads the code out at the start of the exam.");

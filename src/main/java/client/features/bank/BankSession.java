@@ -2,9 +2,11 @@ package client.features.bank;
 
 import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.auth.CourseRef;
+import common.dto.bank.BankChanged;
 import common.dto.bank.BankListRequest;
 import common.dto.bank.BankPage;
 import common.dto.bank.BankQuestionRow;
@@ -20,6 +22,7 @@ import common.dto.bank.VersionHistory;
 import common.dto.lock.LockHolder;
 import common.protocol.Message;
 import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +66,21 @@ import java.util.Optional;
  * generation is discarded. The counter is bumped by <b>anything that changes what an answer
  * would mean</b>, which is every filter, the page, and the selection. That is a property of how
  * the class is built rather than a rule about the order the network happens to deliver in.
+ *
+ * <h2>It updates itself ⚑ (U-63, finding 11)</h2>
+ *
+ * <p><b>The defect this subscription exists for, in the words it was reported in:</b> "when a
+ * teacher adds a new question it does not appear for a teacher or coordinator who already has
+ * the bank open; changing the filter made it appear." Changing the filter made it appear
+ * because every filter here calls {@link #requestPage(int)}, so the filter was doing the job a
+ * push should have been doing. There was no bank push at all until U-63, so the only way to a
+ * current list was a user action, which is the whole of what NFR-18 forbids.
+ *
+ * <p>{@link #subscribeTo(ClientEventBus)} wires it and {@link #onServerPush(ServerPushEvent)}
+ * is the entry point, filtered on the course the notice names: a teacher narrowed to Algebra
+ * does not re-read for a question written in History, because her list provably cannot have
+ * changed. That filter is {@link BankChanged#concerns(String)} and it lives on the DTO so the
+ * principal's screen applies the same rule rather than a second copy of it.
  */
 public final class BankSession {
 
@@ -94,6 +112,16 @@ public final class BankSession {
     private AsyncViewState listState = AsyncViewState.IDLE;
     private String listError;
     private List<BankQuestionRow> rows = List.of();
+    /**
+     * 2026-08-31, U-65 and U-67 (Omar, round 5). Every course and topic a page has ever shown,
+     * kept for the pickers. Deriving options from the CURRENT rows made them vanish under their
+     * own filter: pick Databases and the other courses disappear from the picker until Show all.
+     * The screen cache is evicted on sign-out, so a new user gets a fresh session and fresh maps.
+     */
+    private final java.util.LinkedHashMap<String, CourseRef> seenCourses =
+            new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String, java.util.TreeSet<String>> seenTopics =
+            new java.util.LinkedHashMap<>();
     private long totalRows;
     private int totalPages;
     private boolean hasNextPage;
@@ -238,6 +266,14 @@ public final class BankSession {
         // full bank renders the "there are no questions yet" panel: see stepBackFromTheEnd.
         page = Math.max(payload.page(), 0);
         rows = List.copyOf(payload.rows());
+        for (BankQuestionRow row : rows) {
+            seenCourses.putIfAbsent(row.courseCode(),
+                    new CourseRef(row.courseCode(), row.courseName()));
+            if (row.topic() != null && !row.topic().isBlank()) {
+                seenTopics.computeIfAbsent(row.courseCode(),
+                        code -> new java.util.TreeSet<>()).add(row.topic());
+            }
+        }
         totalRows = payload.totalRows();
         totalPages = payload.totalPages();
         // Delegated to BankPage rather than recomputed here. Not a guard and no test can prove
@@ -353,6 +389,80 @@ public final class BankSession {
     public boolean isFiltered() {
         return courseFilter != null || topicFilter != null || difficultyFilter != null
                 || !search.isEmpty();
+    }
+
+    // ===================== Live (U-63) ====================================
+
+    /**
+     * Subscribes this session to the app bus, so a colleague's new question appears without
+     * anybody pressing anything (NFR-18, U-63).
+     *
+     * <p>Called from the view's {@code build()}, which is where {@code ApprovalQueueSession} is
+     * wired and for the reason its javadoc gives: the live refresh then sits somewhere a test
+     * can reach, rather than behind a {@code listensToEvents} override only the shell can
+     * exercise.
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class.</b> The
+     * bus invokes subscribers reflectively from its own package, so a package-private
+     * subscriber registers without complaint and then throws {@code IllegalAccessException} on
+     * every push, which the dispatcher catches and logs rather than rethrows: the screen simply
+     * never updates and no test fails. {@code ApprovalQueueSession} and {@code ExamListSession}
+     * both record the same trap.
+     *
+     * <p>Optional by design: {@link #load()} alone is a complete screen, and every existing
+     * test that never calls this still describes a working session.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public BankSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read if it changes what this list would say.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_BANK_CHANGED) {
+            return;
+        }
+        if (event.payload() instanceof BankChanged changed && changed.concerns(courseFilter)) {
+            onBankChanged(changed);
+        }
+    }
+
+    /**
+     * Re-reads after somebody else wrote to a course this screen is showing (U-63).
+     *
+     * <p>A re-query rather than patching the pushed question in, and the payload is a notice
+     * with nothing to patch <em>in</em> for exactly this reason ({@code BankChanged}'s javadoc
+     * carries the argument): this list is one page of a filtered, ordered, server-side query,
+     * and only the server can say whether a new question belongs on the page being shown.
+     *
+     * <p>The open question is re-read too, through {@link #reload()}, because a colleague's
+     * {@code QUESTION_UPDATE} moves the pane as well as the row. The one case that is not a
+     * re-read is a <b>delete of the question in the pane</b>: re-reading it would ask the
+     * server for something that is gone and answer the teacher with "this question could not be
+     * opened" and a retry button that can never work, which is the mystery state PRD section
+     * 4.1 forbids. The pane returns to its empty state instead, beside a list that no longer
+     * has the row in it, and the two then agree.
+     *
+     * @param changed what the server said moved
+     */
+    public void onBankChanged(BankChanged changed) {
+        Objects.requireNonNull(changed, "changed");
+        if (changed.change() == BankChanged.Change.DELETED
+                && changed.displayId5() != null
+                && changed.displayId5().equals(selectedId)) {
+            clearSelection();
+            requestPage(page);
+            return;
+        }
+        reload();
     }
 
     // ===================== Paging =========================================
@@ -911,9 +1021,10 @@ public final class BankSession {
         for (CourseRef course : courses) {
             options.putIfAbsent(course.code(), course);
         }
-        for (BankQuestionRow row : rows) {
-            options.putIfAbsent(row.courseCode(),
-                    new CourseRef(row.courseCode(), row.courseName()));
+        // U-65: the union is over every course the bank has EVER shown this user, not the
+        // current page, so filtering to one course cannot empty the picker of the others.
+        for (CourseRef course : seenCourses.values()) {
+            options.putIfAbsent(course.code(), course);
         }
         return List.copyOf(options.values());
     }
@@ -933,7 +1044,16 @@ public final class BankSession {
      * @return the distinct topics of the filtered course, newest lookup first; empty for now
      */
     public List<String> availableTopics() {
-        return List.of();
+        // 2026-08-31, U-67 (Omar, round 5): "question bank doesn't filter by topic". The wire
+        // has carried the filter since E6 and selectTopic already works; what was missing was a
+        // populated picker. The options are the topics seen for the selected course (a page is
+        // 40 rows and no course's bank is near that, so the set completes on the first page).
+        // No course selected means no picker: one topic name can live in two courses.
+        if (courseFilter == null) {
+            return List.of();
+        }
+        java.util.TreeSet<String> topics = seenTopics.get(courseFilter);
+        return topics == null ? List.of() : List.copyOf(topics);
     }
 
     /** @return the course filter, or {@code null} */

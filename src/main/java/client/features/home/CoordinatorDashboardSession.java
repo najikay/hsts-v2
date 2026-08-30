@@ -9,6 +9,11 @@ import common.dto.approval.ApprovalQueue;
 import common.dto.approval.ApprovalRow;
 import common.protocol.Message;
 import common.protocol.Verb;
+import client.events.ClientEventBus;
+import client.events.ServerPushEvent;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +49,9 @@ public final class CoordinatorDashboardSession {
     private int waitingCount;
     private int teacherCount;
 
+    /** Whether {@link #load}'s read is still outstanding; the {@link #refresh} guard (U-63). */
+    private int pending;
+
     public CoordinatorDashboardSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -70,6 +78,59 @@ public final class CoordinatorDashboardSession {
                 approvals.state() == DashboardCard.State.FAILED);
     }
 
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes the dashboard to the app bus (NFR-18, U-63).
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>: the
+     * bus invokes reflectively, and a subscriber it cannot reach registers happily and then
+     * fails silently on every delivery. {@code ApprovalQueueSession} spells the trap out.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public CoordinatorDashboardSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read if it changes what these two cards say (U-63).
+     *
+     * <p>The same two types as {@code ApprovalQueueSession}, and for the same reason, because
+     * both cards here are built from the same {@code APPROVALS_QUEUE_GET} that fills her queue:
+     * {@code APPROVAL_REQUESTED} puts an exam in it and {@code APPROVAL_SUPERSEDED} takes one
+     * out. Her home screen and her queue therefore cannot disagree about how many are waiting,
+     * which they could until U-63, since the queue subscribed under B-30 and this did not.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_NOTIFICATION) {
+            return;
+        }
+        if (event.payload() instanceof NotificationDto item
+                && (item.type() == NotificationType.APPROVAL_REQUESTED
+                    || item.type() == NotificationType.APPROVAL_SUPERSEDED)) {
+            refresh();
+        }
+    }
+
+    /**
+     * Re-reads both cards (U-63).
+     *
+     * <p>Ignored while the read is in flight: that answer is at least as new as this push, and
+     * a second request behind it could settle out of order and put the older count back.
+     */
+    public void refresh() {
+        if (pending > 0) {
+            return;
+        }
+        load();
+    }
+
     /** Sends the one read both cards are built from. */
     public void load() {
         approvals = loadingApprovals();
@@ -78,8 +139,15 @@ public final class CoordinatorDashboardSession {
         teacherCount = 0;
         onChange.run();
 
+        pending = 1;
         dispatcher.send(Verb.APPROVALS_QUEUE_GET, null)
-                .whenComplete((response, failure) -> poster.run(() -> settle(response, failure)));
+                .whenComplete((response, failure) -> poster.run(() -> {
+                    // Counted off here rather than inside settle, which returns early on the
+                    // failure path: a counter that leaks on an error is a dashboard that stops
+                    // refreshing after the first dropped connection.
+                    pending = 0;
+                    settle(response, failure);
+                }));
     }
 
     private void settle(Message response, Throwable failure) {

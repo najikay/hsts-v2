@@ -155,6 +155,41 @@ public final class ConnectWiring {
         return new Wiring(client, dispatcher);
     }
 
+    /**
+     * Throws away a socket that opened but did not prove itself (B-49).
+     *
+     * <p>{@link ConnectHandshake} can leave the caller holding a live socket that
+     * is provably useless. It must be closed, or the client leaks a connection
+     * every time somebody presses Connect at a stopped server, and the server
+     * leaks the matching entry in its backlog.
+     *
+     * <p><b>The connection-lost handler is silenced first, and that is the point
+     * of the method ⚑.</b> Closing an {@code HSTSClient} fires
+     * {@code connectionClosed()}, which posts a {@link ConnectionLostEvent} and
+     * raises the shell's reconnect banner. On this path that banner would be a
+     * lie twice over: nothing was lost, because nothing was ever established, and
+     * the screen is already showing the connect screen's own sentence about the
+     * same failure. Doing the silencing here rather than in the two callers keeps
+     * the cast to the concrete client in the class that created it.
+     *
+     * @param client the connection to discard; {@code null} is tolerated
+     */
+    public static void abandon(IClientConnection client) {
+        if (client == null) {
+            return;
+        }
+        if (client instanceof HSTSClient real) {
+            real.setConnectionLostHandler(null);
+        }
+        try {
+            client.disconnect();
+        } catch (Exception e) {
+            // Closing a socket we have already given up on cannot fail in a way
+            // anybody can act on, and the user is being told about the connect.
+            LOG.debug("Could not close the unproven connection: {}", e.toString());
+        }
+    }
+
     /** The given bus, or the detached stand-in described on {@link #forEndpoint}. */
     private static ClientEventBus busFor(ServerEndpoint endpoint, ClientEventBus eventBus) {
         if (eventBus != null) {

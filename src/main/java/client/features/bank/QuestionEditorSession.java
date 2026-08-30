@@ -108,7 +108,8 @@ public final class QuestionEditorSession {
     private final RequestDispatcher dispatcher;
     private final FxThreadPoster poster;
     private final Mode mode;
-    private final String courseCode;
+    /** Mutable in CREATE mode only (U-68): the course is a field of the form, not the filter. */
+    private String courseCode;
     private final String displayId5;
     private int baseVersionNo;
     private final ImagePickerLogic image;
@@ -117,6 +118,21 @@ public final class QuestionEditorSession {
 
     private String text = "";
     private final String[] answers = {"", "", "", ""};
+    /**
+     * Picks the course a NEW question belongs to (U-68). Ignored in edit mode, where the course
+     * is a fact of the stored question rather than a choice.
+     */
+    public void setCourse(String code) {
+        if (mode != Mode.CREATE || Objects.equals(code, courseCode)) {
+            return;
+        }
+        courseCode = code;
+        onChange.run();
+    }
+
+    /** U-55: the mark a new question starts with. */
+    public static final int DEFAULT_CORRECT_ANSWER = 1;
+
     private Integer correctAnswer;
     private String topic = "";
     private Difficulty difficulty;
@@ -154,9 +170,17 @@ public final class QuestionEditorSession {
      */
     public static QuestionEditorSession forCreate(RequestDispatcher dispatcher,
                                                   FxThreadPoster poster, String courseCode) {
-        Objects.requireNonNull(courseCode, "courseCode");
-        return new QuestionEditorSession(dispatcher, poster, Mode.CREATE, courseCode, null, 0,
-                new ImagePickerLogic());
+        // 2026-08-31, U-68 (Omar, round 5): null is allowed. The editor carries its own course
+        // picker now, so "New question" no longer depends on the bank's filter naming a course.
+        QuestionEditorSession session = new QuestionEditorSession(dispatcher, poster, Mode.CREATE,
+                courseCode, null, 0, new ImagePickerLogic());
+        // 2026-08-31, U-55 (Naji, round 5): a new question starts with Answer 1 marked correct.
+        // The radio cannot express "none", so a blank start only ever cost her a detour: pick
+        // another answer, then pick Answer 1 again. Exactly one is still enforced (C-8); the
+        // teacher moves the mark when the correct answer is not the first.
+        session.correctAnswer = DEFAULT_CORRECT_ANSWER;
+        session.rememberBaseline();
+        return session;
     }
 
     /**
@@ -378,12 +402,27 @@ public final class QuestionEditorSession {
         if (text.isBlank() || topic.isBlank() || difficulty == null || correctAnswer == null) {
             return false;
         }
+        if (mode == Mode.CREATE && courseCode == null) {
+            return false;
+        }
         for (String answer : answers) {
             if (answer.isBlank()) {
                 return false;
             }
         }
+        // 2026-08-31, U-57 (Naji, round 5): "saving with 0 changes counts as a new version".
+        // Every save of an existing question writes version n+1 (C-2), so a save with nothing
+        // changed is a version identical to the last one. Blocked here rather than warned,
+        // the F3.1 shape; the view names the reason on the button.
+        if (isUnchangedEdit()) {
+            return false;
+        }
         return liveProblems().isEmpty();
+    }
+
+    /** U-57: an existing question with nothing changed since the editor opened. */
+    public boolean isUnchangedEdit() {
+        return mode == Mode.EDIT && !isDirty();
     }
 
     /** @return whether anything has been typed since the editor opened */

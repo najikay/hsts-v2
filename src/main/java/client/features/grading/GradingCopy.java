@@ -91,6 +91,9 @@ public final class GradingCopy {
 
     /** The button that opens the override dialog. */
     public static final String OVERRIDE = "Change score…";
+    /** U-64: why Change score is off while several rows are ticked. */
+    public static final String OVERRIDE_ONE_AT_A_TIME =
+            "Change score works on one student at a time. Click that student's row.";
 
     /** Heading of the override dialog. */
     public static final String OVERRIDE_TITLE = "Change this score";

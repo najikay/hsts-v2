@@ -9,6 +9,7 @@ import client.events.ConnectionLostEvent;
 import client.events.DirectFxThreadPoster;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
+import common.protocol.Message;
 import common.protocol.Verb;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -169,8 +170,11 @@ class ReconnectorTest {
             assertThat(manager.isConnectionAlive()).isTrue();
 
             // And the rebind really did happen: traffic goes down the new socket.
+            // HELLO is on it too, because a re-dial proves itself before it reports
+            // success (B-49), so this asserts what went where rather than how much.
             manager.getDispatcher().send(Verb.LOGIN, null);
-            assertThat(fresh.sentCount()).isEqualTo(1);
+            assertThat(fresh.sentMessages()).extracting(Message::getVerb)
+                    .containsExactly(Verb.HELLO, Verb.LOGIN);
             assertThat(live.sentCount()).isZero();
         }
 

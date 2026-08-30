@@ -11,6 +11,11 @@ import common.dto.grading.StudentGradeRow;
 import common.dto.results.ResultStatistics;
 import common.protocol.Message;
 import common.protocol.Verb;
+import client.events.ClientEventBus;
+import client.events.ServerPushEvent;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -62,6 +67,9 @@ public final class StudentDashboardSession {
     private int gradeCount;
     private String newestExam;
 
+    /** Whether {@link #load}'s read is still outstanding; the {@link #refresh} guard (U-63). */
+    private int pending;
+
     public StudentDashboardSession(RequestDispatcher dispatcher, FxThreadPoster poster) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.poster = Objects.requireNonNull(poster, "poster");
@@ -99,6 +107,70 @@ public final class StudentDashboardSession {
                 latestGrade.state() == DashboardCard.State.FAILED);
     }
 
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes the dashboard to the app bus (NFR-18, U-63).
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>: the
+     * bus invokes reflectively, and a subscriber it cannot reach registers happily and then
+     * fails silently on every delivery.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public StudentDashboardSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read the card if a grade of hers was published (U-63).
+     *
+     * <p>Two ways of learning the same thing, and both are honoured because the server sends
+     * both: {@code PUSH_GRADE_PUBLISHED} carries the row and goes only to the student it
+     * belongs to ({@code GradingHandlers.publish}), and a durable {@code GRADE_PUBLISHED}
+     * notification goes out beside it. Reacting to either and not to the other would make this
+     * card's freshness depend on which of two messages happened to arrive first.
+     *
+     * <p>The pushed row is not adopted, deliberately. This card is "your latest grade" out of a
+     * whole {@code MyGrades} answer, and deciding whether one pushed row is the latest is the
+     * ordering question the server has already answered. {@code MyGradesSession} takes the same
+     * line.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null) {
+            return;
+        }
+        if (event.verb() == Verb.PUSH_GRADE_PUBLISHED) {
+            refresh();
+            return;
+        }
+        if (event.verb() == Verb.PUSH_NOTIFICATION
+                && event.payload() instanceof NotificationDto item
+                && item.type() == NotificationType.GRADE_PUBLISHED) {
+            refresh();
+        }
+    }
+
+    /**
+     * Re-reads the card (U-63).
+     *
+     * <p>Ignored while the read is in flight, which here is doing real work rather than being a
+     * formality: the two messages above arrive within milliseconds of each other for the same
+     * event, so without this guard every published grade would cost two identical reads that
+     * could settle in either order.
+     */
+    public void refresh() {
+        if (pending > 0) {
+            return;
+        }
+        load();
+    }
+
     /** Sends the grades read. */
     public void load() {
         latestGrade = loadingGrade();
@@ -106,8 +178,14 @@ public final class StudentDashboardSession {
         newestExam = null;
         onChange.run();
 
+        pending = 1;
         dispatcher.send(Verb.MY_GRADES_GET, null)
-                .whenComplete((response, failure) -> poster.run(() -> settle(response, failure)));
+                .whenComplete((response, failure) -> poster.run(() -> {
+                    // Counted off here rather than inside settle, which returns early on the
+                    // failure path; a leaked counter is a card that never refreshes again.
+                    pending = 0;
+                    settle(response, failure);
+                }));
     }
 
     private void settle(Message response, Throwable failure) {

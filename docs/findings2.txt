@@ -1,0 +1,11 @@
+1) when server consol is on "stop listening", the client, when entering the ip/port manually keeps "connecting...", doesn't tell you its unable to connect.   - when i closed the server console, the error showed up in the client console " could not reach ... nothing is listening..."
+	2) client screen timed out and went to sleep, connection was lost. yellow banner with retry button appeared while still in the logged in screen, but the retry button doesn't do anything. logged out, it went to the log in screen, was still disconnected. there was a "reconnet" button but it wasn't pressable. closed the client consol and relaunched it, it connected.
+	3) teacher's grading : select all then "change grade" opens for the first one ticked.
+	4) might be overkill : should the questions in the exam the coordinator is looking at to approve show if they've been used in other exams?
+	5) [cosmetic] - michal.sharon which is teacher of database and also coordinator of computer science : she sees the question bank for databases and oop, in the filtering, when she chooses database, when she clicks again oop disappears until she chooses show all or oop. same thing happened for rina barak.
+	6) usernames are not case-sensitive.
+	7) [bug] principal's login. you click Reports->by student. you pick a student with 3 sittings, you pick from Closed settings, things bug out of all "closed sittings" clickables, whether "by teacher/course/student"
+	8) "too many attempts" enforacble only when no change in username/password is made.
+	9) [cosmetic] - question bank doesn't filter by topic
+	10) [cosmetic] - when adding a question, it should have its own field to pick the course rather than having to chose the course from the question bank filter to allow you to add a question
+	11) when a teacher adds a new question to the question bank, it doesn't appear right away for teacher/coordinator who already have the question bank opened before the addition was made. changing the filter made the question appear. for the principal however, even changing the course filter didn't help, i had to log out and then log in to see it. same with editing the question. note : clicking on another question didn't help either, only changing the question bank filter.

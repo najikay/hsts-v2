@@ -1,6 +1,8 @@
 package client.features.grading;
 
+import client.events.ClientEventBus;
 import client.events.FxThreadPoster;
+import client.events.ServerPushEvent;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
 import common.dto.grading.ApproveRequest;
@@ -11,9 +13,12 @@ import common.dto.grading.ExecutionGradingSummary;
 import common.dto.grading.GradeOverrideRequest;
 import common.dto.grading.GradingQueue;
 import common.dto.grading.StudentGradeRow;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -111,6 +116,55 @@ public final class GradingQueueSession {
         load();
         if (open != null) {
             requestExecution(open.summary().executionId());
+        }
+    }
+
+    // ===================== Live (U-63) ===================================
+
+    /**
+     * Subscribes the queue to the app bus, so a sitting that finishes appears in it without
+     * anybody pressing anything (NFR-18, U-63).
+     *
+     * <p><b>The defect this exists for.</b> {@code GRADING_DUE} already reached this teacher:
+     * the server raised it when an execution closed with papers to mark, and her bell badge
+     * incremented for it. The queue underneath the bell did not re-read, so the one screen
+     * whose entire purpose is a work list sat there showing yesterday's work until she
+     * navigated away and back. It is {@code ApprovalQueueSession}'s B-30 defect on the other
+     * inbox in the app, and this is the same fix.
+     *
+     * <p>Called from {@code GradingQueueView.build()}, the placement that class argues for.
+     *
+     * <p><b>{@link #onServerPush(ServerPushEvent)} must stay public on a public class</b>: the
+     * bus invokes reflectively, and a subscriber it cannot reach registers happily and then
+     * throws on every delivery, which the dispatcher logs rather than rethrows. The screen
+     * simply never updates and no test fails.
+     *
+     * @param eventBus the app bus; pushes arrive on it already on the FX thread
+     * @return this, for chaining beside {@link #onChange(Runnable)}
+     */
+    public GradingQueueSession subscribeTo(ClientEventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus").register(this);
+        return this;
+    }
+
+    /**
+     * A server push landed; re-read if it changes what this queue would say.
+     *
+     * <p>{@code GRADING_DUE} alone. {@code GRADE_PUBLISHED} is addressed to a student and never
+     * arrives here; an approval she makes herself is already followed by
+     * {@link #reopenAfterWrite()}, and re-reading again on a push about her own click would
+     * make the table she is working in jump under her hands.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_NOTIFICATION) {
+            return;
+        }
+        if (event.payload() instanceof NotificationDto item
+                && item.type() == NotificationType.GRADING_DUE) {
+            refresh();
         }
     }
 

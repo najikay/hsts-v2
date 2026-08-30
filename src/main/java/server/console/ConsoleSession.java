@@ -28,6 +28,13 @@ import java.util.Objects;
  * owns both and neither is in the socket. What stops is <em>new</em> clients being
  * able to connect.
  *
+ * <p><b>Closes</b> is load-bearing, and until B-49 it was not true. OCSF's
+ * {@code stopListening()} raised a flag and left the socket bound, so the
+ * operating system kept completing handshakes into the accept backlog and a
+ * client dialling a stopped server sat on {@code Connecting...} rather than
+ * being refused. The sentence this button returns has always claimed the
+ * refusal; {@code AbstractServer.stopListening} now performs it.
+ *
  * <p>That is the useful meaning during a demo ("watch what happens when the server
  * goes away") and it is also the only safe one: a button on a window that could
  * discard live attempts is a button somebody will eventually press by accident.
@@ -174,7 +181,8 @@ public final class ConsoleSession {
             server.stopListening();
             model.setListening(false);
             log.info("Listener stopped from the console");
-            return Outcome.ok("Stopped listening. Exams already in progress keep running. "
+            return Outcome.ok("Stopped listening. New connections are refused right away. "
+                    + "Exams already in progress keep running. "
                     + "Press Start listening to let clients connect again.");
         } catch (IOException | RuntimeException e) {
             model.setListening(server.isListening());

@@ -136,7 +136,13 @@ public final class ConnectFlow {
     /** The connect was refused: something is at that address, nothing is listening on the port. */
     public static final String UNREACHABLE_REFUSED = "Nothing is listening on that address.";
 
-    /** The connect timed out: nothing answered in time. */
+    /**
+     * The connect timed out: nothing answered in time.
+     *
+     * <p>Covers both halves of "did not answer": no TCP handshake, and a handshake
+     * that completed into a socket no server was ever going to read (B-49). A user
+     * cannot act on the difference and the sentence is true of both.
+     */
     public static final String UNREACHABLE_TIMEOUT = "That address did not answer.";
 
     /** The host name could not be resolved. */
@@ -334,6 +340,14 @@ public final class ConnectFlow {
                 return UNREACHABLE_UNKNOWN_HOST;
             }
             if (current instanceof java.net.SocketTimeoutException) {
+                return UNREACHABLE_TIMEOUT;
+            }
+            // The socket opened and then nothing came back: a bound-but-unaccepting
+            // server, which is what "Stop listening" used to leave behind (B-49).
+            // Catching the supertype covers the dispatcher's own
+            // RequestTimeoutException and ConnectHandshake's backstop alike, and both
+            // mean the same thing to a user: that address did not answer.
+            if (current instanceof java.util.concurrent.TimeoutException) {
                 return UNREACHABLE_TIMEOUT;
             }
             if (current instanceof java.net.NoRouteToHostException) {

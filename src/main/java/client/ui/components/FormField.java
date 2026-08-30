@@ -100,6 +100,28 @@ public final class FormField extends VBox {
         return this;
     }
 
+    /**
+     * Puts a node in the control's own row, beside it and level with it ("Generate for me"
+     * beside the code box), so the label sits above both and the hint runs under both.
+     *
+     * <p>2026-08-31, U-60: placing such a button beside the whole field instead aligns it with
+     * the hint line, one row below the box, which is the misalignment this exists to remove.
+     */
+    public FormField trailing(javafx.scene.Node node) {
+        Objects.requireNonNull(node, "node");
+        int index = getChildren().indexOf(control);
+        // Building the row REPARENTS the control: JavaFX removes it from this box the moment
+        // the HBox adopts it, so the children have already shifted by the time the row goes
+        // back in. Add at the captured index rather than set, which after the shift would
+        // overwrite whatever slid into the control's old place (the message row, as the
+        // release dialog's tests caught).
+        HBox row = new HBox(10, control, node);
+        row.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(control, javafx.scene.layout.Priority.ALWAYS);
+        getChildren().add(index, row);
+        return this;
+    }
+
     /** Marks the field as required, adding the danger asterisk to its label. */
     public FormField required() {
         if (!getStyleClass().contains("required")) {

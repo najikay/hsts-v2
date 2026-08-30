@@ -1,0 +1,64 @@
+Manual round 5 (2026-08-31), Naji, one machine, after wave 6.
+
+1. Teacher > Question Bank > question card > bottom buttons: Edit was centred (U-37); it looked
+   better next to Version history. -> U-54, reverted.
+
+2. New question: the correct-answer radio looked like Answer 1 was chosen (focus fill), but
+   nothing was selected; to use Answer 1 you had to pick another then pick 1 again. -> U-55:
+   focus is a ring only, and Answer 1 is the real default for a new question.
+3. Edit question: the difficulty box shows nothing and has to be re-picked every time. -> U-56:
+   the value is driven through setValue and re-applied once the control is on screen.
+
+4. Edit question, Save with nothing changed still writes a new version. -> U-57: Save is off
+   until something differs from what the editor opened on, with the reason on the button.
+
+5. Approvals queue (walkthrough 4.7): the Status cell's two chips ("Pending approval", "You
+   wrote this one") were cut off. Function fine. -> U-58: chips never truncate; the Status
+   column has a real minimum width.
+6. Table headings: some left, some right (the numeric ones). Everything is English; make them
+   uniform, left. -> U-59: every heading left-aligned; numeric cells keep right alignment.
+
+7. Release an exam modal: the exam code box and "Generate for me" were misaligned (clock fix
+   is good). -> U-60: the button sits inside the field beside the box, one baseline.
+
+8. Principal: after clicking around Reports (by teacher / course / student, rows), the whole
+   principal client stopped responding: dashboard, Data and Reports all stuck. -> OPEN, waiting
+   for a jstack of the frozen client and the terminal text. Harness stress test (3 passes over
+   every segment, subject and row plus dashboard/data round trips) does not reproduce it.
+
+Omar (2026-08-31):
+O1. Server console on "Stop listening": a client entering the ip/port manually sits on
+    "Connecting..." forever; only when the console was closed did "Could not reach ... nothing
+    is listening" appear. -> B-49, wave: OCSF stopListening() keeps the ServerSocket open so
+    the TCP handshake completes into the backlog; close the listening socket on Stop listening,
+    and time the client's post-connect hello out.
+O2. Client slept, connection lost, yellow banner's Retry did nothing; after sign-out Login was
+    still Disconnected and Reconnect not pressable; relaunch connected. -> this is U-52 (fixed
+    in ce8757c). Confirm Omar's build; if he is on today's pull, reopen.
+
+9. Avi's bot card: a green chip showing "..." (a cut-off word). -> U-58 covers it (StatusChip
+   pins its width); confirm on the next walk.
+10. Bot manager (mark 13): Tamar's screen did not show Avi's changes until she pressed the
+    notification. -> U-62: the bot manager re-reads on the bot notifications it already
+    receives. Toggle on/off and create send no notification today -> U-63 (wave).
+11. General: every screen must update itself, no refresh anywhere. -> U-63 audit (wave):
+    screens with no push subscription today: teacher/student/coordinator/principal dashboards,
+    Grading queue, Question Bank list (a colleague's add/edit/delete), Teacher Results, Bot
+    manager on toggle/create (needs a server-side notification, BOT amendment A4).
+
+12. Walkthrough 14.2: the Databases bot answered "switched off". Doc error, not product: the seed
+    ships that bot off on purpose (14.4). 14.2 and 14.5 now use the Java 21 bot.
+
+Merged from Omar (docs/findings2.txt), triage:
+O1  Stop listening leaves clients on Connecting... -> B-49, agent in flight.
+O2  Retry/Reconnect dead after sleep -> U-52 (wave 6); need Omar's build hash, then retest.
+O3  Select all then Change score -> U-64, done (one at a time, tooltip).
+O4  Show cross-exam usage in approval preview -> U-69, ruled not now.
+O5  Course picker loses courses under its own filter -> U-65, done.
+O6  Usernames not case-sensitive -> U-66, ruled by design (BCrypt password is case-sensitive).
+O7  Principal reports: 3-sitting student then row clicks break everywhere -> U-61 recipe;
+    harness test written (threeSittingRowsStayClickable); still needs the jstack if green.
+O8  Throttle only counts identical attempts -> agent in flight (per-username rule).
+O9  No topic filter -> U-67, done (per-course topic picker).
+O10 Course should be a field on Add question -> U-68, done.
+O11 Bank not live for others; principal stale across filters -> U-63 agent in flight.

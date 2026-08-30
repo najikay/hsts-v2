@@ -195,6 +195,10 @@ public class HSTSServer extends AbstractServer {
                                         ScheduledExecutorService sweeper,
                                         ScheduledExecutorService examTimers) {
         MessageRouter router = new MessageRouter(sessions);
+        // First, and open: a client that has just opened a socket asks HELLO before
+        // it will believe it is connected, so this must answer even on a server whose
+        // database is still warming up (B-49).
+        HelloResponder.registerOn(router);
         // One factory for both seams: the Singleton is what owns the pool, and asking
         // for it twice would still be one pool but would read as if it were two.
         SessionFactory sessionFactory = HibernateUtil.sessionFactory();
@@ -290,7 +294,11 @@ public class HSTSServer extends AbstractServer {
         new BankHandlers(sessionFactory,
                 new QuestionService(new QuestionRepository(), new CourseRepository(),
                         new UserRepository(), new QuestionIdAllocator(), clock,
-                        new EditLockGuard(locks)))
+                        new EditLockGuard(locks)),
+                // Its own CourseRepository instance: the repositories are stateless query
+                // holders, and the one above is the service's. U-63 uses it for one thing,
+                // findBankReaderIds, which is who PUSH_BANK_CHANGED is addressed to.
+                new CourseRepository(), pushGateway)
                 .registerOn(router);
         // The bank's read verbs (E6.3, E6.5, E6.6), separate from the writes above because they
         // carry a different guard over a wider role set: reachesCourse, and the principal reads
@@ -705,15 +713,46 @@ public class HSTSServer extends AbstractServer {
         log.info("Server started, listening on port {}", getPort());
     }
 
+    /**
+     * The accept loop ended. <b>Nothing else does ⚑ (B-49).</b>
+     *
+     * <p>This used to call {@code shutdownNow()} on the lock sweeper and the exam
+     * timers, which was the wrong hook for both. {@code serverStopped()} fires
+     * every time the listener stops, and the server console stops the listener as
+     * a routine action with a sentence promising that "Exams already in progress
+     * keep running". They did not: {@code examTimers} carries the attempt-deadline
+     * sweep and {@code lockSweeper} the edit-lock expiry, and a
+     * {@code ScheduledExecutorService} that has been shut down cannot be started
+     * again. One press of Stop listening therefore killed every exam deadline in
+     * the process for good, and pressing Start listening brought back the socket
+     * but not the timers.
+     *
+     * <p>Both now go in {@link #serverClosed()}, which runs only from
+     * {@link ocsf.server.AbstractServer#close()} — the actual end of the server,
+     * where stopping the timers is what the caller asked for.
+     */
     @Override
     protected void serverStopped() {
+        log.info("Server has stopped listening for connections. Sessions, timers and "
+                + "exams in progress are unaffected.");
+    }
+
+    /**
+     * The server is closing for good: stop the background work.
+     *
+     * <p>{@code close()} has already dropped every client connection, so there is
+     * nothing left for a deadline to fire at. Idempotent, because
+     * {@code shutdownNow()} on an already-stopped executor is.
+     */
+    @Override
+    protected void serverClosed() {
         if (lockSweeper != null) {
             lockSweeper.shutdownNow();
         }
         if (examTimers != null) {
             examTimers.shutdownNow();
         }
-        log.info("Server has stopped listening for connections.");
+        log.info("Server closed; background timers stopped.");
     }
 
     @Override

@@ -42,7 +42,11 @@ public final class CoordinatorHomeView extends AbstractScreen {
     @Override
     protected Parent build() {
         session = new CoordinatorDashboardSession(dispatcher(), onFxThread())
-                .onChange(this::render);
+                .onChange(this::render)
+                // The live card re-read (U-63, NFR-18). Her queue subscribed under B-30 and
+                // this did not, so her home screen and her queue could disagree about how many
+                // exams were waiting.
+                .subscribeTo(eventBus());
 
         // Read once, here: the shell records the signed-in user before it navigates
         // (ShellBoot.enter) and evicts every screen on sign-out, so a built dashboard

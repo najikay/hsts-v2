@@ -141,7 +141,10 @@ public final class ApprovalQueueView extends AbstractScreen {
         TableColumn<ApprovalRow, ApprovalRow> column = new TableColumn<>("Status");
         column.setCellValueFactory(cell ->
                 new javafx.beans.property.SimpleObjectProperty<>(cell.getValue()));
-        column.setPrefWidth(220);
+        column.setPrefWidth(280);
+        // U-58: two chips side by side ("Pending approval" + "You wrote this one") need the
+        // room; under the constrained resize policy a pref width is a wish, a min is a floor.
+        column.setMinWidth(280);
         column.setCellFactory(unused -> new TableCell<>() {
             @Override
             protected void updateItem(ApprovalRow row, boolean empty) {
@@ -155,6 +158,7 @@ public final class ApprovalQueueView extends AbstractScreen {
                 if (row.selfAuthored()) {
                     Label badge = new Label(ApprovalCopy.SELF_AUTHORED_BADGE);
                     badge.getStyleClass().addAll("hsts-chip", "neutral", "self-authored");
+                    badge.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
                     cell.getChildren().add(badge);
                 }
                 setGraphic(cell);

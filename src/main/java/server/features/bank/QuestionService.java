@@ -163,28 +163,52 @@ public class QuestionService {
      * with {@code OK} carrying a {@link DeleteOutcome}, because being told which exams use a
      * question is a successful answer to "may I delete this", not an error.
      *
-     * @param status   what happened
-     * @param outcome  the wire answer, or {@code null} for anything other than {@link
-     *                 DeleteStatus#RESOLVED}
-     * @param lockedBy who holds the edit lock, and {@code null} unless the status is {@link
-     *                 DeleteStatus#LOCKED}
+     * @param status     what happened
+     * @param outcome    the wire answer, or {@code null} for anything other than {@link
+     *                   DeleteStatus#RESOLVED}
+     * @param lockedBy   who holds the edit lock, and {@code null} unless the status is {@link
+     *                   DeleteStatus#LOCKED}
+     * @param courseCode the course the question belonged to, for {@code PUSH_BANK_CHANGED}
+     *                   (U-63), and {@code null} on every path that did not reach a question
      */
     public record DeleteResolution(DeleteStatus status, DeleteOutcome outcome,
-                                   LockHolder lockedBy) {
+                                   LockHolder lockedBy, String courseCode) {
 
         public DeleteResolution {
             Objects.requireNonNull(status, "status");
             requireHolderIff(status == DeleteStatus.LOCKED, lockedBy, status);
         }
 
+        /**
+         * The three-argument shape the lock invariant's own tests use.
+         *
+         * <p>Kept when {@code courseCode} was added under U-63 rather than migrating every call
+         * site, because those call sites are asserting something about the holder invariant and
+         * a fourth argument of {@code null} in each would be noise around the thing under test.
+         */
+        public DeleteResolution(DeleteStatus status, DeleteOutcome outcome, LockHolder lockedBy) {
+            this(status, outcome, lockedBy, null);
+        }
+
         /** The shape every non-lock path uses, so those call sites stay two arguments. */
         public DeleteResolution(DeleteStatus status, DeleteOutcome outcome) {
-            this(status, outcome, null);
+            this(status, outcome, null, null);
         }
 
         /** A refusal that can always name the teacher who has the question open. */
         public static DeleteResolution lockedBy(LockHolder holder) {
-            return new DeleteResolution(DeleteStatus.LOCKED, null, holder);
+            return new DeleteResolution(DeleteStatus.LOCKED, null, holder, null);
+        }
+
+        /**
+         * A delete that reached a real question, so it can say which course moved (U-63).
+         *
+         * @param outcome    deleted, or blocked by the exams that pin it
+         * @param courseCode the question's course
+         * @return the resolution, carrying what the push needs
+         */
+        public static DeleteResolution resolved(DeleteOutcome outcome, String courseCode) {
+            return new DeleteResolution(DeleteStatus.RESOLVED, outcome, null, courseCode);
         }
     }
 
@@ -385,10 +409,11 @@ public class QuestionService {
         if (!blocking.isEmpty()) {
             log.debug("Delete of question {} blocked by {} exam(s)",
                     question.getDisplayId(), blocking.size());
-            return new DeleteResolution(DeleteStatus.RESOLVED,
+            return DeleteResolution.resolved(
                     new DeleteOutcome(false, blocking.stream()
                             .map(exam -> new BlockingExam(exam.displayId(), exam.name()))
-                            .toList()));
+                            .toList()),
+                    question.getCourseCode());
         }
 
         // A managed entity: the stamp is flushed with the transaction, and the serial stays
@@ -396,7 +421,8 @@ public class QuestionService {
         question.setDeletedAt(clock.instant());
         log.debug("Question {} soft-deleted by user {}",
                 question.getDisplayId(), caller.userId());
-        return new DeleteResolution(DeleteStatus.RESOLVED, new DeleteOutcome(true, List.of()));
+        return DeleteResolution.resolved(new DeleteOutcome(true, List.of()),
+                question.getCourseCode());
     }
 
     // ===================== Shared ========================================

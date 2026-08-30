@@ -89,9 +89,15 @@ public final class QuestionEditorCopy {
 
     /** Saves a new question. */
     public static final String CREATE = "Add question";
+    /** U-68: the create form's course field. */
+    public static final String COURSE_LABEL = "Course";
+    public static final String COURSE_PROMPT = "Choose the course";
 
     /** Saves an edit. */
     public static final String SAVE = "Save as a new version";
+    /** U-57: why Save is off on an edit with nothing changed. */
+    public static final String NOTHING_CHANGED =
+            "Nothing has changed yet. Edit something to save a new version.";
 
     /** Leaves without saving. */
     public static final String CANCEL = "Cancel";

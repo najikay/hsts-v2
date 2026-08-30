@@ -1,6 +1,8 @@
 package client.features.grading;
 
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import client.ui.components.logic.AsyncViewState;
@@ -13,6 +15,9 @@ import common.dto.grading.GradeOverrideRequest;
 import common.dto.grading.GradeState;
 import common.dto.grading.GradingQueue;
 import common.dto.grading.StudentGradeRow;
+import common.dto.notify.NavRef;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.protocol.ErrorCode;
 import common.protocol.Message;
 import common.protocol.Verb;
@@ -44,13 +49,14 @@ class GradingQueueSessionTest {
     private static final long OTHER_EXECUTION = 4823;
 
     private FakeClientConnection connection;
+    private RequestDispatcher dispatcher;
     private GradingQueueSession session;
     private int renders;
 
     @BeforeEach
     void setUp() {
         connection = new FakeClientConnection();
-        RequestDispatcher dispatcher = new RequestDispatcher(connection);
+        dispatcher = new RequestDispatcher(connection);
         connection.setServerMessageHandler(dispatcher::dispatchIncoming);
         session = new GradingQueueSession(dispatcher, new DirectFxThreadPoster())
                 .onChange(() -> renders++);
@@ -526,5 +532,94 @@ class GradingQueueSessionTest {
         session.load();
 
         assertThat(renders).isEqualTo(2);
+    }
+
+    // ===================== It updates itself (U-63) =======================
+
+    /**
+     * The grading queue re-reads itself when a sitting closes (U-63, NFR-18).
+     *
+     * <p><b>The defect this pins.</b> {@code GRADING_DUE} already reached this teacher and her
+     * bell badge incremented for it. The queue underneath the bell did not re-read, so the one
+     * screen whose entire purpose is a work list showed yesterday's work until she navigated
+     * away and back. It is {@code ApprovalQueueSession}'s B-30 on the app's other inbox, and
+     * like B-30 nothing could have failed for it, which is why this posts a real
+     * {@code NotificationDto} onto a real bus rather than calling the method.
+     */
+    @Nested
+    @DisplayName("it updates itself ⚑ (U-63)")
+    class UpdatesItself {
+
+        private ClientEventBus eventBus;
+
+        @BeforeEach
+        void subscribe() {
+            eventBus = new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+            dispatcher.setPushListener(new PushEventBridge(eventBus));
+            session.subscribeTo(eventBus);
+        }
+
+        private NotificationDto notification(NotificationType type) {
+            return new NotificationDto(1L, type, "Papers are waiting for you", "",
+                    NavRef.to("grading", EXECUTION), Instant.parse("2026-06-02T12:00:00Z"), null);
+        }
+
+        private long queueReads() {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.GRADING_QUEUE_GET)
+                    .count();
+        }
+
+        @Test
+        @DisplayName("⚑ a GRADING_DUE push re-asks the queue, with no user action")
+        void aClosingSittingRefreshesTheQueue() {
+            connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of()));
+            session.load();
+            assertThat(session.queue()).isEmpty();
+            connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of(summary(8, 0))));
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+
+            assertThat(queueReads())
+                    .as("she pressed nothing: NFR-18 on a screen that is a work list")
+                    .isEqualTo(2);
+            assertThat(session.queue()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a grade published to a student is not a reason to re-read her queue")
+        void anUnrelatedNotificationIsIgnored() {
+            connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of(summary(2, 0))));
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADE_PUBLISHED));
+
+            assertThat(queueReads())
+                    .as("type-filtered; and re-reading on a push about her own click would make "
+                            + "the table jump under her hands")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("the open sitting is re-read as well, because its rows moved too")
+        void theOpenSittingIsReReadToo() {
+            givenOpenSitting();
+            connection.clearSent();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .contains(Verb.GRADING_QUEUE_GET, Verb.GRADING_EXECUTION_GET);
+        }
+
+        @Test
+        @DisplayName("a null bus is refused rather than silently not subscribing")
+        void aNullBusIsRefused() {
+            org.assertj.core.api.Assertions.assertThatNullPointerException()
+                    .isThrownBy(() -> session.subscribeTo(null));
+        }
     }
 }

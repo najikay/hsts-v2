@@ -3,6 +3,7 @@ package ocsf.client;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 
 /**
@@ -27,6 +28,16 @@ public abstract class AbstractClient implements Runnable {
     private int port;
     private volatile boolean readyToStop = false;
 
+    /**
+     * How long {@link #openConnection()} may spend dialling and shaking hands, in
+     * milliseconds. {@code 0} waits forever, which is what this class used to do
+     * unconditionally.
+     */
+    private volatile int connectTimeout = DEFAULT_CONNECT_TIMEOUT_MS;
+
+    /** The default bound on a connect: long enough for a loaded server, short enough to answer a user. */
+    public static final int DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
+
     public AbstractClient(String host, int port) {
         this.host = host;
         this.port = port;
@@ -34,15 +45,73 @@ public abstract class AbstractClient implements Runnable {
 
     // ===== Public API =====================================================
 
-    /** Opens the connection to the server and starts the read thread. */
+    /**
+     * Sets the bound on the next {@link #openConnection()}.
+     *
+     * @param millis milliseconds; {@code 0} means wait forever, negatives are
+     *               treated as {@code 0}
+     */
+    public final void setConnectTimeout(int millis) {
+        this.connectTimeout = Math.max(0, millis);
+    }
+
+    /** @return the current connect and handshake bound in milliseconds. */
+    public final int getConnectTimeout() {
+        return connectTimeout;
+    }
+
+    /**
+     * Opens the connection to the server and starts the read thread.
+     *
+     * <h2>Both halves of the open are bounded, and that is the fix ⚑ (B-49)</h2>
+     *
+     * <p>This method used to be {@code new Socket(host, port)} followed by
+     * {@code new ObjectInputStream(...)}, and the <b>second</b> of those is where
+     * a client talking to a stopped server hung. Constructing an
+     * {@link ObjectInputStream} reads the peer's serialization stream header
+     * before it returns, and the server writes that header only once it has
+     * accepted the socket and built its own {@link ObjectOutputStream}. A server
+     * that is bound but not accepting never gets that far, while the operating
+     * system cheerfully completes the TCP handshake into the accept backlog on its
+     * behalf. So the socket connected, the header never came, and
+     * {@code openConnection} blocked with no timeout on it at all: the connect
+     * screen said {@code Connecting...} until somebody closed the server console.
+     *
+     * <p>The socket now carries {@link #setConnectTimeout(int)} across both steps.
+     * The dial gets it through {@link Socket#connect(java.net.SocketAddress, int)},
+     * and the header read gets it through {@code SO_TIMEOUT}, which is cleared
+     * again the moment the handshake is done so the read loop below goes on
+     * blocking indefinitely as it always has. A server that never answers now
+     * costs a {@link java.net.SocketTimeoutException} rather than a thread.
+     *
+     * @throws java.net.SocketTimeoutException when the dial or the stream
+     *                                         handshake outlasts the timeout
+     */
     public final void openConnection() throws IOException {
         if (isConnected()) {
             return;
         }
-        clientSocket = new Socket(host, port);
-        output = new ObjectOutputStream(clientSocket.getOutputStream());
-        output.flush();
-        input = new ObjectInputStream(clientSocket.getInputStream());
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(host, port), connectTimeout);
+        // Bounds the header read inside the ObjectInputStream constructor below.
+        socket.setSoTimeout(connectTimeout);
+        clientSocket = socket;
+        try {
+            output = new ObjectOutputStream(socket.getOutputStream());
+            output.flush();
+            input = new ObjectInputStream(socket.getInputStream());
+        } catch (IOException e) {
+            // A half-open connection is worse than none: the caller is about to be
+            // told this failed, and must not be left holding a live socket.
+            try {
+                closeAll();
+            } catch (IOException closing) {
+                e.addSuppressed(closing);
+            }
+            throw e;
+        }
+        // The handshake is over; the read loop waits as long as the session lasts.
+        socket.setSoTimeout(0);
         readyToStop = false;
         clientReader = new Thread(this);
         clientReader.start();

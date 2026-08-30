@@ -239,7 +239,16 @@ class NotifyDtoTest {
                 // in this vocabulary rather than in the fixture: both name an emit point the
                 // product has, and neither had a constant to be spelled with.
                 NotificationType.GRADING_DUE,
-                NotificationType.EXECUTION_CLOSED);
+                NotificationType.EXECUTION_CLOSED,
+                // ⚑ U-63 added this one (BOT amendment A4). BOT_ACTIVE_SET and BOT_CREATE were
+                // the two mutating bot verbs that told nobody anything, so a co-teacher with
+                // the manager open could not learn that a shared bot now exists or that
+                // students can no longer talk to it. Its own constant rather than a reused
+                // BOT_SOURCE_CHANGED, because a toggle is not a source change and the type is
+                // what the panel picks an icon by; BOT_DELETE's reuse of BOT_SOURCE_CHANGED
+                // still stands, since a deleted bot and changed material both mean "open the
+                // manager and look".
+                NotificationType.BOT_CHANGED);
     }
 
     private static NotificationDto row(long id) {

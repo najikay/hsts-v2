@@ -495,6 +495,10 @@ class BotAdminServiceTest {
         @BeforeEach
         void createTheBot() {
             create(DANA, DATABASES, "Databases bot");
+            // U-63 gave BOT_CREATE a notification of its own (BOT amendment A4), and the
+            // create above is fixture rather than subject here. Cleared so these tests still
+            // assert on the one notification they are about.
+            notifier.sent.clear();
         }
 
         @Test
@@ -583,6 +587,8 @@ class BotAdminServiceTest {
             store = new InMemoryBotStore().course(JAVA, "Java 21").teaches(JAVA, DANA)
                     .user(DANA, "Dana Cohen").bot(JAVA, "Java bot", true);
             service = newService(BotAdminService.SourceLocks.OPEN);
+            // A fresh store, but the same notifier: the outer fixture's create is still in it.
+            notifier.sent.clear();
 
             service.addSource(teacher(DANA), Message.request(Verb.BOT_SOURCE_ADD,
                     new SourceAddRequest(JAVA, BotSourceKind.TEXT, "Notes",
@@ -778,6 +784,10 @@ class BotAdminServiceTest {
         @BeforeEach
         void createTheBot() {
             create(DANA, DATABASES, "Databases bot");
+            // U-63 gave BOT_CREATE a notification of its own (BOT amendment A4), and the
+            // create above is fixture rather than subject here. Cleared so these tests still
+            // assert on the one notification they are about.
+            notifier.sent.clear();
         }
 
         private void recordQuestion(String question, Instant at) {
@@ -888,5 +898,159 @@ class BotAdminServiceTest {
                     assertThat(router.isRegistered(verb)).as("%s", verb).isTrue();
                     assertThat(router.isOpen(verb)).as("%s", verb).isFalse();
                 });
+    }
+
+    // ===================== Toggle and create announce (U-63) ==============
+
+    /**
+     * The two mutating verbs that told nobody anything ⚑ (U-63, finding 11).
+     *
+     * <p>Before this the server sent no notification at all for {@code BOT_ACTIVE_SET} or
+     * {@code BOT_CREATE}: only a source change and a delete existed. A co-teacher's Bot Manager
+     * therefore had no way to learn either of the two facts that matter most about a shared
+     * bot, which are that it now exists and that students can or cannot talk to it.
+     *
+     * <p>{@code BOT_CHANGED} rather than a reused {@code BOT_SOURCE_CHANGED}, and the argument
+     * is on that constant: a toggle is not a source change, and a colleague told the material
+     * moved would go looking for a table that is exactly as she left it.
+     */
+    @Nested
+    @DisplayName("⚑ U-63: a toggle and a create reach the course's other teachers")
+    class AnnouncingToggleAndCreate {
+
+        private Message setActive(long teacherId, boolean active) {
+            return service.setActive(teacher(teacherId),
+                    Message.request(Verb.BOT_ACTIVE_SET,
+                            new BotActiveRequest(DATABASES, active)));
+        }
+
+        @Test
+        @DisplayName("creating a bot tells the course's other teachers, and not the creator")
+        void createNotifiesCoTeachers() {
+            create(DANA, DATABASES, "Databases study bot");
+
+            assertThat(notifier.sent).hasSize(1);
+            RecordingNotifier.Sent sent = notifier.sent.get(0);
+            assertThat(sent.userIds())
+                    .as("Michal teaches Databases too and her screen still offers Create")
+                    .containsExactly(MICHAL);
+            assertThat(sent.userIds())
+                    .as("telling somebody what they just did is noise, and noise is what makes "
+                            + "people stop reading their notifications")
+                    .doesNotContain(DANA);
+            assertThat(sent.type()).isEqualTo(NotificationType.BOT_CHANGED);
+            assertThat(sent.title()).isEqualTo("Study bot created");
+            assertThat(sent.body()).contains("Dana Cohen").contains("Databases 22");
+        }
+
+        @Test
+        @DisplayName("⚑ a second teacher pressing Create joins the bot and tells nobody (S-30)")
+        void joiningAnExistingBotAnnouncesNothing() {
+            create(DANA, DATABASES, "Databases study bot");
+            notifier.sent.clear();
+
+            Message response = create(MICHAL, DATABASES, "Databases study bot");
+
+            assertThat(response.isOk())
+                    .as("S-30 makes this verb idempotent: she joins the bot that is there")
+                    .isTrue();
+            assertThat(notifier.sent)
+                    .as("announcing 'a study bot was created' for a press that created nothing "
+                            + "is a notification that is simply untrue")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("⚑ switching the bot on tells the other teachers, and says which way")
+        void switchingOnNotifiesCoTeachers() {
+            create(DANA, DATABASES, "Databases study bot");
+            // A bot is born switched ON (Bot.active defaults true), so switching it on
+            // straight after creating it moves nothing. Off first, and the assertion below
+            // is then about a toggle that really happened.
+            setActive(DANA, false);
+            notifier.sent.clear();
+
+            setActive(DANA, true);
+
+            assertThat(notifier.sent).hasSize(1);
+            RecordingNotifier.Sent sent = notifier.sent.get(0);
+            assertThat(sent.userIds()).containsExactly(MICHAL);
+            assertThat(sent.type()).isEqualTo(NotificationType.BOT_CHANGED);
+            assertThat(sent.title()).isEqualTo("Study bot switched on");
+            assertThat(sent.body())
+                    .as("whether students can talk to it right now is the fact that matters, "
+                            + "so it is in the sentence and not only in the type")
+                    .contains("switched on");
+        }
+
+        @Test
+        @DisplayName("switching it off says so, in its own words")
+        void switchingOffSaysSo() {
+            create(DANA, DATABASES, "Databases study bot");
+            notifier.sent.clear();
+
+            setActive(DANA, false);
+
+            assertThat(notifier.sent).hasSize(1);
+            assertThat(notifier.sent.get(0).title()).isEqualTo("Study bot switched off");
+            assertThat(notifier.sent.get(0).body()).contains("switched off");
+        }
+
+        @Test
+        @DisplayName("⚑ a toggle that moves nothing announces nothing")
+        void aNoOpToggleIsSilent() {
+            // ⚑ This is the case that surprised the test author rather than the reader: a bot
+            // is created ON, so "switch it on" immediately after creating it is a no-op, and
+            // the guard catches it. A double-click is a normal thing to do, and a notification
+            // per click would make a colleague's screen re-read for a state that never moved
+            // (GradingHandlers.approve states the same rule about a re-approve).
+            create(DANA, DATABASES, "Databases study bot");
+            notifier.sent.clear();
+
+            setActive(DANA, true);
+
+            assertThat(notifier.sent).isEmpty();
+
+            // And the other direction: off, then off again.
+            setActive(DANA, false);
+            notifier.sent.clear();
+            setActive(DANA, false);
+
+            assertThat(notifier.sent).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a refused toggle announces nothing, because nothing was committed")
+        void aRefusedToggleIsSilent() {
+            // No bot on this course at all: NOT_FOUND, before anything is written.
+            Message response = setActive(DANA, true);
+
+            assertThat(response.isError()).isTrue();
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+            assertThat(notifier.sent).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a teacher who does not teach the course is refused and tells nobody")
+        void anOutsiderIsRefusedAndSilent() {
+            create(DANA, DATABASES, "Databases study bot");
+            notifier.sent.clear();
+
+            Message response = service.setActive(teacher(OTHER_TEACHER),
+                    Message.request(Verb.BOT_ACTIVE_SET, new BotActiveRequest(DATABASES, true)));
+
+            assertThat(response.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+            assertThat(notifier.sent).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a solo-taught course's bot notifies nobody, which is not an error")
+        void aSoloCourseTellsNobody() {
+            create(OTHER_TEACHER, JAVA, "Java study bot");
+
+            assertThat(notifier.sent)
+                    .as("a rule that fired for nobody is not a failure")
+                    .isEmpty();
+        }
     }
 }

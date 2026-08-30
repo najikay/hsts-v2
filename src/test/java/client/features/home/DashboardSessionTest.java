@@ -1,7 +1,9 @@
 package client.features.home;
 
 import client.core.Routes;
+import client.events.ClientEventBus;
 import client.events.DirectFxThreadPoster;
+import client.events.PushEventBridge;
 import client.net.FakeClientConnection;
 import client.net.RequestDispatcher;
 import common.dto.approval.ApprovalQueue;
@@ -17,6 +19,9 @@ import common.dto.grading.GradeState;
 import common.dto.grading.GradingQueue;
 import common.dto.grading.MyGrades;
 import common.dto.grading.StudentGradeRow;
+import common.dto.notify.NavRef;
+import common.dto.notify.NotificationDto;
+import common.dto.notify.NotificationType;
 import common.dto.release.ReleaseList;
 import common.dto.release.ReleaseRow;
 import common.dto.release.ReleaseState;
@@ -29,6 +34,7 @@ import common.dto.results.ExecutionState;
 import common.dto.results.ResultStatistics;
 import common.dto.results.TeacherResults;
 import common.protocol.ErrorCode;
+import common.protocol.Message;
 import common.protocol.Verb;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -602,6 +608,231 @@ class DashboardSessionTest {
 
             assertThat(session.cards().get(0).state()).isEqualTo(DashboardCard.State.FAILED);
             assertThat(session.cards().get(1).state()).isEqualTo(DashboardCard.State.EMPTY);
+        }
+    }
+
+    // ===================== They update themselves (U-63) ==================
+
+    /**
+     * Every dashboard re-reads its own cards, with no user action (U-63, NFR-18).
+     *
+     * <p>These four screens were the largest remaining hole in NFR-18: a home screen is the
+     * one a user leaves open, and all four were a photograph of the moment it was opened. A
+     * sitting could finish, a queue could fill and an exam could arrive for approval, and the
+     * bell would say so while the numbers underneath it went on saying what they said.
+     *
+     * <p>Driven through a real {@link ClientEventBus} and a real {@link PushEventBridge}
+     * rather than by calling the refresh method, because "the subscriber was never registered"
+     * is precisely the defect these tests exist to catch, and a direct call cannot see it.
+     */
+    @Nested
+    @DisplayName("they update themselves ⚑ (U-63)")
+    class UpdatesItself {
+
+        private ClientEventBus eventBus;
+
+        @BeforeEach
+        void wireTheBus() {
+            eventBus = new ClientEventBus(ClientEventBus.newBus(), new DirectFxThreadPoster());
+            // setPushListener, NOT setServerMessageHandler: the dispatcher stays the connection's
+            // handler so responses still settle, and it forwards the pushes to the bridge.
+            dispatcher.setPushListener(new PushEventBridge(eventBus));
+        }
+
+        private NotificationDto notification(NotificationType type) {
+            return new NotificationDto(1L, type, "Something happened", "", NavRef.none(),
+                    NOW, null);
+        }
+
+        private long reads(Verb verb) {
+            return connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == verb)
+                    .count();
+        }
+
+        private void teacherServer() {
+            connection.replyOk(Verb.RELEASE_LIST_GET, new ReleaseList(NOW, List.of()));
+            connection.replyOk(Verb.GRADING_QUEUE_GET, new GradingQueue(List.of()));
+            connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of()));
+        }
+
+        @Test
+        @DisplayName("⚑ teacher: GRADING_DUE re-reads the cards")
+        void teacherFollowsGradingDue() {
+            teacherServer();
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+
+            assertThat(reads(Verb.GRADING_QUEUE_GET))
+                    .as("the awaiting-grading card is what this notification IS")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("teacher: a release changing state re-reads the live and next cards")
+        void teacherFollowsExecutionStatus() {
+            teacherServer();
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_EXECUTION_STATUS,
+                    release(1L, ReleaseState.LIVE));
+
+            assertThat(reads(Verb.RELEASE_LIST_GET)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("teacher: an approval notification is not hers to react to")
+        void teacherIgnoresApprovals() {
+            teacherServer();
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_REQUESTED));
+
+            assertThat(reads(Verb.GRADING_QUEUE_GET))
+                    .as("type-filtered, not a re-read on anything that arrives")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("⚑ teacher: a push while the reads are in flight starts no second round")
+        void teacherDoesNotStampede() {
+            // Nothing answers: all three reads stay outstanding.
+            connection.respondTo(Verb.RELEASE_LIST_GET, request -> null);
+            connection.respondTo(Verb.GRADING_QUEUE_GET, request -> null);
+            connection.respondTo(Verb.RESULTS_EXAMS_GET, request -> null);
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .as("a second set of requests could settle out of order and put the older "
+                            + "numbers back")
+                    .hasSize(3);
+        }
+
+        @Test
+        @DisplayName("⚑ coordinator: an exam arriving for approval re-reads both cards")
+        void coordinatorFollowsApprovals() {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET, new ApprovalQueue(List.of(), true));
+            CoordinatorDashboardSession session =
+                    new CoordinatorDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET,
+                    new ApprovalQueue(List.of(submission(1L, "Dana Cohen")), true));
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_REQUESTED));
+
+            assertThat(reads(Verb.APPROVALS_QUEUE_GET)).isEqualTo(2);
+            assertThat(session.cards().get(0).value())
+                    .as("her home screen and her queue can no longer disagree about the count")
+                    .isEqualTo("1");
+        }
+
+        @Test
+        @DisplayName("coordinator: a supersede re-reads too, because it takes a row away")
+        void coordinatorFollowsSupersedes() {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET, new ApprovalQueue(List.of(), true));
+            CoordinatorDashboardSession session =
+                    new CoordinatorDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_SUPERSEDED));
+
+            assertThat(reads(Verb.APPROVALS_QUEUE_GET)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ student: a published grade re-reads her card")
+        void studentFollowsPublishedGrades() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of()));
+            StudentDashboardSession session =
+                    new StudentDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_GRADE_PUBLISHED, grade(1L, 88, NOW));
+
+            assertThat(reads(Verb.MY_GRADES_GET)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ student: the row push and the notification for one grade cost one read")
+        void studentReadsOncePerGrade() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of()));
+            StudentDashboardSession session =
+                    new StudentDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+            // Nothing answers from here, so the first re-read stays in flight while the
+            // notification that rides beside it arrives.
+            connection.respondTo(Verb.MY_GRADES_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_GRADE_PUBLISHED, grade(1L, 88, NOW));
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADE_PUBLISHED));
+
+            assertThat(reads(Verb.MY_GRADES_GET))
+                    .as("the server sends both for one event; reacting to each separately "
+                            + "would cost two identical reads that could settle in either order")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("⚑ principal: a sitting finishing re-reads her cards")
+        void principalFollowsClosedSittings() {
+            connection.replyOk(Verb.DATA_EXAMS_GET, new DataExams(List.of()));
+            connection.replyOk(Verb.DATA_RESULTS_GET, new DataResults(List.of()));
+            PrincipalDashboardSession session =
+                    new PrincipalDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(reads(Verb.DATA_RESULTS_GET))
+                    .as("S-7 makes this the only notification she ever receives, so it is the "
+                            + "only one her dashboard can act on")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("every dashboard refuses a null bus rather than silently not subscribing")
+        void aNullBusIsRefused() {
+            org.assertj.core.api.Assertions.assertThatNullPointerException().isThrownBy(() ->
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(null));
+            org.assertj.core.api.Assertions.assertThatNullPointerException().isThrownBy(() ->
+                    new CoordinatorDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(null));
+            org.assertj.core.api.Assertions.assertThatNullPointerException().isThrownBy(() ->
+                    new StudentDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(null));
+            org.assertj.core.api.Assertions.assertThatNullPointerException().isThrownBy(() ->
+                    new PrincipalDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(null));
         }
     }
 }

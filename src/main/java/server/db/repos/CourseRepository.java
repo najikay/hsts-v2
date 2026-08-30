@@ -235,6 +235,62 @@ public final class CourseRepository {
     }
 
     /**
+     * Everybody who can read one course's question bank ⚑ (E6, U-63 — NFR-18).
+     *
+     * <p><b>This is {@code BankBrowseService.reachableCourseCodes} inverted, and the inversion
+     * is the whole reason it lives here rather than in the handler that pushes.</b> That method
+     * answers "which courses may this user read"; {@code PUSH_BANK_CHANGED} needs the other
+     * direction, "who may read this course", and the two have to agree or the push becomes a
+     * disclosure. Agreement is by construction: the three clauses below are the same three
+     * facts that method unions over, read the other way round.
+     *
+     * <ul>
+     *   <li><b>its teachers</b>, from {@code course_teachers} (S-5), including the one who made
+     *       the change. Unlike the bot's F12.3 notifications this excludes nobody: the actor's
+     *       own second window is a screen that has to follow too, and a push she raised is not
+     *       noise in a bell she never sees it in (this verb writes no notification row);</li>
+     *   <li><b>the coordinator of its subject</b>, via {@code courses.subject_code} then
+     *       {@code coordinators} (section 7.7's second scope). She reads the banks of every
+     *       course in her subject whether or not she teaches them;</li>
+     *   <li><b>every principal</b>, who reaches every course in the school (F9.3). Her role is
+     *       stored, so this is the one clause that is a role test rather than a membership
+     *       one, which is exactly what {@code Authorization.reachesEveryCourse} short-circuits
+     *       on.</li>
+     * </ul>
+     *
+     * <p>Students are absent and that is the point: they never read a bank, so a bank push must
+     * never reach one. It is one query rather than three round trips because it runs on the
+     * commit path of every question write.
+     *
+     * <p>Consumer: E6's {@code BankHandlers}, choosing who to push {@code PUSH_BANK_CHANGED} to.
+     *
+     * @param session    the current session
+     * @param courseCode the 2-character course code
+     * @return their user ids, ascending and distinct; empty for a course nobody staffs
+     */
+    public List<Long> findBankReaderIds(Session session, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return List.of();
+        }
+        return session.createQuery("""
+                        select distinct u.id from User u
+                        where u.id in (
+                                select ct.id.teacherId from CourseTeacher ct
+                                where ct.id.courseCode = :courseCode)
+                           or u.id in (
+                                select co.teacherId from Coordinator co
+                                where co.subjectCode in (
+                                        select c.subjectCode from Course c
+                                        where c.code = :courseCode))
+                           or u.role = :principal
+                        order by u.id
+                        """, Long.class)
+                .setParameter("courseCode", courseCode.strip())
+                .setParameter("principal", server.db.entities.UserRole.PRINCIPAL)
+                .getResultList();
+    }
+
+    /**
      * A course's display name (E16.9).
      *
      * <p>One column, because that is all the caller wants: the bot's screens put the

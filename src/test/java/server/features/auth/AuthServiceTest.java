@@ -228,6 +228,85 @@ class AuthServiceTest {
             assertThat(auth.login(USER, PASSWORD, connection).isSuccess()).isTrue();
         }
 
+        // =============== Omar's finding 8, pinned both ways ===============
+        //
+        // Reported as "too many attempts enforceable only when no change in
+        // username/password is made". Half of that is a misreading and half of it
+        // is the design, and neither half was pinned by a test, which is how the
+        // report became plausible. These two settle it:
+        //
+        //   changing the PASSWORD changes nothing. The counter is per username and
+        //   it does not care what was guessed, so five wrong guesses lock the
+        //   account whether they were five different guesses or the same one five
+        //   times. That is the F1.1 rule and it is what stops a brute force.
+        //
+        //   changing the USERNAME does change something, correctly. Each username
+        //   carries its own counter, because throttling anything else either fails
+        //   to stop an attacker (per connection: they open another socket) or lets
+        //   one attacker lock out a whole school (per address: a classroom behind
+        //   one NAT). Trying five names once each locks nobody, and that is the
+        //   behaviour a tester who varies both fields at once will see.
+
+        @Test
+        @DisplayName("⚑ five wrong passwords lock the account even when every one of them is different")
+        void aDifferentPasswordEveryTimeStillLocks() {
+            String[] guesses = {"wrong-1", "wrong-2", "wrong-3", "wrong-4", "wrong-5"};
+
+            for (String guess : guesses) {
+                assertThat(auth.login(USER, guess, connection).message())
+                        .as("guess %s", guess)
+                        .isEqualTo(AuthService.GENERIC_FAILURE);
+            }
+
+            assertThat(auth.throttle().isLocked(USER))
+                    .as("the counter is per username; it never looks at the password")
+                    .isTrue();
+            assertThat(auth.login(USER, PASSWORD, connection).message())
+                    .isEqualTo(AuthService.THROTTLED_FAILURE);
+        }
+
+        @Test
+        @DisplayName("⚑ each username carries its own counter, and attempts on others do not reset it")
+        void differentUsernamesHaveIndependentCounters() {
+            String other = "rina.barak";
+
+            // Four on one name, four on another, interleaved. Neither locks, and
+            // neither has reset the other: this is what Omar was looking at.
+            for (int round = 0; round < LoginThrottle.MAX_FAILURES - 1; round++) {
+                auth.login(USER, "wrong", connection);
+                auth.login(other, "wrong", connection);
+            }
+            assertThat(auth.throttle().isLocked(USER)).isFalse();
+            assertThat(auth.throttle().isLocked(other)).isFalse();
+
+            // The fifth on one name locks that name only.
+            auth.login(USER, "wrong", connection);
+
+            assertThat(auth.throttle().isLocked(USER))
+                    .as("four intervening attempts on another user did not reset this counter")
+                    .isTrue();
+            assertThat(auth.throttle().isLocked(other))
+                    .as("and locking one account must not lock the classroom")
+                    .isFalse();
+            assertThat(auth.login(other, PASSWORD, otherConnection).isSuccess())
+                    .as("the other user still signs in normally")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("⚑ retyping the username in a different case is the same account, and still locks")
+        void caseVariantsShareOneCounter() {
+            String[] typings = {"dana.cohen", "Dana.Cohen", "DANA.COHEN", " dana.cohen ", "dAnA.cOhEn"};
+
+            for (String typed : typings) {
+                auth.login(typed, "wrong", connection);
+            }
+
+            assertThat(auth.throttle().isLocked(USER))
+                    .as("the counter follows the account, not the characters typed")
+                    .isTrue();
+        }
+
         private void failFiveTimes() {
             for (int attempt = 0; attempt < LoginThrottle.MAX_FAILURES; attempt++) {
                 auth.login(USER, "wrong", connection);

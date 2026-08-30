@@ -300,6 +300,49 @@ public final class NotificationCatalog {
     }
 
     /**
+     * A course's study bot was created (→ the other teachers of that course, U-63).
+     *
+     * <p>Sent because a bot is a shared thing: the moment one teacher creates it, her
+     * colleagues' Bot Manager stops offering Create and starts showing a bot they can add
+     * material to. A screen that still offers Create for a bot that exists is a screen whose
+     * next click is answered with "there is already one here" (S-30), which is a refusal the
+     * server should never have had to make.
+     *
+     * @param courseName the course that now has a bot
+     * @param editorName the teacher who created it
+     * @param botId      the new bot
+     */
+    public static Draft botCreated(String courseName, String editorName, long botId) {
+        return new Draft(NotificationType.BOT_CHANGED,
+                "Study bot created",
+                editorName + " created the study bot for " + courseName + ".",
+                NavRef.to(ROUTE_BOT_MANAGER, botId));
+    }
+
+    /**
+     * A course's study bot was switched on or off (→ the other teachers of that course, U-63).
+     *
+     * <p><b>The state is in the sentence, not only in the type.</b> "Dana Cohen changed the
+     * study bot" would leave a colleague to open the manager to learn the one fact that
+     * matters, which is whether students can talk to it right now (F12.4). Two sentences from
+     * one factory rather than two factories, because the difference is a single word and the
+     * rest of the line is identical.
+     *
+     * @param courseName the course whose bot was toggled
+     * @param editorName the teacher who toggled it
+     * @param active     its state now
+     * @param botId      the bot
+     */
+    public static Draft botToggled(String courseName, String editorName, boolean active,
+                                   long botId) {
+        return new Draft(NotificationType.BOT_CHANGED,
+                active ? "Study bot switched on" : "Study bot switched off",
+                editorName + (active ? " switched on " : " switched off ")
+                        + "the study bot for " + courseName + ".",
+                NavRef.to(ROUTE_BOT_MANAGER, botId));
+    }
+
+    /**
      * A student used another course's bot during an attempt (C-4).
      *
      * <p>Worded as something to look at, not as an accusation: the server cannot

@@ -5,6 +5,7 @@ import client.features.locks.EditLockState;
 import client.features.locks.FxHeartbeat;
 import client.features.locks.LockAwareEditor;
 import client.features.locks.LockBanner;
+import common.dto.auth.CourseRef;
 import common.dto.auth.LoginResult;
 import client.core.NavParams;
 import client.ui.components.Buttons;
@@ -81,6 +82,8 @@ public final class QuestionEditorView extends AbstractScreen {
 
     /** Nav parameter carrying the course, for a new question. */
     public static final String PARAM_COURSE = "courseCode";
+    /** U-68: marks an intentional blank-course create, telling the guard it is not a wiring error. */
+    public static final String PARAM_NEW = "newQuestion";
 
     private final VBox root = new VBox(16);
     private final Label title = new Label();
@@ -94,6 +97,10 @@ public final class QuestionEditorView extends AbstractScreen {
             QuestionEditorCopy.ANSWERS_LABEL, answerOptionLabels());
     private final FormField topicField =
             FormField.text(QuestionEditorCopy.TOPIC_LABEL, QuestionEditorCopy.TOPIC_PROMPT);
+    /** U-68: create mode only; the course the new question belongs to. */
+    private final ComboBox<CourseRef> courseBox = new ComboBox<>();
+    private final FormField courseField =
+            new FormField(QuestionEditorCopy.COURSE_LABEL, courseBox);
     private final ComboBox<Difficulty> difficultyBox = new ComboBox<>();
     private final FormField difficultyField =
             new FormField(QuestionEditorCopy.DIFFICULTY_LABEL, difficultyBox);
@@ -133,7 +140,8 @@ public final class QuestionEditorView extends AbstractScreen {
         byte[] image = params.get(PARAM_IMAGE, byte[].class).orElse(null);
         String course = params.getString(PARAM_COURSE, null);
 
-        if (detail == null && course == null) {
+        boolean newQuestion = "true".equals(params.getString(PARAM_NEW, ""));
+        if (detail == null && course == null && !newQuestion) {
             // Neither mode is possible. Nothing links here without one, so this is a wiring
             // error rather than a state, and drawing an empty form would hide it.
             navigator().navigate(BankRoutes.LIST);
@@ -147,6 +155,30 @@ public final class QuestionEditorView extends AbstractScreen {
         buildForm();
         openLock(detail);
         render();
+        redriveDifficulty();
+    }
+
+    /**
+     * U-56 (2026-08-31): a value applied before the ComboBox had a skin left its custom button
+     * cell blank, so an Edit opened with the difficulty in the session and nothing in the box.
+     * Once the screen is shown, the value is cleared and set again on the next pulse, which
+     * drives the button cell through the value property with the skin in place. Silent to the
+     * session: the guard keeps the round trip from marking the form dirty.
+     */
+    private void redriveDifficulty() {
+        Difficulty value = session.difficulty();
+        if (value == null) {
+            return;
+        }
+        javafx.application.Platform.runLater(() -> {
+            filling = true;
+            try {
+                difficultyBox.setValue(null);
+                difficultyBox.setValue(value);
+            } finally {
+                filling = false;
+            }
+        });
     }
 
     /**
@@ -270,6 +302,30 @@ public final class QuestionEditorView extends AbstractScreen {
             }
         });
 
+        // U-68: the create form owns its course. Options are the courses she may write in
+        // (LoginResult.courses is the taught set, the same set QUESTION_CREATE checks). Absent
+        // in edit mode, where the course is a fact of the stored question. Guarded for the
+        // gallery and tests, where nobody is signed in.
+        boolean creating = session.mode() == QuestionEditorSession.Mode.CREATE;
+        if (creating) {
+            LoginResult user = ScreenManager.getInstance().signedInUser();
+            courseBox.getItems().setAll(user == null ? List.<CourseRef>of() : user.courses());
+            courseBox.getStyleClass().add("question-course");
+            courseBox.setPromptText(QuestionEditorCopy.COURSE_PROMPT);
+            courseBox.setCellFactory(view -> new CourseNameCell());
+            courseBox.setButtonCell(new CourseNameCell());
+            courseField.required();
+            courseBox.getSelectionModel().selectedItemProperty()
+                    .addListener((observable, old, value) -> {
+                        if (!filling) {
+                            session.setCourse(value == null ? null : value.code());
+                        }
+                    });
+        }
+        courseField.setVisible(creating);
+        courseField.setManaged(creating);
+
+        difficultyBox.getStyleClass().add("question-difficulty");
         difficultyBox.getItems().setAll(Difficulty.values());
         difficultyBox.setCellFactory(view -> new DifficultyCell());
         difficultyBox.setButtonCell(new DifficultyCell());
@@ -295,7 +351,7 @@ public final class QuestionEditorView extends AbstractScreen {
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.getStyleClass().add("editor-actions");
 
-        VBox form = new VBox(16, textField, answers, correct, hint(), topicField,
+        VBox form = new VBox(16, courseField, textField, answers, correct, hint(), topicField,
                 difficultyField, picker);
         form.getStyleClass().add("editor-form");
 
@@ -336,8 +392,19 @@ public final class QuestionEditorView extends AbstractScreen {
                 correct.select(session.correctAnswer());
             }
             topicField.textField().setText(session.topic());
+            if (session.courseCode() != null) {
+                courseBox.getItems().stream()
+                        .filter(course -> course.code().equals(session.courseCode()))
+                        .findFirst()
+                        .ifPresent(course -> courseBox.getSelectionModel().select(course));
+            }
             if (session.difficulty() != null) {
-                difficultyBox.getSelectionModel().select(session.difficulty());
+                // 2026-08-31, U-56: select() alone left the button cell blank when the value
+                // was applied before the control had a skin (build runs off-scene), so an
+                // Edit opened with the difficulty set in the session and nothing showing in
+                // the box. setValue drives the button cell through the value property, and
+                // onShow re-applies it once the skin exists.
+                difficultyBox.setValue(session.difficulty());
             }
         } finally {
             filling = false;
@@ -359,6 +426,8 @@ public final class QuestionEditorView extends AbstractScreen {
         unsaved.setVisible(dirty);
         unsaved.setManaged(dirty);
         save.setDisable(!session.canSave());
+        save.setTooltip(session.isUnchangedEdit()
+                ? new javafx.scene.control.Tooltip(QuestionEditorCopy.NOTHING_CHANGED) : null);
         save.setText(session.isSaving() ? QuestionEditorCopy.SAVING
                 : session.mode() == QuestionEditorSession.Mode.CREATE
                         ? QuestionEditorCopy.CREATE : QuestionEditorCopy.SAVE);
@@ -501,6 +570,15 @@ public final class QuestionEditorView extends AbstractScreen {
 
     private javafx.stage.Window window() {
         return view().getScene() == null ? null : view().getScene().getWindow();
+    }
+
+    /** U-68: course options render by name; the id is a bank detail, not a choice. */
+    private static final class CourseNameCell extends ListCell<CourseRef> {
+        @Override
+        protected void updateItem(CourseRef course, boolean empty) {
+            super.updateItem(course, empty);
+            setText(empty || course == null ? null : course.name());
+        }
     }
 
     private static final class DifficultyCell extends ListCell<Difficulty> {

@@ -425,6 +425,64 @@ abstract class BankBrowseContract extends RepositoryTestBase {
                 .containsExactly(COURSE_JAVA, COURSE_DATABASES);
     }
 
+    // ===================== The push audience, U-63 ========================
+
+    /**
+     * {@code findBankReaderIds} is the read scope inverted, and the two must agree ⚑ (U-63).
+     *
+     * <p>{@code PUSH_BANK_CHANGED} is addressed with this query, so anybody it returns who
+     * could not have called {@code BANK_LIST} for that course is a disclosure: they would learn
+     * from a push that a course exists which a browse would have hidden. The three tests below
+     * are the three clauses of {@link BankBrowseService#reachableCourseCodes} read backwards,
+     * plus the one that matters most, which is that no student is ever in the answer.
+     */
+    @Test
+    @DisplayName("⚑ a course's bank readers are its teachers, its coordinator and the principal")
+    void bankReadersAreTheReadScopeInverted() {
+        // The shared fixture: dana teaches Algebra, rina coordinates Maths (so she reaches
+        // Algebra without teaching it), avia is the principal, and maya is a student ENROLLED
+        // in Algebra.
+        assertThat(bankReadersOf(COURSE_ALGEBRA))
+                .containsExactlyInAnyOrder(danaId, rinaId, principalId);
+    }
+
+    @Test
+    @DisplayName("⚑ a student enrolled in the course is never a bank reader")
+    void studentsAreNeverBankReaders() {
+        assertThat(bankReadersOf(COURSE_ALGEBRA))
+                .as("maya is enrolled in Algebra and a bank push must never reach her: she "
+                        + "cannot call BANK_LIST for it, so she cannot be told it changed")
+                .doesNotContain(mayaId);
+    }
+
+    @Test
+    @DisplayName("a course nobody teaches still reaches the principal, who reaches everything")
+    void anUnstaffedCourseStillReachesThePrincipal() {
+        // Nobody teaches Java in the shared fixture and Computer Science has no coordinator,
+        // so the role clause is the only one that can answer. It is also the clause that is a
+        // role test rather than a membership one (F9.3).
+        assertThat(bankReadersOf(COURSE_JAVA)).containsExactly(principalId);
+    }
+
+    @Test
+    @DisplayName("a teacher of the course is a reader whether or not she coordinates it")
+    void aPlainTeacherIsAReader() {
+        // rina teaches Calculus AND coordinates its subject: the two clauses overlap on her,
+        // and the query must answer her once rather than twice.
+        assertThat(bankReadersOf(COURSE_CALCULUS))
+                .containsExactlyInAnyOrder(danaId, rinaId, principalId);
+    }
+
+    @Test
+    @DisplayName("no such course is nobody, not an exception")
+    void anUnknownCourseIsEmpty() {
+        // A push for a course that is not there would be a server bug upstream; answering it
+        // with the principal anyway would broadcast that bug to her screen.
+        assertThat(bankReadersOf("99")).containsExactly(principalId);
+        assertThat(bankReadersOf(null)).isEmpty();
+        assertThat(bankReadersOf("  ")).isEmpty();
+    }
+
     // ===================== Fixture =======================================
 
     private BankQuery algebraOnly() {
@@ -461,6 +519,10 @@ abstract class BankBrowseContract extends RepositoryTestBase {
 
     protected final List<String> coordinatedBy(long userId) {
         return inTx(session -> courses.findCoordinatedCourseCodes(session, userId));
+    }
+
+    protected final List<Long> bankReadersOf(String courseCode) {
+        return inTx(session -> courses.findBankReaderIds(session, courseCode));
     }
 
     protected final List<BankQuestionSummary> browse(BankQuery query) {

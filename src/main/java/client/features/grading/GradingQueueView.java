@@ -108,7 +108,12 @@ public final class GradingQueueView extends AbstractScreen {
 
     @Override
     protected Parent build() {
-        session = new GradingQueueSession(dispatcher(), onFxThread()).onChange(this::render);
+        session = new GradingQueueSession(dispatcher(), onFxThread())
+                .onChange(this::render)
+                // The live re-read when a sitting closes with papers to mark (U-63, NFR-18).
+                // GRADING_DUE already reached her bell; until now the queue under it did not
+                // re-read, which on the app's other inbox was B-30.
+                .subscribeTo(eventBus());
 
         root.getStyleClass().add(GradingCopy.STYLE_CLASS);
         root.setLeft(buildQueueRail());
@@ -381,8 +386,16 @@ public final class GradingQueueView extends AbstractScreen {
             boolean canAct = session.openExecution().isPresent() && !session.isBusy();
             approveSelected.setDisable(!canAct || session.selectionSize() == 0);
             selectAll.setDisable(!canAct);
-            override.setDisable(!canAct || selectedRow().isEmpty()
+            // 2026-08-31, U-64 (Omar, round 5): with everything ticked, Change score
+            // opened for whichever row happened to hold the table's single selection,
+            // which read as "the first one ticked". An override is a one-student act:
+            // with more than one ticked it is off, and the tooltip says the way in.
+            boolean manyTicked = session.selectionSize() > 1;
+            override.setDisable(!canAct || manyTicked || selectedRow().isEmpty()
                     || !GradingCopy.canOverride(selectedRow().get()));
+            override.setTooltip(manyTicked
+                    ? new javafx.scene.control.Tooltip(GradingCopy.OVERRIDE_ONE_AT_A_TIME)
+                    : null);
         } finally {
             selecting = false;
         }

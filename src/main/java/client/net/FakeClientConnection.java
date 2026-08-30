@@ -24,7 +24,9 @@ import java.util.function.UnaryOperator;
  *   <li><b>answers</b> them from a per-verb script
  *       ({@link #replyOk}, {@link #replyError}, {@link #respondTo}) — the reply
  *       is correlated to the actual request, so the real
- *       {@link RequestDispatcher} completes the real future;</li>
+ *       {@link RequestDispatcher} completes the real future. {@code HELLO} is
+ *       scripted from the start, because this fake stands in for a server that is
+ *       up;</li>
  *   <li><b>injects</b> server pushes ({@link #pushToClient}) and failures
  *       ({@link #failConnectWith}, {@link #failSendsWith}) on demand.</li>
  * </ul>
@@ -51,7 +53,18 @@ public class FakeClientConnection implements IClientConnection {
         this("fake-host", 5555);
     }
 
+    /**
+     * @param host the address this fake claims to be bound to
+     * @param port the port this fake claims to be bound to
+     */
     public FakeClientConnection(String host, int port) {
+        // A fake connection stands in for a connection to a LIVE server, so it
+        // answers HELLO out of the box (B-49). Otherwise every test that opens one
+        // would have to script the handshake that ConnectHandshake now demands, and
+        // a test that forgot would not fail — it would hang for the timeout and then
+        // report a connect failure, which is the least debuggable outcome available.
+        // A test that wants a different answer just calls respondTo(HELLO, ...).
+        responders.put(Verb.HELLO, request -> Message.ok(request, null));
         this.host = host;
         this.port = port;
     }

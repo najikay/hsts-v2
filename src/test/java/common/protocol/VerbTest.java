@@ -160,14 +160,26 @@ class VerbTest {
     }
 
     @Test
-    @DisplayName("no bank verb is a push: the bank has none, by contract")
-    void noBankVerbIsAPush() {
-        // The live "being edited by" badges on a bank list ride E18.8's push, not a bank one
-        // (F10.0). If a PUSH_QUESTION_* ever appears, two sources of lock truth exist.
+    @DisplayName("no bank REQUEST verb is a push, and lock truth still has one source")
+    void noBankRequestVerbIsAPush() {
+        // Retitled under U-63 (BANK amendment A3), because the old title said "the bank has
+        // none, by contract" and the bank now has exactly one: PUSH_BANK_CHANGED, the notice
+        // that lets a colleague's new question reach a screen that is already open.
+        //
+        // The invariant this test actually protects is untouched and is worth separating from
+        // that sentence. The live "being edited by" badges on a bank list ride E18.8's
+        // PUSH_LOCK_CHANGED, not a bank push (F10.0), and PUSH_BANK_CHANGED carries no lock
+        // information whatsoever: a course code, a display id and one of three words. So there
+        // is still exactly one source of lock truth. A PUSH_QUESTION_* would be the second one,
+        // and its absence is asserted below rather than assumed.
         assertThat(List.of(Verb.BANK_LIST, Verb.QUESTION_GET, Verb.QUESTION_VERSIONS,
                         Verb.QUESTION_IMAGE_GET, Verb.QUESTION_CREATE, Verb.QUESTION_UPDATE,
                         Verb.QUESTION_DELETE))
                 .allSatisfy(verb -> assertThat(verb.isPush()).isFalse());
+        assertThat(Arrays.stream(Verb.values()).map(Verb::name))
+                .as("a per-question push would be a second source of lock truth beside E18.8's")
+                .noneMatch(name -> name.startsWith("PUSH_QUESTION"));
+        assertThat(Verb.PUSH_BANK_CHANGED.isPush()).isTrue();
     }
 
     @Test
@@ -278,8 +290,12 @@ class VerbTest {
     }
 
     @Test
-    @DisplayName("exactly seven push verbs are defined (adding one is a deliberate act)")
+    @DisplayName("exactly eight push verbs are defined (adding one is a deliberate act)")
     void pushVerbCount() {
-        assertThat(java.util.Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(7);
+        // Seven until 2026-08-30. The eighth is PUSH_BANK_CHANGED (U-63, BANK amendment A3),
+        // and this test doing its job is the deliberate act it asks for: a push verb is a new
+        // way for the server to reach a client unbidden, so one arriving without a contract
+        // amendment behind it should fail a build rather than pass a review.
+        assertThat(Arrays.stream(Verb.values()).filter(Verb::isPush).count()).isEqualTo(8);
     }
 }

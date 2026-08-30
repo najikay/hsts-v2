@@ -56,6 +56,11 @@ public final class StatusChip extends HBox {
         setSpacing(6);
         label.getStyleClass().add("chip-label");
         getChildren().add(label);
+        // 2026-08-31, U-58 (Naji, round 5): a chip inside a constrained table column was
+        // ellipsised ("Pending appro…"). A chip is a word, not a paragraph: it keeps its
+        // preferred width and the column makes room, the same pin Buttons.styled carries.
+        label.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+        setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
         set(spec);
     }
 

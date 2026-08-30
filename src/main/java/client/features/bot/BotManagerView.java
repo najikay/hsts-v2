@@ -13,6 +13,11 @@ import client.ui.components.EmptyState;
 import client.ui.components.Icons;
 import client.ui.components.ProgressOverlay;
 import client.ui.components.StatusChip;
+import common.protocol.Verb;
+import org.greenrobot.eventbus.Subscribe;
+import common.dto.notify.NotificationType;
+import common.dto.notify.NotificationDto;
+import client.events.ServerPushEvent;
 import client.ui.components.WarnConfirm;
 import client.ui.components.logic.ChipSpec;
 import client.ui.components.logic.ChipTone;
@@ -269,6 +274,48 @@ public final class BotManagerView extends AbstractScreen {
     }
 
     /** Wires the shared lock helper in, following the recipe in its javadoc. */
+    /**
+     * 2026-08-31, U-62 (Naji, round 5): "bot info isn't being updated in both screens, I had to
+     * press the notification for it to work". The co-teacher's screen re-reads its courses on
+     * the two bot notifications the server already sends to her (a source changed, the bot
+     * deleted). The editor's own screen updates from its own answer, so the push it does not
+     * receive is not needed there. Registered by ScreenLifecycle while the screen is shown.
+     */
+    @Override
+    public boolean listensToEvents() {
+        return true;
+    }
+
+    /**
+     * A server push landed; re-read every course card if a colleague changed a bot.
+     *
+     * <p>Two types, and the second is why U-63 touched this method. {@code BOT_SOURCE_CHANGED}
+     * covers material being added, changed or removed, and a bot being deleted (U-62, and
+     * {@code NotificationCatalog.botDeleted} for that reuse). {@code BOT_CHANGED} is the pair of
+     * events the server did not announce at all before U-63: a <b>toggle</b> and a
+     * <b>create</b>. Both move a card on this screen, and a create moves it hardest, because a
+     * co-teacher's empty state stops being an empty state: it goes on offering Create for a bot
+     * that now exists, and the server answers that click by handing her somebody else's bot
+     * (S-30).
+     *
+     * <p>{@link BotManagerListSession#refreshAll()} rather than patching one card, for the
+     * reason {@code renderCourseList} gives about rebuilding rather than patching: the push says
+     * one thing changed and a card has five facts on it, any of which may have moved.
+     *
+     * @param event the push, straight off the bus
+     */
+    @Subscribe
+    public void onServerPush(ServerPushEvent event) {
+        if (event == null || event.verb() != Verb.PUSH_NOTIFICATION || list == null) {
+            return;
+        }
+        if (event.payload() instanceof NotificationDto item
+                && (item.type() == NotificationType.BOT_SOURCE_CHANGED
+                    || item.type() == NotificationType.BOT_CHANGED)) {
+            list.refreshAll();
+        }
+    }
+
     private void initLocks() {
         lockBanner.hide();
         LoginResult user = ScreenManager.getInstance().signedInUser();
