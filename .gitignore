@@ -19,3 +19,6 @@ logs/
 # collision the id exists to prevent.
 /server-id.properties
 *.local.properties
+
+# Submission documents carry personal ID numbers - never in the repo
+docs/submission/
