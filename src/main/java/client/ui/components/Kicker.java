@@ -33,6 +33,11 @@ public final class Kicker {
         Label label = new Label(KickerText.track(text));
         label.getStyleClass().add(STYLE_CLASS);
         label.setAccessibleText(KickerText.plain(text));
+        // 2026-08-31, CI round: a kicker is one word and never wraps, so it keeps its
+        // preferred width and the row's spacer absorbs the difference. Without the pin the
+        // runner's fonts measured "AWAITING GRADING" two pixels wider than the dev machines'
+        // and the guard caught the dots only in CI.
+        label.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
         return label;
     }
 

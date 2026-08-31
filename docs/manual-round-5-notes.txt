@@ -62,3 +62,8 @@ O8  Throttle only counts identical attempts -> agent in flight (per-username rul
 O9  No topic filter -> U-67, done (per-course topic picker).
 O10 Course should be a field on Add question -> U-68, done.
 O11 Bank not live for others; principal stale across filters -> U-63 agent in flight.
+
+CI (Naji, after the sweep push): CI red since the round-3 wave and nobody was watching. Three
+ReportsInteractionTest cases lost the route-animation race only on the runner (settle() added,
+BankScreenInteractionTest's cure); two truncations only the runner's fonts expose: the tracked
+kicker pinned to its preferred width, the approvals Exam column floored at 250px.

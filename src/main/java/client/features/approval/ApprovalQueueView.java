@@ -108,6 +108,11 @@ public final class ApprovalQueueView extends AbstractScreen {
         exam.setCellValueFactory(cell ->
                 new javafx.beans.property.SimpleStringProperty(cell.getValue().examLabel()));
         exam.setPrefWidth(260);
+        // 2026-08-31, CI round: U-58's 280px Status floor squeezed this column to 231px at
+        // 1024x700, and the runner's fonts need 247 for "101201 · Calculus Midterm (v1)".
+        // The exam label is the row's identity, so it gets the floor and the four middle
+        // columns share what is left.
+        exam.setMinWidth(250);
 
         table.column(exam)
                 .column("Course", ApprovalRow::courseLabel)

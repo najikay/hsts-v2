@@ -217,9 +217,9 @@ class ReportsInteractionTest extends ApplicationTest {
             // Leave for the principal's other screens and come back, the way she does.
             interact(() -> manager.navigator().navigate(Routes.HOME_PRINCIPAL.id(),
                     NavParams.empty()));
-            WaitForAsyncUtils.waitForFxEvents();
+            settle();
             interact(() -> manager.navigator().navigate(Routes.DATA.id(), NavParams.empty()));
-            WaitForAsyncUtils.waitForFxEvents();
+            settle();
             openReports(manager);
         }
 
@@ -400,6 +400,19 @@ class ReportsInteractionTest extends ApplicationTest {
 
     private void openReports(ScreenManager manager) {
         interact(() -> manager.navigator().navigate(Routes.REPORTS.id(), NavParams.empty()));
+        settle();
+    }
+
+    /**
+     * 2026-08-31, CI round: the router plays a {@link client.ui.anim.Motion#ROUTE_MS}
+     * entrance on every screen it swaps in, and {@code waitForFxEvents} pumps pulses without
+     * outwaiting it. On the dev machines the next assertion usually won its race; on the
+     * runner it reliably lost, which is why three of this class's tests were red only in CI.
+     * Same cure as BankScreenInteractionTest.settle().
+     */
+    private void settle() {
+        WaitForAsyncUtils.waitForFxEvents();
+        sleep(client.ui.anim.Motion.ROUTE_MS * 3L);
         WaitForAsyncUtils.waitForFxEvents();
     }
 
