@@ -149,9 +149,26 @@ class StopListeningSocketTest {
         return fresh;
     }
 
+    /**
+     * A port OUTSIDE the kernel's ephemeral range (Linux: 32768-60999), probed free.
+     *
+     * <p>{@code new ServerSocket(0)} hands back an ephemeral port, and on a busy CI
+     * runner the kernel can hand that same number to any outbound connection as its
+     * local port in the gap between this test's Stop (close) and Start (rebind) -
+     * SO_REUSEADDR covers TIME_WAIT, not a live steal. The real console rebinds a
+     * fixed configured port, so the steal is a test-environment artifact; drawing
+     * from the non-ephemeral range removes it.
+     */
     private static int freePort() throws IOException {
-        try (ServerSocket probe = new ServerSocket(0)) {
-            return probe.getLocalPort();
+        java.util.Random random = new java.util.Random();
+        for (int attempt = 0; attempt < 50; attempt++) {
+            int candidate = 20_000 + random.nextInt(10_000);
+            try (ServerSocket probe = new ServerSocket(candidate)) {
+                return probe.getLocalPort();
+            } catch (IOException taken) {
+                // occupied; try another
+            }
         }
+        throw new IOException("No free non-ephemeral port after 50 attempts");
     }
 }
