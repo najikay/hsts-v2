@@ -192,7 +192,11 @@ public final class DataView extends AbstractScreen {
         coursePicker.getSelectionModel().selectedItemProperty()
                 .addListener((obs, old, option) -> {
                     if (!selecting) {
-                        session.selectCourse(option == null ? null : option.code());
+                        // One pulse later, deliberately: the session's onChange re-renders,
+                        // and a render must never run while the ComboBox is still inside
+                        // its own selection-change processing (U-61).
+                        javafx.application.Platform.runLater(() ->
+                                session.selectCourse(option == null ? null : option.code()));
                     }
                 });
 
@@ -343,12 +347,23 @@ public final class DataView extends AbstractScreen {
         // a blank row, so clearing the filter is a thing she can pick rather than a thing she
         // has to know about.
         options.add(0, null);
-        coursePicker.setItems(FXCollections.observableArrayList(options));
-        coursePicker.getSelectionModel().select(session.selectedCourse()
+        // U-61, the reports screen's rule: refill only when the contents changed, and
+        // drive the selection only when it differs. Replacing the items on EVERY render
+        // yanked the popup's list out from under its own skin whenever a render fired from
+        // inside the ComboBox's selection change, and a push re-read (U-63) did the same
+        // to a popup she was mid-click on.
+        if (!options.equals(coursePicker.getItems())) {
+            coursePicker.setItems(FXCollections.observableArrayList(options));
+        }
+        DataSession.CourseOption chosen = session.selectedCourse()
                 .flatMap(code -> options.stream()
                         .filter(option -> option != null && option.code().equals(code))
                         .findFirst())
-                .orElse(null));
+                .orElse(null);
+        if (!java.util.Objects.equals(chosen,
+                coursePicker.getSelectionModel().getSelectedItem())) {
+            coursePicker.getSelectionModel().select(chosen);
+        }
         show(coursePicker, session.courseOptions().size() > 1);
     }
 

@@ -68,6 +68,13 @@ public final class ApprovalQueueSession {
     private String error;
 
     /**
+     * Retires the answers of superseded loads. {@link #refresh()} deliberately starts a new
+     * read while one can still be in flight (a push landed, so the older question is stale),
+     * and without this the older answer could land last and stand until the next push.
+     */
+    private int generation;
+
+    /**
      * @param dispatcher the request correlator — the screen never touches a socket
      * @param poster     the single FX-thread hop; {@code DirectFxThreadPoster} in tests
      */
@@ -97,10 +104,12 @@ public final class ApprovalQueueSession {
         }
         state = AsyncViewState.LOADING;
         error = null;
+        int asked = ++generation;
         onChange.run();
 
         dispatcher.send(Verb.APPROVALS_QUEUE_GET, null)
-                .whenComplete((response, failure) -> poster.run(() -> settle(response, failure)));
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settle(asked, response, failure)));
     }
 
     /**
@@ -183,7 +192,11 @@ public final class ApprovalQueueSession {
         refresh();
     }
 
-    private void settle(Message response, Throwable failure) {
+    private void settle(int asked, Message response, Throwable failure) {
+        if (asked != generation) {
+            // A newer read is in flight or has landed; this answer describes an older world.
+            return;
+        }
         if (failure != null || response == null || response.isError()
                 || !(response.getPayload() instanceof ApprovalQueue page)) {
             // A well-formed OK carrying the wrong type is a protocol bug, not a user error;

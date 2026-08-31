@@ -142,6 +142,30 @@ class StopListeningSocketTest {
         assertThat(server.isListening()).isTrue();
     }
 
+    @Test
+    @DisplayName("\u2691 a socket that connects and never speaks does not block the next client")
+    void aHeaderlessSocketDoesNotBlockTheNextClient() throws Exception {
+        // Milliseconds instead of the production 5 s, so the test is quick; the
+        // property under test is the same: the accept loop survives a peer that
+        // completes TCP and then goes silent (a port scanner, a crashed client).
+        server.setHandshakeTimeout(250);
+
+        try (Socket mute = new Socket()) {
+            mute.connect(new InetSocketAddress("127.0.0.1", port), (int) WINDOW.toMillis());
+
+            // Before the fix the accept loop was parked reading the mute socket's
+            // header INSIDE the connections lock, with no bound on the read: this
+            // client completed TCP into the backlog and its stream handshake then
+            // timed out against a loop that was never coming.
+            client = connectedClient();
+            RequestDispatcher dispatcher = new RequestDispatcher(client);
+            client.setServerMessageHandler(dispatcher::dispatchIncoming);
+            ConnectHandshake.prove(dispatcher, WINDOW);
+        }
+
+        assertThat(server.isListening()).isTrue();
+    }
+
     private HSTSClient connectedClient() throws IOException {
         HSTSClient fresh = new HSTSClient("127.0.0.1", port);
         fresh.setConnectTimeout((int) WINDOW.toMillis());

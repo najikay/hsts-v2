@@ -243,6 +243,68 @@ class TeacherResultsInteractionTest extends ApplicationTest {
                 .contains(ResultsCopy.NO_EXAMS_TITLE, ResultsCopy.NO_EXAMS_HINT);
     }
 
+    @Test
+    @org.junit.jupiter.api.Timeout(60)
+    @DisplayName("⚑ S3, U-61: switching sittings through the real picker, twice, keeps working")
+    void realPickerClicksSwitchSittings() {
+        // The gesture the harness never made here: the ComboBox's REAL popup. The render
+        // used to hand the picker a brand-new items list on every render, including
+        // renders fired from inside the picker's own selection change - the exact storm
+        // U-61 fixed on the reports screen next door.
+        ScreenManager manager = signIn(this::everythingLoads);
+        openResults(manager);
+        await("the graded sitting to open first", () ->
+                labelTexts(manager.scene()).contains("7 of 8 (87.5%)"));
+
+        for (int round = 0; round < 2; round++) {
+            pickSittingFromPopup(manager, "2075");
+            await("the unfinished-grading panel", () ->
+                    manager.scene().getRoot().lookup(".results-unfinished").isVisible());
+
+            pickSittingFromPopup(manager, "4821");
+            await("the frozen figures back on screen", () ->
+                    labelTexts(manager.scene()).contains("7 of 8 (87.5%)")
+                            && !manager.scene().getRoot()
+                                    .lookup(".results-unfinished").isVisible());
+        }
+    }
+
+    /** Opens the execution picker's real popup and clicks the sitting, as a teacher does. */
+    private void pickSittingFromPopup(ScreenManager manager, String code) {
+        Node picker = manager.scene().getRoot().lookup(".combo-box");
+        assertThat(picker).as("the execution picker").isNotNull();
+        clickOn(picker);
+        WaitForAsyncUtils.waitForFxEvents();
+        Node entry = lookup(".list-cell").queryAll().stream()
+                .filter(node -> node instanceof javafx.scene.control.ListCell<?> cell
+                        && cell.getText() != null && cell.getText().contains(code)
+                        && !insideComboBox(node))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no popup entry for " + code));
+        clickOn(entry);
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /** The button cell lives inside the ComboBox; the popup's cells do not. */
+    private static boolean insideComboBox(Node node) {
+        for (Node parent = node; parent != null; parent = parent.getParent()) {
+            if (parent instanceof javafx.scene.control.ComboBox<?>) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Polls rather than sleeps, the ReportsInteractionTest cure for runner speed. */
+    private void await(String what, java.util.concurrent.Callable<Boolean> condition) {
+        try {
+            WaitForAsyncUtils.waitFor(10, java.util.concurrent.TimeUnit.SECONDS, condition);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new AssertionError("Timed out waiting for " + what, e);
+        }
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
     // ===================== Fixture =======================================
 
     private void everythingLoads(FakeClientConnection connection) {

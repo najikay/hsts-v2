@@ -75,6 +75,9 @@ public final class NotificationsPanel extends VBox {
     private final VBox list = new VBox();
     private final Button markAll = Buttons.styled("Mark all read", Buttons.LINK, Buttons.SMALL);
 
+    /** What the rows were last built from, so an unchanged model change is quiet (S3 sweep). */
+    private List<NotificationDto> renderedItems;
+
     /**
      * @param session   the conversation with the server; also the source of the model
      * @param navigator where click-through goes
@@ -167,6 +170,15 @@ public final class NotificationsPanel extends VBox {
     private void render() {
         markAll.setDisable(!model.hasUnread());
         List<NotificationDto> items = model.items();
+        // The U-61 discipline (S3 sweep): identical rows are not a change. Every open
+        // refetches and usually answers with the page already on screen, and rebuilding
+        // and re-staggering the rows for it made the panel shimmer for no news. A row
+        // whose read state moved is a different row (the DTO carries readAt), so a
+        // mark-read still repaints.
+        if (items.equals(renderedItems)) {
+            return;
+        }
+        renderedItems = items;
         list.getChildren().clear();
         if (items.isEmpty()) {
             list.getChildren().add(new EmptyState(Icons.INBOX, "Nothing yet",

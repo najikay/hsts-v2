@@ -280,6 +280,44 @@ class RequestDispatcherTest {
             assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS))
                     .cause().isInstanceOf(RequestTimeoutException.class);
         }
+
+        @Test
+        @DisplayName("\u2691 U-52: a timeout tells the listener, so the wiring can probe a silent connection")
+        void timeoutNotifiesTheListener() {
+            List<Verb> observed = Collections.synchronizedList(new ArrayList<>());
+            dispatcher.setTimeoutListener(observed::add);
+
+            dispatcher.send(Verb.BANK_LIST, null);
+            scheduler.fireAll();
+
+            assertThat(observed).containsExactly(Verb.BANK_LIST);
+        }
+
+        @Test
+        @DisplayName("an answered request never reaches the listener")
+        void anAnsweredRequestDoesNotNotify() {
+            List<Verb> observed = Collections.synchronizedList(new ArrayList<>());
+            dispatcher.setTimeoutListener(observed::add);
+
+            dispatcher.send(Verb.BANK_LIST, null);
+            dispatcher.dispatchIncoming(Message.ok(connection.lastSent(), "done"));
+            scheduler.fireAll();
+
+            assertThat(observed).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a listener that throws does not undo the timeout it observed")
+        void aThrowingListenerStillTimesOut() {
+            dispatcher.setTimeoutListener(verb -> {
+                throw new IllegalStateException("broken observer");
+            });
+
+            CompletableFuture<Message> future = dispatcher.send(Verb.BANK_LIST, null);
+            assertThatCode(scheduler::fireAll).doesNotThrowAnyException();
+
+            assertThat(future).isCompletedExceptionally();
+        }
     }
 
     @Nested

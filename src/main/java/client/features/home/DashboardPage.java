@@ -173,6 +173,9 @@ public final class DashboardPage {
         grid.setHgap(16);
         grid.setVgap(16);
         rememberForResize(grid, cards, navigate, bodies);
+        Object lastRendered = grid.getProperties().put(LAST_CARDS_KEY, List.copyOf(cards));
+        boolean cardsChanged = !(lastRendered instanceof List<?> previous
+                && previous.equals(cards));
 
         int columns = columnsFor(grid, cards.size());
         for (int i = 0; i < columns; i++) {
@@ -198,7 +201,9 @@ public final class DashboardPage {
             grid.add(node, i % columns, i / columns);
             nodes.add(node);
         }
-        Animations.staggerCards(nodes);
+        if (cardsChanged) {
+            Animations.staggerCards(nodes);
+        }
     }
 
     /**
@@ -215,6 +220,16 @@ public final class DashboardPage {
 
     /** Where the grid remembers what it was last filled with, for a re-flow. */
     private static final Object REFLOW_KEY = new Object();
+
+    /**
+     * Where the grid remembers the cards it last rendered (S3 sweep).
+     *
+     * <p>The entrance stagger is for cards that changed - a settling read, a number that
+     * moved. A push re-read that settles on identical cards used to replay it anyway,
+     * which made every dashboard blink for no news; the rebuild still happens (the rich
+     * bodies re-render from fresh details) but identical cards arrive without ceremony.
+     */
+    private static final Object LAST_CARDS_KEY = new Object();
 
     /**
      * How many cards fit across, given the width the grid actually has.

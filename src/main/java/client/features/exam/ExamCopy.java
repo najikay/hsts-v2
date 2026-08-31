@@ -130,6 +130,13 @@ public final class ExamCopy {
     /** The dismissing button. */
     public static final String SUBMIT_CANCEL = "Keep working";
 
+    /** Toast title when a hand-in did not reach the server (F6.9). */
+    public static final String SUBMIT_FAILED_TITLE = "Not handed in";
+
+    /** Its body: the paper is still live and the button still works, and saying so is the point. */
+    public static final String SUBMIT_FAILED =
+            "Your exam was not handed in. Check your connection and press Hand in again.";
+
     /** The consequence line for a paper with blanks. */
     public static final String SUBMIT_UNANSWERED_NOTE =
             "Unanswered questions score 0. You cannot change your answers after handing in.";

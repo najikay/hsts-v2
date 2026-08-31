@@ -129,6 +129,16 @@ public class FakeClientConnection implements IClientConnection {
         return respondTo(verb, request -> Message.ok(request, payload));
     }
 
+    /**
+     * Makes {@code verb} draw no answer at all - the shape of a server that went
+     * silent (sleep and wake, a half-dead NAT). Clears any scripted responder,
+     * including the {@code HELLO} one installed at construction.
+     */
+    public FakeClientConnection neverAnswer(Verb verb) {
+        responders.remove(Objects.requireNonNull(verb, "verb"));
+        return this;
+    }
+
     /** Answers {@code verb} with a correlated ERROR. */
     public FakeClientConnection replyError(Verb verb, ErrorCode code, String message) {
         return respondTo(verb, request -> Message.error(request, code, message));

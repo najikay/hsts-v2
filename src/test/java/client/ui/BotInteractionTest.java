@@ -333,6 +333,55 @@ class BotInteractionTest extends ApplicationTest {
         assertThat(view.lockBanner().message()).contains("Michal Sharon");
     }
 
+    @Test
+    @DisplayName("closing the source-edit dialog gives the advisory lock straight back (E18.3)")
+    void closingTheSourceEditDialogReleasesItsLock() {
+        FakeClientConnection[] wire = new FakeClientConnection[1];
+        ScreenManager manager = signIn(DANA_TWO_COURSES, connection -> {
+            wire[0] = connection;
+            managerPages(connection, Map.of("11", ALGEBRA_PAGE, "12", CALCULUS_PAGE));
+            connection.respondTo(Verb.LOCK_ACQUIRE, request -> Message.ok(request,
+                    LockResponse.granted(((LockRequest) request.getPayload()).entity(),
+                            new LockHolder(DANA_TWO_COURSES.userId(),
+                                    DANA_TWO_COURSES.displayName()),
+                            Instant.now().plusSeconds(120))));
+            connection.replyOk(Verb.LOCK_RELEASE, null);
+            connection.replyOk(Verb.LOCK_RENEW, null);
+        });
+
+        interact(() -> manager.navigator().navigate(Routes.BOT_MANAGER.id(),
+                NavParams.of("courseCode", "12")));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        client.features.bot.BotManagerView view =
+                (client.features.bot.BotManagerView) manager.screens()
+                        .get(Routes.BOT_MANAGER.id());
+        Node row = view.sourcesBox().getChildren().get(0);
+        Node edit = row.lookupAll(".button").stream()
+                .filter(n -> n instanceof javafx.scene.control.Button b
+                        && BotCopy.EDIT.equals(b.getText()))
+                .findFirst().orElseThrow(() -> new AssertionError("no Edit on the text row"));
+        clickOn(edit);
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(verbsSentOn(wire[0])).contains(Verb.LOCK_ACQUIRE);
+
+        // She thinks better of it: ESC is the dialog's cancel button.
+        press(javafx.scene.input.KeyCode.ESCAPE).release(javafx.scene.input.KeyCode.ESCAPE);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(verbsSentOn(wire[0]))
+                .as("the dialog is closed, so nothing is being edited any more: without the "
+                        + "release the FxHeartbeat renews her hold for as long as she stays "
+                        + "parked on the manager, and a co-teacher's row stays read-only "
+                        + "with her name on it")
+                .contains(Verb.LOCK_RELEASE);
+    }
+
+    /** Every verb this wire has carried, in order. */
+    private static java.util.List<Verb> verbsSentOn(FakeClientConnection connection) {
+        return connection.sentMessages().stream().map(Message::getVerb).toList();
+    }
+
     // ===================== The list of bots (U-26) =======================
 
     @Test

@@ -686,6 +686,12 @@ public final class DataTable<T> extends VBox {
     }
 
     private void setState(AsyncViewState next) {
+        // 2026-08-31, S3 sweep: the fade is an ENTRANCE, so it plays only when the table
+        // was not already showing content. fadeIn drops the node to opacity 0 before it
+        // animates, so replaying it on a READY-to-READY setItems - which is every push
+        // re-read and every U-61 refresh() - blinked the whole table on screens that were
+        // merely being kept fresh.
+        boolean entering = next.showsContent() && !state.showsContent();
         this.state = next;
         setShown(table, next.showsContent());
         setShown(skeleton, next.showsSkeleton());
@@ -696,7 +702,7 @@ public final class DataTable<T> extends VBox {
         if (!next.showsSkeleton()) {
             Skeletons.stopShimmer(skeleton);
         }
-        if (next.showsContent()) {
+        if (entering) {
             // The table itself still fades; its rows carry the first-load
             // stagger separately, and only once.
             Animations.fadeIn(table, Motion.ROUTE_MS);

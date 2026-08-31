@@ -191,6 +191,32 @@ class StatChartInteractionTest extends ApplicationTest {
                 .contains("Mean 72.5");
     }
 
+    @Test
+    @DisplayName("⚑ S3: setData with EQUAL data does not restart the entrance")
+    void equalDataDoesNotRestartTheEntrance() {
+        settle();
+        double settled = bars().get(9).getHeight();
+        assertThat(settled).as("the top bucket holds two of eight").isGreaterThan(0);
+
+        interact(() -> chart.setData(StatChartData.of(SEEDED_DECILES, 72.5, 72.5, 17.5, 8)));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // Every screen that owns this chart calls setData on every render (the U-61
+        // discipline renders often), and a push re-read usually carries the same frozen
+        // record. A replayed entrance snaps the bars to zero mid-read.
+        assertThat(bars().get(9).getHeight())
+                .as("equal data is not a change, so the bars must not move")
+                .isEqualTo(settled);
+    }
+
+    private List<Rectangle> bars() {
+        return scene.getRoot().lookupAll(".stat-bar").stream()
+                .filter(Rectangle.class::isInstance)
+                .map(Rectangle.class::cast)
+                .sorted(java.util.Comparator.comparingDouble(Rectangle::getX))
+                .toList();
+    }
+
     // ===================== Helpers =======================================
 
     /** Waits out the bar entrance (bounded at 246 ms) and lets layout settle. */

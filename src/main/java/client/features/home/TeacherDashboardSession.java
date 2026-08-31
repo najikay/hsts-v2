@@ -302,7 +302,12 @@ public final class TeacherDashboardSession {
         if (pending > 0) {
             return;
         }
-        load();
+        // The reads, without the blanking (S3 sweep): refresh() used to route through
+        // load(), so every push flashed all four cards back to skeletons and replayed
+        // their entrance. The settled cards stay on screen until each answer lands; the
+        // settle methods overwrite them, and clear the two rich details when their
+        // subject is gone.
+        sendReads();
     }
 
     /** Sends the three list reads. Called on every visit to the dashboard. */
@@ -316,7 +321,11 @@ public final class TeacherDashboardSession {
         liveCount = 0;
         gradingCount = 0;
         onChange.run();
+        sendReads();
+    }
 
+    /** The three reads, shared by the blanking visit and the quiet push re-read (U-63). */
+    private void sendReads() {
         pending = 3;
         dispatcher.send(Verb.RELEASE_LIST_GET, null)
                 .whenComplete((response, failure) ->
@@ -359,6 +368,10 @@ public final class TeacherDashboardSession {
         List<ReleaseRow> liveRows = rowsIn(list, ReleaseState.LIVE);
         List<ReleaseRow> scheduled = rowsIn(list, ReleaseState.SCHEDULED);
         liveCount = liveRows.size();
+        if (liveRows.isEmpty()) {
+            // A quiet refresh keeps details until told otherwise; nothing is live now.
+            liveDetail = null;
+        }
 
         live = DashboardCard.counted(DashboardCopy.LIVE_KICKER, DashboardCopy.LIVE_TITLE,
                 liveRows.size(), DashboardCopy.LIVE_HINT, DashboardCopy.LIVE_EMPTY,
@@ -458,6 +471,7 @@ public final class TeacherDashboardSession {
         }
         Optional<ExecutionResultRow> newest = newestClosed(answer);
         if (newest.isEmpty()) {
+            closedDetail = null;
             lastClosed = new DashboardCard(DashboardCopy.LAST_CLOSED_KICKER,
                     DashboardCopy.LAST_CLOSED_TITLE, "0", DashboardCopy.LAST_CLOSED_EMPTY,
                     DashboardCopy.LAST_CLOSED_LINK, null, Routes.RESULTS.id(),
@@ -473,6 +487,7 @@ public final class TeacherDashboardSession {
 
     private void settleLastClosed(Message response, Throwable failure) {
         if (!(payloadOf(response, failure) instanceof ExecutionResults results)) {
+            closedDetail = null;
             lastClosed = DashboardCard.failed(DashboardCopy.LAST_CLOSED_KICKER,
                     DashboardCopy.LAST_CLOSED_TITLE, DashboardCopy.LAST_CLOSED_LINK,
                     Routes.RESULTS.id());
@@ -483,6 +498,7 @@ public final class TeacherDashboardSession {
         if (stats.isEmpty()) {
             // A closed sitting whose marking is unfinished is a state, not an
             // error: the server says so calmly and so does the card.
+            closedDetail = null;
             lastClosed = new DashboardCard(DashboardCopy.LAST_CLOSED_KICKER,
                     DashboardCopy.LAST_CLOSED_TITLE, "0", DashboardCopy.LAST_CLOSED_UNMARKED,
                     DashboardCopy.LAST_CLOSED_LINK, null, Routes.RESULTS.id(),

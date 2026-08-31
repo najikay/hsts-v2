@@ -385,6 +385,43 @@ class GradingInteractionTest extends ApplicationTest {
                 .doesNotContain(GradingCopy.APPROVE_FAILED, GradingCopy.OVERRIDE_CONFLICT);
     }
 
+    @Test
+    @DisplayName("⚑ S3, U-64: with several rows ticked the way in is said somewhere reachable")
+    void manyTicksExplainWhyChangeScoreIsOff() {
+        List<Long> sentIds = new ArrayList<>();
+        ScreenManager manager = signIn(gradingServer(sentIds));
+        openGrading(manager);
+        openFirstSitting(manager);
+
+        clickRow(manager, "Maya Levi");
+        tick(manager, "Maya Levi");
+        tick(manager, "Omer Katz");
+
+        assertThat(button(manager, GradingCopy.OVERRIDE).isDisabled())
+                .as("an override is a one-student act (U-64)")
+                .isTrue();
+        Node holder = manager.scene().getRoot().lookup(".override-holder");
+        assertThat(holder).as("the enabled wrapper the explanation lives on").isNotNull();
+        Object tip = holder.getProperties()
+                .get(client.features.grading.GradingQueueView.OVERRIDE_TIP_KEY);
+        assertThat(tip)
+                .as("a disabled control shows no tooltip, so the sentence must sit on a "
+                        + "hoverable wrapper or it is unreachable exactly when it matters")
+                .isInstanceOf(javafx.scene.control.Tooltip.class);
+        assertThat(((javafx.scene.control.Tooltip) tip).getText())
+                .isEqualTo(GradingCopy.OVERRIDE_ONE_AT_A_TIME);
+
+        tick(manager, "Omer Katz");
+
+        assertThat(holder.getProperties()
+                .get(client.features.grading.GradingQueueView.OVERRIDE_TIP_KEY))
+                .as("one tick is not 'several', and the explanation goes away with the state")
+                .isNull();
+        assertThat(button(manager, GradingCopy.OVERRIDE).isDisabled())
+                .as("with one tick and her still-changeable row selected, the override is back")
+                .isFalse();
+    }
+
     // ===================== Fixture =======================================
 
     private static ExecutionGradingSummary summary() {

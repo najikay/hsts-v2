@@ -76,6 +76,24 @@ public final class GradingQueueView extends AbstractScreen {
     private final Button selectAll = new Button(GradingCopy.SELECT_ALL);
     private final Button override = new Button(GradingCopy.OVERRIDE);
 
+    /**
+     * The property key under which {@link #overrideHolder} records the installed U-64
+     * tooltip, so installing is idempotent and a test can see the wiring.
+     */
+    public static final String OVERRIDE_TIP_KEY = "hsts.override-blocked-tip";
+
+    /** U-64's explanation. One instance, installed and uninstalled rather than rebuilt. */
+    private final Tooltip overrideBlockedTip = new Tooltip(GradingCopy.OVERRIDE_ONE_AT_A_TIME);
+
+    /**
+     * The wrapper the U-64 tooltip lives on (S3 sweep).
+     *
+     * <p>A disabled control receives no mouse events, so a tooltip set on the disabled
+     * button itself could never show - the sentence explaining the way in was unreachable
+     * in exactly the state it was written for. The wrapper stays enabled and hoverable.
+     */
+    private final HBox overrideHolder = new HBox(override);
+
     private final EmptyState queueEmpty = new EmptyState(Icons.GRADING,
             GradingCopy.QUEUE_EMPTY_TITLE, GradingCopy.QUEUE_EMPTY_HINT);
 
@@ -177,7 +195,8 @@ public final class GradingQueueView extends AbstractScreen {
         selectAll.setOnAction(event -> selectAllApprovableRows());
         override.setOnAction(event -> openOverrideDialog());
 
-        HBox actions = new HBox(8, selectAll, Buttons.spacer(), override, approveSelected);
+        overrideHolder.getStyleClass().add("override-holder");
+        HBox actions = new HBox(8, selectAll, Buttons.spacer(), overrideHolder, approveSelected);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         buildTable();
@@ -393,9 +412,19 @@ public final class GradingQueueView extends AbstractScreen {
             boolean manyTicked = session.selectionSize() > 1;
             override.setDisable(!canAct || manyTicked || selectedRow().isEmpty()
                     || !GradingCopy.canOverride(selectedRow().get()));
-            override.setTooltip(manyTicked
-                    ? new javafx.scene.control.Tooltip(GradingCopy.OVERRIDE_ONE_AT_A_TIME)
-                    : null);
+            // U-64's second half (S3 sweep): the tooltip goes on the enabled wrapper,
+            // because JavaFX shows no tooltip over a disabled control - set on the button
+            // it could never appear. Installed once while several rows are ticked and
+            // uninstalled when the state passes, rather than rebuilt on every render.
+            if (manyTicked) {
+                if (overrideHolder.getProperties().get(OVERRIDE_TIP_KEY) == null) {
+                    Tooltip.install(overrideHolder, overrideBlockedTip);
+                    overrideHolder.getProperties().put(OVERRIDE_TIP_KEY, overrideBlockedTip);
+                }
+            } else if (overrideHolder.getProperties().get(OVERRIDE_TIP_KEY) != null) {
+                Tooltip.uninstall(overrideHolder, overrideBlockedTip);
+                overrideHolder.getProperties().remove(OVERRIDE_TIP_KEY);
+            }
         } finally {
             selecting = false;
         }

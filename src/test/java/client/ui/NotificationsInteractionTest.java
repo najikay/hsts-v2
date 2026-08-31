@@ -221,6 +221,27 @@ class NotificationsInteractionTest extends ApplicationTest {
                 .isEqualTo(11L);
     }
 
+    @Test
+    @DisplayName("⚑ S3: reopening on an unchanged page keeps the same rows, no rebuild")
+    void reopeningWithTheSamePageKeepsTheRows() {
+        ScreenManager manager = signIn();
+
+        clickOn(manager.shell().bell());
+        WaitForAsyncUtils.waitForFxEvents();
+        Node row = manager.scene().getRoot().lookup(".panel-row");
+        assertThat(row).isNotNull();
+
+        clickOn(manager.shell().bell());
+        assertThat(closed(manager)).isTrue();
+        clickOn(manager.shell().bell());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.scene().getRoot().lookup(".panel-row"))
+                .as("the refetch answered with the page already rendered; identical rows "
+                        + "are not a change and must not be rebuilt and re-staggered")
+                .isSameAs(row);
+    }
+
     // ===================== Fixture =======================================
 
     /** Boots the app, attaches a scripted server, and enters Dana's shell. */

@@ -174,6 +174,14 @@ public final class ReportsSession {
         if (subject == null) {
             return;
         }
+        // S3 sweep: a subject that is not in the current dimension's list cannot be run.
+        // The picker's listener defers this call one pulse (U-61), and a pulse is long
+        // enough for a dimension switch to have emptied the list underneath it; running
+        // the stale subject would send one dimension's id under the other dimension's
+        // name and paint the refusal beneath the new heading.
+        if (!subjects.contains(subject)) {
+            return;
+        }
         // U-61: the same subject again is a no-op unless the last attempt failed. Without
         // this, every render's re-select round-tripped the same report and the screen
         // could never settle.

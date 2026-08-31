@@ -717,9 +717,18 @@ public final class BotManagerView extends AbstractScreen {
                 .cancelText("Cancel")
                 .detail(new VBox(8, title, area))
                 .info());
+        // The lock goes back the moment the dialog is done (E18.3; 2026-08-31, round 5
+        // sweep). It used to be held until she left the screen or picked another course,
+        // and the FxHeartbeat renewed it the whole time, so a co-teacher's row stayed
+        // read-only with her name on it for as long as she sat on the manager. A saved
+        // edit releases once its answer has been applied, so the hold covers the write it
+        // was taken for and not a moment more; a cancelled one has nothing to cover.
         if (confirmed && !area.getText().isBlank() && !title.getText().isBlank()) {
             maybe.get().updateSource(row.sourceId(), BotSourceKind.TEXT, title.getText().trim(),
-                    area.getText().getBytes(StandardCharsets.UTF_8));
+                            area.getText().getBytes(StandardCharsets.UTF_8))
+                    .whenComplete((done, failure) -> releaseLock());
+        } else {
+            releaseLock();
         }
     }
 

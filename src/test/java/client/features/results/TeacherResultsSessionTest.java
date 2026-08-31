@@ -53,6 +53,7 @@ class TeacherResultsSessionTest {
 
     private static final long GRADED_EXECUTION = 10;
     private static final long LIVE_EXECUTION = 11;
+    private static final long OLDER_GRADED_EXECUTION = 12;
 
     private FakeClientConnection connection;
     private RequestDispatcher dispatcher;
@@ -78,6 +79,12 @@ class TeacherResultsSessionTest {
     private static ExecutionResultRow graded() {
         return new ExecutionResultRow(GRADED_EXECUTION, "4821", OPENED, CLOSED,
                 ExecutionState.CLOSED, 8, 8, true, true);
+    }
+
+    /** A second frozen sitting, a day older, so the preserved one is NOT the default. */
+    private static ExecutionResultRow gradedOlder() {
+        return new ExecutionResultRow(OLDER_GRADED_EXECUTION, "3311", OPENED.minusSeconds(86400),
+                CLOSED.minusSeconds(86400), ExecutionState.CLOSED, 8, 8, true, true);
     }
 
     private static ExecutionResultRow live() {
@@ -671,6 +678,62 @@ class TeacherResultsSessionTest {
                             + "sitting, because a colleague's grade was approved elsewhere")
                     .contains(graded());
             assertThat(session.selectedExam()).contains(algebraExam());
+        }
+
+        @Test
+        @DisplayName("⚑ S3: a re-read keeps her on a sitting that is NOT the default")
+        void aLiveReReadKeepsHerOffTheDefaultSitting() {
+            // TWO sittings with frozen statistics: the newest is the default, and she is
+            // deliberately reading the OLDER one. The earlier fixture had one, so the
+            // preserved sitting and defaultExecution()'s answer were the same row and a
+            // settle that re-ran the default could pass unseen.
+            ExamResultRow exam = new ExamResultRow(1, "101101", "Algebra", "11", "אלגברה",
+                    List.of(graded(), gradedOlder()));
+            connection.replyOk(Verb.RESULTS_EXAMS_GET, new TeacherResults(List.of(exam)));
+            connection.respondTo(Verb.RESULTS_EXECUTION_GET, request -> {
+                ExecutionResultsRequest ask = (ExecutionResultsRequest) request.getPayload();
+                ExecutionResultRow header = ask.executionId() == OLDER_GRADED_EXECUTION
+                        ? gradedOlder() : graded();
+                return Message.ok(request, new ExecutionResults(header, "Algebra", "11",
+                        "אלגברה", List.of(row(1, "Maya Levi", 60, null)), seededStats()));
+            });
+            session.load();
+            assertThat(session.selectedExecution().orElseThrow().executionId())
+                    .as("the default is the newest with statistics")
+                    .isEqualTo(GRADED_EXECUTION);
+            session.openExecution(gradedOlder());
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(session.selectedExecution().orElseThrow().executionId())
+                    .as("the settle must not re-run defaultExecution and yank her to the "
+                            + "newest sitting because something closed elsewhere")
+                    .isEqualTo(OLDER_GRADED_EXECUTION);
+            assertThat(session.results().orElseThrow().execution().executionId())
+                    .as("and the rows under the header are that sitting's")
+                    .isEqualTo(OLDER_GRADED_EXECUTION);
+        }
+
+        @Test
+        @DisplayName("⚑ S3: the open sitting's rows stay on screen while its re-read is in flight")
+        void aLiveReReadKeepsTheOpenSittingsRowsOnScreen() {
+            serverHasEverything();
+            session.load();
+            assertThat(session.results()).isPresent();
+            // The exams list answers; the sitting's own re-read stays in flight.
+            connection.respondTo(Verb.RESULTS_EXECUTION_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(session.results())
+                    .as("a readable table one second out of date beats a skeleton")
+                    .isPresent();
+            assertThat(session.detailState()).isEqualTo(AsyncViewState.READY);
+            assertThat(session.isOpeningExecution())
+                    .as("the quiet re-read must not announce itself as LOADING")
+                    .isFalse();
         }
 
         @Test

@@ -146,6 +146,14 @@ public final class ExamPreviewSession {
         if (!force && state == AsyncViewState.LOADING && examVersionId == requestedVersionId) {
             return;
         }
+        if (preview != null && preview.summary().examVersionId() != examVersionId) {
+            // The loaded paper belongs to another version. Discarding the late answer (see
+            // settle) closes only half of the 4.1 defect: while B loads, A's paper would
+            // otherwise stay fully rendered with Approve and Reject wired to A's id and A's
+            // lockVersion - the wrong-exam decision, one confirm away. A reload of the same
+            // version keeps its paper, which is what a CONFLICT re-read wants.
+            preview = null;
+        }
         requestedVersionId = examVersionId;
         state = AsyncViewState.LOADING;
         error = null;

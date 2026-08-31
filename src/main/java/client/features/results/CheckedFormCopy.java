@@ -130,7 +130,7 @@ public final class CheckedFormCopy {
      *
      * @param form the loaded form
      * @return for example {@code "Submitted · 45 minutes"} or
-     *         {@code "Time ran out — submitted automatically · 75 minutes"}
+     *         {@code "Time ran out, submitted automatically · 75 minutes"}
      */
     public static String attemptLine(CheckedForm form) {
         Objects.requireNonNull(form, "form");
@@ -138,7 +138,9 @@ public final class CheckedFormCopy {
                 // Says what happened rather than naming a state: "TIMED_OUT" is a database
                 // word, and a student reading it would reasonably wonder whether her paper
                 // counted. It did, and it was scored like any other (H12.4).
-                ? "Time ran out — submitted automatically"
+                // A comma, not an em dash: PRD 4.1 keeps em dashes out of user-visible
+                // copy (S3 sweep; the rule the notification catalog's test enforces).
+                ? "Time ran out, submitted automatically"
                 : "Submitted";
         Integer minutes = form.actualMinutes();
         if (minutes == null) {

@@ -330,6 +330,44 @@ class ReportsInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("⚑ S3, U-71: the floors hold at the smallest window the shell allows")
+    void floorsHoldAtTheSmallestWindow() {
+        // 1024x700 is the smallest window the shell allows (the truncation guard's word);
+        // U-71's fix was proven at 1280x800, and a floor that holds there and not here
+        // would be the same defect one squeeze later.
+        ScreenManager manager = signIn(this::everythingLoads);
+        interact(() -> {
+            Stage stage = (Stage) manager.scene().getWindow();
+            stage.setWidth(1024);
+            stage.setHeight(700);
+        });
+        openReports(manager);
+
+        await("both sitting rows at the smallest window", () ->
+                cellTexts(manager.scene()).contains("Algebra midterm · 4821")
+                        && cellTexts(manager.scene()).contains("Algebra quiz · 5150"));
+
+        Node table = manager.scene().getRoot().lookup(".reports-rows .hsts-table");
+        assertThat(table).isNotNull();
+        assertThat(table.getLayoutBounds().getHeight())
+                .as("the rows table keeps its floor of about three rows")
+                .isGreaterThanOrEqualTo(150);
+        Node chart = manager.scene().getRoot().lookup(".hsts-stat-chart");
+        assertThat(chart).isNotNull();
+        assertThat(chart.getLayoutBounds().getHeight())
+                .as("the chart gives way but never below its own floor")
+                .isGreaterThanOrEqualTo(120);
+        long realisedRows = manager.scene().getRoot()
+                .lookupAll(".reports-rows .table-row-cell").stream()
+                .filter(node -> node instanceof javafx.scene.control.TableRow<?> row
+                        && !row.isEmpty())
+                .count();
+        assertThat(realisedRows)
+                .as("U-71's own symptom: items=2 must never render as rowCells=1")
+                .isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
     @DisplayName("the print layout drops the pickers (E15.4)")
     void printLayoutDropsThePickers() {
         ScreenManager manager = signIn(this::everythingLoads);

@@ -57,6 +57,50 @@ class DataTableTest extends ApplicationTest {
         // Nothing to show: these assertions are about the table's own settings.
     }
 
+    /**
+     * ⚑ U-61's promise, proven. setItems answered with identical rows deliberately skips
+     * the clear-then-add (which yanks selection and realised cells), and refreshes instead;
+     * the refresh must still repaint a column that draws from state OUTSIDE the row object,
+     * or a monitor or bank list whose derived facts moved would quietly stop updating.
+     */
+    @Test
+    @DisplayName("⚑ U-61: identical rows still repaint cells that draw from outside the row")
+    void equalRowsRefreshDerivedCells() {
+        java.util.concurrent.atomic.AtomicReference<String> external =
+                new java.util.concurrent.atomic.AtomicReference<>("first");
+        DataTable<Row> table = new DataTable<>();
+        table.column("Id", Row::id)
+                .column("Derived", row -> external.get());
+
+        Stage[] stage = new Stage[1];
+        interact(() -> {
+            stage[0] = new Stage();
+            stage[0].setScene(new javafx.scene.Scene(table, 420, 320));
+            stage[0].show();
+            table.setItems(List.of(new Row("q1", ""), new Row("q2", "")));
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(cellTexts(table)).contains("first");
+
+        external.set("second");
+        interact(() -> table.setItems(List.of(new Row("q1", ""), new Row("q2", ""))));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(cellTexts(table))
+                .as("a push that changes only derived state must still repaint")
+                .contains("second")
+                .doesNotContain("first");
+        interact(() -> stage[0].hide());
+    }
+
+    private static List<String> cellTexts(DataTable<?> table) {
+        return table.table().lookupAll(".table-cell").stream()
+                .filter(javafx.scene.control.TableCell.class::isInstance)
+                .map(cell -> ((javafx.scene.control.TableCell<?, ?>) cell).getText())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
     @Test
     @DisplayName("⚑ every table shares its full width out across the columns")
     void theTableFillsItsWidth() {
@@ -94,6 +138,27 @@ class DataTableTest extends ApplicationTest {
                     assertThat(column.getMinWidth()).isLessThanOrEqualTo(column.getPrefWidth());
                     assertThat(column.getMaxWidth()).isGreaterThanOrEqualTo(column.getPrefWidth());
                 });
+    }
+
+    @Test
+    @DisplayName("⚑ S3: setItems with identical rows does not replay the entrance fade")
+    void identicalRowsDoNotReplayTheFade() {
+        DataTable<Row> table = build();
+        // Let the first-content fade finish (ROUTE_MS, bounded).
+        sleep(400);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        double[] opacity = new double[1];
+        interact(() -> {
+            // The U-61 refresh path: every push re-read lands here with the same rows.
+            table.setItems(List.of(new Row("Q-1", "What is a monad?")));
+            opacity[0] = table.table().getOpacity();
+        });
+
+        assertThat(opacity[0])
+                .as("fadeIn drops the node to opacity 0 before animating, so a replayed "
+                        + "fade blinks the whole table on a re-read that changed nothing")
+                .isEqualTo(1.0);
     }
 
     // ===================== The column chooser (U-36) =====================

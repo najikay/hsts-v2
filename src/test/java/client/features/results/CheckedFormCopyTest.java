@@ -123,7 +123,7 @@ class CheckedFormCopyTest {
 
             // omer.katz's seeded row. "TIMED_OUT" is a database word; a student reading it
             // would reasonably wonder whether her paper counted. It did (H12.4).
-            assertThat(line).isEqualTo("Time ran out — submitted automatically · 75 minutes");
+            assertThat(line).isEqualTo("Time ran out, submitted automatically · 75 minutes");
             assertThat(line).doesNotContain("TIMED_OUT");
         }
 

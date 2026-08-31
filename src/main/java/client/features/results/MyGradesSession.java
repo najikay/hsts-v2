@@ -53,6 +53,14 @@ public final class MyGradesSession {
     private String error;
 
     /**
+     * Whether a quiet re-read is in flight underneath rows still on screen (U-63's rule,
+     * S3 sweep). Its own flag because a quiet re-read must not announce itself through
+     * {@code LOADING}: that state is what the view draws a skeleton from, and a push she
+     * never asked for must not blank the one screen that is entirely about her.
+     */
+    private boolean refreshing;
+
+    /**
      * @param dispatcher the request correlator — the screen never touches a socket
      * @param poster     the single FX-thread hop; {@code DirectFxThreadPoster} in tests
      */
@@ -96,7 +104,30 @@ public final class MyGradesSession {
      * from it is the only way the two cannot drift. NFR-18 — the student pressed nothing.
      */
     public void onGradePublished() {
-        load();
+        refresh();
+    }
+
+    /**
+     * Re-reads the list without blanking it (U-63's discipline, S3 sweep).
+     *
+     * <p>{@code load()} announces itself through {@code LOADING}, which the screen answers
+     * with a skeleton - right for the first visit, wrong for a push: a student reading her
+     * grades when one more was published watched the screen blink to a shimmer and every
+     * card replay its entrance. The rows on screen are correct and a newer answer is
+     * coming, so they stay until it lands. A list that never loaded, or whose load failed,
+     * has nothing to keep and takes the ordinary path.
+     */
+    private void refresh() {
+        if (state == AsyncViewState.LOADING || refreshing) {
+            return;
+        }
+        if (state == AsyncViewState.IDLE || state == AsyncViewState.ERROR) {
+            load();
+            return;
+        }
+        refreshing = true;
+        dispatcher.send(Verb.MY_GRADES_GET, null)
+                .whenComplete((response, failure) -> poster.run(() -> settle(response, failure)));
     }
 
     /**
@@ -138,18 +169,20 @@ public final class MyGradesSession {
     }
 
     private void settle(Message response, Throwable failure) {
+        boolean quiet = refreshing;
+        refreshing = false;
         if (failure != null || response == null) {
-            fail();
+            fail(quiet);
             return;
         }
         if (response.isError()) {
-            fail();
+            fail(quiet);
             return;
         }
         if (!(response.getPayload() instanceof MyGrades payload)) {
             // A well-formed OK carrying the wrong type is a protocol bug, not a user error;
             // the student still gets a human sentence rather than a stack trace.
-            fail();
+            fail(quiet);
             return;
         }
         grades = payload.grades();
@@ -158,7 +191,13 @@ public final class MyGradesSession {
         onChange.run();
     }
 
-    private void fail() {
+    private void fail(boolean quiet) {
+        if (quiet) {
+            // A failed quiet re-read leaves the screen exactly as it was (the DataSession
+            // rule): what is on it is real and a few seconds old, and she never asked for
+            // the re-read. The next push asks again.
+            return;
+        }
         grades = List.of();
         error = LOAD_FAILED;
         state = AsyncViewState.ERROR;

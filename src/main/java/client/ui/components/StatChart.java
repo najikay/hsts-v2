@@ -135,9 +135,30 @@ public final class StatChart extends VBox {
      *             execution nobody has a score in yet
      */
     public void setData(StatChartData data) {
-        this.logic = new StatChartLogic(Objects.requireNonNull(data, "data"));
+        Objects.requireNonNull(data, "data");
+        // 2026-08-31, S3 sweep: EQUAL data is not a change. Every screen that owns this
+        // chart calls setData on every render (the U-61 discipline renders often), and a
+        // re-render or a push re-read carrying the same frozen record must not replay the
+        // entrance or reset the plot - bars snapping to zero on a live re-read reads as
+        // data vanishing. The gallery's "Replay entrance" button uses replayEntrance().
+        if (data.equals(logic.data())) {
+            return;
+        }
+        this.logic = new StatChartLogic(data);
         this.animateNextLayout = true;
         refresh();
+    }
+
+    /**
+     * Replays the bar entrance over the data already on the chart.
+     *
+     * <p>For the design gallery's replay control. {@link #setData} deliberately treats
+     * equal data as a no-op, so a caller that wants the motion again asks for the motion
+     * rather than pretending the data changed.
+     */
+    public void replayEntrance() {
+        this.animateNextLayout = true;
+        plot.requestLayout();
     }
 
     /** @return the decision layer, for a caller that wants the same numbers as the chart. */

@@ -557,6 +557,7 @@ five new entries, one reopening.
 **In Naji's words:** "the histogram got stuck and the display on top the table got stuck too, also the table itself got stuck ... correction the whole principal dashboard, data, reports got bugged out ... nothing is working anymore"
 **Status:** `OPEN` — not reproduced in the harness (ReportsInteractionTest.clickingAroundNeverWedges, 3 passes, kept as a guard). Waiting for a jstack of the frozen client and the two terminals' text. Candidates: an FX-thread loop, a request that never returns, a dead socket without a banner.
 **Also (Naji, same session):** "the reports are the same for all students, it just gives the same exact report" - consistent with the data no longer changing after the first report (the picker's selection not reaching the session, or the request never returning); to be confirmed against the seed once the freeze is understood: BY_STUDENT for `noa.friedman` (three sittings) and `noam.peretz` (none) must differ.
+**S3 addendum (sweep):** the same disease was found and fixed in `TeacherResultsView` (exam list and execution picker) and `DataView` (course picker); `DataTable.setState`'s unconditional fade and `StatChart.setData`'s unconditional entrance were the flicker half, now change-gated. Real-popup regression tests on both screens. **Also:** the one-pulse deferral opened a window where a subject from the old dimension could run under the new one - membership-guarded now.
 
 ### U-62 · FUNCTIONAL · bot manager did not update on the co-teacher's screen
 **In Naji's words:** "bot info isn't being updated in both screens I had to press the notification for it to work"
@@ -568,11 +569,13 @@ five new entries, one reopening.
 **Finding:** sessions with a push subscription today: approvals, exams list, releases, live monitor, take exam, my grades, notifications, bank row locks. **Without one:** the four dashboards (counts and cards), Grading queue (GRADING_DUE arrives at the bell only), Question Bank list (a colleague's add/edit/delete), Teacher Results, and the bot manager on toggle/create (no notification is sent for those; needs BOT amendment A4: a BOT_CHANGED notification to co-teachers on create, rename, toggle).
 **Ruling:** wave item after round 5: each of those re-reads on the relevant push; the bank list and results re-read on a new lightweight push or on the notification types that already imply the change.
 **Status:** `DONE` (agent W, 61 files, 766 tests green). All four dashboards, the Grading queue, the Question Bank list, the principal's Data browser and Teacher Results now re-read on the pushes that imply their content changed, underneath the rows on screen (no skeleton flicker). Two contract amendments: BANK A3 `PUSH_BANK_CHANGED` (a notice carrying courseCode and displayId5, recipients = the bank read scope inverted: the course's teachers, its subject coordinator, principals; the actor included so her second window follows; never students) and BOT A4 `BOT_CHANGED` for toggle and create. **The principal's staleness had its own root cause:** `DataSession` loads each tab exactly once per session and applies both filters client-side over the cache, so no filter change ever produced a round trip and only a re-login could show a new question; the push now invalidates that cache. Four existing guards (verb counts, notification icons) were updated, not silenced.
+**S3 addendum (sweep):** refresh() on all four dashboards, My Grades and the Teacher Results detail no longer blanks to skeletons; TeacherResultsSession preserved the exam but re-defaulted the SITTING on settle - fixed, with a two-frozen-sittings fixture that catches it.
 
 ### U-64 · UX · grading queue: Change score with everything ticked opened an arbitrary row
 **In Omar's words:** "select all then change grade opens for the first one ticked"
 **Ruling:** an override is a one-student act: with more than one row ticked, Change score is off and its tooltip says "Change score works on one student at a time. Click that student's row."
 **Status:** `DONE`
+**S3 addendum (sweep):** the explanatory tooltip sat on the disabled button, and disabled controls get no mouse events - it could never show. Moved to an enabled wrapper.
 
 ### U-65 · FUNCTIONAL · bank course picker: filtering to one course hid the others
 **In Omar's words:** "when she chooses database, when she clicks again oop disappears until she chooses show all"
@@ -610,3 +613,80 @@ five new entries, one reopening.
 **Found by:** CI, after four rounds of elimination and a scene dump added to the failing waits (round five). `table 1164x42 · items=2 · rowCells=1`: the reports column's preferred heights do not fit an 800px-tall window, a VBox short of room squeezes children toward their minimums, the table had no minimum and collapsed to a single virtualised row while the chart held ~230px. The runner's slightly taller fonts tipped it; local fonts squeezed by, which is why no local run ever reproduced it.
 **Ruling:** layout floors, not test knobs: the rows table never shows fewer than about three rows (`minHeight 150`), the chart gives way first (`minHeight 120`). Possibly related to U-61's "the table got stuck" if the window was short; U-61 stays open on its own evidence.
 **Status:** `DONE`
+**S3 addendum (sweep):** floors runtime-proven at 1024x700 as well (`floorsHoldAtTheSmallestWindow`, rowCells >= 2).
+
+### U-72 · UX · connect button says "Still trying…" when a dial runs long
+**Source:** sweep S1, with the B-49 regression refit. The dial bound is 15 s now, and a first LAN connect through a firewall prompt can legitimately use most of it; a button stuck on "Connecting..." for that long reads as a hang.
+**Ruling:** after 4 s of Connecting the button reads "Still trying…"; every terminal state still clears it.
+**Status:** `DONE` (S1 patch)
+
+### U-73 · FUNCTIONAL · editor revisits grew the ToggleGroup and re-wired listeners (sweep S4)
+**Symptom:** every visit to the cached editor added four more radios to the correct-answer group and re-added change listeners to the long-lived controls; a stale detached radio could stay selected inside the group.
+**Fix:** buildForm detaches the previous visit's radios and clears the list; the long-lived controls are wired once (wireOnce), their lambdas reading the current session field.
+**Status:** `DONE` - failing-then-passing test (4, not 8, after a revisit).
+
+### U-74 · FUNCTIONAL · bot source lock held after the edit dialog closed (sweep S4)
+**Symptom:** cancelling or saving the source edit left the teacher's advisory lock held and heartbeat-renewed until she left the screen; the co-teacher stayed banner-blocked.
+**Fix:** cancel releases immediately; a confirmed save releases when the write settles, so the hold covers exactly the write (E18.3 applied to the dialog).
+**Status:** `DONE` - real-gesture test (Edit, ESC, LOCK_RELEASE on the wire).
+
+### U-75 · UX · U-70's radios had lost every state style, including U-55's focus ring (sweep S4)
+**Root cause:** the radio state rules were scoped under .hsts-radio-group; U-70 moved the radios into the answer rows, keeping the class but leaving the scope.
+**Fix:** the state rules also name .editor-answers .radio-option, tokens only, so both palettes and all five accents cover them. **U-70 addendum, measured and pinned by test:** Tab enters the group once on the selected toggle, arrow keys move focus and the mark through the rows, Space confirms, Tab exits to the next box.
+**Status:** `DONE` - parsed-stylesheet test.
+
+### U-76 · FUNCTIONAL · topic picker items rebuilt under an open popup (sweep S4, amends U-67)
+**Fix:** the same equality guard the course picker carries; a lock push mid-popup repaints the chip and mutates nothing.
+**Status:** `DONE` - real popup + real push test.
+
+### U-77 · COSMETIC · narrow detail pane clipped the illustration at a fixed 360px (sweep S4, amends U-36)
+**Fix:** fitWidth bound to the pane's live width, capped at 360.
+**Status:** `DONE` - real-resize test at 1000px.
+
+### U-78 · FUNCTIONAL · pushes blanked dashboards, My Grades and open results to skeletons (sweep S3)
+**Symptom:** every U-63 push re-read routed through load(), blanking cards and lists to LOADING and replaying entrance staggers; a colleague's sitting closing yanked a teacher off the sitting she was reading.
+**Fix:** quiet refresh() paths that keep READY content on screen (failed quiet re-reads keep the rows), preserved sittings reopened directly, identical cards and rows rebuild nothing.
+**Status:** `DONE` - 9 red-on-HEAD session tests.
+
+### U-79 · UX · StatChart and DataTable replayed animations on every render (sweep S3)
+**Fix:** equal chart data is a no-op (the gallery keeps an explicit replay); the table's content fade plays only when entering content.
+**Status:** `DONE`
+
+### U-80 · FUNCTIONAL · checked form showed the previous grade's paper while the next loaded (sweep S3)
+**Fix:** no form means nothing on screen, not the old paper.
+**Status:** `DONE` (inspection + green suites; no view harness exists for this screen)
+
+### U-81 · COPY · "Time ran out — submitted automatically" carried an em dash (sweep S3)
+**Fix:** comma, per PRD 4.1. The empty-value glyphs in closedAt and NO_COMMENT are not prose and stay.
+**Status:** `DONE`
+
+### U-82 · FUNCTIONAL · builder adopted a stale save answer after opening another exam (sweep S2)
+**Symptom:** save exam A, open exam B; B's builder shows A's paper, pops "Saved" and navigates to the list.
+**Fix:** the save captures the load generation and a mismatched settle is dropped; resetLoaded clears the saving flag so the guard cannot jam Save.
+**Status:** `DONE` - red-on-HEAD test.
+
+### U-83 · FUNCTIONAL · approval preview left the previous exam decidable while the next loaded (sweep S2)
+**Symptom:** click exam B in the queue; A's paper stays up with Approve live and A's lock token.
+**Fix:** opening a different version clears the stale paper (a same-version CONFLICT reload keeps its own); the header blanks with it.
+**Status:** `DONE` - red-on-HEAD test.
+
+### U-84 · FUNCTIONAL · a failed hand-in was silent (sweep S2)
+**Symptom:** Hand in pressed, dialog closes, nothing happens; the student believes she finished.
+**Fix:** both failure paths announce through a toast; the paper stays live.
+**Status:** `DONE` - real-scene test.
+
+### U-85 · FUNCTIONAL · release and monitor ticks rebuilt every row each second (sweep S2, U-61's shape)
+**Symptom:** Close early sometimes eats the click; the Live dot stutters.
+**Fix:** the tick updates only the countdown labels; rows rebuild only when data changes.
+**Status:** `DONE` - node-identity tests across a real tick.
+
+### U-86 · COSMETIC · release list claimed "You have not released anything yet" during the first fetch (sweep S2)
+**Fix:** skeleton until the server answers; the empty sentence only when the server says empty.
+**Status:** `DONE`
+
+### U-87 · FLOW · builder stuck on the auto-compose pane after a lock takeover (sweep S2)
+**Fix:** the tab folds to Manual while not editable (choice restored on release); criteria controls freeze with the rest.
+**Status:** `DONE`
+
+### U-88 · SMALL (sweep S2) · approval queue generation guard; "Saved" now waits for every in-flight write; the dice hint restores after typing a code
+**Status:** `DONE` - one red-on-HEAD test each.

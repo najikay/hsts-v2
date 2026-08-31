@@ -193,6 +193,40 @@ class MyGradesSessionTest {
             assertThat(connection.sentCount()).isEqualTo(1);
             assertThat(connection.lastSent().getVerb()).isEqualTo(Verb.MY_GRADES_GET);
         }
+        @Test
+        @DisplayName("⚑ S3: a push re-read keeps the list on screen instead of a skeleton")
+        void aPushReReadDoesNotBlankTheList() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            session.load();
+            assertThat(session.state()).isEqualTo(AsyncViewState.READY);
+            connection.respondTo(Verb.MY_GRADES_GET, request -> null);
+            connection.clearSent();
+
+            session.onGradePublished();
+
+            assertThat(connection.sentCount()).as("it still re-reads").isEqualTo(1);
+            assertThat(session.state())
+                    .as("a readable list one second out of date beats a shimmer, and a "
+                            + "skeleton here replayed every card's entrance on settle")
+                    .isEqualTo(AsyncViewState.READY);
+            assertThat(session.grades()).containsExactly(MAYA_ALGEBRA);
+        }
+
+        @Test
+        @DisplayName("S3: a failed quiet re-read keeps the list exactly as it was")
+        void aFailedQuietReReadKeepsTheList() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(MAYA_ALGEBRA)));
+            session.load();
+            connection.replyError(Verb.MY_GRADES_GET, ErrorCode.INTERNAL, "blip");
+
+            session.onGradePublished();
+
+            assertThat(session.state()).isEqualTo(AsyncViewState.READY);
+            assertThat(session.grades()).containsExactly(MAYA_ALGEBRA);
+            assertThat(session.error())
+                    .as("she never asked for the re-read; the next push asks again")
+                    .isEmpty();
+        }
     }
 
     @Nested

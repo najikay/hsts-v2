@@ -819,6 +819,83 @@ class DashboardSessionTest {
         }
 
         @Test
+        @DisplayName("⚑ S3: a teacher push re-read keeps the settled cards on screen")
+        void teacherPushReReadDoesNotBlankTheCards() {
+            teacherServer();
+            TeacherDashboardSession session =
+                    new TeacherDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+            // The re-read's answers stay in flight.
+            connection.respondTo(Verb.RELEASE_LIST_GET, request -> null);
+            connection.respondTo(Verb.GRADING_QUEUE_GET, request -> null);
+            connection.respondTo(Verb.RESULTS_EXAMS_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.GRADING_DUE));
+
+            assertThat(session.cards())
+                    .as("a push she never asked for must not flash the cards to skeletons")
+                    .allSatisfy(card -> assertThat(card.state())
+                            .isNotEqualTo(DashboardCard.State.LOADING));
+        }
+
+        @Test
+        @DisplayName("S3: the same no-blanking rule for the coordinator's cards")
+        void coordinatorPushReReadDoesNotBlankTheCards() {
+            connection.replyOk(Verb.APPROVALS_QUEUE_GET, new ApprovalQueue(List.of(), true));
+            CoordinatorDashboardSession session =
+                    new CoordinatorDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+            connection.respondTo(Verb.APPROVALS_QUEUE_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.APPROVAL_REQUESTED));
+
+            assertThat(session.cards()).allSatisfy(card -> assertThat(card.state())
+                    .isNotEqualTo(DashboardCard.State.LOADING));
+        }
+
+        @Test
+        @DisplayName("S3: the same no-blanking rule for the student's card")
+        void studentPushReReadDoesNotBlankTheCard() {
+            connection.replyOk(Verb.MY_GRADES_GET, new MyGrades(List.of(grade(1, 88, NOW))));
+            StudentDashboardSession session =
+                    new StudentDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+            connection.respondTo(Verb.MY_GRADES_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_GRADE_PUBLISHED, grade(2, 90, NOW));
+
+            assertThat(session.cards().get(0).state())
+                    .isNotEqualTo(DashboardCard.State.LOADING);
+            assertThat(session.cards().get(0).value())
+                    .as("the settled number stays until the fresh answer lands")
+                    .isEqualTo("88");
+        }
+
+        @Test
+        @DisplayName("S3: the same no-blanking rule for the principal's cards")
+        void principalPushReReadDoesNotBlankTheCards() {
+            connection.replyOk(Verb.DATA_EXAMS_GET, new DataExams(List.of()));
+            connection.replyOk(Verb.DATA_RESULTS_GET, new DataResults(List.of()));
+            PrincipalDashboardSession session =
+                    new PrincipalDashboardSession(dispatcher, new DirectFxThreadPoster())
+                            .subscribeTo(eventBus);
+            session.load();
+            connection.respondTo(Verb.DATA_EXAMS_GET, request -> null);
+            connection.respondTo(Verb.DATA_RESULTS_GET, request -> null);
+
+            connection.pushToClient(Verb.PUSH_NOTIFICATION,
+                    notification(NotificationType.EXECUTION_CLOSED));
+
+            assertThat(session.cards()).allSatisfy(card -> assertThat(card.state())
+                    .isNotEqualTo(DashboardCard.State.LOADING));
+        }
+
+        @Test
         @DisplayName("every dashboard refuses a null bus rather than silently not subscribing")
         void aNullBusIsRefused() {
             org.assertj.core.api.Assertions.assertThatNullPointerException().isThrownBy(() ->

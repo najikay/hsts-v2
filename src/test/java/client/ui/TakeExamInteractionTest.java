@@ -366,6 +366,47 @@ class TakeExamInteractionTest extends ApplicationTest {
         assertThat(labelTexts(manager.scene())).contains(ExamCopy.CODE_TITLE);
     }
 
+    /**
+     * ⚑ A hand-in that never reached the server used to be completely silent: the confirm
+     * dialog closed, the paper stayed live, and nothing anywhere said it had not worked.
+     */
+    @Test
+    @DisplayName("⚑ a hand-in that never reached the server is announced, and the paper stays live")
+    void failedHandInIsAnnounced() {
+        ScreenManager manager = signIn();
+        FakeClientConnection connection = (FakeClientConnection) manager.getClient();
+        openTakeExam(manager);
+        enterTheExam(manager);
+
+        interact(() -> connection.failSendsWith(new IOException("socket closed")));
+        // Driven the way the confirmed dialog does it: the dialog itself is a modal
+        // showAndWait and cannot be driven from the FX thread the test shares.
+        submitThroughTheSession(manager);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(manager.scene()))
+                .as("silence here is a student believing she has finished when she has not")
+                .contains(ExamCopy.SUBMIT_FAILED_TITLE, ExamCopy.SUBMIT_FAILED);
+        assertThat(manager.scene().getRoot().lookupAll(".question-card"))
+                .as("the paper is still live; nothing was closed")
+                .isNotEmpty();
+    }
+
+    /** Hands in through the session, the way a confirmed dialog does. */
+    private void submitThroughTheSession(ScreenManager manager) {
+        interact(() -> {
+            Object screen = manager.screens().get(Routes.TAKE_EXAM.id());
+            try {
+                java.lang.reflect.Field field = screen.getClass().getDeclaredField("attempt");
+                field.setAccessible(true);
+                Object session = field.get(screen);
+                session.getClass().getMethod("submit").invoke(session);
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
+        });
+    }
+
     // ===================== Fixture =======================================
 
     /** Boots the app, attaches a scripted server, and enters Maya's shell. */

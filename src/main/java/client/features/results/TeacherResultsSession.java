@@ -104,6 +104,15 @@ public final class TeacherResultsSession {
      */
     private boolean refreshing;
 
+    /**
+     * Whether the detail read in flight is a quiet re-read under rows still on screen (U-63).
+     *
+     * <p>Set only by {@link #reopenQuietly}. {@link #settleDetail} reads it to decide what a
+     * failure means: a failed quiet re-read keeps the correct rows she is reading (the
+     * {@code DataSession} rule), while a failed click shows the error panel as ever.
+     */
+    private boolean refreshingDetail;
+
     private ResultsView view = ResultsView.TABLE;
     private boolean printLayout;
 
@@ -163,10 +172,24 @@ public final class TeacherResultsSession {
         exams = payload.exams();
         error = null;
         state = AsyncViewState.forResult(exams);
-        ExamResultRow opening = reselect();
-        if (opening == null) {
-            opening = defaultExam(exams);
+        ExamResultRow preserved = reselect();
+        if (preserved != null) {
+            // U-63's second half (S3 sweep). reselect() has already re-matched the sitting
+            // she was reading inside the fresh answer; handing the exam to selectExam here
+            // re-ran defaultExecution and yanked her to the newest sitting with statistics,
+            // which is exactly the move the preserved selection exists to prevent - and it
+            // blanked the detail to a skeleton for a re-read she never asked for. The
+            // preserved sitting is re-read quietly instead, under the rows on screen.
+            selectedExam = preserved;
+            if (selectedExecution != null) {
+                reopenQuietly(selectedExecution);
+                return;
+            }
+            // The exam survived and that sitting did not: fall back to its default.
+            selectExam(preserved);
+            return;
         }
+        ExamResultRow opening = defaultExam(exams);
         if (opening == null) {
             selectedExam = null;
             selectedExecution = null;
@@ -348,6 +371,7 @@ public final class TeacherResultsSession {
         selectedExecution = execution;
         detailState = AsyncViewState.LOADING;
         detailError = null;
+        refreshingDetail = false;
         results = null;
         onChange.run();
 
@@ -365,16 +389,46 @@ public final class TeacherResultsSession {
         }
         if (failure != null || response == null || response.isError()
                 || !(response.getPayload() instanceof ExecutionResults payload)) {
+            if (refreshingDetail && results != null) {
+                // A quiet re-read hit a blip under rows that are real and readable. Keeping
+                // them beats swapping correct data for an error panel she never asked for;
+                // the next push asks again (the DataSession rule, U-63).
+                refreshingDetail = false;
+                return;
+            }
+            refreshingDetail = false;
             results = null;
             detailError = ResultsCopy.EXECUTION_FAILED;
             detailState = AsyncViewState.ERROR;
             onChange.run();
             return;
         }
+        refreshingDetail = false;
         results = payload;
         detailError = null;
         detailState = AsyncViewState.forResultSize(payload.rows().size());
         onChange.run();
+    }
+
+    /**
+     * Re-reads one sitting underneath rows that stay on screen (U-63, S3 sweep).
+     *
+     * <p>The detail half of {@link #refresh()}'s no-blanking rule: {@link #openExecution}
+     * announces itself through {@code detailState = LOADING}, which the view answers with a
+     * skeleton - right for a click, wrong for a push. The rows and statistics she is
+     * reading stay until the fresh answer lands, and {@link #settleDetail} keeps them on a
+     * failed quiet re-read too.
+     */
+    private void reopenQuietly(ExecutionResultRow execution) {
+        selectedExecution = execution;
+        detailError = null;
+        refreshingDetail = true;
+        onChange.run();
+
+        long asked = execution.executionId();
+        dispatcher.send(Verb.RESULTS_EXECUTION_GET, new ExecutionResultsRequest(asked))
+                .whenComplete((response, failure) ->
+                        poster.run(() -> settleDetail(asked, response, failure)));
     }
 
     // ===================== The toggle (T-10, E14.4) =======================

@@ -152,6 +152,68 @@ class ConnectHandshakeTest {
         }
     }
 
+    @Nested
+    @DisplayName("the dial bound and the handshake bound are separate (the two-machine regression)")
+    class TwoBounds {
+
+        @Test
+        @DisplayName("\u2691 a server whose header arrives late still connects: the dial bound does not cut the handshake short")
+        void slowHeaderStillConnects() throws Exception {
+            socket = new ServerSocket(0, 50);
+            acceptAndWriteHeaderAfter(Duration.ofMillis(900));
+
+            client = new HSTSClient("127.0.0.1", socket.getLocalPort());
+            // The regression in miniature: one knob used to bound BOTH halves, so
+            // a dial bound tight enough for loopback strangled a header that
+            // needed a moment longer. Scaled down from the field numbers (5 s
+            // bound, ~7 s first LAN connect through a firewall prompt).
+            client.setDialTimeout(300);
+            client.setHandshakeTimeout(2_000);
+
+            client.connect();   // times out on the old single-bound behaviour
+
+            assertThat(client.isConnectionOpen()).isTrue();
+        }
+
+        @Test
+        @DisplayName("\u2691 a server that recovers after one handshake window connects on the silent retry")
+        void aBusyServerConnectsOnTheRetry() throws Exception {
+            socket = new ServerSocket(0, 50);
+            serveEveryoneAfter(Duration.ofMillis(900));
+
+            client = new HSTSClient("127.0.0.1", socket.getLocalPort());
+            // Scaled down from the field case: bounds of 600 ms standing in for
+            // 5 s, a server busy for 900 ms standing in for one busy for 7 s.
+            // Attempt one times out at 600 ms; the silent retry lands in the
+            // backlog and the recovered server serves it inside the second
+            // window. The old behaviour failed the whole connect at the first
+            // timeout.
+            client.setConnectTimeout(600);
+
+            client.connect();
+
+            assertThat(client.isConnectionOpen()).isTrue();
+        }
+
+        @Test
+        @DisplayName("the defaults: a patient dial, a tight handshake")
+        void theDefaultsAreSplit() {
+            // 12-20 s dial: outlasts a firewall prompt and TCP's 1/3/7 s SYN
+            // retransmission ladder. 5 s handshake: a live server writes its
+            // header in milliseconds, so only a wedged one takes longer.
+            assertThat(ocsf.client.AbstractClient.DEFAULT_DIAL_TIMEOUT_MS)
+                    .isBetween(12_000, 20_000);
+            assertThat(ocsf.client.AbstractClient.DEFAULT_HANDSHAKE_TIMEOUT_MS)
+                    .isEqualTo(5_000);
+
+            HSTSClient fresh = new HSTSClient("127.0.0.1", 5555);
+            assertThat(fresh.getDialTimeout())
+                    .isEqualTo(ocsf.client.AbstractClient.DEFAULT_DIAL_TIMEOUT_MS);
+            assertThat(fresh.getHandshakeTimeout())
+                    .isEqualTo(ocsf.client.AbstractClient.DEFAULT_HANDSHAKE_TIMEOUT_MS);
+        }
+    }
+
     private static HSTSClient clientFor(int port) {
         HSTSClient fresh = new HSTSClient("127.0.0.1", port);
         fresh.setConnectTimeout(TIMEOUT_MS);
@@ -176,6 +238,76 @@ class ConnectHandshakeTest {
                 // Interrupted or closed at teardown; the test has its answer by then.
             }
         }, "silent-server");
+        accepter.setDaemon(true);
+        accepter.start();
+    }
+
+    /**
+     * Accepts one client at once (the kernel already completed the handshake),
+     * writes the serialization header only after {@code delay}, and then answers
+     * every request with a correlated OK: a slow but healthy server, which is
+     * what a first LAN connect through a firewall prompt looks like.
+     */
+    private void acceptAndWriteHeaderAfter(Duration delay) {
+        accepter = new Thread(() -> {
+            try (Socket accepted = socket.accept()) {
+                Thread.sleep(delay.toMillis());
+                ObjectOutputStream out = new ObjectOutputStream(accepted.getOutputStream());
+                out.flush();
+                java.io.ObjectInputStream in =
+                        new java.io.ObjectInputStream(accepted.getInputStream());
+                while (true) {
+                    Object msg = in.readObject();
+                    if (msg instanceof common.protocol.Message request) {
+                        out.writeObject(common.protocol.Message.ok(request, null));
+                        out.flush();
+                        out.reset();
+                    }
+                }
+            } catch (Exception ignored) {
+                // Interrupted or closed at teardown; the test has its answer by then.
+            }
+        }, "slow-header-server");
+        accepter.setDaemon(true);
+        accepter.start();
+    }
+
+    /**
+     * A server that is busy for {@code delay} and then serves every queued
+     * connection properly: the kernel completed their handshakes into the
+     * backlog all along, so recovery means accepting and answering them all.
+     */
+    private void serveEveryoneAfter(Duration delay) {
+        accepter = new Thread(() -> {
+            try {
+                Thread.sleep(delay.toMillis());
+                while (true) {
+                    Socket accepted = socket.accept();
+                    Thread serving = new Thread(() -> {
+                        try {
+                            ObjectOutputStream out = new ObjectOutputStream(accepted.getOutputStream());
+                            out.flush();
+                            java.io.ObjectInputStream in =
+                                    new java.io.ObjectInputStream(accepted.getInputStream());
+                            while (true) {
+                                Object msg = in.readObject();
+                                if (msg instanceof common.protocol.Message request) {
+                                    out.writeObject(common.protocol.Message.ok(request, null));
+                                    out.flush();
+                                    out.reset();
+                                }
+                            }
+                        } catch (Exception ignored) {
+                            // The client under test hangs up; that ends the service.
+                        }
+                    }, "recovered-server-worker");
+                    serving.setDaemon(true);
+                    serving.start();
+                }
+            } catch (Exception ignored) {
+                // Interrupted or closed at teardown; the test has its answer by then.
+            }
+        }, "busy-then-recovered-server");
         accepter.setDaemon(true);
         accepter.start();
     }

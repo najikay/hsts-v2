@@ -190,7 +190,14 @@ public final class CreateReleaseDialog {
                 code.hint(ReleaseCopy.CODE_GENERATED);
                 revalidate.run();
             });
-            codeField.textProperty().addListener((obs, old, typed) -> revalidate.run());
+            codeField.textProperty().addListener((obs, old, typed) -> {
+                if (typed != null && !typed.isBlank()) {
+                    // Typing takes the choice back from the server: the hint must stop
+                    // promising a generated code the moment she supplies her own.
+                    code.hint(ReleaseCopy.CODE_HINT);
+                }
+                revalidate.run();
+            });
             opens.onChange(revalidate);
             closes.onChange(revalidate);
             versions.valueProperty().addListener((obs, old, picked) -> revalidate.run());

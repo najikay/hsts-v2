@@ -207,6 +207,10 @@ public final class ExamPreviewView extends AbstractScreen {
             paper.getChildren().clear();
             teacherPanel.getChildren().clear();
             statusRow.getChildren().clear();
+            // The heading goes with the paper: a blank pane under the previous exam's name
+            // reads as that exam still being on screen.
+            examName.setText("");
+            meta.setText("");
             boolean mayDecide = mayDecide();
             show(approve, mayDecide);
             show(reject, mayDecide);

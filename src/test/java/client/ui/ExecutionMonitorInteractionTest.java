@@ -24,6 +24,7 @@ import common.protocol.Verb;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.control.Spinner;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,6 +39,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -254,6 +256,62 @@ class ExecutionMonitorInteractionTest extends ApplicationTest {
 
         assertThat(labelTexts(manager.scene()))
                 .anySatisfy(text -> assertThat(text).contains("not yours to manage"));
+    }
+
+    /**
+     * A pin, not a fix. Editable Spinners were long notorious for ignoring typed text until
+     * Enter or an arrow press (JDK-8150946), which here would mean the confirmation naming
+     * a number the teacher never chose (F7.1, S-20). Proven sound at runtime on this
+     * toolkit build: the editor commits when its focus leaves, and a click on Add time
+     * moves focus first. This test is what notices if a JavaFX upgrade regresses that.
+     */
+    @Test
+    @DisplayName("minutes typed into Add time are honoured once focus leaves the box")
+    void typedMinutesCommitOnFocusLoss() {
+        ScreenManager manager = signIn(snapshot(true, 1, 0, 0));
+        openMonitor(manager);
+
+        Spinner<Integer> minutes = minutesSpinner(manager.scene());
+        interact(() -> minutes.getEditor().requestFocus());
+        interact(() -> minutes.getEditor().setText("30"));
+        interact(() -> buttonNamed(manager.scene(), "Add time").requestFocus());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(minutes.getValue())
+                .as("the confirmation that follows names this number; it has to be hers")
+                .isEqualTo(30);
+    }
+
+    /**
+     * The one-second tick used to rebuild every row: the chips and their tooltips were
+     * replaced under the pointer once a second, and the in-progress dot's pulse restarted
+     * on every beat. Only the clocks may move between pushes.
+     */
+    @Test
+    @DisplayName("the countdown tick repaints the clocks without rebuilding the rows")
+    void tickLeavesTheRowsStanding() {
+        ScreenManager manager = signIn(snapshot(true, 3, 1, 0));
+        openMonitor(manager);
+        Node row = manager.scene().getRoot().lookup(".monitor-row");
+        assertThat(row).isNotNull();
+
+        WaitForAsyncUtils.sleep(1600, TimeUnit.MILLISECONDS);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(manager.scene().getRoot().lookupAll(".monitor-row"))
+                .as("chips and tooltips must not be replaced under the pointer once a second")
+                .contains(row);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Spinner<Integer> minutesSpinner(Scene scene) {
+        // Filtered on the control type: ".spinner" also matches the internal skin node of
+        // any ProgressIndicator in the scene, which is not a Spinner at all.
+        return scene.getRoot().lookupAll(".spinner").stream()
+                .filter(Spinner.class::isInstance)
+                .map(node -> (Spinner<Integer>) node)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no Spinner on the monitor"));
     }
 
     // ===================== Fixture =======================================

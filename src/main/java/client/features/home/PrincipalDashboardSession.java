@@ -130,7 +130,9 @@ public final class PrincipalDashboardSession {
         if (pending > 0) {
             return;
         }
-        load();
+        // Without the blanking (S3 sweep): routing through load() flashed both cards back
+        // to skeletons on every push. The settled cards stay until each answer lands.
+        sendReads();
     }
 
     /** Sends both catalogue reads. */
@@ -140,7 +142,11 @@ public final class PrincipalDashboardSession {
         examCount = 0;
         sittingCount = 0;
         onChange.run();
+        sendReads();
+    }
 
+    /** The two reads, shared by the blanking visit and the quiet push re-read (U-63). */
+    private void sendReads() {
         pending = 2;
         dispatcher.send(Verb.DATA_EXAMS_GET, null)
                 .whenComplete((response, failure) ->

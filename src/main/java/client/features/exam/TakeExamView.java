@@ -81,6 +81,7 @@ public final class TakeExamView extends AbstractScreen {
         attempt = new ExamAttemptSession(dispatcher(), eventBus(), model, DelayedRunner.shared());
         attempt.onExtended(this::playExtension);
         attempt.onFinished(this::showEnding);
+        attempt.onSubmitFailed(this::announceSubmitFailure);
         attempt.onDisconnected(event -> banner.showDisconnected(event.serverLabel()));
 
         entryView = new ExamEntryView(entry);
@@ -292,6 +293,20 @@ public final class TakeExamView extends AbstractScreen {
         ToastStack toasts = toasts();
         if (toasts != null) {
             toasts.success(ExamCopy.EXTENSION_TOAST_TITLE, ExamCopy.extensionToast(extension));
+        }
+    }
+
+    /**
+     * A hand-in that did not land says so (F6.9).
+     *
+     * <p>The paper is still live and nothing was closed. Silence here is a student walking
+     * out believing she has finished when she has not, which is the worst outcome the
+     * submit flow has.
+     */
+    private void announceSubmitFailure() {
+        ToastStack toasts = toasts();
+        if (toasts != null) {
+            toasts.error(ExamCopy.SUBMIT_FAILED_TITLE, ExamCopy.SUBMIT_FAILED);
         }
     }
 

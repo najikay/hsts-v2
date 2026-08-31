@@ -1553,6 +1553,39 @@ class ExamBuilderSessionTest {
             assertThat(session.saveError()).contains(ExamBuildCopy.STALE_NOTICE);
         }
 
+        /**
+         * ⚑ resetLoaded's own rule, applied to the save: if it can be in flight, its counter
+         * belongs there. A save answered after another exam was opened used to adopt the old
+         * exam's composition, id and token under the new heading and raise the saved toast -
+         * and a guard alone would have left {@code saving} true forever, a Save button dead
+         * for the rest of the session.
+         */
+        @Test
+        @DisplayName("⚑ a save answered after another exam was opened is dropped whole")
+        void staleSaveAnswerIsDropped() {
+            openDraft();
+            session.save(); // no EXAM_VERSION_SAVE responder: the answer waits
+
+            connection.respondTo(Verb.EXAM_VERSION_GET, request ->
+                    Message.ok(request, other(8001L, "Calculus final")));
+            session.open(8001L);
+
+            connection.deliver(Message.ok(lastSent(Verb.EXAM_VERSION_SAVE),
+                    stored(ApprovalState.DRAFT, 4)));
+
+            assertThat(session.examVersionId())
+                    .as("the answer of the exam she left must not become the open exam")
+                    .isEqualTo(8001L);
+            assertThat(session.name()).isEqualTo("Calculus final");
+            assertThat(session.isSaved()).isFalse();
+            assertThat(session.saveNotice())
+                    .as("the toast would navigate her; a dropped answer says nothing")
+                    .isEmpty();
+            assertThat(session.isSaving())
+                    .as("and the retired save releases the button rather than jamming it")
+                    .isFalse();
+        }
+
         @Test
         @DisplayName("a second save is refused while one is in flight")
         void oneSaveAtATime() {
@@ -1608,6 +1641,45 @@ class ExamBuilderSessionTest {
             // Still an EDIT-mode draft. The lock is a hold on a thing she may otherwise change,
             // and collapsing it into READ_ONLY would tell her the version had been submitted.
             assertThat(session.mode()).isEqualTo(ExamBuilderSession.Mode.EDIT);
+        }
+
+        /**
+         * ⚑ The mid-session half of the auto-tab rule. resetLoaded folds the tab back to
+         * MANUAL on every open, but a takeover can land while she is standing on the
+         * criteria form - and the segmented switch is withheld while the builder cannot
+         * edit, so a stored AUTO was a pane with no way back and the paper hidden behind it.
+         */
+        @Test
+        @DisplayName("⚑ a lockout folds the builder back to the paper, not a criteria dead end")
+        void lockoutFoldsTheAutoTab() {
+            openDraft();
+            session.tab(ExamBuilderSession.Tab.AUTO);
+
+            session.setLockedOut(true);
+
+            assertThat(session.tab()).isEqualTo(ExamBuilderSession.Tab.MANUAL);
+
+            // The choice itself is kept: the lock being released puts her back where she was.
+            session.setLockedOut(false);
+            assertThat(session.tab()).isEqualTo(ExamBuilderSession.Tab.AUTO);
+        }
+
+        @Test
+        @DisplayName("criteria edits are refused while somebody else holds it")
+        void lockoutFreezesTheCriteria() {
+            openDraft();
+            session.tab(ExamBuilderSession.Tab.AUTO);
+            session.addCriterion();
+            session.criterionTopic(1, "Recursion");
+            session.setLockedOut(true);
+
+            session.criterionTopic(1, "Integrals");
+            session.criterionCount(0, ExamBuilderSession.Bucket.EASY, 5);
+            session.removeCriterion(1);
+
+            assertThat(session.criteria()).hasSize(2);
+            assertThat(session.criteria().get(1).topic()).isEqualTo("Recursion");
+            assertThat(session.criteria().get(0).easy()).isZero();
         }
 
         @Test

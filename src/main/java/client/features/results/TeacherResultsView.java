@@ -151,7 +151,10 @@ public final class TeacherResultsView extends AbstractScreen {
         examList.setCellFactory(view -> new ExamCell());
         examList.getSelectionModel().selectedItemProperty().addListener((obs, old, exam) -> {
             if (!selecting && exam != null) {
-                session.selectExam(exam);
+                // One pulse later, deliberately: the session's onChange re-renders, and a
+                // render must never run while the list is still inside its own
+                // selection-change processing (U-61, the reports screen's rule).
+                javafx.application.Platform.runLater(() -> session.selectExam(exam));
             }
         });
         VBox.setVgrow(examList, Priority.ALWAYS);
@@ -176,7 +179,10 @@ public final class TeacherResultsView extends AbstractScreen {
         executionPicker.getSelectionModel().selectedItemProperty()
                 .addListener((obs, old, execution) -> {
                     if (!selecting && execution != null) {
-                        session.openExecution(execution);
+                        // One pulse later, deliberately: a render must never run while the
+                        // ComboBox is still inside its own selection processing (U-61).
+                        javafx.application.Platform.runLater(
+                                () -> session.openExecution(execution));
                     }
                 });
 
@@ -306,8 +312,20 @@ public final class TeacherResultsView extends AbstractScreen {
     private void renderExams() {
         selecting = true;
         try {
-            examList.setItems(FXCollections.observableArrayList(session.exams()));
-            session.selectedExam().ifPresent(exam -> examList.getSelectionModel().select(exam));
+            // U-61, word for word from the reports screen: refill only when the contents
+            // changed, and drive the selection only when it differs. Replacing the items on
+            // EVERY render yanked the list out from under its own skin whenever a render
+            // fired from inside a selection change, and a push-driven render (U-63) did the
+            // same to a list she was mid-click on.
+            List<ExamResultRow> options = session.exams();
+            if (!options.equals(examList.getItems())) {
+                examList.setItems(FXCollections.observableArrayList(options));
+            }
+            ExamResultRow chosen = session.selectedExam().orElse(null);
+            if (chosen != null
+                    && !chosen.equals(examList.getSelectionModel().getSelectedItem())) {
+                examList.getSelectionModel().select(chosen);
+            }
         } finally {
             selecting = false;
         }
@@ -325,7 +343,9 @@ public final class TeacherResultsView extends AbstractScreen {
             show(examMeta, false);
             show(executionPicker, false);
             show(releasedByOther, false);
-            executionPicker.setItems(FXCollections.observableArrayList());
+            if (!executionPicker.getItems().isEmpty()) {
+                executionPicker.setItems(FXCollections.observableArrayList());
+            }
             markedLabel.setText("");
             return;
         }
@@ -337,9 +357,18 @@ public final class TeacherResultsView extends AbstractScreen {
 
         selecting = true;
         try {
-            executionPicker.setItems(FXCollections.observableArrayList(exam.executions()));
-            session.selectedExecution()
-                    .ifPresent(execution -> executionPicker.getSelectionModel().select(execution));
+            // U-61 again: the picker's items are replaced only when the sittings changed,
+            // and the value is driven only when it differs, so a render fired from inside
+            // the ComboBox's own event processing cannot yank the popup's list.
+            List<ExecutionResultRow> options = exam.executions();
+            if (!options.equals(executionPicker.getItems())) {
+                executionPicker.setItems(FXCollections.observableArrayList(options));
+            }
+            ExecutionResultRow chosen = session.selectedExecution().orElse(null);
+            if (chosen != null
+                    && !chosen.equals(executionPicker.getSelectionModel().getSelectedItem())) {
+                executionPicker.getSelectionModel().select(chosen);
+            }
         } finally {
             selecting = false;
         }

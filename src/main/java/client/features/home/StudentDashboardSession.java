@@ -168,7 +168,9 @@ public final class StudentDashboardSession {
         if (pending > 0) {
             return;
         }
-        load();
+        // Without the blanking (S3 sweep): routing through load() flashed the grade card
+        // back to a skeleton on every push. The settled card stays until the answer lands.
+        sendRead();
     }
 
     /** Sends the grades read. */
@@ -177,7 +179,11 @@ public final class StudentDashboardSession {
         gradeCount = 0;
         newestExam = null;
         onChange.run();
+        sendRead();
+    }
 
+    /** The one read, shared by the blanking visit and the quiet push re-read (U-63). */
+    private void sendRead() {
         pending = 1;
         dispatcher.send(Verb.MY_GRADES_GET, null)
                 .whenComplete((response, failure) -> poster.run(() -> {

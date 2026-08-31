@@ -87,6 +87,9 @@ public final class MyGradesView extends AbstractScreen {
     private Node errorState;
     private Node emptyState;
 
+    /** What the grid was last built from, so an unchanged quiet re-read is quiet (S3 sweep). */
+    private List<StudentGradeRow> renderedGrades;
+
     @Override
     protected Parent build() {
         session = new MyGradesSession(dispatcher(), onFxThread())
@@ -345,14 +348,33 @@ public final class MyGradesView extends AbstractScreen {
         error.setManaged(!message.isEmpty());
 
         List<StudentGradeRow> grades = session.grades();
-        heroHost.getChildren().setAll(hero(grades));
 
         switch (session.state()) {
-            case LOADING -> show(true, false, false, false);
-            case ERROR -> show(false, false, false, true);
-            case EMPTY -> show(false, false, true, false);
+            case LOADING -> {
+                renderedGrades = null;
+                heroHost.getChildren().setAll(hero(grades));
+                show(true, false, false, false);
+            }
+            case ERROR -> {
+                renderedGrades = null;
+                heroHost.getChildren().setAll(hero(grades));
+                show(false, false, false, true);
+            }
+            case EMPTY -> {
+                renderedGrades = null;
+                heroHost.getChildren().setAll(hero(grades));
+                show(false, false, true, false);
+            }
             default -> {
-                fillGrid(grades);
+                // The U-61 discipline (S3 sweep): identical rows are not a change. The
+                // session's quiet re-read usually settles on the list already on screen,
+                // and rebuilding the hero and re-staggering every card for it made a push
+                // flicker the one screen that is entirely about the reader.
+                if (!grades.equals(renderedGrades)) {
+                    renderedGrades = List.copyOf(grades);
+                    heroHost.getChildren().setAll(hero(grades));
+                    fillGrid(grades);
+                }
                 show(false, true, false, false);
             }
         }

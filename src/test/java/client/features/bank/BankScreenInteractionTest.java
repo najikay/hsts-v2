@@ -637,6 +637,82 @@ class BankScreenInteractionTest extends ApplicationTest {
                 .hasSize(1);
     }
 
+    // ===================== Round 5 verification (U-67, U-36) ==============
+
+    @Test
+    @DisplayName("an unrelated lock push leaves the topic picker's list alone (U-67)")
+    void topicPickerSurvivesUnrelatedRenders() {
+        FakeClientConnection[] wire = new FakeClientConnection[1];
+        Scene scene = openBank(connection -> {
+            wire[0] = connection;
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.LOCKS_SNAPSHOT,
+                    new LocksSnapshot(EntityRef.QUESTION, java.util.Map.of()));
+        });
+
+        // Filter to Algebra through the real popup, the way a person does, so the topic
+        // picker exists at all: its options are per-course by design (ruling 7.6).
+        clickOn(scene.getRoot().lookup(".bank-course-picker"));
+        WaitForAsyncUtils.waitForFxEvents();
+        Node entry = lookup(".list-cell").queryAll().stream()
+                .filter(node -> node instanceof javafx.scene.control.ListCell<?> cell
+                        && "Algebra".equals(cell.getText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no popup entry for Algebra"));
+        clickOn(entry);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        @SuppressWarnings("unchecked")
+        ComboBox<String> topics = (ComboBox<String>) scene.getRoot().lookup(".bank-topic-picker");
+        assertThat(topics.isVisible()).as("a course is filtered, so the picker is offered")
+                .isTrue();
+        assertThat(topics.getItems()).contains(BankCopy.ALL_TOPICS, "Equations", "Geometry");
+        int[] rebuilt = {0};
+        topics.getItems().addListener(
+                (javafx.collections.ListChangeListener<String>) change -> rebuilt[0]++);
+
+        // A colleague opens an editor somewhere on the page: the lock push re-renders.
+        interact(() -> wire[0].pushToClient(Verb.PUSH_LOCK_CHANGED,
+                LockChange.acquired(QuestionLockKey.of("11005"),
+                        new LockHolder(7L, "Ron Levi"))));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(cellTexts(scene)).contains("Editing · Ron Levi");
+        assertThat(rebuilt[0])
+                .as("the options did not change, so the items list must not be rebuilt: the "
+                        + "course picker already guards this with an equality check, and a "
+                        + "rebuild on every render disturbs the very popup a teacher has open "
+                        + "each time a push lands")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("on a narrow window the illustration fits the 320px pane (U-36)")
+    void illustrationFitsTheNarrowPane() {
+        Scene scene = openBank(connection -> {
+            bankHasTwoQuestions(connection);
+            connection.replyOk(Verb.QUESTION_GET, new QuestionDetail("11005", "11", "Algebra",
+                    2, 2, "Read the diagram", List.of("A", "B", "C", "D"), 1, "Geometry",
+                    Difficulty.HARD, true, "Dana Cohen", SPRING));
+            connection.replyOk(Verb.QUESTION_IMAGE_GET,
+                    new QuestionImage("11005", 2, "image/png", onePixelPng()));
+        });
+        interact(() -> ((Stage) scene.getWindow()).setWidth(1000));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        clickOn(rowShowing(scene, "Read the diagram"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        javafx.scene.image.ImageView image =
+                (javafx.scene.image.ImageView) scene.getRoot().lookup(".bank-image");
+        assertThat(image).isNotNull();
+        assertThat(image.getFitWidth())
+                .as("under 1100px the pane narrows to 320 (U-36), and a fit width pinned to "
+                        + "the wide pane's 360 draws a diagram the scroll pane clips at the "
+                        + "right edge")
+                .isLessThanOrEqualTo(320.0);
+    }
+
     // ===================== Fixture and harness ============================
 
     private void bankHasTwoQuestions(FakeClientConnection connection) {

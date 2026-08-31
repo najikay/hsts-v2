@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -276,6 +277,92 @@ class ConnectWiringTest {
         @DisplayName("a null connection is nothing to close, not a crash")
         void tolerantOfNull() {
             ConnectWiring.abandon(null);   // must not throw
+        }
+    }
+
+    @Nested
+    @DisplayName("a request timeout probes a connection the read thread still trusts (U-52)")
+    class SilenceProbe {
+
+        private FakeClientConnection connection;
+        private RequestDispatcher dispatcher;
+        private List<Throwable> condemned;
+
+        @BeforeEach
+        void wire() {
+            connection = new FakeClientConnection();
+            dispatcher = new RequestDispatcher(connection, Duration.ofMillis(40));
+            connection.setServerMessageHandler(dispatcher::dispatchIncoming);
+            condemned = Collections.synchronizedList(new ArrayList<>());
+            dispatcher.setTimeoutListener(ConnectWiring.silenceProbe(
+                    dispatcher, condemned::add, Duration.ofMillis(60)));
+        }
+
+        @Test
+        @DisplayName("\u2691 silence condemns the connection: sleep and wake finally raises the banner")
+        void aSilentServerIsCondemned() throws Exception {
+            connection.neverAnswer(Verb.HELLO);   // nobody is home any more
+
+            dispatcher.send(Verb.BANK_LIST, null);
+
+            awaitUntil(() -> !condemned.isEmpty());
+            assertThat(condemned.get(0)).isInstanceOf(client.net.RequestTimeoutException.class);
+            assertThat(connection.sentMessages()).extracting(Message::getVerb)
+                    .containsExactly(Verb.BANK_LIST, Verb.HELLO);
+        }
+
+        @Test
+        @DisplayName("any answer to the probe keeps the connection")
+        void aLiveServerIsKept() throws Exception {
+            // The fake answers HELLO out of the box: the server is alive, one
+            // request was just slow.
+            dispatcher.send(Verb.BANK_LIST, null);
+
+            awaitUntil(() -> connection.sentMessages().stream()
+                    .anyMatch(m -> m.getVerb() == Verb.HELLO));
+            Thread.sleep(150);   // long enough for a wrong verdict to land
+
+            assertThat(condemned).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a HELLO timeout never probes: the probe must not chase itself")
+        void aHelloTimeoutNeverProbes() {
+            RequestDispatcher.TimeoutListener probe = ConnectWiring.silenceProbe(
+                    dispatcher, condemned::add, Duration.ofMillis(60));
+
+            probe.onRequestTimedOut(Verb.HELLO);
+
+            assertThat(connection.sentMessages()).isEmpty();
+            assertThat(condemned).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a condemned connection fans out like a read failure: futures fail, the loss is posted")
+        void silenceFansOutLikeAReadFailure() throws Exception {
+            ConnectWiring.Wiring wiring =
+                    ConnectWiring.attach(connection, ENDPOINT, eventBus, dispatcher);
+            wiring.dispatcher().setTimeoutListener(ConnectWiring.silenceProbe(
+                    wiring.dispatcher(),
+                    ConnectWiring.connectionLostHandler(ENDPOINT, eventBus, wiring.dispatcher()),
+                    Duration.ofMillis(60)));
+            connection.neverAnswer(Verb.HELLO);
+
+            wiring.dispatcher().send(Verb.BANK_LIST, null, Duration.ofMillis(40));
+
+            awaitUntil(() -> !collector.losses.isEmpty());
+            assertThat(collector.losses.get(0).serverLabel()).isEqualTo(ENDPOINT.display());
+        }
+
+        private void awaitUntil(java.util.function.BooleanSupplier condition)
+                throws InterruptedException {
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (!condition.getAsBoolean()) {
+                if (System.nanoTime() > deadline) {
+                    throw new AssertionError("condition not met within 5 s");
+                }
+                Thread.sleep(10);
+            }
         }
     }
 

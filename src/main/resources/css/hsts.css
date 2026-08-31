@@ -1705,21 +1705,31 @@
 .hsts-radio-group .radio-options { -fx-spacing: 6px; }
 
 /* Each option is a full-width hit target, not just the 14px circle and its
-   text: a teacher picking an answer aims at the row. */
-.hsts-radio-group .radio-option {
+   text: a teacher picking an answer aims at the row.
+   `.editor-answers` rides along on every state rule here since U-70 moved the
+   question editor's correct-answer radios out of the RadioGroup component and
+   into the answer rows (one per FormField.trailing slot, one shared
+   ToggleGroup): the rules were scoped to the component's own container, so the
+   moved radios kept the class and lost the hover fill, the selected tint and
+   the U-55 focus ring. Tokens only, so both palettes cover them for free. */
+.hsts-radio-group .radio-option,
+.editor-answers .radio-option {
     -fx-padding: 6px 10px;
     -fx-background-radius: 8px;
     -fx-text-fill: -hsts-text;
 }
-.hsts-radio-group .radio-option:hover    { -fx-background-color: -hsts-bg; }
-.hsts-radio-group .radio-option:selected { -fx-background-color: -hsts-accent-soft; }
+.hsts-radio-group .radio-option:hover,
+.editor-answers .radio-option:hover    { -fx-background-color: -hsts-bg; }
+.hsts-radio-group .radio-option:selected,
+.editor-answers .radio-option:selected { -fx-background-color: -hsts-accent-soft; }
 
 /* The keyboard ring. Arrow keys move selection through this group, so the
    focused option must be visible without hunting for a 1px outline. */
 /* 2026-08-31, U-55: focus used to paint the same soft fill as :selected, so tabbing into
    the group made "Answer 1" look chosen while nothing was. Focus is the ring only; the
    fill belongs to :selected alone. */
-.hsts-radio-group .radio-option:focused {
+.hsts-radio-group .radio-option:focused,
+.editor-answers .radio-option:focused {
     -fx-border-color: -hsts-accent;
     -fx-border-width: 1.5px;
     -fx-border-radius: 8px;
@@ -1728,7 +1738,8 @@
 
 /* A disabled option is skipped by the arrow keys, so it must also LOOK
    unreachable rather than merely dim. */
-.hsts-radio-group .radio-option:disabled { -fx-opacity: 0.45; }
+.hsts-radio-group .radio-option:disabled,
+.editor-answers .radio-option:disabled { -fx-opacity: 0.45; }
 
 /* Invalid: section 6 already tints the label and shows the message row;
    this adds the one thing it cannot reach, the radio circles themselves. */

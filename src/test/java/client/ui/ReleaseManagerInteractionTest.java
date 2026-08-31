@@ -46,6 +46,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -407,6 +408,123 @@ class ReleaseManagerInteractionTest extends ApplicationTest {
 
         assertThat(labelTexts(manager.scene()))
                 .anySatisfy(text -> assertThat(text).contains("Open your releases again"));
+    }
+
+    /**
+     * ⚑ An unanswered fetch is not a history. The view used to render the empty list it
+     * starts with as "You have not released anything yet" while the first RELEASE_LIST_GET
+     * was still on its way, which on a slow network is a false sentence for seconds.
+     */
+    @Test
+    @DisplayName("⚑ the first fetch shows loading, not a claim that she has released nothing")
+    void firstLoadDoesNotClaimEmpty() {
+        ScreenManager manager = boot(connection ->
+                connection.replyOk(Verb.RELEASE_OPTIONS_GET, options()));
+        FakeClientConnection connection = (FakeClientConnection) manager.getClient();
+        openReleases(manager);
+
+        assertThat(labelTexts(manager.scene()))
+                .as("the list has not answered yet; claiming an empty history is a guess")
+                .doesNotContain(ReleaseCopy.EMPTY_TITLE);
+
+        // The LAST list request: the teacher dashboard fetches releases for its cards on
+        // sign-in, and answering that one would leave this screen's own fetch pending.
+        Message asked = connection.sentMessages().stream()
+                .filter(sent -> sent.getVerb() == Verb.RELEASE_LIST_GET)
+                .reduce((first, second) -> second).orElseThrow();
+        interact(() -> connection.deliver(Message.ok(asked, ReleaseList.empty(NOW))));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(manager.scene()))
+                .as("once the server has said empty, the empty state is the honest answer")
+                .contains(ReleaseCopy.EMPTY_TITLE);
+    }
+
+    /**
+     * ⚑ The one-second countdown tick used to rebuild every card, buttons included: a press
+     * spanning a tick landed on a node that no longer existed, and the LIVE chip's pulse
+     * restarted on every beat - the render-storm shape U-61 took out of the reports screen.
+     */
+    @Test
+    @DisplayName("⚑ the countdown tick must not rebuild the rows under the pointer")
+    void tickLeavesTheButtonsStanding() {
+        ScreenManager manager = signIn(list(live()));
+        openReleases(manager);
+        Button close = buttonNamed(manager.scene(), ReleaseCopy.CLOSE_ACTION);
+        assertThat(close).isNotNull();
+
+        WaitForAsyncUtils.sleep(1600, TimeUnit.MILLISECONDS);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(buttonNamed(manager.scene(), ReleaseCopy.CLOSE_ACTION))
+                .as("a press that spans a tick must land on the button she aimed at")
+                .isSameAs(close);
+    }
+
+    /**
+     * A pin, not a fix. Editable Spinners were long notorious for ignoring typed text until
+     * Enter or an arrow press (JDK-8150946), which here would mean a release quietly going
+     * out at the suggested time rather than the typed one (F5.2). Proven sound at runtime
+     * on this toolkit build: the editor commits when its focus leaves, and a click on
+     * Release moves focus first. This test is what notices if a JavaFX upgrade regresses
+     * that, because nothing in this codebase defends against it.
+     */
+    @Test
+    @DisplayName("an hour typed into the clock is honoured once focus leaves the box")
+    void typedTimeCommitsOnFocusLoss() {
+        signIn(ReleaseList.empty(NOW));
+        CreateReleaseDialog.Form[] form = new CreateReleaseDialog.Form[1];
+        Stage[] stage = new Stage[1];
+        interact(() -> {
+            form[0] = CreateReleaseDialog.form(options(), NOW, java.time.ZoneOffset.UTC);
+            stage[0] = new Stage();
+            stage[0].setScene(new Scene(new javafx.scene.layout.StackPane(form[0].node())));
+            stage[0].show();
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        // The suggested window is 10:00 to 11:00 UTC, so the one spinner holding 11 is the
+        // closing hour whatever order the lookup returns them in.
+        Spinner<Integer> closesHour = form[0].node().lookupAll(".release-moment-spinner").stream()
+                .map(node -> {
+                    @SuppressWarnings("unchecked")
+                    Spinner<Integer> spinner = (Spinner<Integer>) node;
+                    return spinner;
+                })
+                .filter(spinner -> spinner.getValue() == 11)
+                .findFirst().orElseThrow();
+
+        interact(() -> closesHour.getEditor().requestFocus());
+        interact(() -> closesHour.getEditor().setText("13"));
+        interact(() -> form[0].confirmButton().requestFocus());
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(form[0].answer()).isPresent();
+        assertThat(form[0].answer().orElseThrow().closeAt())
+                .as("the release must close at the time she typed, not the suggested one")
+                .isEqualTo(NOW.plus(Duration.ofHours(4)));
+        interact(() -> stage[0].hide());
+    }
+
+    @Test
+    @DisplayName("typing a code after the dice takes the choice back from the server")
+    void typingAfterTheDiceRestoresTheHint() {
+        ScreenManager manager = signIn(ReleaseList.empty(NOW));
+        openReleases(manager);
+        Scene dialog = buildCreateDialog();
+
+        interact(() -> buttonNamed(dialog, ReleaseCopy.CODE_GENERATE).fire());
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(labelTexts(dialog)).contains(ReleaseCopy.CODE_GENERATED);
+
+        interact(() -> ((TextField) dialog.getRoot().lookup(".release-code-field"))
+                .setText("4821"));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(labelTexts(dialog))
+                .as("the hint must stop promising a generated code once she supplies her own")
+                .contains(ReleaseCopy.CODE_HINT)
+                .doesNotContain(ReleaseCopy.CODE_GENERATED);
     }
 
     // ===================== Fixture =======================================

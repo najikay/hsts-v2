@@ -65,9 +65,26 @@ backstop above the dispatcher's own timer. On expiry the connect fails with
 `ConnectFlow.UNREACHABLE_TIMEOUT` — *"That address did not answer."* — and the socket is closed
 through `ConnectWiring.abandon`. No exception type or class name reaches the screen (B-37).
 
-The server side is bounded independently: `AbstractClient.openConnection` now applies
-`DEFAULT_CONNECT_TIMEOUT_MS` (5 s) to both the dial and the serialization stream handshake, so a
-client that never gets that far fails with a `SocketTimeoutException` and the same sentence.
+The socket open is bounded independently, and its two halves are bounded **separately**
+(amended 2026-08-31, after the two-machine regression): `AbstractClient.openConnection` applies
+`DEFAULT_DIAL_TIMEOUT_MS` (15 s) to the TCP dial and `DEFAULT_HANDSHAKE_TIMEOUT_MS` (5 s) to the
+serialization stream handshake. The first bound is generous because a first connect across a real
+LAN is routinely slow for reasons that end well — a firewall prompt, a scanned jar, a retransmitted
+SYN landing at seven seconds — and the original single 5 s bound killed exactly those connects.
+The second stays tight because it is the half that detects a stopped server: the kernel completed
+the handshake into the backlog for free, and a live server writes its header in milliseconds. A
+client that never gets that far fails with a `SocketTimeoutException` and the same sentence. While
+a long dial is in progress the connect button reads "Still trying" so the wait shows as progress.
+
+The server bounds its half of the stream handshake with the same 5 s
+(`AbstractServer.DEFAULT_HANDSHAKE_TIMEOUT_MS`), so a socket that connects and never writes a
+header costs the accept loop seconds, not forever — and it no longer blocks other clients while it
+waits, because the handshake happens outside the connections lock.
+
+After the connection is up, a request that times out triggers one `HELLO` liveness probe
+(`ConnectWiring.silenceProbe`, 3 s): any answer keeps the connection, silence condemns it through
+the same fan-out a read failure uses, so the reconnect banner engages even when the socket died
+without the read thread noticing (sleep and wake).
 
 ## 5. Who asks it
 

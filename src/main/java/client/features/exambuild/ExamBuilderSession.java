@@ -380,6 +380,10 @@ public final class ExamBuilderSession {
         answerCache.clear();
         answersLoading.clear();
         answersFailed.clear();
+        // A save still in flight belongs to the exam being left: its answer is dropped by
+        // settleSave's generation guard, so the flag it would have cleared is cleared here,
+        // or the new exam opens with a Save button disabled forever.
+        saving = false;
         saved = false;
         saveError = null;
         saveNotice = null;
@@ -1096,9 +1100,15 @@ public final class ExamBuilderSession {
         onChange.run();
     }
 
-    /** @return which tab is showing. */
+    /**
+     * @return which tab is showing. A builder that cannot edit always shows the paper: the
+     *         segmented switch is withheld while {@link #isEditable()} is false, so a stored
+     *         AUTO would be a criteria pane with no way back (the mid-session lockout case;
+     *         {@link #resetLoaded} already covers the read-only open). The choice itself is
+     *         kept, so the lock being released puts her back where she was.
+     */
     public Tab tab() {
-        return tab;
+        return isEditable() ? tab : Tab.MANUAL;
     }
 
     /** @return the criteria grid as she has it, course-wide row first. */
@@ -1126,7 +1136,7 @@ public final class ExamBuilderSession {
 
     /** @param index the row; @param topic what she typed into its topic box. */
     public void criterionTopic(int index, String topic) {
-        if (index <= 0 || index >= criteria.size()) {
+        if (!isEditable() || index <= 0 || index >= criteria.size()) {
             // Index 0 is the course-wide row and has no topic to set. Guarding here rather than
             // hiding the box is what keeps "the first row is the course-wide one" a single fact.
             return;
@@ -1143,7 +1153,7 @@ public final class ExamBuilderSession {
      *               so a negative reaches the same rule the server would refuse it with
      */
     public void criterionCount(int index, Bucket bucket, int value) {
-        if (index < 0 || index >= criteria.size() || bucket == null) {
+        if (!isEditable() || index < 0 || index >= criteria.size() || bucket == null) {
             return;
         }
         criteria.set(index, criteria.get(index).with(bucket, value));
@@ -1163,7 +1173,7 @@ public final class ExamBuilderSession {
 
     /** Removes a topic row. The course-wide row at index 0 cannot be removed. */
     public void removeCriterion(int index) {
-        if (index <= 0 || index >= criteria.size()) {
+        if (!isEditable() || index <= 0 || index >= criteria.size()) {
             return;
         }
         criteria.remove(index);
@@ -1454,12 +1464,25 @@ public final class ExamBuilderSession {
                 : new ExamVersionSave(examVersionId, lockVersion, name, durationMinutes,
                         studentText, teacherText, pins());
 
+        int generation = loadGeneration;
         dispatcher.send(verb, payload)
                 .whenComplete((response, failure) ->
-                        poster.run(() -> settleSave(response, failure)));
+                        poster.run(() -> settleSave(generation, response, failure)));
     }
 
-    private void settleSave(Message response, Throwable failure) {
+    /**
+     * Takes a save's answer only while the screen is still on the exam that sent it.
+     *
+     * <p>{@link #resetLoaded}'s own rule, applied to the fourth in-flight answer: a save
+     * answered after {@link #open} moved to another exam used to adopt the old exam's
+     * composition, id and token under the new heading, raise the saved toast, and navigate.
+     * The write itself landed server-side and the exam list shows it; this screen is simply
+     * no longer about it.
+     */
+    private void settleSave(int generation, Message response, Throwable failure) {
+        if (generation != loadGeneration) {
+            return;
+        }
         saving = false;
         if (failure != null || response == null) {
             saveError = ExamBuildCopy.SAVE_FAILED;

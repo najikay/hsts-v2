@@ -7,8 +7,11 @@ import client.events.PushEventBridge;
 import client.net.HSTSClient;
 import client.net.IClientConnection;
 import client.net.RequestDispatcher;
+import common.protocol.Verb;
 
+import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -120,6 +123,14 @@ public final class ConnectWiring {
         // the screens are actually waiting on.
         client.setConnectionLostHandler(
                 connectionLostHandler(endpoint, bus, wiring.dispatcher()));
+        // A connection can die without the read thread noticing (sleep and wake
+        // is the reproducible case, U-52 follow-up): writes land in the void and
+        // requests just time out, so no ConnectionLostEvent was ever posted and
+        // the banner never engaged. A timeout now triggers one HELLO probe, and
+        // a probe nobody answers condemns the connection through the same
+        // fan-out a read failure uses.
+        wiring.dispatcher().setTimeoutListener(silenceProbe(wiring.dispatcher(),
+                connectionLostHandler(endpoint, bus, wiring.dispatcher())));
         return wiring;
     }
 
@@ -207,6 +218,65 @@ public final class ConnectWiring {
      */
     private static ClientEventBus detachedBus() {
         return new ClientEventBus(ClientEventBus.newBus(), Runnable::run);
+    }
+
+    /**
+     * How long a liveness probe waits for its {@code HELLO} before condemning
+     * the connection. Shorter than {@link ConnectHandshake#TIMEOUT}: the user
+     * has already waited out a full request timeout to get here.
+     */
+    static final Duration PROBE_WINDOW = Duration.ofSeconds(3);
+
+    /**
+     * The answer to "a request timed out - is the server still there?" (U-52
+     * follow-up, 2026-08-31).
+     *
+     * <p>One {@code HELLO}, single-flight. Any answer at all means the server is
+     * alive and the timeout was that request's own problem, so nothing happens.
+     * Silence, or a send that fails outright, means the socket is dead in the
+     * way only a wake from sleep produces - writes succeed into the void, the
+     * read thread never fails - and the connection is condemned through
+     * {@code onDead}, which fails the in-flight futures and raises the banner.
+     *
+     * <p>Never probes on a {@code HELLO} timeout: that is either the connect
+     * handshake, whose caller already treats silence as failure, or this probe
+     * itself, and probing on the probe would ping-pong forever.
+     *
+     * <p>Non-blocking: the verdict arrives on the dispatcher's own timer, so no
+     * thread is parked. Package-visible with an injectable window so the test
+     * drives it in milliseconds.
+     */
+    static RequestDispatcher.TimeoutListener silenceProbe(RequestDispatcher dispatcher,
+                                                          Consumer<Throwable> onDead) {
+        return silenceProbe(dispatcher, onDead, PROBE_WINDOW);
+    }
+
+    /** @see #silenceProbe(RequestDispatcher, Consumer) */
+    static RequestDispatcher.TimeoutListener silenceProbe(RequestDispatcher dispatcher,
+                                                          Consumer<Throwable> onDead,
+                                                          Duration window) {
+        Objects.requireNonNull(dispatcher, "dispatcher");
+        Objects.requireNonNull(onDead, "onDead");
+        AtomicBoolean probing = new AtomicBoolean();
+        return timedOutVerb -> {
+            if (timedOutVerb == Verb.HELLO) {
+                return;
+            }
+            if (!probing.compareAndSet(false, true)) {
+                return;
+            }
+            LOG.warn("A {} request timed out; probing the connection with HELLO", timedOutVerb);
+            dispatcher.send(Verb.HELLO, null, window).whenComplete((answer, failure) -> {
+                probing.set(false);
+                if (failure == null) {
+                    LOG.info("The server answered the probe; the connection stays up");
+                    return;
+                }
+                LOG.warn("The probe drew no answer; declaring the connection lost: {}",
+                        failure.toString());
+                onDead.accept(failure);
+            });
+        };
     }
 
     /**

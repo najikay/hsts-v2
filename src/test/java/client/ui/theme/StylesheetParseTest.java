@@ -156,6 +156,35 @@ class StylesheetParseTest {
     }
 
     /**
+     * U-70's answer-row radios kept their state styling when they moved (round 5).
+     *
+     * <p>The correct-answer radios left the {@code RadioGroup} component for the answer rows
+     * (one per {@code FormField.trailing} slot, one shared {@code ToggleGroup}), and every
+     * state rule - the hover fill, the selected tint, the keyboard focus ring U-55 is about -
+     * was scoped {@code .hsts-radio-group .radio-option}, which no longer matches them. The
+     * rules below are the ones extended to cover the editor's rows; asserting them here is
+     * what tells "written" from "applied", exactly as the wave-2 group above.
+     */
+    @Test
+    @DisplayName("U-70: the answer-row radios keep their selected and focus styling")
+    void theAnswerRowRadioSelectorsSurviveParsing() {
+        List<String> selectors = parse("/css/hsts.css").getRules().stream()
+                .map(Rule::getSelectors)
+                .flatMap(List::stream)
+                .map(StylesheetParseTest::normalise)
+                .collect(Collectors.toList());
+
+        assertThat(selectors)
+                .as("the radios sit in the editor's answer rows now, outside any "
+                        + ".hsts-radio-group, so the state rules must name that home too")
+                .contains(
+                        canonical(".editor-answers .radio-option"),
+                        canonical(".editor-answers .radio-option:hover"),
+                        canonical(".editor-answers .radio-option:selected"),
+                        canonical(".editor-answers .radio-option:focused"));
+    }
+
+    /**
      * The wider dialog is a rule that parsed, and it still beats the cap it overrides ⚑
      * (2026-08-30, live session, U-47).
      *

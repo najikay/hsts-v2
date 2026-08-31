@@ -71,3 +71,15 @@ kicker pinned to its preferred width, the approvals Exam column floored at 250px
 13. Question editor: the correct-answer picker was its own section below the four answer
     boxes; the mark now sits beside each answer box (U-70). Walkthrough: bot creation made
     its own step (13.6b) and guardrail probes added (14.2b).
+
+Sweep S4 observations, ruled (Naji's lane, recorded by the lead's assistant):
+- BankSession.load() returns to page 0 after an editor trip, so a row beyond page 1 loses its
+  pane selection. Invisible at demo bank sizes (every course fits one page); accepted for the
+  defence, noted for phase 2.
+- BotService consumes a rate-limit slot before the C-4 lockout check. Acceptable by design: a
+  locked-out student hammering the bot is exactly who the limiter exists for.
+
+Sweep S2 observations, logged not fixed (by design or debatable, lead may revisit):
+- A failed RELEASE_OPTIONS_GET leaves the create dialog claiming no exams (log-only by design).
+- A save landing after the teacher left the builder still navigates to the list from a hidden
+  screen (documented U-31 behaviour).

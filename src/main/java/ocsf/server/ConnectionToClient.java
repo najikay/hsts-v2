@@ -28,16 +28,34 @@ public class ConnectionToClient extends Thread {
     ConnectionToClient(AbstractServer server, Socket clientSocket) throws IOException {
         this.server = server;
         this.clientSocket = clientSocket;
+        // The stream handshake is bounded ⚑ (B-49 follow-up). Constructing the
+        // ObjectInputStream blocks until the CLIENT's serialization header
+        // arrives, and this constructor runs on the accept-loop thread. A socket
+        // that connected and never wrote a byte - a port scanner, a health
+        // check, a client that died mid-open - used to park the accept loop
+        // here forever, which refused every later client silently.
+        clientSocket.setSoTimeout(server.handshakeTimeout());
         // Output stream must be created (and flushed) before the input stream
         // to avoid the classic ObjectStream header deadlock.
         this.output = new ObjectOutputStream(clientSocket.getOutputStream());
         this.output.flush();
         this.input = new ObjectInputStream(clientSocket.getInputStream());
+        // Handshake done: reads may now block for as long as the session lasts.
+        clientSocket.setSoTimeout(0);
         this.running = true;
     }
 
-    /** Sends a message object to this client. */
-    public void sendToClient(Object msg) throws IOException {
+    /**
+     * Sends a message object to this client.
+     *
+     * <p>{@code synchronized}: a router response goes out on this connection's
+     * own read thread while a {@code PushGateway} broadcast for the same user
+     * can arrive from any other thread (another client's read thread, the lock
+     * sweeper, an exam timer). Interleaved {@code writeObject} calls on one
+     * {@link ObjectOutputStream} corrupt the stream for the client, which then
+     * reads garbage and drops the connection.
+     */
+    public synchronized void sendToClient(Object msg) throws IOException {
         if (clientSocket == null || output == null) {
             throw new IOException("socket does not exist");
         }

@@ -31,6 +31,17 @@ public abstract class AbstractServer implements Runnable {
     /** Read timeout (ms) for the accept socket so the loop can be interrupted. 0 = none. */
     private int timeout = 500;
 
+    /**
+     * Bound (ms) on a new client's serialization stream handshake, applied while
+     * a {@link ConnectionToClient} is constructed. Mirrors the client side's
+     * handshake bound: a peer that connects and never writes its header must
+     * cost seconds, not the accept loop (B-49 follow-up). 0 = wait forever.
+     */
+    private volatile int handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT_MS;
+
+    /** The default stream handshake bound: matches the client's 5 seconds. */
+    public static final int DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
+
     /** Live client connections. */
     private final List<ConnectionToClient> clientConnections = new ArrayList<>();
 
@@ -165,6 +176,21 @@ public abstract class AbstractServer implements Runnable {
         this.timeout = timeout;
     }
 
+    /**
+     * Sets the bound on a connecting client's stream handshake; tests shorten it
+     * so a header-less socket costs milliseconds instead of five seconds.
+     *
+     * @param millis milliseconds; {@code 0} waits forever, negatives count as 0
+     */
+    public final void setHandshakeTimeout(int millis) {
+        this.handshakeTimeout = Math.max(0, millis);
+    }
+
+    /** @return the current stream handshake bound, for {@link ConnectionToClient}. */
+    final int handshakeTimeout() {
+        return handshakeTimeout;
+    }
+
     /** Snapshot array of the currently connected clients. */
     public final Thread[] getClientConnections() {
         synchronized (clientConnections) {
@@ -194,13 +220,30 @@ public abstract class AbstractServer implements Runnable {
             while (!readyToStop && mine != null && serverSocket == mine) {
                 try {
                     Socket clientSocket = mine.accept();
+                    // Built OUTSIDE the connections lock ⚑ (B-49 follow-up). The
+                    // constructor reads the client's serialization header, which
+                    // is remote input: performed under the lock, one client that
+                    // connected and never wrote a byte stalled every
+                    // sendToAllClients() along with the accept loop. The header
+                    // read is bounded (see ConnectionToClient), and a socket
+                    // whose handshake fails is closed here rather than leaked
+                    // with a peer still waiting on it.
+                    ConnectionToClient client;
+                    try {
+                        client = new ConnectionToClient(this, clientSocket);
+                    } catch (IOException handshakeFailed) {
+                        try {
+                            clientSocket.close();
+                        } catch (IOException ignored) {
+                            // Already as closed as it is going to get.
+                        }
+                        continue;
+                    }
                     synchronized (clientConnections) {
-                        ConnectionToClient client =
-                                new ConnectionToClient(this, clientSocket);
                         clientConnections.add(client);
                         clientConnected(client);
-                        client.start();
                     }
+                    client.start();
                 } catch (java.net.SocketTimeoutException ste) {
                     // expected — lets the loop re-check readyToStop
                 } catch (IOException e) {

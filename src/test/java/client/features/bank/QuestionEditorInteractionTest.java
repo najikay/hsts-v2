@@ -275,6 +275,109 @@ class QuestionEditorInteractionTest extends ApplicationTest {
         assertThat(save.getTooltip()).isNull();
     }
 
+    @Test
+    @DisplayName("a revisit rebuilds the radios; the first visit's do not linger in the group (U-70)")
+    void aRevisitDoesNotAccumulateRadios() {
+        Scene scene = openEditor(connection -> { },
+                NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+
+        // Leave and come back, the way the cached screen is really re-shown: the bank
+        // navigates away (onHide) and later back to the same instance (onShow).
+        interact(() -> {
+            openedView.onHide();
+            openedView.onShow(NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+
+        RadioButton first = (RadioButton) scene.getRoot().lookup(".radio-option");
+        assertThat(first).isNotNull();
+        assertThat(first.getToggleGroup().getToggles())
+                .as("buildForm runs once per visit over one long-lived ToggleGroup, and the "
+                        + "screen is cached for the life of the process: a visit that does not "
+                        + "detach the previous four radios grows the group by four, forever")
+                .hasSize(4);
+
+        List<RadioButton> radios = scene.getRoot().lookupAll(".radio-option").stream()
+                .filter(RadioButton.class::isInstance)
+                .map(RadioButton.class::cast)
+                .toList();
+        clickOn(radios.get(1));
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(radios.stream().filter(RadioButton::isSelected).count())
+                .as("and C-8's exactly-one still holds on the rebuilt form")
+                .isEqualTo(1);
+    }
+
+    /**
+     * The keyboard story of the U-70 layout, measured rather than assumed.
+     *
+     * <p>The radios left the {@code RadioGroup} component for the answer rows, and that
+     * component's javadoc warns that JavaFX gives the arrow half of radio traversal wrong for
+     * loose radios. It turns out the warning is about radios with no group semantics in the
+     * traversal path: for four {@code RadioButton}s sharing one {@code ToggleGroup} the
+     * toolkit's own convention holds, and this test pins each leg of it with real key
+     * presses so a regression (a radio dropped from the group, a focusTraversable toggle) is
+     * caught by the gesture a keyboard user would actually make:
+     * <ul>
+     *   <li>Tab enters the group once, on the selected toggle - unselected radios are not
+     *       tab stops, so the form stays four Tabs shorter than four loose radios;</li>
+     *   <li>arrows move focus AND selection through the group, wherever the rows are;</li>
+     *   <li>Space confirms without stealing the mark;</li>
+     *   <li>Tab leaves the group for the next text box.</li>
+     * </ul>
+     */
+    @Test
+    @DisplayName("the keyboard walks the answer-row radios: Tab onto the group, arrows move the mark (U-70)")
+    void keyboardReachesTheAnswerRowRadios() {
+        Scene scene = openEditor(connection -> { },
+                NavParams.of(QuestionEditorView.PARAM_DETAIL, GEOMETRY));
+
+        List<RadioButton> radios = scene.getRoot().lookupAll(".radio-option").stream()
+                .filter(RadioButton.class::isInstance)
+                .map(RadioButton.class::cast)
+                .toList();
+        assertThat(radios).hasSize(4);
+        assertThat(radios.get(2).isSelected()).as("GEOMETRY's key names answer 3").isTrue();
+
+        // Tab out of answer box 3 enters the group on its selected toggle.
+        clickOn(answerBox(scene, 3));
+        type(javafx.scene.input.KeyCode.TAB);
+        assertThat(scene.getFocusOwner())
+                .as("Tab enters the radio group on the selected toggle, which is the "
+                        + "platform convention the moved radios must keep")
+                .isSameAs(radios.get(2));
+
+        // Arrows move the mark itself, row to row: selection follows focus in a group.
+        type(javafx.scene.input.KeyCode.UP);
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(scene.getFocusOwner()).isSameAs(radios.get(1));
+        assertThat(radios.get(1).isSelected())
+                .as("an arrow within the group moves the selection with the focus")
+                .isTrue();
+        type(javafx.scene.input.KeyCode.LEFT);
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(radios.get(0).isSelected())
+                .as("and again: the mark walked 3 to 2 to 1 on arrows alone")
+                .isTrue();
+        assertThat(radios.stream().filter(RadioButton::isSelected).count())
+                .as("one shared ToggleGroup: a purely keyboard-driven change cannot "
+                        + "double-mark (C-8)")
+                .isEqualTo(1);
+        assertThat(labelTexts(scene))
+                .as("moving the key from answer 3 to answer 1 is an edit")
+                .contains(QuestionEditorCopy.UNSAVED);
+
+        // Space confirms without stealing; Tab leaves the group for the next box.
+        type(javafx.scene.input.KeyCode.SPACE);
+        WaitForAsyncUtils.waitForFxEvents();
+        assertThat(radios.get(0).isSelected()).isTrue();
+        type(javafx.scene.input.KeyCode.TAB);
+        assertThat(scene.getFocusOwner())
+                .as("Tab leaves the group for the next text box rather than crawling "
+                        + "through three more radios")
+                .isInstanceOf(TextField.class);
+    }
+
     // ===================== E6.14, the edit lock ⚑ =========================
 
     @Test

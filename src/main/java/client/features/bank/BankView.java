@@ -418,7 +418,14 @@ public final class BankView extends AbstractScreen {
                 List<String> options = new ArrayList<>();
                 options.add(BankCopy.ALL_TOPICS);
                 options.addAll(topics);
-                topicPicker.getItems().setAll(options);
+                // Guarded exactly as the course picker above is, and for the same reason
+                // (2026-08-31, round 5 sweep): render() runs on every settle and every lock
+                // push, and an unconditional setAll rebuilds the popup's cells under the
+                // teacher choosing from it. The options move only when a page shows a topic
+                // the map has not seen, so most renders leave the list untouched.
+                if (!options.equals(topicPicker.getItems())) {
+                    topicPicker.getItems().setAll(options);
+                }
                 topicPicker.getSelectionModel().select(session.selectedTopic() == null
                         ? BankCopy.ALL_TOPICS : session.selectedTopic());
             }
@@ -532,7 +539,20 @@ public final class BankView extends AbstractScreen {
                 if (bytes != null && bytes.length > 0) {
                     ImageView view = new ImageView(new Image(new ByteArrayInputStream(bytes)));
                     view.setPreserveRatio(true);
-                    view.setFitWidth(DETAIL_WIDTH - 60);
+                    // The wide pane's width was a constant here, and on the narrow window
+                    // (U-36: the pane gives way to 320px under 1100) a 360px fit drew a
+                    // diagram the scroll pane clipped at the right edge. The binding follows
+                    // the body the picture sits in; the fallback covers the pulse before
+                    // layout has given it a width. Bindings hold their dependency weakly, so
+                    // the ImageView a re-render discards is collectable with its binding.
+                    view.fitWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(
+                            () -> {
+                                double room = detailBody.getWidth();
+                                return room > 0
+                                        ? Math.min(DETAIL_WIDTH - 60, room)
+                                        : DETAIL_WIDTH - 60;
+                            },
+                            detailBody.widthProperty()));
                     view.getStyleClass().add("bank-image");
                     return view;
                 }
@@ -736,15 +756,6 @@ public final class BankView extends AbstractScreen {
     /** A tooltip that explains a disabled control, or clears one that no longer applies. */
     private static void setReason(Button button, String reason) {
         button.setTooltip(reason == null ? null : new javafx.scene.control.Tooltip(reason));
-    }
-
-    /** The course's display name from the options in hand, or the code when it is not there. */
-    private String courseNameOf(String courseCode) {
-        return session.courseOptions().stream()
-                .filter(course -> courseCode.equals(course.code()))
-                .map(CourseRef::name)
-                .findFirst()
-                .orElse(courseCode);
     }
 
     private static List<CourseRef> coursesOfSignedInUser() {

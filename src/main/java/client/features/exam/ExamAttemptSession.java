@@ -106,6 +106,16 @@ public final class ExamAttemptSession {
     private final List<Consumer<TimerExtended>> extensionListeners = new ArrayList<>();
     private final List<Consumer<AttemptOutcome>> finishListeners = new ArrayList<>();
     private final List<Consumer<ConnectionLostEvent>> connectionListeners = new ArrayList<>();
+    private final List<Runnable> submitFailedListeners = new ArrayList<>();
+
+    /**
+     * Writes whose answers are still on their way.
+     *
+     * <p>The indicator may only say Saved once the dirty set is empty AND nothing is in
+     * flight: with two writes out together, the first acknowledgement used to find the dirty
+     * set already empty and claim Saved while the second could still fail.
+     */
+    private int writesInFlight;
 
     private long executionId;
     private boolean started;
@@ -192,6 +202,7 @@ public final class ExamAttemptSession {
         }
         dirty.clear();
         flushScheduled = false;
+        writesInFlight = 0;
         attention.stop();
         model.clear();
     }
@@ -216,6 +227,18 @@ public final class ExamAttemptSession {
     /** Subscribes to the attempt ending, however it ended (F6.4/F6.10). */
     public void onFinished(Consumer<AttemptOutcome> listener) {
         finishListeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    /**
+     * Subscribes to a hand-in that did not land (F6.9).
+     *
+     * <p>A refused or failed submit leaves the paper live and used to leave the screen
+     * silent: the dialog had closed, nothing changed, and the student had no way to tell a
+     * hand-in that worked from one that never reached the server. The screen's half is a
+     * toast; this is the seam it hangs off.
+     */
+    public void onSubmitFailed(Runnable listener) {
+        submitFailedListeners.add(Objects.requireNonNull(listener, "listener"));
     }
 
     /**
@@ -292,11 +315,13 @@ public final class ExamAttemptSession {
                 .whenComplete((response, failure) -> poster.run(() -> {
                     if (failure != null) {
                         log.warn("Submit failed: {}", failure.toString());
+                        notifySubmitFailed();
                         settled.complete(null);
                         return;
                     }
                     if (response.isError() || !(response.getPayload() instanceof AttemptOutcome outcome)) {
                         log.warn("Submit refused: {} {}", response.getErrorCode(), response.errorMessage());
+                        notifySubmitFailed();
                         settled.complete(null);
                         return;
                     }
@@ -431,10 +456,12 @@ public final class ExamAttemptSession {
 
     /** One write, and what its answer means for the indicator and the clock. */
     private CompletableFuture<Void> send(long questionVersionId, int option) {
+        writesInFlight++;
         CompletableFuture<Void> settled = new CompletableFuture<>();
         dispatcher.send(Verb.ANSWER_SAVE,
                         new SaveAnswerRequest(model.attemptId(), questionVersionId, option))
                 .whenComplete((response, failure) -> poster.run(() -> {
+                    writesInFlight = Math.max(0, writesInFlight - 1);
                     if (failure != null) {
                         log.warn("Autosave of question {} failed: {}", questionVersionId, failure.toString());
                         retry(questionVersionId, option);
@@ -454,7 +481,7 @@ public final class ExamAttemptSession {
                     if (response.getPayload() instanceof SaveAnswerResult result) {
                         model.syncTiming(result.timing());
                     }
-                    if (dirty.isEmpty()) {
+                    if (dirty.isEmpty() && writesInFlight == 0) {
                         model.setSaveState(SaveState.SAVED);
                     }
                     settled.complete(null);
@@ -492,6 +519,12 @@ public final class ExamAttemptSession {
                     }
                     return null;
                 });
+    }
+
+    private void notifySubmitFailed() {
+        for (Runnable listener : List.copyOf(submitFailedListeners)) {
+            listener.run();
+        }
     }
 
     private void notifyFinished(AttemptOutcome outcome) {

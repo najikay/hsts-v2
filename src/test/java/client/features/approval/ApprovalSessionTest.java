@@ -204,6 +204,26 @@ class ApprovalSessionTest {
         }
 
         /**
+         * refresh() deliberately starts a read while one can still be in flight - the push
+         * said the older question is stale - so the two answers can land in either order.
+         */
+        @Test
+        @DisplayName("⚑ an older load's answer cannot overwrite a newer one")
+        void lateAnswerFromAnOlderLoadLoses() {
+            session.load();
+            session.refresh(); // a push landed: the first read now asks a stale question
+
+            Message first = connection.sentMessages().get(0);
+            Message second = connection.sentMessages().get(1);
+            connection.deliver(Message.ok(second, new ApprovalQueue(List.of(PENDING), true)));
+            connection.deliver(Message.ok(first, ApprovalQueue.empty()));
+
+            assertThat(session.rows())
+                    .as("the answer to the newer question is the one that stands")
+                    .containsExactly(PENDING);
+        }
+
+        /**
          * B-30's proof, and it is driven through the REAL bus rather than by calling the
          * method. Before this batch {@code ApprovalQueueSession} had no {@code @Subscribe} at
          * all: acceptance case 18.2 watched the coordinator's bell badge increment while the
@@ -347,6 +367,28 @@ class ApprovalSessionTest {
                     .as("the paper on screen has to be the one she opened, and the decision "
                             + "buttons read their lockVersion off exactly this object")
                     .isEqualTo(ALGEBRA_V2);
+        }
+
+        /**
+         * ⚑ The 4.1 defect's in-flight half. Discarding A's late answer closes only part of
+         * it: while B was loading, A's paper used to stay fully rendered with Approve and
+         * Reject live against A's id and A's lock token - the wrong-exam decision, one
+         * confirm away, on a screen she believed was B.
+         */
+        @Test
+        @DisplayName("⚑ opening another version blanks the stale paper for the whole load")
+        void openingAnotherVersionClearsTheStalePaper() {
+            session.open(CALCULUS_V1);
+            connection.deliver(Message.ok(connection.lastSent(), PREVIEW));
+            assertThat(session.preview()).isPresent();
+
+            session.open(ALGEBRA_V2); // no responder: B's answer is still on its way
+
+            assertThat(session.preview())
+                    .as("A's paper must not stand behind B's load with live decision buttons")
+                    .isEmpty();
+            assertThat(session.canDecide()).isFalse();
+            assertThat(session.state()).isEqualTo(AsyncViewState.LOADING);
         }
 
         @Test

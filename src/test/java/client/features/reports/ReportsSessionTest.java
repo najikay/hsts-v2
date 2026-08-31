@@ -268,6 +268,27 @@ class ReportsSessionTest {
         }
 
         @Test
+        @DisplayName("⚑ S3: a subject from the old dimension cannot run after a switch")
+        void aSubjectFromTheOldDimensionCannotRunMidSwitch() {
+            serverHasEverything();
+            session.load();
+            // The new dimension's subject list never arrives, which is exactly the window
+            // in which the picker's one-pulse-deferred listener (U-61) can still deliver a
+            // subject from the OLD dimension.
+            connection.respondTo(Verb.REPORT_SUBJECTS_GET, ReportsSessionTest::neverArrives);
+            session.selectDimension(ReportDimension.BY_COURSE);
+            connection.clearSent();
+
+            session.selectSubject(DANA);
+
+            assertThat(connection.sentCount())
+                    .as("running it would send the old subject's id under the new "
+                            + "dimension and paint the refusal beneath the new heading")
+                    .isZero();
+            assertThat(session.selectedSubject()).isEmpty();
+        }
+
+        @Test
         @DisplayName("a subject list that lands after she has moved on is discarded")
         void staleSubjectsAreDiscarded() {
             // BY_TEACHER never answers; BY_STUDENT does. The stale BY_TEACHER answer is then

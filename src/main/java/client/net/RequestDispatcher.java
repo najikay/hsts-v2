@@ -71,6 +71,24 @@ public class RequestDispatcher {
         void schedule(Runnable task, Duration delay);
     }
 
+    /**
+     * Told after a request times out with no answer (U-52 follow-up).
+     *
+     * <p>A timeout is the <b>only</b> signal a half-dead connection gives: after
+     * the machine sleeps and wakes, writes still succeed into the void and the
+     * read thread sees no failure, so no {@code ConnectionLostEvent} is ever
+     * posted and the reconnect banner never engages. {@code ConnectWiring}
+     * registers a listener here that answers the question a timeout raises -
+     * "is anybody still there?" - with one {@code HELLO} probe.
+     *
+     * <p>Called on the scheduler's thread, after the future has already been
+     * failed; implementations must not block.
+     */
+    @FunctionalInterface
+    public interface TimeoutListener {
+        void onRequestTimedOut(Verb verb);
+    }
+
     /** The socket in use right now; swapped by {@link #rebind(IClientConnection)}. */
     private volatile IClientConnection connection;
 
@@ -79,6 +97,7 @@ public class RequestDispatcher {
     private final Map<String, CompletableFuture<Message>> pending = new ConcurrentHashMap<>();
 
     private volatile PushListener pushListener;
+    private volatile TimeoutListener timeoutListener;
 
     public RequestDispatcher(IClientConnection connection) {
         this(connection, DEFAULT_TIMEOUT);
@@ -98,6 +117,11 @@ public class RequestDispatcher {
     /** Registers the sink for push messages; {@code null} clears it (pushes are then dropped). */
     public void setPushListener(PushListener listener) {
         this.pushListener = listener;
+    }
+
+    /** Registers the timeout observer; {@code null} clears it (timeouts then pass silently). */
+    public void setTimeoutListener(TimeoutListener listener) {
+        this.timeoutListener = listener;
     }
 
     // ===================== Outbound ======================================
@@ -144,6 +168,16 @@ public class RequestDispatcher {
         }
         log.warn("Timeout after {} ms waiting for {} (requestId={})", waited.toMillis(), verb, requestId);
         future.completeExceptionally(new RequestTimeoutException(verb, requestId, waited));
+        TimeoutListener listener = this.timeoutListener;
+        if (listener != null) {
+            try {
+                listener.onRequestTimedOut(verb);
+            } catch (RuntimeException e) {
+                // The observer is a convenience; the timeout it observed already
+                // did its real work by failing the future above.
+                log.error("Timeout listener threw on {}", verb, e);
+            }
+        }
     }
 
     // ===================== Inbound =======================================

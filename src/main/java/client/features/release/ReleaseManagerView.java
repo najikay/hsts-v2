@@ -5,6 +5,7 @@ import client.core.Routes;
 import client.ui.components.Buttons;
 import client.ui.components.EmptyState;
 import client.ui.components.Icons;
+import client.ui.components.Skeletons;
 import client.ui.components.StatusChip;
 import client.ui.components.WarnConfirm;
 import client.ui.screen.AbstractScreen;
@@ -30,6 +31,8 @@ import javafx.stage.Window;
 import javafx.util.Duration;
 
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The teacher's Release Manager (Presentation tier, E9.5/E9.6 — F5).
@@ -75,6 +78,12 @@ public final class ReleaseManagerView extends AbstractScreen {
     private final EmptyState empty =
             new EmptyState(Icons.RELEASE, ReleaseCopy.EMPTY_TITLE, ReleaseCopy.EMPTY_BODY);
 
+    /** Shown while the first list is still on its way; an unanswered fetch is not a history. */
+    private final Node loadingRows = Skeletons.list(3);
+
+    /** One updater per countdown line, so the tick repaints words without rebuilding rows. */
+    private final List<Runnable> statusLines = new ArrayList<>();
+
     private ReleaseManagerSession session;
     private Timeline ticker;
     private ZoneId zone = ZoneId.systemDefault();
@@ -90,7 +99,7 @@ public final class ReleaseManagerView extends AbstractScreen {
         root.setTop(buildHeader());
         root.setCenter(buildBody());
 
-        ticker = new Timeline(new KeyFrame(TICK, e -> renderRows()));
+        ticker = new Timeline(new KeyFrame(TICK, e -> tick()));
         ticker.setCycleCount(Animation.INDEFINITE);
         return root;
     }
@@ -133,12 +142,35 @@ public final class ReleaseManagerView extends AbstractScreen {
     private void renderRows() {
         ReleaseList list = session.releases();
         rows.getChildren().clear();
+        statusLines.clear();
         if (list.isEmpty()) {
+            if (session.isLoading()) {
+                // An empty answer and an answer still on its way are different facts, and
+                // "You have not released anything yet" during the first fetch is a guess.
+                rows.getChildren().add(loadingRows);
+                return;
+            }
+            Skeletons.stopShimmer(loadingRows);
             rows.getChildren().add(empty);
             return;
         }
+        Skeletons.stopShimmer(loadingRows);
         for (ReleaseRow row : list.rows()) {
             rows.getChildren().add(rowNode(row));
+        }
+    }
+
+    /**
+     * Ages only the countdown sentences between pushes.
+     *
+     * <p>It used to rebuild every card once a second, which destroyed the action buttons
+     * under the pointer (a press spanning a tick landed on a node that no longer existed)
+     * and restarted the LIVE chip's pulse on every beat - the same render-storm shape U-61
+     * took out of the reports screen. The rows are rebuilt only when the data changes.
+     */
+    private void tick() {
+        for (Runnable line : List.copyOf(statusLines)) {
+            line.run();
         }
     }
 
@@ -161,6 +193,7 @@ public final class ReleaseManagerView extends AbstractScreen {
 
         Label status = new Label(ReleaseCopy.status(row, session.now(), zone));
         status.getStyleClass().addAll("small", "muted", "release-status-line");
+        statusLines.add(() -> status.setText(ReleaseCopy.status(row, session.now(), zone)));
 
         HBox top = new HBox(12, name, chip, Buttons.spacer(), code);
         top.setAlignment(Pos.CENTER_LEFT);

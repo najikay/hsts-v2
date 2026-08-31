@@ -306,6 +306,38 @@ class ExamAttemptSessionTest {
     }
 
     @Nested
+    @DisplayName("writes in flight and the indicator")
+    class WritesInFlight {
+
+        /**
+         * ⚑ With two writes out together, the first acknowledgement used to find the dirty
+         * set already empty and flip the indicator to Saved while the second write was still
+         * unconfirmed - and could still fail.
+         */
+        @Test
+        @DisplayName("⚑ Saved only once every write in flight has come back")
+        void savedWaitsForEveryWrite() {
+            session.start(EXECUTION, liveForm(List.of()));
+            session.select(1001, 2);
+            session.select(1002, 3);
+            delay.fire(); // both writes go out; neither is answered yet
+
+            List<Message> writes = connection.sentMessages().stream()
+                    .filter(message -> message.getVerb() == Verb.ANSWER_SAVE)
+                    .toList();
+            assertThat(writes).hasSize(2);
+
+            connection.deliver(Message.ok(writes.get(0), saveResult(1, 3)));
+            assertThat(model.saveState())
+                    .as("question 1002 is still unconfirmed; Saved here is a lie")
+                    .isEqualTo(SaveState.SAVING);
+
+            connection.deliver(Message.ok(writes.get(1), saveResult(2, 3)));
+            assertThat(model.saveState()).isEqualTo(SaveState.SAVED);
+        }
+    }
+
+    @Nested
     @DisplayName("submitting (F6.9)")
     class Submitting {
 
@@ -371,6 +403,49 @@ class ExamAttemptSessionTest {
 
             assertThat(session.submit().join()).isNull();
             assertThat(model.isFinished()).isFalse();
+        }
+
+        /**
+         * ⚑ A refused or failed hand-in leaves the paper live and used to leave the screen
+         * silent: the dialog had closed, nothing on screen changed, and the student had no
+         * way to tell a hand-in that worked from one that never reached the server.
+         */
+        @Test
+        @DisplayName("⚑ a hand-in that did not land is announced, so the screen can say so")
+        void failedSubmitIsAnnounced() throws IOException {
+            int[] announced = {0};
+            session.onSubmitFailed(() -> announced[0]++);
+            connection.failSendsWith(new IOException("socket closed"));
+
+            session.submit().join();
+
+            assertThat(announced[0]).isEqualTo(1);
+            assertThat(model.isFinished()).isFalse();
+        }
+
+        @Test
+        @DisplayName("a refused hand-in is announced too")
+        void refusedSubmitIsAnnounced() {
+            int[] announced = {0};
+            session.onSubmitFailed(() -> announced[0]++);
+            connection.replyError(Verb.ATTEMPT_SUBMIT, ErrorCode.NOT_FOUND,
+                    "That exam is not open for you.");
+
+            session.submit().join();
+
+            assertThat(announced[0]).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a hand-in that landed announces no failure")
+        void landedSubmitAnnouncesNoFailure() {
+            int[] announced = {0};
+            session.onSubmitFailed(() -> announced[0]++);
+            connection.replyOk(Verb.ATTEMPT_SUBMIT, outcome(AttemptState.SUBMITTED));
+
+            session.submit().join();
+
+            assertThat(announced[0]).isZero();
         }
     }
 

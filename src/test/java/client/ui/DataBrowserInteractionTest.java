@@ -224,6 +224,68 @@ class DataBrowserInteractionTest extends ApplicationTest {
                 .contains(DataCopy.READ_ONLY_NOTE);
     }
 
+    @Test
+    @org.junit.jupiter.api.Timeout(60)
+    @DisplayName("⚑ S3, U-61: the course picker's real popup narrows and restores, twice")
+    void realCoursePickerClicksNarrowAndRestore() {
+        // The render used to hand the course picker a brand-new items list on every
+        // render, including renders fired from inside the picker's own selection change -
+        // the exact storm U-61 fixed on the reports screen. Only the real popup exercises
+        // that path.
+        ScreenManager manager = signIn(this::everythingLoads);
+        openData(manager);
+
+        for (int round = 0; round < 2; round++) {
+            pickCourseFromPopup(manager, "Calculus (12)");
+            await("the bank narrowed to Calculus", () ->
+                    cellTexts(manager.scene(), DataTab.QUESTIONS).contains("Evaluate the limit")
+                            && !cellTexts(manager.scene(), DataTab.QUESTIONS)
+                                    .contains("Solve the linear equation"));
+
+            pickCourseFromPopup(manager, DataCopy.ALL_COURSES);
+            await("every course back", () ->
+                    cellTexts(manager.scene(), DataTab.QUESTIONS)
+                            .contains("Solve the linear equation"));
+        }
+        assertThat(labelTexts(screen(manager.scene()))).contains("3 questions");
+    }
+
+    /** Opens the course picker's real popup and clicks the entry, as a principal does. */
+    private void pickCourseFromPopup(ScreenManager manager, String label) {
+        Node picker = manager.scene().getRoot().lookup(".data-course-picker");
+        assertThat(picker).as("the course picker").isNotNull();
+        clickOn(picker);
+        WaitForAsyncUtils.waitForFxEvents();
+        Node entry = lookup(".list-cell").queryAll().stream()
+                .filter(node -> node instanceof javafx.scene.control.ListCell<?> cell
+                        && label.equals(cell.getText())
+                        && !insideComboBox(node))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no popup entry for " + label));
+        clickOn(entry);
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /** The button cell lives inside the ComboBox; the popup's cells do not. */
+    private static boolean insideComboBox(Node node) {
+        for (Node parent = node; parent != null; parent = parent.getParent()) {
+            if (parent instanceof javafx.scene.control.ComboBox<?>) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Polls rather than sleeps, the ReportsInteractionTest cure for runner speed. */
+    private void await(String what, java.util.concurrent.Callable<Boolean> condition) {
+        try {
+            WaitForAsyncUtils.waitFor(10, java.util.concurrent.TimeUnit.SECONDS, condition);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new AssertionError("Timed out waiting for " + what, e);
+        }
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
     // ===================== The rows open (U-44, 2026-08-30) ===============
 
     /**

@@ -128,7 +128,9 @@ public final class CoordinatorDashboardSession {
         if (pending > 0) {
             return;
         }
-        load();
+        // Without the blanking (S3 sweep): routing through load() flashed both cards back
+        // to skeletons on every push. The settled cards stay until the answer lands.
+        sendRead();
     }
 
     /** Sends the one read both cards are built from. */
@@ -138,7 +140,11 @@ public final class CoordinatorDashboardSession {
         waitingCount = 0;
         teacherCount = 0;
         onChange.run();
+        sendRead();
+    }
 
+    /** The one read, shared by the blanking visit and the quiet push re-read (U-63). */
+    private void sendRead() {
         pending = 1;
         dispatcher.send(Verb.APPROVALS_QUEUE_GET, null)
                 .whenComplete((response, failure) -> poster.run(() -> {

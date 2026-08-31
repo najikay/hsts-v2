@@ -106,6 +106,15 @@ public final class ConnectView extends AbstractScreen {
     private volatile boolean showing;
 
     /**
+     * Flips the button copy to "Still trying" when a dial runs long (B-49
+     * regression follow-up). The dial bound is generous on purpose - a first
+     * connect through a firewall prompt can take ten seconds and still succeed -
+     * and a label that changes is what tells the user the wait is progress
+     * rather than a hang.
+     */
+    private javafx.animation.PauseTransition stillTrying;
+
+    /**
      * The last set of servers the picker was given.
      *
      * <p>Kept so that declining a fingerprint warning goes back to the choice the
@@ -426,6 +435,19 @@ public final class ConnectView extends AbstractScreen {
         hostField.control().setDisable(active);
         portField.control().setDisable(active);
         refreshButton();
+        if (stillTrying != null) {
+            stillTrying.stop();
+            stillTrying = null;
+        }
+        if (active) {
+            stillTrying = new javafx.animation.PauseTransition(javafx.util.Duration.seconds(4));
+            stillTrying.setOnFinished(e -> {
+                if (connecting) {
+                    buttonLabel.setText("Still trying…");
+                }
+            });
+            stillTrying.play();
+        }
     }
 
     // ------------------------------------------------------------------ nodes

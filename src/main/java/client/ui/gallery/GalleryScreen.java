@@ -410,7 +410,9 @@ public final class GalleryScreen extends AbstractScreen {
         insufficient.setPrefSize(340, 220);
 
         Button replay = Buttons.secondary("Replay entrance");
-        replay.setOnAction(e -> chart.setData(seeded));
+        // setData treats equal data as a no-op (S3 sweep), so the replay button asks
+        // for the motion by name rather than re-sending the same record.
+        replay.setOnAction(e -> chart.replayEntrance());
         Button counts = Buttons.styled("Show counts", Buttons.GHOST);
         counts.setOnAction(e -> chart.setScale(StatChartLogic.Scale.COUNT));
         Button percent = Buttons.styled("Show percent", Buttons.GHOST);

@@ -122,6 +122,17 @@ public final class QuestionEditorView extends AbstractScreen {
     private QuestionEditorSession session;
     private boolean filling;
     private boolean showingDialog;
+    /**
+     * Whether the long-lived controls' listeners are attached (2026-08-31, round 5 sweep).
+     *
+     * <p>{@code buildForm} runs once per visit and the screen is cached for the life of the
+     * process, so a listener added there unconditionally is added again on every visit. Each
+     * lambda reads the {@code session} field rather than capturing a session, so the
+     * duplicates were idempotent rather than wrong; what they were is a leak that grows with
+     * every visit. The per-visit controls (the answer rows and their radios) are rebuilt
+     * fresh each time and keep their wiring in the loop that builds them.
+     */
+    private boolean wiredOnce;
 
     @Override
     protected Parent build() {
@@ -261,16 +272,19 @@ public final class QuestionEditorView extends AbstractScreen {
     private void buildForm() {
         root.getChildren().clear();
         answerFields.clear();
+        // The radios are rebuilt per visit but the ToggleGroup is a field, so the previous
+        // visit's four have to leave the group or it grows by four per visit, forever (the
+        // screen is cached). Detaching the selected one fires the group listener with null,
+        // which the null guard below ignores.
+        for (RadioButton radio : correctRadios) {
+            radio.setToggleGroup(null);
+        }
+        correctRadios.clear();
 
         textBox.setPromptText(QuestionEditorCopy.TEXT_PROMPT);
         textBox.setWrapText(true);
         textBox.setPrefRowCount(3);
         textField.required();
-        textBox.textProperty().addListener((observable, old, value) -> {
-            if (!filling) {
-                session.setText(value);
-            }
-        });
 
         VBox answers = new VBox(8);
         answers.getStyleClass().add("editor-answers");
@@ -298,18 +312,9 @@ public final class QuestionEditorView extends AbstractScreen {
         answersError.getStyleClass().add("field-message");
         answersError.setWrapText(true);
         setShown(answersError, false);
-        correctGroup.selectedToggleProperty().addListener((observable, old, picked) -> {
-            if (!filling && picked != null) {
-                session.setCorrectAnswer((Integer) picked.getUserData());
-            }
-        });
 
         topicField.required();
-        topicField.textField().textProperty().addListener((observable, old, value) -> {
-            if (!filling) {
-                session.setTopic(value);
-            }
-        });
+        wireOnce();
 
         // U-68: the create form owns its course. Options are the courses she may write in
         // (LoginResult.courses is the taught set, the same set QUESTION_CREATE checks). Absent
@@ -324,12 +329,6 @@ public final class QuestionEditorView extends AbstractScreen {
             courseBox.setCellFactory(view -> new CourseNameCell());
             courseBox.setButtonCell(new CourseNameCell());
             courseField.required();
-            courseBox.getSelectionModel().selectedItemProperty()
-                    .addListener((observable, old, value) -> {
-                        if (!filling) {
-                            session.setCourse(value == null ? null : value.code());
-                        }
-                    });
         }
         courseField.setVisible(creating);
         courseField.setManaged(creating);
@@ -339,12 +338,6 @@ public final class QuestionEditorView extends AbstractScreen {
         difficultyBox.setCellFactory(view -> new DifficultyCell());
         difficultyBox.setButtonCell(new DifficultyCell());
         difficultyField.required();
-        difficultyBox.getSelectionModel().selectedItemProperty()
-                .addListener((observable, old, value) -> {
-                    if (!filling) {
-                        session.setDifficulty(value);
-                    }
-                });
 
         // The picker is built over the session's own logic, which was loaded at construction.
         // Two objects, one state: there is no second copy of "what is happening to the picture".
@@ -374,6 +367,48 @@ public final class QuestionEditorView extends AbstractScreen {
         lockBanner.hide();
         root.getChildren().addAll(new VBox(2, title, subtitle), lockBanner, scroll, actions);
         fillFromSession();
+    }
+
+    /**
+     * Attaches the listeners of the controls that outlive a visit, exactly once.
+     *
+     * <p>Every lambda reads the {@code session} field at event time, so the wiring survives
+     * the session being replaced on the next {@code onShow}. The course listener is attached
+     * whether or not this visit is a create: in edit mode the box is hidden, its items are
+     * empty and {@code QuestionEditorSession.setCourse} ignores every call anyway.
+     */
+    private void wireOnce() {
+        if (wiredOnce) {
+            return;
+        }
+        wiredOnce = true;
+        textBox.textProperty().addListener((observable, old, value) -> {
+            if (!filling) {
+                session.setText(value);
+            }
+        });
+        correctGroup.selectedToggleProperty().addListener((observable, old, picked) -> {
+            if (!filling && picked != null) {
+                session.setCorrectAnswer((Integer) picked.getUserData());
+            }
+        });
+        topicField.textField().textProperty().addListener((observable, old, value) -> {
+            if (!filling) {
+                session.setTopic(value);
+            }
+        });
+        difficultyBox.getSelectionModel().selectedItemProperty()
+                .addListener((observable, old, value) -> {
+                    if (!filling) {
+                        session.setDifficulty(value);
+                    }
+                });
+        courseBox.getSelectionModel().selectedItemProperty()
+                .addListener((observable, old, value) -> {
+                    if (!filling) {
+                        session.setCourse(value == null ? null : value.code());
+                    }
+                });
     }
 
     private static void setShown(javafx.scene.Node node, boolean shown) {

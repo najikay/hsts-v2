@@ -128,15 +128,23 @@ public final class CheckedFormView extends AbstractScreen {
                 message -> {
                     unavailable.set("Not available", message);
                     show(unavailable, true);
-                    show(header, false);
-                    show(teacherLine, false);
-                    show(attemptLine, false);
-                    show(noteBox, false);
-                    questions.getChildren().clear();
                 },
                 () -> show(unavailable, false));
 
-        session.form().ifPresent(this::renderForm);
+        // S3 sweep: no form means nothing on screen. This screen is cached and onShow
+        // re-opens it for a different grade; until the fix it kept showing the PREVIOUS
+        // grade's header, note and marked questions for the whole round trip - a stale
+        // paper under a new navigation.
+        session.form().ifPresentOrElse(this::renderForm, this::renderNothingLoaded);
+    }
+
+    /** Clears the paper: shown while loading, after an error, and before any open. */
+    private void renderNothingLoaded() {
+        show(header, false);
+        show(teacherLine, false);
+        show(attemptLine, false);
+        show(noteBox, false);
+        questions.getChildren().clear();
     }
 
     private void renderForm(CheckedForm form) {

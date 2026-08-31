@@ -29,6 +29,9 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The teacher's live execution monitor (Presentation tier, E11.2/E11.3 — F7.2, F7.1).
  *
@@ -77,6 +80,9 @@ public final class ExecutionMonitorView extends AbstractScreen {
     private final EmptyState empty = new EmptyState(Icons.MONITOR, "Nobody has started yet",
             "Students appear here as soon as they enter the code.");
 
+    /** One updater per live clock, so the tick repaints numbers without rebuilding rows. */
+    private final List<Runnable> remainingLines = new ArrayList<>();
+
     private ExecutionMonitorSession session;
     private Timeline ticker;
     private VBox header;
@@ -103,7 +109,7 @@ public final class ExecutionMonitorView extends AbstractScreen {
         root.setTop(header);
         root.setCenter(body);
 
-        ticker = new Timeline(new KeyFrame(TICK, e -> renderRows()));
+        ticker = new Timeline(new KeyFrame(TICK, e -> tick()));
         ticker.setCycleCount(Animation.INDEFINITE);
         return root;
     }
@@ -171,12 +177,26 @@ public final class ExecutionMonitorView extends AbstractScreen {
         renderRows();
     }
 
+    /**
+     * Ages only the remaining-time column between pushes.
+     *
+     * <p>It used to rebuild every row once a second, which replaced the chips and their
+     * tooltips under the pointer and restarted the in-progress dot's pulse on every beat.
+     * The rows are rebuilt only when a snapshot arrives.
+     */
+    private void tick() {
+        for (Runnable line : List.copyOf(remainingLines)) {
+            line.run();
+        }
+    }
+
     private void renderRows() {
         ExecutionMonitor snapshot = session.snapshot().orElse(null);
         if (snapshot == null) {
             return;
         }
         rows.getChildren().clear();
+        remainingLines.clear();
         if (snapshot.isEmpty()) {
             rows.getChildren().add(empty);
             return;
@@ -202,6 +222,10 @@ public final class ExecutionMonitorView extends AbstractScreen {
                 : (row.actualMinutes() == null ? "" : ExamCopy.minutes(row.actualMinutes())));
         remaining.getStyleClass().addAll("mono", "small");
         remaining.setMinWidth(70);
+        if (row.state().isLive()) {
+            remainingLines.add(() -> remaining.setText(
+                    CountdownLogic.format(session.remainingFor(row))));
+        }
 
         HBox line = new HBox(12);
         line.setAlignment(Pos.CENTER_LEFT);
