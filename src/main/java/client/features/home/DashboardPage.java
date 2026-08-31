@@ -466,6 +466,10 @@ public final class DashboardPage {
 
         Label left = new Label(DashboardCopy.timeLeftLine(detail.minutesLeft()));
         left.getStyleClass().addAll("small", "faint");
+        // 2026-08-31, CI round: one short phrase that never wraps; the runner's fonts
+        // measured it two pixels wider than ours and ellipsised it. The row's spacer
+        // absorbs the difference.
+        left.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
 
         HBox counts = new HBox(8, caption, Buttons.spacer(), left);
         counts.setAlignment(Pos.CENTER_LEFT);

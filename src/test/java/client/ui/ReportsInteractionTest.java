@@ -101,6 +101,8 @@ class ReportsInteractionTest extends ApplicationTest {
         ScreenManager manager = signIn(this::everythingLoads);
         openReports(manager);
 
+        await("both sitting rows to render", () ->
+                cellTexts(manager.scene()).contains("Algebra quiz · 5150"));
         Set<String> cells = cellTexts(manager.scene());
         assertThat(cells)
                 .as("both sittings, oldest first, named by exam and code")
@@ -155,7 +157,8 @@ class ReportsInteractionTest extends ApplicationTest {
         // produce the explained empty state rather than a blank table.
         ComboBox<ReportSubject> picker = subjectPicker(manager.scene());
         interact(() -> picker.getSelectionModel().select(RINA));
-        WaitForAsyncUtils.waitForFxEvents();
+        await("the explained empty state", () ->
+                labelTexts(manager.scene()).contains(ReportsCopy.NO_EXECUTIONS.title()));
 
         assertThat(labelTexts(manager.scene()))
                 .contains(ReportsCopy.NO_EXECUTIONS.title(), ReportsCopy.NO_EXECUTIONS.hint());
@@ -176,12 +179,14 @@ class ReportsInteractionTest extends ApplicationTest {
 
         Node chart = manager.scene().getRoot().lookup(".hsts-stat-chart");
         assertThat(chart).isNotNull();
-        assertThat(labelTexts(manager.scene()))
-                .as("the report opens on its most recent sitting")
-                .contains("Algebra quiz · 5150");
+        await("the report to open on its most recent sitting", () ->
+                labelTexts(manager.scene()).contains("Algebra quiz · 5150"));
 
+        await("the midterm row to render", () ->
+                cellTexts(manager.scene()).contains("Algebra midterm · 4821"));
         clickOn(cellWithText(manager.scene(), "Algebra midterm · 4821"));
-        WaitForAsyncUtils.waitForFxEvents();
+        await("the chart heading to follow the click", () ->
+                "Algebra midterm · 4821".equals(chartHeading(manager.scene())));
 
         assertThat(chartHeading(manager.scene()))
                 .as("the chart heading follows the selected row")
@@ -264,11 +269,15 @@ class ReportsInteractionTest extends ApplicationTest {
         // Omar's recipe: pick closed sittings in turn, over and over. The third row sits
         // below the harness stage's fold, so it is asserted as data and the two rendered
         // rows carry the clicking; the freeze this guards against killed every row click.
-        assertThat(labelTexts(manager.scene())).isNotEmpty();
+        await("the closed sittings to render", () ->
+                cellTexts(manager.scene()).contains("Algebra quiz · 5150"));
         for (int pass = 0; pass < 3; pass++) {
             for (String label : List.of("Algebra midterm · 4821", "Algebra quiz · 5150")) {
+                await("the row to be clickable: " + label, () ->
+                        cellTexts(manager.scene()).contains(label));
                 clickOn(cellWithText(manager.scene(), label));
-                WaitForAsyncUtils.waitForFxEvents();
+                await("the chart to follow the click: " + label, () ->
+                        label.equals(chartHeading(manager.scene())));
                 assertThat(chartHeading(manager.scene()))
                         .as("the chart must follow every click, on every pass")
                         .isEqualTo(label);
@@ -280,8 +289,11 @@ class ReportsInteractionTest extends ApplicationTest {
         WaitForAsyncUtils.waitForFxEvents();
         interact(() -> subjectPicker(manager.scene()).getSelectionModel().select(DANA));
         WaitForAsyncUtils.waitForFxEvents();
+        await("the quiz row after the dimension switch", () ->
+                cellTexts(manager.scene()).contains("Algebra quiz · 5150"));
         clickOn(cellWithText(manager.scene(), "Algebra quiz · 5150"));
-        WaitForAsyncUtils.waitForFxEvents();
+        await("the chart after the final click", () ->
+                "Algebra quiz · 5150".equals(chartHeading(manager.scene())));
         assertThat(chartHeading(manager.scene())).isEqualTo("Algebra quiz · 5150");
     }
 
@@ -410,6 +422,20 @@ class ReportsInteractionTest extends ApplicationTest {
      * runner it reliably lost, which is why three of this class's tests were red only in CI.
      * Same cure as BankScreenInteractionTest.settle().
      */
+    /**
+     * 2026-08-31, CI round two: a fixed sleep is a bet on the runner's speed, and the runner
+     * kept winning. Poll instead: wait up to ten seconds for the condition, pumping the FX
+     * thread, and only then assert. What it waits FOR is still exact.
+     */
+    private void await(String what, java.util.concurrent.Callable<Boolean> condition) {
+        try {
+            WaitForAsyncUtils.waitFor(10, java.util.concurrent.TimeUnit.SECONDS, condition);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new AssertionError("Timed out waiting for " + what, e);
+        }
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
     private void settle() {
         WaitForAsyncUtils.waitForFxEvents();
         sleep(client.ui.anim.Motion.ROUTE_MS * 3L);

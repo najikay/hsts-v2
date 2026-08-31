@@ -252,9 +252,12 @@ public final class DataTable<T> extends VBox {
         TextFit.keepOnHover(kicker);
         kicker.sceneProperty().addListener((observable, was, now) -> {
             if (now != null) {
-                Platform.runLater(() -> column.setMinWidth(Math.ceil(
-                        TextFit.renderedWidth(kicker.getText(), kicker.getFont()))
-                        + HEADING_SLACK));
+                // 2026-08-31, CI round: max, not set. A view that gave its column an
+                // explicit floor (the approvals Exam column) had it silently overwritten
+                // here a pulse later, which only the runner's fonts made visible.
+                Platform.runLater(() -> column.setMinWidth(Math.max(column.getMinWidth(),
+                        Math.ceil(TextFit.renderedWidth(kicker.getText(), kicker.getFont()))
+                        + HEADING_SLACK)));
             }
         });
     }
