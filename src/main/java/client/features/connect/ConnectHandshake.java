@@ -55,11 +55,22 @@ public final class ConnectHandshake {
     /**
      * How long a live server has to answer {@code HELLO}.
      *
-     * <p>Five seconds. Long enough for a loaded server on classroom Wi-Fi, short
-     * enough that a student watching a spinner gets an answer and an address
-     * field back rather than an evening.
+     * <p>Fifteen seconds, matching the dial bound, and for the same reason
+     * (2026-08-31, diagnosed in the field by Omar with clock-aligned logs on both
+     * machines and a raw-socket probe): a Wi-Fi power-save network was measured
+     * delaying the FIRST data packet of every new TCP connection by about five
+     * seconds - the old 5 s budget lost to exactly that packet by 300 ms, on a
+     * network where the steady state was 124 ms. The packet immediately after
+     * the dial deserves the dial's patience. A genuinely dead address now
+     * reports in 15 s instead of 5 (the button reads "Still trying…" from 4 s);
+     * a stopped server is unaffected, because its socket is closed and the dial
+     * is refused in milliseconds.
+     *
+     * <p>Overridable without a rebuild through {@code client.properties}
+     * ({@code connect.hello.timeout.ms}) - the demo-day escape hatch.
      */
-    public static final Duration TIMEOUT = Duration.ofSeconds(5);
+    public static final Duration TIMEOUT =
+            Duration.ofMillis(client.core.ClientConfig.helloTimeoutMs());
 
     /**
      * Extra time allowed for the dispatcher's own timer before this class stops

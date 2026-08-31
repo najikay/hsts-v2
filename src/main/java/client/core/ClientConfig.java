@@ -46,6 +46,35 @@ public final class ClientConfig {
         return load(resolveExternalConfigPath(), "/" + CONFIG_FILE);
     }
 
+    /** Optional key: how long a first HELLO may take before the connect gives up. */
+    private static final String KEY_HELLO_TIMEOUT = "connect.hello.timeout.ms";
+    private static final long DEFAULT_HELLO_TIMEOUT_MS = 15_000;
+
+    /**
+     * The HELLO budget, from {@code client.properties} when the demo-day escape hatch is
+     * needed without a rebuild (2026-08-31, B-49 field addendum: a Wi-Fi power-save network
+     * was measured delaying the FIRST data packet of every new TCP connection by ~5 s, so
+     * the proof packet needs the same patience the dial already gets). Floor of one second;
+     * an unparseable value falls back to the default.
+     */
+    public static long helloTimeoutMs() {
+        Properties props = new Properties();
+        Path external = resolveExternalConfigPath();
+        if (external != null && Files.isRegularFile(external)) {
+            loadFromFile(props, external);
+        } else {
+            loadFromClasspath(props, "/" + CONFIG_FILE);
+        }
+        try {
+            long value = Long.parseLong(
+                    props.getProperty(KEY_HELLO_TIMEOUT,
+                            Long.toString(DEFAULT_HELLO_TIMEOUT_MS)).trim());
+            return Math.max(1_000, value);
+        } catch (NumberFormatException e) {
+            return DEFAULT_HELLO_TIMEOUT_MS;
+        }
+    }
+
     /**
      * Resolution core, with both sources injected - visible for testing so the
      * external-file / classpath / defaults branches can each be exercised.

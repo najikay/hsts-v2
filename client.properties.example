@@ -3,3 +3,8 @@
 
 server.host=localhost
 server.port=5555
+
+# Optional: how long the first proof packet (HELLO) may take on connect, in
+# milliseconds. Default 15000. Raise it on a network that stalls the first
+# packet of new connections (some Wi-Fi power-save setups do).
+#connect.hello.timeout.ms=15000

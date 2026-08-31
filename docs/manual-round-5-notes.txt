@@ -83,3 +83,8 @@ Sweep S2 observations, logged not fixed (by design or debatable, lead may revisi
 - A failed RELEASE_OPTIONS_GET leaves the create dialog claiming no exams (log-only by design).
 - A save landing after the teacher left the builder still navigates to the list from a hidden
   screen (documented U-31 behaviour).
+
+O-final: two-machine still failing after the sweep -> Omar's field diagnosis (excellent work):
+  the network delays the first data packet of each new TCP connection ~5 s (Wi-Fi power save);
+  HELLO's 5 s budget lost by 300 ms. HELLO raised to 15 s (the dial's own argument), overridable
+  via client.properties connect.hello.timeout.ms. Hardware chase continues on Omar's side.
