@@ -124,6 +124,16 @@ public final class ReportsView extends AbstractScreen {
 
         buildTable();
         chart.setPrefHeight(300);
+        // 2026-08-31, CI round five, and the scene dump that ended it: in an 800px-tall
+        // window this column's preferred heights do not fit, and a VBox short of room
+        // squeezes children toward their minimums. The table had no minimum, so it
+        // collapsed to 42px - ONE virtualised row - while the chart held ~230. The
+        // runner's slightly taller fonts tipped the layout over; local fonts squeezed by,
+        // which is why no local run ever reproduced it. The floors state the design: the
+        // rows table is this screen's primary surface and never shows fewer than about
+        // three rows; the chart is the one that gives way when the window is short.
+        table.table().setMinHeight(150);
+        chart.setMinHeight(120);
 
         root.getChildren().addAll(new VBox(2, title, subtitle), buildPickerRow(), error,
                 heading, summaryCards, participants, comparisonHint, table, chart);

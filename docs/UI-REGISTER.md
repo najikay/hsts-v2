@@ -605,3 +605,8 @@ five new entries, one reopening.
 **In Naji's words:** "we have a section where we write down the 4 possible answers, and another where we check the place of the correct answer, it'd make a lot more sense if the check box was in the same section... right next to the questions"
 **Ruling:** each answer row carries its radio (FormField.trailing), all four in one ToggleGroup, so C-8's exactly-one is untouched; the U-55 default (Answer 1) carries over; a correct-answer refusal renders on a message line under the answers.
 **Status:** `DONE`
+
+### U-71 · FUNCTIONAL · reports: the rows table collapsed to one row in a short window
+**Found by:** CI, after four rounds of elimination and a scene dump added to the failing waits (round five). `table 1164x42 · items=2 · rowCells=1`: the reports column's preferred heights do not fit an 800px-tall window, a VBox short of room squeezes children toward their minimums, the table had no minimum and collapsed to a single virtualised row while the chart held ~230px. The runner's slightly taller fonts tipped it; local fonts squeezed by, which is why no local run ever reproduced it.
+**Ruling:** layout floors, not test knobs: the rows table never shows fewer than about three rows (`minHeight 150`), the chart gives way first (`minHeight 120`). Possibly related to U-61's "the table got stuck" if the window was short; U-61 stays open on its own evidence.
+**Status:** `DONE`
