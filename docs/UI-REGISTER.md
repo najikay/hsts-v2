@@ -600,3 +600,8 @@ five new entries, one reopening.
 **In Omar's words:** "might be overkill : should the questions in the exam the coordinator is looking at to approve show if they've been used in other exams?"
 **Ruling:** not for the defence. The signal exists in the delete-block list and the builder's newer-version badge; adding cross-exam usage to the approval paper is new wire surface a week before the defence for a judgement the spec does not ask the coordinator to make.
 **Status:** `CLOSED - not now`
+
+### U-70 · UX · question editor: the correct-answer choice sits beside each answer box
+**In Naji's words:** "we have a section where we write down the 4 possible answers, and another where we check the place of the correct answer, it'd make a lot more sense if the check box was in the same section... right next to the questions"
+**Ruling:** each answer row carries its radio (FormField.trailing), all four in one ToggleGroup, so C-8's exactly-one is untouched; the U-55 default (Answer 1) carries over; a correct-answer refusal renders on a message line under the answers.
+**Status:** `DONE`

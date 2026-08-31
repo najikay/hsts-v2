@@ -11,7 +11,6 @@ import client.core.NavParams;
 import client.ui.components.Buttons;
 import client.ui.components.FormField;
 import client.ui.components.ImagePicker;
-import client.ui.components.RadioGroup;
 import client.ui.components.WarnConfirm;
 import client.ui.components.logic.ValidationState;
 import client.ui.screen.AbstractScreen;
@@ -25,6 +24,7 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
@@ -67,7 +67,8 @@ import java.util.List;
  *
  * <h2>The answer rows</h2>
  *
- * <p>Four labelled boxes, then one {@link RadioGroup} naming which of them is correct. The
+ * <p>Four labelled boxes, each with the correct-answer radio at its side (U-70; one shared
+ * ToggleGroup, so C-8's at-most-one is untouched). The
  * component is used exactly as its recipe describes rather than being taken apart to interleave
  * radios with text fields: {@code ToggleGroup} is what guarantees C-8's at-most-one, and that
  * guarantee is worth more than a tighter row.
@@ -93,8 +94,15 @@ public final class QuestionEditorView extends AbstractScreen {
     private final TextArea textBox = new TextArea();
     private final FormField textField = new FormField(QuestionEditorCopy.TEXT_LABEL, textBox);
     private final List<FormField> answerFields = new ArrayList<>();
-    private final RadioGroup<Integer> correct = RadioGroup.indexed(
-            QuestionEditorCopy.ANSWERS_LABEL, answerOptionLabels());
+    /**
+     * 2026-08-31, U-70 (Naji, round 5): "it'd make a lot more sense if the check box was in
+     * the same section as the answers". The four radios sit beside their own boxes now, in
+     * ONE ToggleGroup, which is still what makes two correct answers unrepresentable (C-8).
+     */
+    private final javafx.scene.control.ToggleGroup correctGroup =
+            new javafx.scene.control.ToggleGroup();
+    private final List<RadioButton> correctRadios = new ArrayList<>();
+    private final Label answersError = new Label();
     private final FormField topicField =
             FormField.text(QuestionEditorCopy.TOPIC_LABEL, QuestionEditorCopy.TOPIC_PROMPT);
     /** U-68: create mode only; the course the new question belongs to. */
@@ -114,14 +122,6 @@ public final class QuestionEditorView extends AbstractScreen {
     private QuestionEditorSession session;
     private boolean filling;
     private boolean showingDialog;
-
-    private static List<String> answerOptionLabels() {
-        List<String> labels = new ArrayList<>(QuestionEditorSession.ANSWER_COUNT);
-        for (int i = 1; i <= QuestionEditorSession.ANSWER_COUNT; i++) {
-            labels.add(BankCopy.answerLabel(i));
-        }
-        return labels;
-    }
 
     @Override
     protected Parent build() {
@@ -279,6 +279,13 @@ public final class QuestionEditorView extends AbstractScreen {
             FormField field = FormField.text(BankCopy.answerLabel(i),
                     QuestionEditorCopy.answerPrompt(i));
             field.required();
+            RadioButton radio = new RadioButton(QuestionEditorCopy.CORRECT_MARK);
+            radio.getStyleClass().add("radio-option");
+            radio.setToggleGroup(correctGroup);
+            radio.setUserData(position);
+            radio.setAccessibleText(QuestionEditorCopy.correctMarkAccessible(position));
+            correctRadios.add(radio);
+            field.trailing(radio);
             field.textField().textProperty().addListener((observable, old, value) -> {
                 if (!filling) {
                     session.setAnswer(position, value);
@@ -288,10 +295,12 @@ public final class QuestionEditorView extends AbstractScreen {
             answers.getChildren().add(field);
         }
 
-        correct.required();
-        correct.setOnSelect(index -> {
-            if (!filling) {
-                session.setCorrectAnswer(index);
+        answersError.getStyleClass().add("field-message");
+        answersError.setWrapText(true);
+        setShown(answersError, false);
+        correctGroup.selectedToggleProperty().addListener((observable, old, picked) -> {
+            if (!filling && picked != null) {
+                session.setCorrectAnswer((Integer) picked.getUserData());
             }
         });
 
@@ -351,7 +360,7 @@ public final class QuestionEditorView extends AbstractScreen {
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.getStyleClass().add("editor-actions");
 
-        VBox form = new VBox(16, courseField, textField, answers, correct, hint(), topicField,
+        VBox form = new VBox(16, courseField, textField, answers, answersError, hint(), topicField,
                 difficultyField, picker);
         form.getStyleClass().add("editor-form");
 
@@ -365,6 +374,11 @@ public final class QuestionEditorView extends AbstractScreen {
         lockBanner.hide();
         root.getChildren().addAll(new VBox(2, title, subtitle), lockBanner, scroll, actions);
         fillFromSession();
+    }
+
+    private static void setShown(javafx.scene.Node node, boolean shown) {
+        node.setVisible(shown);
+        node.setManaged(shown);
     }
 
     private Node hint() {
@@ -389,7 +403,10 @@ public final class QuestionEditorView extends AbstractScreen {
                 answerFields.get(i).textField().setText(values.get(i));
             }
             if (session.correctAnswer() != null) {
-                correct.select(session.correctAnswer());
+                Integer chosen = session.correctAnswer();
+                for (RadioButton radio : correctRadios) {
+                    radio.setSelected(radio.getUserData().equals(chosen));
+                }
             }
             topicField.textField().setText(session.topic());
             if (session.courseCode() != null) {
@@ -447,7 +464,7 @@ public final class QuestionEditorView extends AbstractScreen {
     private void applyProblems() {
         textField.clearValidation();
         answerFields.forEach(FormField::clearValidation);
-        correct.clearValidation();
+        setShown(answersError, false);
         topicField.clearValidation();
         difficultyField.clearValidation();
         picker.clearMessage();
@@ -466,7 +483,10 @@ public final class QuestionEditorView extends AbstractScreen {
                                 .apply(ValidationState.invalid(problem.message()));
                     }
                 }
-                case CORRECT_ANSWER -> correct.showError(problem.message());
+                case CORRECT_ANSWER -> {
+                    answersError.setText(problem.message());
+                    setShown(answersError, true);
+                }
                 case TOPIC -> topicField.apply(ValidationState.invalid(problem.message()));
                 case DIFFICULTY ->
                         difficultyField.apply(ValidationState.invalid(problem.message()));

@@ -67,3 +67,7 @@ CI (Naji, after the sweep push): CI red since the round-3 wave and nobody was wa
 ReportsInteractionTest cases lost the route-animation race only on the runner (settle() added,
 BankScreenInteractionTest's cure); two truncations only the runner's fonts expose: the tracked
 kicker pinned to its preferred width, the approvals Exam column floored at 250px.
+
+13. Question editor: the correct-answer picker was its own section below the four answer
+    boxes; the mark now sits beside each answer box (U-70). Walkthrough: bot creation made
+    its own step (13.6b) and guardrail probes added (14.2b).

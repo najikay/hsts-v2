@@ -63,6 +63,11 @@ public final class QuestionEditorCopy {
 
     /** The radio group's label; the group itself is the C-8 guarantee. */
     public static final String ANSWERS_LABEL = "Answers, and which one is correct";
+    /** U-70: the radio beside each answer box. */
+    public static final String CORRECT_MARK = "Correct";
+    public static String correctMarkAccessible(int oneBased) {
+        return "Mark answer " + oneBased + " as the correct one";
+    }
 
     /** Hint under the answer rows. */
     public static final String ANSWERS_HINT =
