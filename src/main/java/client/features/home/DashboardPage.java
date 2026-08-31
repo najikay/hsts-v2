@@ -456,6 +456,10 @@ public final class DashboardPage {
         submitted.set(Integer.toString(detail.submitted()));
         Label ofTotal = new Label(DashboardCopy.submittedSuffix(detail.sitting()));
         ofTotal.getStyleClass().addAll("small", "muted");
+        // CI round three: the third short phrase in this card the runner's fonts measured
+        // wider than ours. Same rule as the others: a phrase that never wraps keeps its
+        // preferred width and the row's spacer gives way.
+        ofTotal.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
 
         HBox caption = new HBox(4, submitted, ofTotal);
         caption.setAlignment(Pos.CENTER_LEFT);

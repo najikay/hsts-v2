@@ -53,7 +53,13 @@ public abstract class AbstractServer implements Runnable {
             // it had, so Start listening after a Stop must bind a fresh one rather
             // than call setSoTimeout on a corpse (B-49).
             if (serverSocket == null || serverSocket.isClosed()) {
-                serverSocket = new ServerSocket(port);
+                // Reuse-address, because Stop listening leaves the port with the previous
+                // clients' connections in TIME_WAIT, and a Start moments later must not be
+                // refused "Address already in use" for it (seen on the CI runner).
+                ServerSocket fresh = new ServerSocket();
+                fresh.setReuseAddress(true);
+                fresh.bind(new java.net.InetSocketAddress(port));
+                serverSocket = fresh;
             }
             serverSocket.setSoTimeout(timeout);
             // Register the replacement BEFORE clearing the stop flag. A Stop followed at

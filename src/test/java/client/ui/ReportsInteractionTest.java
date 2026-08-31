@@ -383,7 +383,17 @@ class ReportsInteractionTest extends ApplicationTest {
     }
 
     private ScreenManager signIn(Consumer<FakeClientConnection> script) {
-        interact(() -> new ClientApp().start(new Stage()));
+        interact(() -> {
+            Stage stage = new Stage();
+            new ClientApp().start(stage);
+            // 2026-08-31, CI round three: unsized, the stage inherits the platform's screen,
+            // and the runner's is small enough that the rows table showed ONE row - every
+            // "timed out waiting for rows" and missed click in CI was virtualisation hiding
+            // the second row below the fold. The guard tests pick their sizes explicitly for
+            // the same reason.
+            stage.setWidth(1280);
+            stage.setHeight(800);
+        });
         WaitForAsyncUtils.waitForFxEvents();
 
         ScreenManager manager = ScreenManager.getInstance();
