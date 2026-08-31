@@ -135,9 +135,20 @@ public final class ReportsView extends AbstractScreen {
         table.table().setMinHeight(150);
         chart.setMinHeight(120);
 
-        root.getChildren().addAll(new VBox(2, title, subtitle), buildPickerRow(), error,
+        // 2026-08-31, Omar's round: with U-71's floors this column can be taller than a
+        // short window, and a clipped chart with no way down IS the missing scroll he saw.
+        // The page scrolls (the house idiom, QuestionEditorView's editor-scroll); the table
+        // gets a real preferred height instead of Vgrow, which means nothing inside a
+        // scroll pane, and its own virtualisation keeps long sittings lists cheap.
+        table.table().setPrefHeight(400);
+        VBox content = new VBox(14, new VBox(2, title, subtitle), buildPickerRow(), error,
                 heading, summaryCards, participants, comparisonHint, table, chart);
-        VBox.setVgrow(table, Priority.ALWAYS);
+        content.getStyleClass().add("reports-content");
+        javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.getStyleClass().add("editor-scroll");
+        root.getChildren().add(scroll);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
         return root;
     }
 

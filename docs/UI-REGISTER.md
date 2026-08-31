@@ -690,3 +690,9 @@ five new entries, one reopening.
 
 ### U-88 · SMALL (sweep S2) · approval queue generation guard; "Saved" now waits for every in-flight write; the dice hint restores after typing a code
 **Status:** `DONE` - one red-on-HEAD test each.
+
+### U-89 · UX · reports: no way to scroll to a clipped chart (found by Omar)
+**In Omar's words:** "the principal is missing scroll down"
+**Root cause:** U-71's height floors mean the reports column can be taller than a short window, and the column had no scroll container, so the chart's bottom was simply clipped.
+**Fix:** the page scrolls (the editor-scroll idiom); the table trades Vgrow for a real 400px preferred height, its own virtualisation keeping long lists cheap; the U-71 floors stand.
+**Status:** `DONE` - reports suites and both truncation-guard window sizes green.
