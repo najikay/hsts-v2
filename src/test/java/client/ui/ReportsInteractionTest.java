@@ -441,9 +441,51 @@ class ReportsInteractionTest extends ApplicationTest {
         try {
             WaitForAsyncUtils.waitFor(10, java.util.concurrent.TimeUnit.SECONDS, condition);
         } catch (java.util.concurrent.TimeoutException e) {
-            throw new AssertionError("Timed out waiting for " + what, e);
+            throw new AssertionError("Timed out waiting for " + what + "\n" + sceneDump(), e);
         }
         WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    /**
+     * What the scene actually looks like at the moment a wait gives up. CI-only failures
+     * cannot be inspected any other way; this puts the numbers in the runner's own log.
+     */
+    private String sceneDump() {
+        try {
+            Scene scene = ScreenManager.getInstance().scene();
+            if (scene == null) {
+                return "scene: null";
+            }
+            StringBuilder out = new StringBuilder();
+            javafx.stage.Window window = scene.getWindow();
+            out.append("window ").append(window == null ? "null"
+                    : (int) window.getWidth() + "x" + (int) window.getHeight());
+            javafx.stage.Screen screen = javafx.stage.Screen.getPrimary();
+            out.append(" · screen ").append((int) screen.getBounds().getWidth())
+                    .append("x").append((int) screen.getBounds().getHeight());
+            Node table = scene.getRoot().lookup(".hsts-table");
+            out.append(" · table ").append(table == null ? "absent"
+                    : (int) table.getLayoutBounds().getWidth() + "x"
+                            + (int) table.getLayoutBounds().getHeight()
+                            + " visible=" + table.isVisible());
+            Node tv = scene.getRoot().lookup(".table-view");
+            if (tv instanceof javafx.scene.control.TableView<?> view) {
+                out.append(" · items=").append(view.getItems().size())
+                        .append(" rowCells=").append(scene.getRoot()
+                                .lookupAll(".table-row-cell").size())
+                        .append(" tv=").append((int) view.getLayoutBounds().getWidth())
+                        .append("x").append((int) view.getLayoutBounds().getHeight());
+            }
+            Node chart = scene.getRoot().lookup(".hsts-stat-chart");
+            out.append(" · chart ").append(chart == null ? "absent"
+                    : (int) chart.getLayoutBounds().getHeight() + "h");
+            out.append(" · cells=").append(cellTexts(scene));
+            out.append(" · labels(first 30)=").append(
+                    labelTexts(scene).stream().limit(30).toList());
+            return out.toString();
+        } catch (RuntimeException e) {
+            return "sceneDump failed: " + e;
+        }
     }
 
     private void settle() {

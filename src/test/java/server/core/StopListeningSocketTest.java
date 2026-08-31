@@ -94,6 +94,12 @@ class StopListeningSocketTest {
         // with the port, with no OCSF or client code in the way to be blamed.
         assertThatThrownBy(() -> {
             try (Socket probe = new Socket()) {
+                // Bound to its own fresh port first. Unbound, the kernel picks the source
+                // port at random from the same ephemeral range freePort() draws from, and
+                // when it lands ON the closed server port the connect "succeeds" by TCP
+                // simultaneous open - a socket connected to itself. Seen once on CI; binding
+                // makes it unrepresentable.
+                probe.bind(new InetSocketAddress("127.0.0.1", freePort()));
                 probe.connect(new InetSocketAddress("127.0.0.1", port), (int) WINDOW.toMillis());
             }
         })
