@@ -174,6 +174,12 @@ public final class ReportsSession {
         if (subject == null) {
             return;
         }
+        // U-61: the same subject again is a no-op unless the last attempt failed. Without
+        // this, every render's re-select round-tripped the same report and the screen
+        // could never settle.
+        if (subject.equals(selectedSubject) && reportState != AsyncViewState.ERROR) {
+            return;
+        }
         selectedSubject = subject;
         reportState = AsyncViewState.LOADING;
         reportError = null;

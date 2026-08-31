@@ -176,7 +176,11 @@ public final class ReportsView extends AbstractScreen {
         subjectPicker.getSelectionModel().selectedItemProperty()
                 .addListener((obs, old, subject) -> {
                     if (!selecting && subject != null) {
-                        session.selectSubject(subject);
+                        // One pulse later, deliberately: the session's onChange re-renders,
+                        // and a render must never run while the ComboBox is still inside
+                        // its own selection-change processing (U-61).
+                        javafx.application.Platform.runLater(
+                                () -> session.selectSubject(subject));
                     }
                 });
 
@@ -259,11 +263,24 @@ public final class ReportsView extends AbstractScreen {
                 segment.setSelected(dimension == session.dimension()));
         subjectPicker.setPromptText(ReportsCopy.subjectPrompt(session.dimension()));
 
+        // 2026-08-31, U-61, the real one: this used to replace the items with a brand-new
+        // list on EVERY render, including renders fired from inside the ComboBox's own
+        // selection change. The harness selects programmatically and never touches the
+        // skin, so tests stayed green; on a real machine the popup's list was yanked out
+        // from under the skin mid-event, the skin threw, and every later FX event threw
+        // after it, which is what "the whole principal is destroyed" looks like. B-4
+        // taught the grading screen this rule; it applies here word for word: refill only
+        // when the contents changed, and drive the value only when it differs.
         selecting = true;
         try {
-            subjectPicker.setItems(FXCollections.observableArrayList(session.subjects()));
-            session.selectedSubject()
-                    .ifPresent(subject -> subjectPicker.getSelectionModel().select(subject));
+            List<ReportSubject> options = session.subjects();
+            if (!options.equals(subjectPicker.getItems())) {
+                subjectPicker.setItems(FXCollections.observableArrayList(options));
+            }
+            ReportSubject chosen = session.selectedSubject().orElse(null);
+            if (chosen != null && !chosen.equals(subjectPicker.getValue())) {
+                subjectPicker.setValue(chosen);
+            }
         } finally {
             selecting = false;
         }

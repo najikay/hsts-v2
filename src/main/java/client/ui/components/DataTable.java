@@ -638,6 +638,19 @@ public final class DataTable<T> extends VBox {
      */
     public void setItems(List<T> rows) {
         Objects.requireNonNull(rows, "rows");
+        // 2026-08-31, U-61: identical rows are not a change. setAll is a clear-then-add,
+        // and a clear yanks the selection and the realised cells out from under whatever
+        // gesture triggered the render - B-4's defect, fixed in the grading view and now
+        // fixed for every table at once, here.
+        if (rows.equals(items)) {
+            // Refresh, not replace: updateItem re-runs on the realised cells, so columns
+            // that paint from state OUTSIDE the row (the bank's editing chip reads the
+            // lock table) still follow a push, while the selection and the cells the user
+            // is interacting with stay put.
+            table.refresh();
+            setState(AsyncViewState.forResult(rows));
+            return;
+        }
         boolean firstContent = firstLoadPending && !rows.isEmpty();
         if (firstContent) {
             firstLoadPending = false;

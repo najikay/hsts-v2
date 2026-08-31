@@ -298,6 +298,38 @@ class ReportsInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @org.junit.jupiter.api.Timeout(60)
+    @DisplayName("⚑ U-61: changing the subject through the real picker, twice, keeps working")
+    void realPickerClicksRunEachReport() {
+        ScreenManager manager = signIn(this::everythingLoads);
+        openReports(manager);
+
+        for (int round = 0; round < 2; round++) {
+            pickFromPopup(manager, "Rina Barak");
+            await("Rina's empty state", () ->
+                    labelTexts(manager.scene()).contains(ReportsCopy.NO_EXECUTIONS.title()));
+
+            pickFromPopup(manager, "Dana Cohen");
+            await("Dana's rows back", () ->
+                    cellTexts(manager.scene()).contains("Algebra quiz · 5150"));
+        }
+        assertThat(labelTexts(manager.scene())).contains("Dana Cohen · by teacher");
+    }
+
+    /** Opens the ComboBox's real popup and clicks the entry, the way a person does. */
+    private void pickFromPopup(ScreenManager manager, String label) {
+        clickOn(subjectPicker(manager.scene()));
+        WaitForAsyncUtils.waitForFxEvents();
+        Node entry = lookup(".list-cell").queryAll().stream()
+                .filter(node -> node instanceof javafx.scene.control.ListCell<?> cell
+                        && cell.getText() != null && cell.getText().startsWith(label))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no popup entry for " + label));
+        clickOn(entry);
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    @Test
     @DisplayName("the print layout drops the pickers (E15.4)")
     void printLayoutDropsThePickers() {
         ScreenManager manager = signIn(this::everythingLoads);
