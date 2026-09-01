@@ -73,6 +73,12 @@ public final class JpaReleaseStore implements ReleaseStore {
         }
 
         @Override
+        public java.util.Map<Long, Integer> questionCountsByVersion(
+                java.util.Collection<Long> versionIds) {
+            return exams.countQuestionsByVersion(session, versionIds);
+        }
+
+        @Override
         public boolean hasAnyExam(long teacherId) {
             return exams.hasAnyExamInTaughtCourses(session, teacherId);
         }

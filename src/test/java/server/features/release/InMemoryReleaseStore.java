@@ -39,6 +39,7 @@ final class InMemoryReleaseStore implements ReleaseStore, ReleaseData {
     private final Map<Long, Set<String>> taught = new LinkedHashMap<>();
     private final Map<String, List<Long>> enrolled = new LinkedHashMap<>();
     private final Map<Long, ParticipationCounts> participation = new LinkedHashMap<>();
+    private final Map<Long, Integer> questionCounts = new LinkedHashMap<>();
 
     private long nextExecutionId = 5000;
 
@@ -133,6 +134,22 @@ final class InMemoryReleaseStore implements ReleaseStore, ReleaseData {
     // ===================== ReleaseData ===================================
 
     @Override
+    public Map<Long, Integer> questionCountsByVersion(Collection<Long> versionIds) {
+        Map<Long, Integer> found = new LinkedHashMap<>();
+        for (Long id : versionIds) {
+            Integer count = questionCounts.get(id);
+            if (count != null) {
+                found.put(id, count);
+            }
+        }
+        return found;
+    }
+
+    /** Fixture: how many questions a version carries (U-93). */
+    void questionCount(long versionId, int count) {
+        questionCounts.put(versionId, count);
+    }
+
     public List<ExamVersionContext> releasableVersionsFor(long teacherId) {
         Set<String> courses = taught.getOrDefault(teacherId, Set.of());
         return versions.values().stream()

@@ -142,12 +142,18 @@ public final class ReleaseService implements ReleaseAnnouncer {
         long teacherId = caller.userId();
         ReleaseOptions answer = store.inTx(data -> {
             List<ExamVersionContext> versions = data.releasableVersionsFor(teacherId);
+            // U-93 (2026-09-01): this used to pass a literal 0 and the picker printed
+            // "0 questions" for every exam - a hardcoded number shown as a fact. One
+            // grouped query for the whole list, the approval queue's own count.
+            List<Long> ids = new ArrayList<>(versions.size());
+            for (ExamVersionContext version : versions) {
+                ids.add(version.examVersionId());
+            }
+            java.util.Map<Long, Integer> counts = data.questionCountsByVersion(ids);
             List<ReleasableVersion> options = new ArrayList<>(versions.size());
             for (ExamVersionContext version : versions) {
-                // Question counts are E7's business and are not on this projection; the
-                // picker shows the exam's own duration, which is, and the count arrives
-                // with the exam list rather than as a query per row here.
-                options.add(ReleaseRows.toOption(version, 0));
+                options.add(ReleaseRows.toOption(version,
+                        counts.getOrDefault(version.examVersionId(), 0)));
             }
             return new ReleaseOptions(options, !options.isEmpty() || data.hasAnyExam(teacherId));
         });

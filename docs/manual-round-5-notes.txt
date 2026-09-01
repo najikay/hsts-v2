@@ -88,3 +88,8 @@ O-final: two-machine still failing after the sweep -> Omar's field diagnosis (ex
   the network delays the first data packet of each new TCP connection ~5 s (Wi-Fi power save);
   HELLO's 5 s budget lost by 300 ms. HELLO raised to 15 s (the dial's own argument), overridable
   via client.properties connect.hello.timeout.ms. Hardware chase continues on Omar's side.
+
+Final round (2026-09-01), items 1-4 from the walkthrough chunk, all fixed and individually
+verified live: U-90 by-student scores (ruling reversed, probe + screenshot), U-91 seeded
+notification refs (reseed + wire probe), U-92 difficulty redrive on scene attach (Windows-only
+ghost; final proof on the Windows build), U-93 real question counts in the release picker.

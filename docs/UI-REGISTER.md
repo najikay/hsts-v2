@@ -707,3 +707,14 @@ five new entries, one reopening.
 **Was:** deliberate - only Maya's B-25 row carried a ref; the register's own comments said the grading-due draft had no target, which turned out stale (it carries ROUTE_GRADING plus the sitting).
 **Now:** each seeded row carries the ref shape its live counterpart writes: grade rows resolve the recipient's attempt, grading-due rows their sitting, approval rows the route alone (their live target id has no seed-time handle), the principal's row her Data browser. Refs appear on a reseed; the demo-day morning Reload performs one.
 **Status:** `DONE`
+
+### U-92 · FUNCTIONAL · edit question: the difficulty box opened blank on real Windows (item 3)
+**Root cause:** U-56's re-drive ran "one pulse after onShow", a guess about when the skin exists; on Windows the screen can still be outside the scene at that pulse, while the headless harness attaches scenes eagerly and stayed green.
+**Fix:** the re-drive fires on the fact itself - the box gaining a scene. Final proof is one Edit click on the Windows build.
+**Status:** `DONE`
+
+### U-93 · FUNCTIONAL · release picker said "0 questions" for every exam (item 4)
+**In Naji's words:** "on the picking the release it shows 0 questions on the exam, which is wrong"
+**Root cause:** `ReleaseService.options` passed a literal 0 into every option; the label printed a hardcoded number as a fact.
+**Fix:** one grouped count query for the whole list (the approval queue's own `countQuestionsByVersion`), threaded through `ReleaseData`.
+**Status:** `DONE` - verified on the live wire.

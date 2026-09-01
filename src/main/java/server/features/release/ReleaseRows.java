@@ -107,7 +107,7 @@ final class ReleaseRows {
      * One picker row (F5.1).
      *
      * @param version       the approved version
-     * @param questionCount how many questions are on it; 0 when the count was not asked for
+     * @param questionCount how many questions are on it (U-93: the real count since 2026-09-01)
      * @return the wire row
      */
     static ReleasableVersion toOption(ExamVersionContext version, int questionCount) {

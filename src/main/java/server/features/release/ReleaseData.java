@@ -47,6 +47,12 @@ public interface ReleaseData {
     List<ExamVersionContext> releasableVersionsFor(long teacherId);
 
     /**
+     * How many questions each of these versions carries (U-93): the number the release
+     * picker prints beside a version, fetched in one query for the whole list.
+     */
+    java.util.Map<Long, Integer> questionCountsByVersion(java.util.Collection<Long> versionIds);
+
+    /**
      * @param teacherId the caller
      * @return {@code true} when she has any exam at all in the courses she teaches, which is
      *         what tells "nothing approved yet" apart from "nothing written yet"
