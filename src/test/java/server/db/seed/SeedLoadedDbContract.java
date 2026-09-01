@@ -737,9 +737,10 @@ abstract class SeedLoadedDbContract extends SeedLoadedTestBase {
         assertThat(hers.get(1)).isEqualTo(awaiting + " attempts awaiting your grade approval");
         assertThat(hers.get(2)).as("unread, so there is a badge to see").isNull();
         assertThat(hers.get(3))
-                .as("the catalog composes a grading-due draft with no target, so neither of "
-                        + "these rows deep-links")
-                .isNull();
+                .as("U-91 corrected this assertion's own old claim: the catalog's grading-due "
+                        + "draft DOES carry a target (ROUTE_GRADING plus the sitting), and the "
+                        + "seeded row now mirrors that live shape, so the bell deep-links")
+                .isEqualTo("grading");
     }
 
     /**
