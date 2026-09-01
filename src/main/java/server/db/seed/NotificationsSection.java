@@ -32,11 +32,18 @@ import java.util.List;
  * body {@code "Your grade for Midterm: Algebra has been published."} — rather than in a
  * seed-only sentence, so what she sees on the day is what a live approval produces.
  *
- * <p>It is also the <b>first seeded notification that deep-links</b>. The catalog's draft
- * carries {@code NavRef.to("grades", attemptId)} and the eight older rows carry no ref at all,
- * so clicking one does nothing. Hers resolves her own attempt on execution {@code 4821} at
- * load time and stores it, which makes the bell → My Grades journey demonstrable rather than
- * described.
+ * <p><b>Every row deep-links (U-91, 2026-09-01).</b> Until then only {@code maya.levi}'s row
+ * carried a ref and the eight older rows carried none, so clicking them did nothing - which a
+ * walkthrough read, fairly, as an inconsistency. Each row now carries the ref shape its LIVE
+ * counterpart writes: grade rows resolve the recipient's own attempt ({@code ROUTE_GRADES}),
+ * grading-due rows carry their sitting on the teacher's queue ({@code ROUTE_GRADING}, the
+ * catalog's own shape), and rows whose live target id has no seed-time handle (the approval
+ * pair) carry the route alone, which navigates to the right screen with no deep entity -
+ * {@code NotificationPresenter.paramsFor} is built for exactly that. The principal's
+ * sitting-finished row routes to her Data browser, because the live draft's target is the
+ * teacher's results screen, which her role does not register. Note the idempotency key below:
+ * rows already in a database keep their old null refs until a {@code --reseed}, which the
+ * demo-day morning reload performs anyway.
  *
  * <p><b>The title had to differ from the other two {@code GRADE_PUBLISHED} rows</b>, because
  * the idempotency key below is recipient + type + title and a repeat would collapse the
@@ -113,36 +120,45 @@ final class NotificationsSection implements SeedSection {
      * code §9 fixes, and the attempt is the recipient's own on that sitting.
      *
      * @param route         the client route, as {@code NotificationCatalog} spells it
-     * @param executionCode the sitting whose attempt is the target
+     * @param executionCode the sitting that anchors the target, or {@code null} for a
+     *                      route-only link (navigates, carries no entity)
      */
     private record Link(String route, String executionCode) { }
 
     private static final List<Note> NOTIFICATIONS = List.of(
             // was "EXAM_REJECTED"
             new Note("dana.cohen", NotificationType.APPROVAL_REJECTED,
-                    "Exam sent back for revision: version 1 of \"Midterm: Algebra\"", null, null, true, 24),
+                    "Exam sent back for revision: version 1 of \"Midterm: Algebra\"", null,
+                    new Link(NotificationCatalog.ROUTE_EXAMS, null), true, 24),
             // was "EXAM_PENDING". The event is the submission, and the type names the event
             // rather than its audience: here the author is told her own exam went out.
             new Note("dana.cohen", NotificationType.APPROVAL_REQUESTED,
-                    "The exam was sent to the subject coordinator for approval", null, null, false, 22),
+                    "The exam was sent to the subject coordinator for approval", null,
+                    new Link(NotificationCatalog.ROUTE_EXAMS, null), false, 22),
             // was "APPROVAL_REQUEST" — the constant is APPROVAL_REQUESTED, past tense
             new Note("rina.barak", NotificationType.APPROVAL_REQUESTED,
-                    "An exam is waiting for your approval in Mathematics", null, null, false, 22),
+                    "An exam is waiting for your approval in Mathematics", null,
+                    new Link(NotificationCatalog.ROUTE_APPROVALS, null), false, 22),
             // was "EXAM_REJECTED"
             new Note("tamar.shani", NotificationType.APPROVAL_REJECTED,
-                    "Collections Quiz was returned for revision", null, null, false, 20),
+                    "Collections Quiz was returned for revision", null,
+                    new Link(NotificationCatalog.ROUTE_EXAMS, null), false, 20),
             // These two were the only well-formed rows, which is why case 8.5's student bell
             // passed and nobody noticed the staff side.
             new Note("noa.friedman", NotificationType.GRADE_PUBLISHED,
-                    "Your grade for Midterm: Algebra is available", null, null, true, 13),
+                    "Your grade for Midterm: Algebra is available", null,
+                    new Link(NotificationCatalog.ROUTE_GRADES, "4821"), true, 13),
             new Note("yael.azulay", NotificationType.GRADE_PUBLISHED,
-                    "Your grade is available, including a teacher's comment", null, null, false, 13),
+                    "Your grade is available, including a teacher's comment", null,
+                    new Link(NotificationCatalog.ROUTE_GRADES, "4821"), false, 13),
             // These two named events the enum had no constant for at all, so both are now real
             // constants rather than re-pointed onto a type that means something else.
             new Note("avi.mizrahi", NotificationType.GRADING_DUE,
-                    "8 attempts awaiting your grade approval", null, null, false, 3),
+                    "8 attempts awaiting your grade approval", null,
+                    new Link(NotificationCatalog.ROUTE_GRADING, "7390"), false, 3),
             new Note("principal.avia", NotificationType.EXECUTION_CLOSED,
-                    "Sitting finished: 8 students, average 72.5", null, null, false, 13),
+                    "Sitting finished: 8 students, average 72.5", null,
+                    new Link("data", null), false, 13),
             // ⚑ B-25. maya.levi is DEMO_DAY §2.3's sign-in account and had no bell at all.
             // The catalog's own words, and the first seeded row that deep-links.
             //
@@ -160,14 +176,15 @@ final class NotificationsSection implements SeedSection {
             // Execution 5 (§9.4) closed yesterday with four AUTO grades on it and nothing
             // approved, and avi.mizrahi has had a row for exactly that situation since this
             // list was written. The count in the title is §9.4's four, the same coupling the
-            // row above it carries with §9.2's eight. No ref: the catalog's grading-due draft
-            // has no target, and inventing one would give the seed a notification the product
-            // cannot produce.
+            // row above it carries with §9.2's eight. U-91 corrected an older claim here that
+            // the grading-due draft has no target: it carries ROUTE_GRADING plus the sitting,
+            // and the seeded row now mirrors exactly that.
             new Note("dana.cohen", NotificationType.GRADING_DUE,
                     // One day ago: the day sitting 3318 ran, which is the same rule
                     // N-GRADING-DUE-JAVA follows for 7390's T-3d. created_at is unspecified
                     // in §11, so it is derived from the sitting's own day rather than picked.
-                    "4 attempts awaiting your grade approval", null, null, false, 1));
+                    "4 attempts awaiting your grade approval", null,
+                    new Link(NotificationCatalog.ROUTE_GRADING, "3318"), false, 1));
 
     @Override
     public String name() {
@@ -213,14 +230,21 @@ final class NotificationsSection implements SeedSection {
      * @return the attempt id to store in {@code ref_id}, or {@code null}
      */
     private static Long linkTargetFor(Session session, Note note, long userId) {
-        if (note.link() == null) {
+        if (note.link() == null || note.link().executionCode() == null) {
+            // Route-only (U-91): navigates to the screen, carries no entity.
             return null;
         }
         List<Long> executions = SeedLookup.findExecutionByCode(session, note.link().executionCode());
         if (executions.size() != 1) {
             return null;
         }
-        return SeedLookup.findAttemptId(session, executions.get(0), userId).orElse(null);
+        long executionId = executions.get(0);
+        if (NotificationCatalog.ROUTE_GRADES.equals(note.link().route())) {
+            // A student's grade row targets her own attempt, the live shape.
+            return SeedLookup.findAttemptId(session, executionId, userId).orElse(null);
+        }
+        // The teacher's queue targets the sitting itself, the catalog's own shape (U-91).
+        return executionId;
     }
 
     private static boolean alreadyNotified(Session session, long userId, String type, String title) {

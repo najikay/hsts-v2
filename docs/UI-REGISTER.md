@@ -701,3 +701,9 @@ five new entries, one reopening.
 **In Naji's words:** "changing the student gives the result of the students in the classes he's in... the UI tries to tell a different story and the clash comes out as something is wrong... I'm leaning towards displaying it"
 **Ruling (reversal, dated):** the earlier "no personal score on the principal's wire" ruling over-applied S-26 (which restricts students, not the principal; 7.3.1 grants her all results, 7.3.2.3 asks for the student's own trajectory). REPORTS contract A2: `ReportRow.subjectScore`, filled only for BY_STUDENT, "-" for unapproved. The rows table gains a "Her score" column (visible only in that dimension), the histogram gains an accent "Her score N" marker inside the class distribution, and a subtitle says exactly what the screen shows. Unpublished grades stay invisible here too.
 **Status:** `DONE` (item 1 of the final round)
+
+### U-91 · SEED · every seeded notification now deep-links (item 2 of the final round)
+**In Naji's words:** "pre-seeded notifications don't move us to a certain screen when we press them... we might do something a little more nice"
+**Was:** deliberate - only Maya's B-25 row carried a ref; the register's own comments said the grading-due draft had no target, which turned out stale (it carries ROUTE_GRADING plus the sitting).
+**Now:** each seeded row carries the ref shape its live counterpart writes: grade rows resolve the recipient's attempt, grading-due rows their sitting, approval rows the route alone (their live target id has no seed-time handle), the principal's row her Data browser. Refs appear on a reseed; the demo-day morning Reload performs one.
+**Status:** `DONE`
