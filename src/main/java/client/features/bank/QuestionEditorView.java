@@ -181,6 +181,32 @@ public final class QuestionEditorView extends AbstractScreen {
         if (value == null) {
             return;
         }
+        // 2026-09-01, U-92 (item 3 of the final round): "one pulse later" was a guess about
+        // when the skin exists, and on real Windows the screen can still be outside the
+        // scene at that pulse - the box opened blank there while the headless harness,
+        // which attaches scenes eagerly, stayed green. The re-drive now fires on the fact
+        // itself: when the box is IN a scene (immediately if it already is, else once, the
+        // moment it gets one), plus one pulse for the skin the scene brings.
+        if (difficultyBox.getScene() != null) {
+            redriveNow(value);
+            return;
+        }
+        javafx.beans.value.ChangeListener<javafx.scene.Scene> once =
+                new javafx.beans.value.ChangeListener<>() {
+                    @Override
+                    public void changed(
+                            javafx.beans.value.ObservableValue<? extends javafx.scene.Scene> obs,
+                            javafx.scene.Scene was, javafx.scene.Scene now) {
+                        if (now != null) {
+                            difficultyBox.sceneProperty().removeListener(this);
+                            redriveNow(value);
+                        }
+                    }
+                };
+        difficultyBox.sceneProperty().addListener(once);
+    }
+
+    private void redriveNow(Difficulty value) {
         javafx.application.Platform.runLater(() -> {
             filling = true;
             try {
