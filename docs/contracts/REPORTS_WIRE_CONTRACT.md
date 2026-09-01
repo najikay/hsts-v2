@@ -416,3 +416,19 @@ the same field for the same reason, server-side.
 that answers false unopenable rather than sending a request for version 0 — which is what a v1
 server's row would look like if the two tiers were ever built separately. They are not (both ship
 from one build), so this is a guard rather than a supported configuration.
+
+### A2 - the subject's own score on by-student rows (2026-09-01, lead's ruling reversal)
+
+`ReportRow` gains a tenth component, `Integer subjectScore`: the subject's approved effective
+score on that sitting, filled ONLY when the report's dimension is BY_STUDENT and null everywhere
+else - including a by-student row whose grade is not yet approved, so an unpublished grade stays
+unpublished on the principal's screen too. Additive: a nine-argument constructor remains and
+means "no subject score", so every pre-A2 call site and every stored expectation still holds.
+
+**The ruling this reverses, on the record.** Acceptance 12.3 ruled that a personal score has no
+field to travel in, reading S-26's "not available to students" as a general privacy stance. That
+was an over-application: S-26 restricts STUDENTS, while spec 7.3.1 grants the principal read
+access to all results as entered, and 7.3.2.3 asks how grades change "בין הבחינות השונות של אותה
+תלמידה" - her trajectory, which class means cannot answer. The rows still carry the class
+statistics; what changed is that the one person the report is about is now visible inside them.
+Student-facing wire types are untouched and the leak guards still hold.

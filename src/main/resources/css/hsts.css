@@ -1569,6 +1569,8 @@
     -fx-stroke-dash-array: 5 4;
 }
 .stat-marker.median { -fx-stroke: -hsts-text; }
+/* REPORTS A2: the one person whose report this is, marked inside her class's distribution. */
+.stat-marker.subject { -fx-stroke: -hsts-accent; -fx-stroke-width: 2; }
 
 .marker-label {
     -fx-font-size: 11px;
@@ -1576,6 +1578,7 @@
     -fx-text-fill: -hsts-muted;
 }
 .marker-label.median { -fx-text-fill: -hsts-text; }
+.marker-label.subject { -fx-text-fill: -hsts-accent; }
 
 /* Grid, baseline and axis text. The baseline is heavier than the gridlines
    because zero is not just another tick: it is the promise the axis is honest. */

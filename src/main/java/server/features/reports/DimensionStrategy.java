@@ -5,6 +5,7 @@ import common.dto.report.ReportSubject;
 import server.db.projections.ExecutionReport;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -91,6 +92,16 @@ public interface DimensionStrategy {
      * @return its sittings; empty when there are none, or when the id names no subject
      */
     List<ExecutionReport> executionsOf(ReportData data, String subjectId);
+
+    /**
+     * The subject's own score per sitting, when the dimension has one (REPORTS A2).
+     *
+     * <p>Default empty: a teacher or a course has no "own score", and the engine stays
+     * dimension-blind - it forwards whatever map the strategy answers and nothing else.
+     */
+    default Map<Long, Integer> subjectScores(ReportData data, String subjectId) {
+        return Map.of();
+    }
 
     /**
      * Reads a user id out of a subject id.

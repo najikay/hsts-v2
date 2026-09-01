@@ -146,7 +146,7 @@ public final class ReportEngine {
                 return Optional.empty();
             }
             List<ExecutionReport> executions = strategy.executionsOf(data, subjectId);
-            List<ReportRow> rows = toRows(data, executions);
+            List<ReportRow> rows = toRows(data, executions, strategy.subjectScores(data, subjectId));
             return Optional.of(new ReportResult(dimension, found.get(), rows,
                     ReportSummary.across(rows)));
         });
@@ -174,6 +174,15 @@ public final class ReportEngine {
      *         unusable
      */
     static List<ReportRow> toRows(ReportData data, List<ExecutionReport> executions) {
+        return toRows(data, executions, Map.of());
+    }
+
+    /**
+     * The A2 overload: rows carrying the subject's own score where the dimension has one.
+     * The browse caller stays on the two-argument form and its rows stay score-free.
+     */
+    static List<ReportRow> toRows(ReportData data, List<ExecutionReport> executions,
+                                  Map<Long, Integer> subjectScores) {
         if (executions.isEmpty()) {
             return List.of();
         }
@@ -195,7 +204,8 @@ public final class ReportEngine {
             }
             rows.add(new ReportRow(id, execution.code(), execution.examName(),
                     execution.courseCode(), execution.courseName(), execution.openAt(),
-                    execution.closeAt(), participants.getOrDefault(id, 0), statistics.get()));
+                    execution.closeAt(), participants.getOrDefault(id, 0), statistics.get(),
+                    subjectScores.get(id)));
         }
         return List.copyOf(rows);
     }

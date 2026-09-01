@@ -357,7 +357,7 @@ public final class ReportsSession {
         return selectedRow()
                 .map(row -> StatChartData.of(row.statistics().deciles(), row.statistics().mean(),
                         row.statistics().median(), row.statistics().standardDeviation(),
-                        row.statistics().count()))
+                        row.statistics().count()).withSubjectScore(row.subjectScore()))
                 .orElseGet(StatChartData::empty);
     }
 

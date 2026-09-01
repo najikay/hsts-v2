@@ -355,6 +355,21 @@ public final class StatChartLogic {
         return xForScore(data.median(), plotWidth);
     }
 
+    /** @return whether this data carries one person's own score to mark (REPORTS A2). */
+    public boolean hasSubjectScore() {
+        return data.subjectScore() != null;
+    }
+
+    /** @return the subject's score's x position; call only when {@link #hasSubjectScore()}. */
+    public double subjectX(double plotWidth) {
+        return xForScore(data.subjectScore(), plotWidth);
+    }
+
+    /** @return the subject marker's label: "Her score 60". */
+    public String subjectLabel() {
+        return "Her score " + data.subjectScore();
+    }
+
     /**
      * The ±1σ band, clamped into the axis.
      *

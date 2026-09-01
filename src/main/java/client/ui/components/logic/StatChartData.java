@@ -58,7 +58,8 @@ public record StatChartData(List<Integer> buckets,
                             double mean,
                             double median,
                             double standardDeviation,
-                            int participantCount) {
+                            int participantCount,
+                            Integer subjectScore) {
 
     /** The decile distribution is ten buckets wide, matching {@code ScoreStatistics}. */
     public static final int BUCKET_COUNT = 10;
@@ -97,6 +98,9 @@ public record StatChartData(List<Integer> buckets,
         if (participantCount < 0) {
             throw new IllegalArgumentException("participantCount cannot be " + participantCount);
         }
+        if (subjectScore != null && (subjectScore < MIN_SCORE || subjectScore > MAX_SCORE)) {
+            throw new IllegalArgumentException("subjectScore outside 0..100: " + subjectScore);
+        }
         if (standardDeviation < 0) {
             throw new IllegalArgumentException("standardDeviation cannot be " + standardDeviation);
         }
@@ -116,7 +120,17 @@ public record StatChartData(List<Integer> buckets,
      */
     public static StatChartData of(List<Integer> deciles, double mean, double median,
                                    double standardDeviation, int participantCount) {
-        return new StatChartData(deciles, mean, median, standardDeviation, participantCount);
+        return new StatChartData(deciles, mean, median, standardDeviation, participantCount,
+                null);
+    }
+
+    /**
+     * The same data with one person's score marked on it (REPORTS A2: the principal's
+     * by-student report). {@code null} marks nothing and is every other caller's value.
+     */
+    public StatChartData withSubjectScore(Integer score) {
+        return new StatChartData(buckets, mean, median, standardDeviation, participantCount,
+                score);
     }
 
     /**
@@ -124,7 +138,7 @@ public record StatChartData(List<Integer> buckets,
      *         chart renders it as an empty state, never as a flat row of zero bars
      */
     public static StatChartData empty() {
-        return new StatChartData(List.of(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0, 0);
+        return new StatChartData(List.of(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0, 0, null);
     }
 
     /**

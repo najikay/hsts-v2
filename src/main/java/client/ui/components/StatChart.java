@@ -278,8 +278,10 @@ public final class StatChart extends VBox {
         private final Rectangle band = new Rectangle();
         private final Line meanMarker = new Line();
         private final Line medianMarker = new Line();
+        private final Line subjectMarker = new Line();
         private final Label meanLabel = new Label();
         private final Label medianLabel = new Label();
+        private final Label subjectLabel = new Label();
         private final Line baseline = new Line();
 
         private final List<Rectangle> bars = new ArrayList<>();
@@ -298,8 +300,10 @@ public final class StatChart extends VBox {
             baseline.getStyleClass().add("chart-baseline");
             meanMarker.getStyleClass().addAll("stat-marker", "mean");
             medianMarker.getStyleClass().addAll("stat-marker", "median");
+            subjectMarker.getStyleClass().addAll("stat-marker", "subject");
             meanLabel.getStyleClass().addAll("marker-label", "mean");
             medianLabel.getStyleClass().addAll("marker-label", "median");
+            subjectLabel.getStyleClass().addAll("marker-label", "subject");
 
             Tooltip.install(band, bandTip);
 
@@ -320,7 +324,8 @@ public final class StatChart extends VBox {
 
             getChildren().add(band);
             getChildren().addAll(bars);
-            getChildren().addAll(baseline, meanMarker, medianMarker, meanLabel, medianLabel);
+            getChildren().addAll(baseline, meanMarker, medianMarker, subjectMarker,
+                    meanLabel, medianLabel, subjectLabel);
             getChildren().addAll(bucketLabels);
             for (javafx.scene.Node node : getChildren()) {
                 node.setManaged(false);
@@ -436,6 +441,23 @@ public final class StatChart extends VBox {
             medianLabel.setText(logic.medianLabel());
             medianLabel.autosize();
             medianLabel.relocate(clampLabelX(medianX, medianLabel.getWidth()), 15);
+
+            // REPORTS A2: one person's own score inside the class distribution, drawn only
+            // when the data carries one (the principal's by-student report; every other
+            // caller marks nothing and these nodes stay hidden).
+            boolean marked = logic.hasSubjectScore();
+            subjectMarker.setVisible(marked);
+            subjectLabel.setVisible(marked);
+            if (marked) {
+                double subjectX = LEFT_GUTTER + logic.subjectX(plotWidth);
+                subjectMarker.setStartX(subjectX);
+                subjectMarker.setEndX(subjectX);
+                subjectMarker.setStartY(top);
+                subjectMarker.setEndY(base);
+                subjectLabel.setText(logic.subjectLabel());
+                subjectLabel.autosize();
+                subjectLabel.relocate(clampLabelX(subjectX, subjectLabel.getWidth()), 28);
+            }
         }
 
         /** Keeps a marker's label inside the frame when its marker sits near an edge. */

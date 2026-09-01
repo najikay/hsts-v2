@@ -102,6 +102,54 @@ class ScreenshotTourTest extends ApplicationTest {
                 {Routes.DATA, "principal-data"},
                 {Routes.REPORTS, "reports"},
         });
+        captureByStudentReport();
+    }
+
+    /**
+     * REPORTS A2: the by-student view with her scores and the histogram marker, captured
+     * through the real segments and the real popup, as the principal.
+     */
+    private void captureByStudentReport() throws Exception {
+        interact(() -> {
+            Stage stage = new Stage();
+            new ClientApp().start(stage);
+            stage.setWidth(1280);
+            stage.setHeight(800);
+        });
+        WaitForAsyncUtils.waitForFxEvents();
+        ScreenManager manager = ScreenManager.getInstance();
+        ConnectWiring.Wiring wiring = ConnectWiring.forEndpoint(
+                new ServerEndpoint("127.0.0.1", PORT), manager.eventBus(), null);
+        interact(() -> {
+            manager.setClient(wiring.client());
+            manager.setDispatcher(wiring.dispatcher());
+            wiring.dispatcher().setPushListener(new PushEventBridge(manager.eventBus()));
+        });
+        wiring.client().connect();
+        Message answer = wiring.dispatcher()
+                .send(Verb.LOGIN, new LoginRequest("principal.avia", "demo123")).get();
+        interact(() -> ShellBoot.enter(manager, (LoginResult) answer.getPayload()));
+        settle();
+        interact(() -> manager.navigator().navigate(Routes.REPORTS.id(), NavParams.empty()));
+        settle();
+        // The real segment, then a real student from the real popup.
+        clickOn((javafx.scene.control.ToggleButton) manager.scene().getRoot()
+                .lookupAll(".toggle-button").stream()
+                .filter(node -> node instanceof javafx.scene.control.ToggleButton toggle
+                        && "By student".equalsIgnoreCase(toggle.getText()))
+                .findFirst().orElseThrow());
+        settle();
+        clickOn(manager.scene().getRoot().lookup(".reports-subject-picker"));
+        WaitForAsyncUtils.waitForFxEvents();
+        clickOn(lookup(".list-cell").queryAll().stream()
+                .filter(node -> node instanceof javafx.scene.control.ListCell<?> cell
+                        && cell.getText() != null && cell.getText().startsWith("Noa"))
+                .findFirst().orElseThrow());
+        settle();
+        snap(manager, "reports-by-student");
+        wiring.dispatcher().send(Verb.LOGOUT, null).get();
+        wiring.client().disconnect();
+        FxTestHarness.resetGlobalState();
     }
 
     private void tourAs(String username, Object[][] stops) throws Exception {

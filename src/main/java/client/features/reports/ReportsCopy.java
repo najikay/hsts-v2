@@ -59,6 +59,23 @@ public final class ReportsCopy {
     /** The style class the print-friendly layout adds to the screen root (E15.4). */
     public static final String PRINT_STYLE_CLASS = "reports-print";
 
+    /** REPORTS A2: the by-student heading's explanation, so the screen says what it shows. */
+    public static final String BY_STUDENT_NOTE =
+            "Her score per sitting, beside the class distribution it landed in. "
+                    + "Her marked papers stay on her own screen.";
+
+    /** REPORTS A2: the by-student column heading. */
+    public static final String HER_SCORE_COLUMN = "Her score";
+
+    /**
+     * @param score her approved score on this sitting, or {@code null}
+     * @return "60", or "-" for a sitting whose grade is not approved yet: unpublished stays
+     *         unpublished, on the principal's screen too
+     */
+    public static String herScore(Integer score) {
+        return score == null ? "-" : String.valueOf(score);
+    }
+
     /** The one line that says what the whole screen is showing, above the table. */
     public static final String ROWS_TABLE_TITLE = "Closed sittings";
 

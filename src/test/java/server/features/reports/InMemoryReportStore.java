@@ -54,6 +54,7 @@ final class InMemoryReportStore implements ReportStore, ReportData {
     private final Map<String, CourseSummary> courses = new LinkedHashMap<>();
     private final Map<Long, Sitting> sittings = new LinkedHashMap<>();
     private final Map<Long, Set<Long>> satBy = new LinkedHashMap<>();
+    private final Map<Long, Map<Long, Integer>> approvedScores = new LinkedHashMap<>();
     private final Map<Long, Integer> participants = new LinkedHashMap<>();
     private final Map<String, SchoolExam> examCatalogue = new LinkedHashMap<>();
 
@@ -187,6 +188,17 @@ final class InMemoryReportStore implements ReportStore, ReportData {
     @Override
     public Optional<PersonRef> student(long studentId) {
         return Optional.ofNullable(students.get(studentId));
+    }
+
+    @Override
+    public Map<Long, Integer> approvedScoresByStudent(long studentId) {
+        return approvedScores.getOrDefault(studentId, Map.of());
+    }
+
+    /** Fixture: records her approved effective score on one sitting (REPORTS A2). */
+    void approvedScore(long executionId, long studentId, int score) {
+        approvedScores.computeIfAbsent(studentId, id -> new LinkedHashMap<>())
+                .put(executionId, score);
     }
 
     @Override

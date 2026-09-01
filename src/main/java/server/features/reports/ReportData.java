@@ -123,6 +123,12 @@ public interface ReportData {
      */
     List<ExecutionReport> executionsByStudent(long studentId);
 
+    /**
+     * Her approved effective score per sitting (REPORTS A2). Consumed only by the
+     * by-student strategy; every other dimension never asks.
+     */
+    Map<Long, Integer> approvedScoresByStudent(long studentId);
+
     // ===================== Shared by every dimension =====================
 
     /**

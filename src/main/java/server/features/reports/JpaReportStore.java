@@ -44,6 +44,7 @@ public final class JpaReportStore implements ReportStore {
     private final ExecutionRepository executions = new ExecutionRepository();
     private final AttemptRepository attempts = new AttemptRepository();
     private final UserRepository users = new UserRepository();
+    private final server.db.repos.GradeRepository grades = new server.db.repos.GradeRepository();
     private final CourseRepository courseRepository = new CourseRepository();
     private final ExamRepository exams = new ExamRepository();
 
@@ -110,6 +111,11 @@ public final class JpaReportStore implements ReportStore {
         @Override
         public List<ExecutionReport> executionsByStudent(long studentId) {
             return executions.findReportRowsByStudent(session, studentId);
+        }
+
+        @Override
+        public Map<Long, Integer> approvedScoresByStudent(long studentId) {
+            return grades.findApprovedScoresByStudent(session, studentId);
         }
 
         @Override

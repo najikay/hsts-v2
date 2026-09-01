@@ -44,9 +44,24 @@ public record ReportRow(long executionId,
                         Instant openAt,
                         Instant closeAt,
                         int participants,
-                        ResultStatistics statistics) implements Serializable {
+                        ResultStatistics statistics,
+                        Integer subjectScore) implements Serializable {
 
     private static final long serialVersionUID = 1L;
+
+    /**
+     * REPORTS contract A2 (2026-09-01): the subject's own approved score on this sitting,
+     * filled ONLY for the by-student dimension and {@code null} everywhere else - including
+     * a by-student row for a sitting whose grade is not yet approved, so an unpublished
+     * grade stays unpublished on the principal's screen too. The nine-argument constructor
+     * below keeps every pre-A2 caller compiling and means "no subject score".
+     */
+    public ReportRow(long executionId, String code4, String examName, String courseCode,
+                     String courseName, Instant openAt, Instant closeAt, int participants,
+                     ResultStatistics statistics) {
+        this(executionId, code4, examName, courseCode, courseName, openAt, closeAt,
+                participants, statistics, null);
+    }
 
     /**
      * @throws NullPointerException when the statistics or either instant is missing, which

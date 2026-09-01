@@ -95,6 +95,10 @@ public final class ReportsView extends AbstractScreen {
             ReportsCopy.NOTHING_PICKED.title(), ReportsCopy.NOTHING_PICKED.hint());
     private final DataTable<ReportRow> table = new DataTable<>();
     private final StatChart chart = new StatChart();
+    /** REPORTS A2: her own score, shown only in the by-student dimension. */
+    private final TableColumn<ReportRow, String> herScoreColumn =
+            new TableColumn<>(ReportsCopy.HER_SCORE_COLUMN);
+    private final Label byStudentNote = new Label(ReportsCopy.BY_STUDENT_NOTE);
 
     private ReportsSession session;
     private boolean selecting;
@@ -143,6 +147,9 @@ public final class ReportsView extends AbstractScreen {
         table.table().setPrefHeight(400);
         VBox content = new VBox(14, new VBox(2, title, subtitle), buildPickerRow(), error,
                 heading, summaryCards, participants, comparisonHint, table, chart);
+        byStudentNote.getStyleClass().addAll("small", "muted");
+        byStudentNote.setWrapText(true);
+        content.getChildren().add(content.getChildren().indexOf(heading) + 1, byStudentNote);
         content.getStyleClass().add("reports-content");
         javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(content);
         scroll.setFitToWidth(true);
@@ -214,6 +221,10 @@ public final class ReportsView extends AbstractScreen {
         table.title(ReportsCopy.ROWS_TABLE_TITLE);
         table.column("Sitting", ReportsCopy::rowLabel);
         table.column("Date", row -> ReportsCopy.rowDate(row.openAt(), ZONE));
+        herScoreColumn.setCellValueFactory(cell -> new javafx.beans.property.SimpleStringProperty(
+                ReportsCopy.herScore(cell.getValue().subjectScore())));
+        herScoreColumn.getStyleClass().add("numeric");
+        table.column(herScoreColumn);
         table.column(numberColumn("Mean", row -> row.statistics().mean()));
         table.column(numberColumn("Median", row -> row.statistics().median()));
         table.column(numberColumn("Sigma", row -> row.statistics().standardDeviation()));
@@ -222,10 +233,10 @@ public final class ReportsView extends AbstractScreen {
         // F-9: sitting labels and dates are the two that truncated at the default
         // window size; the five statistics columns need far less room than an even
         // split gave them.
-        table.columnWidths(300, 150, 100, 100, 100, 130, 130);
+        table.columnWidths(300, 150, 110, 100, 100, 100, 130, 120);
         // UI wave 2: mean, median, sigma, pass rate and participants are all
         // numbers, and a column of them that does not line up is unreadable.
-        table.numericColumns(2, 3, 4, 5, 6);
+        table.numericColumns(2, 3, 4, 5, 6, 7);
         // One node, re-worded per situation: three different facts share the panel, and
         // swapping nodes on every render would churn the scene graph for no reason.
         table.emptyState(tableEmpty);
@@ -303,6 +314,9 @@ public final class ReportsView extends AbstractScreen {
 
         heading.setText(session.heading());
         show(heading, !session.heading().isEmpty());
+        boolean byStudent = session.dimension() == ReportDimension.BY_STUDENT;
+        herScoreColumn.setVisible(byStudent);
+        show(byStudentNote, byStudent && !session.heading().isEmpty());
     }
 
     private void renderSummary() {

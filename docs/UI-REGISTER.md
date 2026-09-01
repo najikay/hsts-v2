@@ -696,3 +696,8 @@ five new entries, one reopening.
 **Root cause:** U-71's height floors mean the reports column can be taller than a short window, and the column had no scroll container, so the chart's bottom was simply clipped.
 **Fix:** the page scrolls (the editor-scroll idiom); the table trades Vgrow for a real 400px preferred height, its own virtualisation keeping long lists cheap; the U-71 floors stand.
 **Status:** `DONE` - reports suites and both truncation-guard window sizes green.
+
+### U-90 · FUNCTIONAL · by-student report now shows her own scores (ruling reversed)
+**In Naji's words:** "changing the student gives the result of the students in the classes he's in... the UI tries to tell a different story and the clash comes out as something is wrong... I'm leaning towards displaying it"
+**Ruling (reversal, dated):** the earlier "no personal score on the principal's wire" ruling over-applied S-26 (which restricts students, not the principal; 7.3.1 grants her all results, 7.3.2.3 asks for the student's own trajectory). REPORTS contract A2: `ReportRow.subjectScore`, filled only for BY_STUDENT, "-" for unapproved. The rows table gains a "Her score" column (visible only in that dimension), the histogram gains an accent "Her score N" marker inside the class distribution, and a subtitle says exactly what the screen shows. Unpublished grades stay invisible here too.
+**Status:** `DONE` (item 1 of the final round)

@@ -65,6 +65,13 @@ public final class ByStudentStrategy implements DimensionStrategy {
                 .orElseGet(List::of);
     }
 
+    @Override
+    public Map<Long, Integer> subjectScores(ReportData data, String subjectId) {
+        return DimensionStrategy.asUserId(subjectId)
+                .map(data::approvedScoresByStudent)
+                .orElseGet(Map::of);
+    }
+
     private static ReportSubject toSubject(PersonRef student, Map<String, Integer> counts) {
         String id = String.valueOf(student.userId());
         return new ReportSubject(id, student.fullName(), student.username(),

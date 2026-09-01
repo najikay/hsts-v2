@@ -107,14 +107,32 @@ class StatChartInteractionTest extends ApplicationTest {
     }
 
     @Test
+    @DisplayName("a subject score draws the accent marker inside the distribution (REPORTS A2)")
+    void subjectScoreDrawsItsMarker() {
+        interact(() -> chart.setData(
+                StatChartData.of(SEEDED_DECILES, 72.5, 72.5, 17.5, 8).withSubjectScore(60)));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(scene.getRoot().lookupAll(".stat-marker").stream()
+                .filter(javafx.scene.Node::isVisible).count())
+                .as("mean, median and her score")
+                .isEqualTo(3);
+        assertThat(labelTexts()).contains("Her score 60");
+    }
+
+    @Test
     @DisplayName("the chart renders ten bars, both markers and the sigma band")
     void rendersTheWholeChart() {
         assertThat(scene.getRoot().lookupAll(".stat-bar"))
                 .as("one bar per decile, empty ranges included")
                 .hasSize(10);
         assertThat(scene.getRoot().lookupAll(".stat-marker"))
-                .as("mean and median")
-                .hasSize(2);
+                .as("mean, median, and the subject marker (hidden without a subject score)")
+                .hasSize(3);
+        assertThat(scene.getRoot().lookupAll(".stat-marker").stream()
+                .filter(javafx.scene.Node::isVisible).count())
+                .as("only mean and median are visible when the data marks nobody")
+                .isEqualTo(2);
         assertThat(scene.getRoot().lookup(".sigma-band")).isNotNull();
         assertThat(labelTexts()).contains("Mean 72.5", "Median 72.5", "0-9", "90-100");
         assertThat(labelTexts())

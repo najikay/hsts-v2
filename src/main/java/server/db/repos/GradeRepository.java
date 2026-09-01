@@ -82,6 +82,35 @@ public final class GradeRepository {
      * @param studentId the student, always the authenticated caller
      * @return approved grades, most recently approved first
      */
+    /**
+     * Her approved score per sitting, for the principal's by-student report (REPORTS A2).
+     *
+     * <p>Effective score: the override when a teacher wrote one, the machine's number
+     * otherwise - the same coalesce every results screen shows. APPROVED only, so an
+     * unpublished grade is as invisible here as it is to the student herself.
+     *
+     * @return executionId to effective score; empty for a student with nothing approved
+     */
+    public java.util.Map<Long, Integer> findApprovedScoresByStudent(Session session,
+                                                                    long studentId) {
+        List<Object[]> rows = session.createQuery("""
+                        select a.executionId, g.finalScore, g.autoScore
+                        from Grade g, ExamAttempt a
+                        where g.attemptId = a.id
+                          and a.studentId = :studentId
+                          and g.status = :status
+                        """, Object[].class)
+                .setParameter("studentId", studentId)
+                .setParameter("status", GradeStatus.APPROVED)
+                .getResultList();
+        java.util.Map<Long, Integer> scores = new java.util.LinkedHashMap<>();
+        for (Object[] row : rows) {
+            Integer finalScore = (Integer) row[1];
+            scores.put((Long) row[0], finalScore != null ? finalScore : (Integer) row[2]);
+        }
+        return scores;
+    }
+
     public List<Grade> findApprovedForStudent(Session session, long studentId) {
         return session.createQuery("""
                         select g from Grade g, ExamAttempt a
