@@ -701,6 +701,8 @@ five new entries, one reopening.
 **In Naji's words:** "changing the student gives the result of the students in the classes he's in... the UI tries to tell a different story and the clash comes out as something is wrong... I'm leaning towards displaying it"
 **Ruling (reversal, dated):** the earlier "no personal score on the principal's wire" ruling over-applied S-26 (which restricts students, not the principal; 7.3.1 grants her all results, 7.3.2.3 asks for the student's own trajectory). REPORTS contract A2: `ReportRow.subjectScore`, filled only for BY_STUDENT, "-" for unapproved. The rows table gains a "Her score" column (visible only in that dimension), the histogram gains an accent "Her score N" marker inside the class distribution, and a subtitle says exactly what the screen shows. Unpublished grades stay invisible here too.
 **Status:** `DONE` (item 1 of the final round)
+**Full-form remodel (2026-09-02, team decision):** the by-student dimension is now a dedicated student report page: hero (monogram, name, her average writ large), her six cards, a new `ScoreTrail` component (her approved scores chronologically; an unapproved sitting breaks the line rather than being bridged - geometry unit-pinned in `ScoreTrailLogicTest`), "Her sittings" with a Vs class column, pooled-class furniture hidden in this dimension only. PRD F9.4 amended; contract untouched beyond A2 (pure client-side composition).
+
 
 ### U-91 · SEED · every seeded notification now deep-links (item 2 of the final round)
 **In Naji's words:** "pre-seeded notifications don't move us to a certain screen when we press them... we might do something a little more nice"

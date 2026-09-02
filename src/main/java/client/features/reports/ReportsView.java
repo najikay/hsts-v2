@@ -99,6 +99,21 @@ public final class ReportsView extends AbstractScreen {
     private final TableColumn<ReportRow, String> herScoreColumn =
             new TableColumn<>(ReportsCopy.HER_SCORE_COLUMN);
     private final Label byStudentNote = new Label(ReportsCopy.BY_STUDENT_NOTE);
+    private final Label studentHeadline = new Label();
+    private final HBox studentCards = new HBox(10);
+    private final HBox studentHero = new HBox(14);
+    private final Label heroMonogram = new Label();
+    private final Label heroName = new Label();
+    private final Label heroDetail = new Label();
+    private final Label heroAverage = new Label();
+    private final Label heroAverageCaption = new Label("Her average");
+    private final client.ui.components.ScoreTrail trail =
+            new client.ui.components.ScoreTrail();
+    private final Label trailTitle = new Label(ReportsCopy.TRAIL_TITLE);
+    private final Label trailCaption = new Label();
+    private final VBox trailCard = new VBox(6);
+    private final TableColumn<ReportRow, String> vsClassColumn =
+            new TableColumn<>("Vs class");
 
     private ReportsSession session;
     private boolean selecting;
@@ -149,7 +164,15 @@ public final class ReportsView extends AbstractScreen {
                 heading, summaryCards, participants, comparisonHint, table, chart);
         byStudentNote.getStyleClass().addAll("small", "muted");
         byStudentNote.setWrapText(true);
-        content.getChildren().add(content.getChildren().indexOf(heading) + 1, byStudentNote);
+        studentHeadline.getStyleClass().add("reports-student-headline");
+        studentCards.getStyleClass().add("reports-summary");
+        studentCards.setAlignment(Pos.CENTER_LEFT);
+        buildStudentHero();
+        int afterHeading = content.getChildren().indexOf(heading) + 1;
+        content.getChildren().add(afterHeading, byStudentNote);
+        content.getChildren().add(afterHeading, trailCard);
+        content.getChildren().add(afterHeading, studentCards);
+        content.getChildren().add(afterHeading, studentHero);
         content.getStyleClass().add("reports-content");
         javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(content);
         scroll.setFitToWidth(true);
@@ -225,6 +248,11 @@ public final class ReportsView extends AbstractScreen {
                 ReportsCopy.herScore(cell.getValue().subjectScore())));
         herScoreColumn.getStyleClass().add("numeric");
         table.column(herScoreColumn);
+        vsClassColumn.setCellValueFactory(cell -> new javafx.beans.property.SimpleStringProperty(
+                ReportsCopy.vsClass(cell.getValue().subjectScore(),
+                        cell.getValue().statistics().mean())));
+        vsClassColumn.getStyleClass().add("numeric");
+        table.column(vsClassColumn);
         table.column(numberColumn("Mean", row -> row.statistics().mean()));
         table.column(numberColumn("Median", row -> row.statistics().median()));
         table.column(numberColumn("Sigma", row -> row.statistics().standardDeviation()));
@@ -233,10 +261,10 @@ public final class ReportsView extends AbstractScreen {
         // F-9: sitting labels and dates are the two that truncated at the default
         // window size; the five statistics columns need far less room than an even
         // split gave them.
-        table.columnWidths(300, 150, 110, 100, 100, 100, 130, 120);
+        table.columnWidths(280, 140, 100, 95, 95, 95, 95, 125, 115);
         // UI wave 2: mean, median, sigma, pass rate and participants are all
         // numbers, and a column of them that does not line up is unreadable.
-        table.numericColumns(2, 3, 4, 5, 6, 7);
+        table.numericColumns(2, 3, 4, 5, 6, 7, 8);
         // One node, re-worded per situation: three different facts share the panel, and
         // swapping nodes on every render would churn the scene graph for no reason.
         table.emptyState(tableEmpty);
@@ -276,6 +304,10 @@ public final class ReportsView extends AbstractScreen {
     private void render() {
         renderPickers();
         renderSummary();
+        // After renderSummary, deliberately: her page hides the pooled-class cards that
+        // renderSummary just showed, and running before it let them pop back (the ordering
+        // bug the first remodel screenshot caught).
+        renderStudentReport(session.dimension() == ReportDimension.BY_STUDENT);
         renderRows();
         renderPrintLayout();
     }
@@ -316,6 +348,7 @@ public final class ReportsView extends AbstractScreen {
         show(heading, !session.heading().isEmpty());
         boolean byStudent = session.dimension() == ReportDimension.BY_STUDENT;
         herScoreColumn.setVisible(byStudent);
+        vsClassColumn.setVisible(byStudent);
         show(byStudentNote, byStudent && !session.heading().isEmpty());
     }
 
@@ -336,6 +369,47 @@ public final class ReportsView extends AbstractScreen {
         String hint = any ? ReportsCopy.comparisonHint(session.summary()) : "";
         comparisonHint.setText(hint);
         show(comparisonHint, !hint.isEmpty());
+    }
+
+    /**
+     * The by-student remodel (U-90 full form): in that dimension the screen IS her page -
+     * hero, her cards, her trail, her sittings - and the pooled-class furniture yields.
+     * Everywhere else the generic composition renders untouched.
+     */
+    private void renderStudentReport(boolean byStudent) {
+        java.util.Optional<ReportSubject> subject = session.selectedSubject();
+        boolean showing = byStudent && subject.isPresent();
+        if (showing) {
+            heroMonogram.setText(monogramOf(subject.get().label()));
+            heroName.setText(subject.get().label());
+            heroDetail.setText(subject.get().detail());
+            heroAverage.setText(session.heroAverage());
+            show(heroAverageCaption, !session.heroAverage().isEmpty());
+        }
+        show(studentHero, showing);
+        List<ReportsCopy.SummaryCard> herCards = session.studentCards();
+        studentCards.getChildren().clear();
+        for (ReportsCopy.SummaryCard card : herCards) {
+            studentCards.getChildren().add(cardNode(card));
+        }
+        show(studentCards, showing && !herCards.isEmpty());
+        trail.setStops(session.trailStops());
+        boolean trailShown = showing && trail.isDrawable();
+        trailCaption.setText(trailShown ? ReportsCopy.trailCaption(
+                session.trailStops().size(),
+                session.trailStops().stream().filter(stop -> stop.score() != null).count())
+                : "");
+        show(trailCard, trailShown);
+        // Her page hides the pooled-class cards; the generic dimensions keep whatever
+        // renderSummary decided, which ran just before this.
+        if (byStudent) {
+            show(summaryCards, false);
+            show(participants, false);
+            show(comparisonHint, false);
+        }
+        table.retitle(byStudent ? ReportsCopy.HER_SITTINGS_TITLE : ReportsCopy.ROWS_TABLE_TITLE);
+        studentHeadline.setText("");
+        show(studentHeadline, false);
     }
 
     private void renderRows() {
@@ -380,6 +454,42 @@ public final class ReportsView extends AbstractScreen {
         // of numbers about nobody.
         show(segmented, !printing);
         show(printToggle, true);
+    }
+
+    /**
+     * The student report's hero (U-90 full form): who she is on the left, her average writ
+     * large on the right. The avatar reuses the shell's own monogram treatment, so the page
+     * reads as native rather than as a bolt-on - the "actual remodel" the ruling asked for.
+     */
+    private void buildStudentHero() {
+        heroMonogram.getStyleClass().add("label");
+        javafx.scene.layout.StackPane avatar = new javafx.scene.layout.StackPane(heroMonogram);
+        avatar.getStyleClass().add("hsts-avatar");
+        avatar.setMinSize(44, 44);
+        avatar.setMaxSize(44, 44);
+        heroName.getStyleClass().add("reports-hero-name");
+        heroDetail.getStyleClass().addAll("small", "muted");
+        Label kicker = client.ui.components.Kicker.label(ReportsCopy.STUDENT_KICKER);
+        VBox identity = new VBox(2, kicker, heroName, heroDetail);
+        heroAverage.getStyleClass().add("reports-hero-average");
+        heroAverageCaption.getStyleClass().addAll("small", "muted");
+        VBox average = new VBox(0, heroAverage, heroAverageCaption);
+        average.setAlignment(Pos.CENTER_RIGHT);
+        studentHero.getChildren().addAll(avatar, identity, Buttons.spacer(), average);
+        studentHero.setAlignment(Pos.CENTER_LEFT);
+        studentHero.getStyleClass().add("reports-student-hero");
+
+        trailTitle.getStyleClass().add("trail-title");
+        trailCaption.getStyleClass().addAll("small", "muted");
+        trailCard.getChildren().addAll(trailTitle, trail, trailCaption);
+        trailCard.getStyleClass().add("reports-trail-card");
+    }
+
+    private static String monogramOf(String fullName) {
+        String[] parts = fullName.trim().split("\\s+");
+        String first = parts[0].isEmpty() ? "?" : parts[0].substring(0, 1);
+        String last = parts.length > 1 ? parts[parts.length - 1].substring(0, 1) : "";
+        return (first + last).toUpperCase(java.util.Locale.ENGLISH);
     }
 
     private static VBox cardNode(ReportsCopy.SummaryCard card) {

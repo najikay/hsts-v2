@@ -353,6 +353,48 @@ public final class ReportsSession {
      *
      * @return what to hand {@code StatChart.setData}
      */
+    /**
+     * Her cards, for the dedicated student report (U-90 full form): present only in the
+     * by-student dimension with rows on screen, empty everywhere else so the view needs no
+     * dimension branch of its own.
+     */
+    public List<ReportsCopy.SummaryCard> studentCards() {
+        if (dimension != ReportDimension.BY_STUDENT) {
+            return List.of();
+        }
+        return ReportsCopy.studentCards(rows());
+    }
+
+    /** The student report's headline, or empty outside the by-student dimension. */
+    public String studentHeadline() {
+        if (dimension != ReportDimension.BY_STUDENT || selectedSubject == null) {
+            return "";
+        }
+        return ReportsCopy.studentHeadline(selectedSubject);
+    }
+
+    /** The trail's stops, chronological, one per sitting she sat (U-90 full form). */
+    public List<client.ui.components.logic.ScoreTrailLogic.Stop> trailStops() {
+        if (dimension != ReportDimension.BY_STUDENT) {
+            return List.of();
+        }
+        return rows().stream()
+                .map(row -> new client.ui.components.logic.ScoreTrailLogic.Stop(
+                        row.code4(), row.subjectScore()))
+                .toList();
+    }
+
+    /** The hero's big number: her average across graded sittings, or empty. */
+    public String heroAverage() {
+        List<ReportRow> graded = rows().stream()
+                .filter(row -> row.subjectScore() != null).toList();
+        if (dimension != ReportDimension.BY_STUDENT || graded.isEmpty()) {
+            return "";
+        }
+        double mean = graded.stream().mapToInt(ReportRow::subjectScore).average().orElse(0);
+        return ReportsCopy.number(mean);
+    }
+
     public StatChartData chartData() {
         return selectedRow()
                 .map(row -> StatChartData.of(row.statistics().deciles(), row.statistics().mean(),

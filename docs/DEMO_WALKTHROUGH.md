@@ -403,9 +403,13 @@ Opens now, Closes + 10.
       all along, and the pooled mean differs from the mean of the means."*
 - [ ] 12.2 **By course** → Algebra 11: the same three; Java 21 → `6120` (and `7390` once Avi
       approves it in mark 13); Biology 31 → `7745`.
-- [ ] 12.3 **By student** → `noa.friedman`: three sittings in three subjects, class figures
-      only, **her own score nowhere**. *Say: "A student's personal score has no field in a
-      report row."*
+- [ ] 12.3 **By student** → `noa.friedman`: the screen becomes **her report**: the hero with
+      her name and her average, her cards (average, pass rate, best and toughest sitting, vs
+      her classes), the **score trail** of her grades over time, and Her sittings with her
+      score and a vs-class delta beside each class's statistics; the histogram marks her
+      inside each distribution. *Say: "The spec asks how her grades change across her exams;
+      this page answers exactly that. An unapproved grade shows as a dash and breaks the
+      trail - unpublished stays unpublished, on the principal's screen too."*
 - [ ] 12.4 Cross-check: `4821` reads **72.5 / 72.5 / 17.5**, identical to the teacher's
       histogram. **Print layout** → exit.
 - [ ] 12.5 *(Q&A, mark 19)* *"A new report dimension is one Strategy class and a menu entry;

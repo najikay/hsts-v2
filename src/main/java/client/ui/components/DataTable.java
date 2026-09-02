@@ -483,6 +483,22 @@ public final class DataTable<T> extends VBox {
     }
 
     /**
+     * Changes the title in place (U-90 full form): the by-student remodel renames this table
+     * per render, and {@link #title(String)} adds a label rather than replacing one, so calling
+     * it on every render stacked them. This updates the existing title label instead, and adds
+     * one only if the table was built without a title.
+     */
+    public void retitle(String text) {
+        for (javafx.scene.Node node : toolbar.getChildren()) {
+            if (node instanceof Label label && label.getStyleClass().contains("table-title")) {
+                label.setText(text);
+                return;
+            }
+        }
+        title(text);
+    }
+
+    /**
      * Puts the row count on the toolbar without a title (2026-08-30, live session, U-40).
      *
      * <p>The count used to arrive as part of {@link #title(String)}, so a screen dropping a

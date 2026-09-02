@@ -432,3 +432,9 @@ access to all results as entered, and 7.3.2.3 asks how grades change "בין ה�
 תלמידה" - her trajectory, which class means cannot answer. The rows still carry the class
 statistics; what changed is that the one person the report is about is now visible inside them.
 Student-facing wire types are untouched and the leak guards still hold.
+
+**A2 consumption note (2026-09-02, U-90 full form).** The by-student view was remodelled into a
+dedicated student report (hero, her cards, a score trail, "Her sittings"). This is client-side
+COMPOSITION over A2's one field: no further wire surface was added, and the other dimensions'
+payloads and rendering are untouched. The trail draws only approved scores and breaks across an
+unapproved sitting - the same rule A2 states for the column.

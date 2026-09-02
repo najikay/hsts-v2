@@ -241,6 +241,91 @@ public final class ReportsCopy {
      * @param value the figure itself
      * @param hint  one short line of context, never empty
      */
+    /** The student report's kicker over the hero (U-90 full form). */
+    public static final String STUDENT_KICKER = "Student report";
+
+    /** The trail card's title. */
+    public static final String TRAIL_TITLE = "Her scores over time";
+
+    /** The by-student table title, replacing the generic one on her page. */
+    public static final String HER_SITTINGS_TITLE = "Her sittings";
+
+    /**
+     * The trail's caption: honest about holes. "3 sittings, all graded" or
+     * "4 sittings, 3 graded, 1 awaiting approval".
+     */
+    public static String trailCaption(int stops, long graded) {
+        if (graded == stops) {
+            return stops + " " + (stops == 1 ? "sitting" : "sittings") + ", all graded";
+        }
+        return stops + " sittings, " + graded + " graded, " + (stops - graded)
+                + " awaiting approval";
+    }
+
+    /**
+     * The by-student dimension's own headline: who this report is about (U-90 full form).
+     */
+    public static String studentHeadline(ReportSubject subject) {
+        Objects.requireNonNull(subject, "subject");
+        return subject.label() + " · " + subject.detail() + " · student report";
+    }
+
+    /**
+     * Her own cards, computed from the rows in hand (U-90 full form). Sittings without an
+     * approved grade are counted and excluded from her averages, and the cards say so - an
+     * unpublished grade stays out of arithmetic exactly as it stays off the screen.
+     */
+    public static List<SummaryCard> studentCards(List<ReportRow> rows) {
+        Objects.requireNonNull(rows, "rows");
+        List<ReportRow> graded = rows.stream().filter(r -> r.subjectScore() != null).toList();
+        if (graded.isEmpty()) {
+            return List.of();
+        }
+        double herAverage = graded.stream().mapToInt(ReportRow::subjectScore).average().orElse(0);
+        long passed = graded.stream()
+                .filter(r -> r.subjectScore() >= ResultStatistics.PASS_MARK).count();
+        ReportRow best = graded.stream()
+                .max(java.util.Comparator.comparingInt(ReportRow::subjectScore)).orElseThrow();
+        ReportRow toughest = graded.stream()
+                .min(java.util.Comparator.comparingInt(ReportRow::subjectScore)).orElseThrow();
+        double vsClass = graded.stream()
+                .mapToDouble(r -> r.subjectScore() - r.statistics().mean()).average().orElse(0);
+
+        List<SummaryCard> cards = new ArrayList<>(6);
+        cards.add(new SummaryCard("Sittings graded",
+                graded.size() + (graded.size() == rows.size() ? "" : " of " + rows.size()),
+                graded.size() == rows.size() ? "every sitting she sat is approved"
+                        : (rows.size() - graded.size()) + " awaiting approval"));
+        cards.add(new SummaryCard("Her average", number(herAverage), "across her graded sittings"));
+        cards.add(new SummaryCard("Her pass rate", passed + " of " + graded.size(),
+                "pass mark " + ResultStatistics.PASS_MARK));
+        cards.add(new SummaryCard("Best sitting", String.valueOf(best.subjectScore()),
+                rowLabel(best)));
+        cards.add(new SummaryCard("Toughest sitting", String.valueOf(toughest.subjectScore()),
+                rowLabel(toughest)));
+        cards.add(new SummaryCard("Vs her classes", signedNumber(vsClass),
+                "her score against each sitting's class average"));
+        return List.copyOf(cards);
+    }
+
+    /** "+10.5" / "-3.2" / "0": the sign is the story on a comparison card. */
+    static String signedNumber(double value) {
+        String plain = number(Math.abs(value));
+        if (plain.equals("0")) {
+            return "0";
+        }
+        return (value > 0 ? "+" : "-") + plain;
+    }
+
+    /**
+     * @param herScore her approved score on the row, or null
+     * @param classMean the row's class average
+     * @return "+17.5" style delta for the Vs class column, "-" while unapproved
+     */
+    public static String vsClass(Integer herScore, double classMean) {
+        return herScore == null ? "-" : signedNumber(herScore - classMean);
+    }
+
     public record SummaryCard(String label, String value, String hint) {
 
         public SummaryCard {

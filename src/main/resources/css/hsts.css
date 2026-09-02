@@ -1579,6 +1579,23 @@
 }
 .marker-label.median { -fx-text-fill: -hsts-text; }
 .marker-label.subject { -fx-text-fill: -hsts-accent; }
+/* U-90 full form: the student report's own headline over her cards. */
+.reports-student-headline { -fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -hsts-accent; }
+/* U-90 full form: the dedicated student report's hero and trail. */
+.reports-student-hero { -fx-background-color: -hsts-card; -fx-background-radius: 12px;
+    -fx-padding: 14px 18px; -fx-border-color: -hsts-border; -fx-border-radius: 12px; }
+.reports-hero-name { -fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.reports-hero-average { -fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: -hsts-accent; }
+.reports-trail-card { -fx-background-color: -hsts-card; -fx-background-radius: 12px;
+    -fx-padding: 12px 16px; -fx-border-color: -hsts-border; -fx-border-radius: 12px; }
+.trail-title { -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.trail-line { -fx-stroke: -hsts-accent; -fx-stroke-width: 2; -fx-fill: transparent; }
+.trail-dot.passed { -fx-fill: -hsts-accent; }
+.trail-dot.failed { -fx-fill: -hsts-danger; }
+.trail-score { -fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: -hsts-text; }
+.trail-stop { -fx-font-size: 10px; -fx-text-fill: -hsts-faint; }
+.trail-pass-line { -fx-stroke: -hsts-border; -fx-stroke-dash-array: 4 4; }
+.trail-pass-label { -fx-font-size: 9px; -fx-text-fill: -hsts-faint; }
 
 /* Grid, baseline and axis text. The baseline is heavier than the gridlines
    because zero is not just another tick: it is the promise the axis is honest. */
