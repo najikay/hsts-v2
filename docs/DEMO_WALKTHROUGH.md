@@ -45,6 +45,7 @@ One session per user, so every account change is **Sign out** first (profile men
 | Java 21 co-teachers | `avi.mizrahi`, `tamar.shani` | grading waiting on `7390` |
 | Coordinator, Mathematics, teaches nothing | `rina.barak` | exam `101201` waits for her |
 | Coordinator, CS, also teaches Databases 22 | `michal.sharon` | self-approval mark |
+| Teacher who also coordinates her subject | `galit.stern` (Biology 31) | owns frozen sitting `7745`, used by marks 11 and 12 |
 | Teacher who also coordinates her subject | `orly.navon` (Chemistry 41) | course with no exam yet |
 | Student, Algebra + Java + Databases + Biology | `maya.levi`, ID `374301851` | the demo student |
 | Student, Algebra + Java | `omer.katz`, ID `361489206` | the second student |
