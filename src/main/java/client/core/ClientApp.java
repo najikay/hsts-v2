@@ -70,6 +70,18 @@ public class ClientApp extends Application {
         ScreenManager manager = ScreenManager.getInstance();
         manager.init(primaryStage, eventBus, themeManager);
 
+        // 2026-09-02, U-94: ThemeMode.SYSTEM follows the OS light/dark setting, and
+        // ThemeState.refreshSystem() is built to re-probe "on window focus" - but nothing
+        // was calling it, so SYSTEM probed once at launch and never again, which read as
+        // "System does nothing". Wired here: regaining focus re-checks the OS, and in SYSTEM
+        // mode a flip fires the theme event and re-applies every scene. Harmless in the
+        // explicit modes (the probe is recorded, nothing on screen changes).
+        primaryStage.focusedProperty().addListener((obs, was, focused) -> {
+            if (focused) {
+                themeState.refreshSystem();
+            }
+        });
+
         if (args.gallery()) {
             log.info("Booting the design-system gallery (--gallery)");
             manager.showStandalone(new GalleryScreen(themeState));

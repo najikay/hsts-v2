@@ -247,10 +247,12 @@ class QuestionEditorInteractionTest extends ApplicationTest {
         javafx.scene.control.ComboBox<Difficulty> box = (javafx.scene.control.ComboBox<Difficulty>)
                 scene.getRoot().lookup(".question-difficulty");
         assertThat(box).isNotNull();
-        assertThat(box.getValue()).isEqualTo(Difficulty.HARD);
-        assertThat(box.getButtonCell().getText())
-                .as("the value was in the session and the selection model, and the custom "
-                        + "button cell showed nothing until the skin existed")
+        assertThat(box.getValue())
+                .as("the value is set from the session on the first render (U-96)")
+                .isEqualTo(Difficulty.HARD);
+        assertThat(box.getConverter().toString(box.getValue()))
+                .as("and the converter renders it, so the button shows text from the jump "
+                        + "with no re-drive and no reopen (U-96)")
                 .isEqualTo(BankCopy.difficulty(Difficulty.HARD));
         assertThat(labelTexts(scene)).doesNotContain(QuestionEditorCopy.UNSAVED);
     }

@@ -408,8 +408,9 @@ class BotInteractionTest extends ApplicationTest {
                 .contains("1 source");
 
         assertThat(buttonsIn(view.courseCardsBox().getChildren().get(0)))
-                .as("a course with a bot is managed")
-                .contains(BotCopy.MANAGE);
+                .as("U-95: a bot card carries no Manage button - the card click opens the "
+                        + "detail pane where every action lives")
+                .doesNotContain(BotCopy.MANAGE);
         assertThat(buttonsIn(view.courseCardsBox().getChildren().get(1)))
                 .as("a course without one is offered the create, on its own card")
                 .contains(BotCopy.CREATE_BOT);
@@ -518,8 +519,10 @@ class BotInteractionTest extends ApplicationTest {
         Node withoutBot = view.courseCardsBox().getChildren().get(1);
 
         assertThat(buttonsIn(withBot))
-                .as("the manager is a list, so which bot is answered by where the button is")
-                .contains(BotCopy.MANAGE, BotCopy.DELETE_BOT);
+                .as("U-95: Manage is gone (the card click opens the detail pane); Delete "
+                        + "stays as this card's distinct destructive action")
+                .contains(BotCopy.DELETE_BOT)
+                .doesNotContain(BotCopy.MANAGE);
         assertThat(buttonsIn(withoutBot))
                 .as("a course with no bot is offered the create and nothing to destroy")
                 .contains(BotCopy.CREATE_BOT)

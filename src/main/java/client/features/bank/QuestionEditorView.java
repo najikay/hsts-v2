@@ -166,57 +166,8 @@ public final class QuestionEditorView extends AbstractScreen {
         buildForm();
         openLock(detail);
         render();
-        redriveDifficulty();
     }
 
-    /**
-     * U-56 (2026-08-31): a value applied before the ComboBox had a skin left its custom button
-     * cell blank, so an Edit opened with the difficulty in the session and nothing in the box.
-     * Once the screen is shown, the value is cleared and set again on the next pulse, which
-     * drives the button cell through the value property with the skin in place. Silent to the
-     * session: the guard keeps the round trip from marking the form dirty.
-     */
-    private void redriveDifficulty() {
-        Difficulty value = session.difficulty();
-        if (value == null) {
-            return;
-        }
-        // 2026-09-01, U-92 (item 3 of the final round): "one pulse later" was a guess about
-        // when the skin exists, and on real Windows the screen can still be outside the
-        // scene at that pulse - the box opened blank there while the headless harness,
-        // which attaches scenes eagerly, stayed green. The re-drive now fires on the fact
-        // itself: when the box is IN a scene (immediately if it already is, else once, the
-        // moment it gets one), plus one pulse for the skin the scene brings.
-        if (difficultyBox.getScene() != null) {
-            redriveNow(value);
-            return;
-        }
-        javafx.beans.value.ChangeListener<javafx.scene.Scene> once =
-                new javafx.beans.value.ChangeListener<>() {
-                    @Override
-                    public void changed(
-                            javafx.beans.value.ObservableValue<? extends javafx.scene.Scene> obs,
-                            javafx.scene.Scene was, javafx.scene.Scene now) {
-                        if (now != null) {
-                            difficultyBox.sceneProperty().removeListener(this);
-                            redriveNow(value);
-                        }
-                    }
-                };
-        difficultyBox.sceneProperty().addListener(once);
-    }
-
-    private void redriveNow(Difficulty value) {
-        javafx.application.Platform.runLater(() -> {
-            filling = true;
-            try {
-                difficultyBox.setValue(null);
-                difficultyBox.setValue(value);
-            } finally {
-                filling = false;
-            }
-        });
-    }
 
     /**
      * Takes the edit lock on the question being edited (E6.14, E18.5).
@@ -361,8 +312,23 @@ public final class QuestionEditorView extends AbstractScreen {
 
         difficultyBox.getStyleClass().add("question-difficulty");
         difficultyBox.getItems().setAll(Difficulty.values());
-        difficultyBox.setCellFactory(view -> new DifficultyCell());
-        difficultyBox.setButtonCell(new DifficultyCell());
+        // 2026-09-02, U-96: a StringConverter, not a custom button cell. The old button cell
+        // (U-56/U-92) rendered only when JavaFX chose to refresh it, which raced the skin on
+        // real Windows - the box opened blank until an open/discard/reopen forced a refresh.
+        // A converter is consulted by the default button cell's own text binding on every
+        // setValue, so the difficulty shows from the first render with no re-drive and no
+        // timing hack. It renders the popup list too, so DifficultyCell is gone entirely.
+        difficultyBox.setConverter(new javafx.util.StringConverter<Difficulty>() {
+            @Override
+            public String toString(Difficulty difficulty) {
+                return difficulty == null ? null : BankCopy.difficulty(difficulty);
+            }
+
+            @Override
+            public Difficulty fromString(String label) {
+                return null;
+            }
+        });
         difficultyField.required();
 
         // The picker is built over the session's own logic, which was loaded at construction.
@@ -477,11 +443,8 @@ public final class QuestionEditorView extends AbstractScreen {
                         .ifPresent(course -> courseBox.getSelectionModel().select(course));
             }
             if (session.difficulty() != null) {
-                // 2026-08-31, U-56: select() alone left the button cell blank when the value
-                // was applied before the control had a skin (build runs off-scene), so an
-                // Edit opened with the difficulty set in the session and nothing showing in
-                // the box. setValue drives the button cell through the value property, and
-                // onShow re-applies it once the skin exists.
+                // U-96: setValue plus the converter shows the difficulty from the first
+                // render; no re-drive, no skin race.
                 difficultyBox.setValue(session.difficulty());
             }
         } finally {
@@ -662,11 +625,4 @@ public final class QuestionEditorView extends AbstractScreen {
         }
     }
 
-    private static final class DifficultyCell extends ListCell<Difficulty> {
-        @Override
-        protected void updateItem(Difficulty difficulty, boolean empty) {
-            super.updateItem(difficulty, empty);
-            setText(empty || difficulty == null ? null : BankCopy.difficulty(difficulty));
-        }
-    }
 }

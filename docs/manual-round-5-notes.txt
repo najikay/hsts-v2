@@ -93,3 +93,8 @@ Final round (2026-09-01), items 1-4 from the walkthrough chunk, all fixed and in
 verified live: U-90 by-student scores (ruling reversed, probe + screenshot), U-91 seeded
 notification refs (reseed + wire probe), U-92 difficulty redrive on scene attach (Windows-only
 ghost; final proof on the Windows build), U-93 real question counts in the release picker.
+
+Final round, three more (2026-09-02): U-94 System theme follows OS live (refreshSystem wired to
+window focus; was never called), U-95 bot Manage button removed (card click opens the detail
+pane), U-96 edit-question difficulty shows from the first render (StringConverter replaces the
+racing custom button cell; redrive hacks deleted).

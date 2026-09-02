@@ -720,3 +720,19 @@ five new entries, one reopening.
 **Root cause:** `ReleaseService.options` passed a literal 0 into every option; the label printed a hardcoded number as a fact.
 **Fix:** one grouped count query for the whole list (the approval queue's own `countQuestionsByVersion`), threaded through `ReleaseData`.
 **Status:** `DONE` - verified on the live wire.
+
+### U-94 · FUNCTIONAL · System theme mode now follows the OS live (item T1)
+**In Naji's words:** "system is dark when sun is down, light otherwise, but I didn't see it working, probably not wired"
+**Clarification + fix:** "System" follows the OS light/dark setting (the standard meaning, and what SystemAppearance probes), not a sunrise clock. ThemeState.refreshSystem() was built to re-probe "on window focus" but nothing called it, so SYSTEM probed once at launch and never again. Wired in ClientApp: regaining window focus re-probes, and in SYSTEM mode a flip re-applies every scene. If a time-of-day rule is wanted instead, it is a one-method change - say so.
+**Status:** `DONE`
+
+### U-95 · UX · the bot card's Manage button is gone (item T2)
+**In Naji's words:** "remove the manage button from the bot on teacher's side, it does nothing and we have other buttons that do its job"
+**Fix:** clicking the card already selects the course and fills the detail pane, where every bot action lives; Manage was a second door to that room. Removed. Create stays (the only way to make a bot); Delete stays (its own destructive row).
+**Status:** `DONE` - verified on the live build (card shows Delete, no Manage; detail pane intact).
+
+### U-96 · FUNCTIONAL · edit question shows its difficulty from the first render (item T3, supersedes U-56/U-92)
+**In Naji's words:** "most other questions I had to open then discard then reopen for it to work"
+**Root cause:** the difficulty ComboBox used a custom button cell that JavaFX refreshed only when it chose to, racing the skin on real Windows; the U-56/U-92 re-drive hacks papered over it and still lost the race often.
+**Fix:** a StringConverter instead of a custom button cell. The default button cell's text binding consults the converter on every setValue, so the value shows on the first render with no re-drive and no reopen. DifficultyCell and the redrive methods are deleted.
+**Status:** `DONE`

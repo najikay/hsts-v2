@@ -392,17 +392,23 @@ public final class BotManagerView extends AbstractScreen {
         if (summary.loaded()) {
             Label sources = new Label(summary.sourcesLabel());
             sources.getStyleClass().addAll("small", "muted");
-            Button action = summary.hasBot()
-                    ? Buttons.styled(summary.actionLabel(), Buttons.OUTLINE, Buttons.SMALL)
-                    : Buttons.styled(summary.actionLabel(), Buttons.PRIMARY, Buttons.SMALL);
-            action.setOnAction(e -> {
-                selectCourse(summary.courseCode());
-                if (!summary.hasBot()) {
-                    createBot(summary.courseCode());
-                }
-            });
-            HBox bottom = new HBox(10, sources, Buttons.spacer(), action);
+            // 2026-09-02, U-95: the Manage button is gone. Clicking the card selects the
+            // course and fills the detail pane on the right, which is where every bot action
+            // already lives - Manage was a second door to a room the card already opens, so
+            // it did nothing the card did not. Create stays: it is the only way to make a
+            // bot, and it is the affordance a teacher looks for on a bot-less card. Delete
+            // stays on its own row below (U-39), a distinct destructive action.
+            HBox bottom = new HBox(10, sources, Buttons.spacer());
             bottom.setAlignment(Pos.CENTER_LEFT);
+            if (!summary.hasBot()) {
+                Button create = Buttons.styled(summary.actionLabel(), Buttons.PRIMARY,
+                        Buttons.SMALL);
+                create.setOnAction(e -> {
+                    selectCourse(summary.courseCode());
+                    createBot(summary.courseCode());
+                });
+                bottom.getChildren().add(create);
+            }
             box.getChildren().add(bottom);
 
             // ⚑ 2026-08-30, live session, U-39. Delete goes on the card that carries Manage,
