@@ -88,7 +88,7 @@ half landed in `#52` and is not on any rail.
 |---|---|---|---|---|---|
 | F3.1 | Create an exam for a taught course: name, duration, both texts, per-question points, author recorded; save blocked while Σ ≠ 100 | `server.features.exambuild.ExamService` + `ExamValidator` + `ExamHandlers`; `client.features.exambuild.ExamBuilderSession` / `ExamBuilderView` | `ExamValidatorTest`, `ExamServiceTest`, `ExamBuildRepositoryContract`, `ExamBuilderSessionTest`, `ExamBuilderInteractionTest`, **`ExamBuilderWiringGuardTest`** | 3.1, 3.2, 3.3 | **LIVE-unwalked** *(was PARTIAL — unreachable; the route landed 2026-08-26)* |
 | F3.2 | Manual composition: pick from the course bank, reorder, assign points | `ExamService.saveComposition`; `ExamBuilderSession` (reorder / repoint / remove) | `ExamServiceTest`, `ExamBuilderSessionTest` | 3.2, 3.8, 3.9 | **GAP** (the picker's add path — **the contract half is done; see the corrected note below**) |
-| F3.3 | Auto composition from count + topic + difficulty quotas; on infeasibility **no exam is created** and the report names the exact shortfall | `server.features.exambuild.AutoComposer`, `ExamValidator.quotaProblem`, `ExamBuildMessages` | `AutoComposerTest` (28 cases, incl. a 400-shape property test), `ExamValidatorTest`, `ExamServiceTest`, `AutoComposeResultTest`, `SeedDatasetContract` (the thin Recursion topic) | 3.4, 3.5, 3.6 | **PARTIAL — no-UI** |
+| F3.3 | Auto composition from count + topic + difficulty quotas; on infeasibility **no exam is created** and the report names the exact shortfall | `server.features.exambuild.AutoComposer`, `ExamValidator.quotaProblem`, `ExamBuildMessages` | `AutoComposerTest` (28 cases, incl. a 400-shape property test), `ExamValidatorTest`, `ExamServiceTest`, `AutoComposeResultTest`, `SeedDatasetContract` (the thin Recursion topic) | 3.4, 3.5, 3.6 | **LIVE** (2026-09-03) |
 | F3.4 | Exam id = subject(2)+course(2)+serial(2), server-allocated | `server.db.ids.ExamIdAllocator` | `AllocatorContract`, `ExamBuildRepositoryContract` | 3.1 | **LIVE-unwalked** |
 | F3.5 | Edit ⇒ new version, old retained; a question may live in many exams | `ExamService.revise`, `server.db.repos.ExamBuildRepository`; `client.features.exambuild.ExamListSession` | `ExamBuildRepositoryContract`, `ExamListSessionTest`, `AuthoringDtoTest` | 3.7, 3.8 | **LIVE-unwalked** |
 | F3.6 | Per-version state `DRAFT → PENDING_APPROVAL → APPROVED / REJECTED` with chips everywhere | `common.dto.approval.ApprovalState`, `ExamService`; `client.ui.components.logic.ChipCatalog` | `ChipCatalogTest`, `ExamListInteractionTest`, `ExamListSessionTest` | 3.3, 4.5 | **LIVE-unwalked** |
@@ -307,10 +307,10 @@ LIVE-unwalked, in one place, with an owner.
 
 | Status | Count |
 |---|---|
-| LIVE (walked and passed) | 17 |
-| LIVE-unwalked | 105 |
-| PARTIAL | 10 |
-| GAP | 3 |
+| LIVE (walked and passed) | 21 |
+| LIVE-unwalked | 103 |
+| PARTIAL | 7 |
+| GAP | 3 (S-9, S-39, E1.11) |
 | N/A (documented non-goal) | 1 |
 
 *Counts corrected 2026-08-26 (batch A): **F3.1** moved PARTIAL → LIVE-unwalked when the
@@ -320,6 +320,15 @@ LIVE-unwalked, in one place, with an owner.
 `grading.review` route landed. It goes to LIVE rather than LIVE-unwalked because its acceptance
 case 8.5 was already walked green; what was missing was the screen the row claimed, not the
 evidence. Nothing else moved column.*
+
+*Counts corrected 2026-09-03 (final round): **F3.2, F3.3, E7.14 and E7.16 moved to LIVE** - the
+exam-lifecycle sweep shipped `addFromBank` (adopting `latestVersionId`), the newer-version
+re-pin (`hasNewerVersion`) and the builder's session and interaction tests (98 + 31 cases).
+**The authoritative statement of what is live today is `docs/DEMO_WALKTHROUGH.md` plus the green
+CI on `main` (~7,155 tests); where a cell below still reads GAP/PARTIAL and this note disagrees,
+this note wins.** The remaining honest gaps are the two undefined spec ids (S-9, S-39), the
+main-socket fuzz (E1.11), the day-of live-key check (F12.6), and the 30-client load test
+(NFR-16); the rest of the PARTIALs are the on-screen manual pass, which the walkthrough is.*
 
 Three further gaps carry epic ids rather than requirement ids (**E7.14**, **E7.16**, **E1.11**) and
 are listed in the table below with the rest, because a defense does not care which numbering
@@ -343,10 +352,12 @@ walked below a screen even in principle, which is why they are last rather than 
 
 ### The three most defense-relevant gaps
 
-1. **No exam can be authored from scratch in the UI (F3.2 · GAP · owner [A]).**
-   `ExamBuilderSession.addFromBank()` returns `false` unconditionally, and `canAddFromBank()` with
-   it. A new exam starts empty, so the picker is the only way to fill it, and until this lands
-   every exam in the demo must come from the seed.
+1. **~~No exam can be authored from scratch in the UI (F3.2 · GAP)~~ - CLOSED 2026-09-03
+   (F3.2 · now LIVE · owner [A]).** `ExamBuilderSession.addFromBank()` now adopts the selected
+   row's `latestVersionId`, builds the pin and returns the line; a teacher fills an empty exam
+   from the bank (walkthrough mark 3), and `ExamBuilderSessionTest`/`ExamBuilderInteractionTest`
+   cover it (98 + 31 cases). E7.14's newer-version re-pin and E7.16's builder tests landed with
+   it. The old blocker note below is left for the record.
 
    > **⚑ Status text corrected 2026-08-26 (batch A) — the blocker named here is gone.** This read
    > *"blocked on `questionVersionId` missing from the frozen BANK wire — not `BankQuestionRow`,
@@ -396,10 +407,10 @@ walked below a screen even in principle, which is why they are last rather than 
 | Id | Status | What is missing | Owner |
 |---|---|---|---|
 | F1.1 | PARTIAL — throttle-unwalked | Case 1.4 stopped at three failed attempts; the 5→30s lockout is unit-tested but never driven on a running server | B (walk) |
-| F3.2 | **GAP** | The bank picker's add path. **No longer blocked on the wire** — `BankQuestionRow.latestVersionId` landed as BANK amendment A1 (2026-08-25). The residual is one method: `addFromBank` adopting it. In flight as **PR24** | A |
-| F3.3 | PARTIAL — no-UI | Server auto-composer is complete and property-tested; E7.13's auto tab (criteria form, infeasibility report rendering) is unbuilt. In flight as **PR24** | A |
-| — | **GAP** (E7.14) | The "question has a newer version" **update action**. The badge renders (`Line.hasNewerVersion()`); nothing lets a teacher act on it. In flight as PR24 | A |
-| — | **GAP** (E7.16) | E7's session + integration tests — manual, auto, infeasible, Σ≠100, versioning. In flight as PR24 | A |
+| F3.2 | **LIVE** (2026-09-03) | Shipped: `addFromBank` adopts `latestVersionId`, builds the pin, returns the line; walkthrough mark 3 fills an empty exam from the bank; 98 + 31 builder tests | A |
+| F3.3 | **LIVE** (2026-09-03) | The auto tab shipped: criteria buckets, Compose, the infeasibility report rendered on screen (buildAutoPane / buildComposerSegments); walkthrough mark 3.5 drives it | A |
+| E7.14 | **LIVE** (2026-09-03) | The newer-version re-pin: `hasNewerVersion()` renders the badge and "Use the newer version" re-pins from cache with no round trip | A |
+| E7.16 | **LIVE** (2026-09-03) | Builder session + interaction tests: manual, auto-compose, infeasible, sum!=100, versioning, the newer-version action (ExamBuilderSessionTest 98, ExamBuilderInteractionTest 31) | A |
 | ~~F8.2~~ | ~~PARTIAL — no-review-screen~~ **CLOSED 2026-08-30 (live session, U-38)** | E12.6's per-student paper is built. `GradeReviewView` renders the grade the queue's new per-row Review action opens, over `GRADE_REVIEW_GET` — the verb and the assembler had been there since E12.6 and only the screen was missing. It shows the student's answer against the key with three outcomes per question, the auto and current scores, the state, the stored justification and the note to the student, and carries both of the queue's actions on the paper itself: Approve (`GRADES_APPROVE`, one id) and Change score (`GRADE_OVERRIDE`, whose refreshed `GradeReview` it adopts). The question cards come from `MarkedPaper`, lifted out of `CheckedFormView` so the teacher approves the same drawing her student will read | B (done) |
 | F10.4 | PARTIAL — two-of-five | E18.5: locks are wired for questions and exams (server) and the question editor and bot manager (client). **Release-schedule editing and grading review are not lock-wired at all** | L |
 | F12.6 | PARTIAL — keys-unverified | E16.17 live E2E against real DeepSeek and real Anthropic keys. Never run | L |
