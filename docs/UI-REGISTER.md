@@ -741,3 +741,9 @@ five new entries, one reopening.
 **In Naji's words:** "the her score line on the histogram overlays on the her score text and it doesn't look too good... maybe we just remove the median and average?"
 **Ruling:** on the by-student histogram the mean and median MARKER lines are dropped - they are already stat cards directly above the chart - so only her accent marker is drawn inside the sigma band, and her label gets a solid pill and sits clear of its own line. The other two dimensions keep all three markers. A hidden marker now carries no text.
 **Status:** `DONE`
+
+### U-98 · FUNCTIONAL · edit-question difficulty now shows on the FIRST open (real root cause; supersedes U-96 timing)
+**In Naji's words:** "the default difficulty on the question is still not working... some easy questions worked, most others I had to open then discard then reopen"
+**Analysis:** the editor screen is CACHED (one instance for the process) and difficultyBox is a reused field. On its first ever show the ComboBox has no skin, and a value set before the skin exists leaves the default button cell blank until a refresh forces it - which is why the FIRST question opened in a session was blank and a discard+reopen (skin now exists) fixed it. "Easy worked, hard did not" was the illusion of "first-open vs later-opens", not the value. The U-96 converter made rendering value-independent but did not beat the skin race; the U-96 test asserted getValue, not the rendered button text, and the harness makes skins eagerly, so it stayed green.
+**Fix:** key the re-assert on the SKIN (the thing that renders), not a guessed pulse (U-92) or scene-attach: set the value, and if the skin is absent re-set it the instant it appears. Items are set once (re-running setAll on a cached box can drop the value). The test now asserts the rendered button-cell text for EASY, MEDIUM and HARD on a fresh open.
+**Status:** `DONE`

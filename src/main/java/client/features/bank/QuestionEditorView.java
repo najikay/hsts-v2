@@ -311,7 +311,11 @@ public final class QuestionEditorView extends AbstractScreen {
         courseField.setManaged(creating);
 
         difficultyBox.getStyleClass().add("question-difficulty");
-        difficultyBox.getItems().setAll(Difficulty.values());
+        // Items set once: this box is a reused field on a cached screen, and re-running
+        // setAll on every visit can drop the current value out of the button cell (U-98).
+        if (difficultyBox.getItems().isEmpty()) {
+            difficultyBox.getItems().setAll(Difficulty.values());
+        }
         // 2026-09-02, U-96: a StringConverter, not a custom button cell. The old button cell
         // (U-56/U-92) rendered only when JavaFX chose to refresh it, which raced the skin on
         // real Windows - the box opened blank until an open/discard/reopen forced a refresh.
@@ -416,6 +420,39 @@ public final class QuestionEditorView extends AbstractScreen {
     }
 
     /**
+     * Shows a difficulty in the box, reliably on the FIRST open of the cached editor (U-98).
+     *
+     * <p>The screen is cached, so on its first ever show the ComboBox has no skin yet, and a
+     * value set before the skin exists leaves the default button cell blank until something
+     * forces a refresh - which is why editing the first question of a session showed an empty
+     * difficulty until an open/discard/reopen (U-56 and U-92 chased this with a pulse and a
+     * scene listener and still lost the race; the skin, not the scene, is what renders the
+     * cell). The fix keys on the skin itself: set the value now, and if the skin is not there
+     * yet, re-set it the instant it appears - a definite event, not a guessed pulse.
+     */
+    private void showDifficulty(Difficulty value) {
+        difficultyBox.setValue(value);
+        if (difficultyBox.getSkin() == null) {
+            difficultyBox.skinProperty().addListener(new javafx.beans.value.ChangeListener<>() {
+                @Override
+                public void changed(javafx.beans.value.ObservableValue<? extends javafx.scene.control.Skin<?>> obs,
+                                    javafx.scene.control.Skin<?> was, javafx.scene.control.Skin<?> now) {
+                    if (now != null) {
+                        difficultyBox.skinProperty().removeListener(this);
+                        filling = true;
+                        try {
+                            difficultyBox.setValue(null);
+                            difficultyBox.setValue(value);
+                        } finally {
+                            filling = false;
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    /**
      * Puts the session's values into the controls without echoing them back.
      *
      * <p>{@code RadioGroup.select} is silent by contract, but the text properties are not, so the
@@ -443,9 +480,7 @@ public final class QuestionEditorView extends AbstractScreen {
                         .ifPresent(course -> courseBox.getSelectionModel().select(course));
             }
             if (session.difficulty() != null) {
-                // U-96: setValue plus the converter shows the difficulty from the first
-                // render; no re-drive, no skin race.
-                difficultyBox.setValue(session.difficulty());
+                showDifficulty(session.difficulty());
             }
         } finally {
             filling = false;

@@ -103,3 +103,8 @@ U-97: student histogram now shows only her marker (mean/median are the cards abo
 label pill sits clear of the line. Difficulty (U-96): the interaction test now proves the
 converter renders EASY/MEDIUM/HARD identically (value-independent, no race) - if the flaky
 behaviour persists it is a stale local build, so pull + clean package + relaunch before retesting.
+
+U-98: difficulty-on-edit real root cause found - cached editor + ComboBox skin race on first
+open (not value-dependent; "easy vs hard" was "first open vs later"). Fixed by re-asserting the
+value on skinProperty. Test now checks rendered button text for all three difficulties.
+Histogram "Her score" label: confirmed good - U-97 pill at the top, never covered by a bar.

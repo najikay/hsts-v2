@@ -114,7 +114,7 @@ class ScreenshotTourTest extends ApplicationTest {
             Stage stage = new Stage();
             new ClientApp().start(stage);
             stage.setWidth(1280);
-            stage.setHeight(800);
+            stage.setHeight(1500);
         });
         WaitForAsyncUtils.waitForFxEvents();
         ScreenManager manager = ScreenManager.getInstance();

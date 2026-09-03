@@ -259,7 +259,42 @@ class QuestionEditorInteractionTest extends ApplicationTest {
         for (Difficulty d : Difficulty.values()) {
             assertThat(box.getConverter().toString(d)).isEqualTo(BankCopy.difficulty(d));
         }
+        // U-98: the BUTTON CELL actually shows the text on first render - the property the
+        // old getValue-only assertion missed, and the whole point of the skin re-assert.
+        assertThat(renderedButtonText(box))
+                .as("the difficulty is visible in the box from the first open, no reopen")
+                .isEqualTo(BankCopy.difficulty(Difficulty.HARD));
         assertThat(labelTexts(scene)).doesNotContain(QuestionEditorCopy.UNSAVED);
+    }
+
+    @Test
+    @DisplayName("every difficulty renders in the box on a first open (U-98, no reopen)")
+    void everyDifficultyShowsOnFirstOpen() {
+        for (Difficulty difficulty : Difficulty.values()) {
+            QuestionDetail detail = new QuestionDetail("11005", "11", "Algebra", 2, 2,
+                    "Read the diagram and answer",
+                    List.of("Twelve", "Fourteen", "Sixteen", "Eighteen"), 3, "Geometry",
+                    difficulty, false, "Dana Cohen", SPRING);
+            Scene scene = openEditor(connection -> { },
+                    NavParams.of(QuestionEditorView.PARAM_DETAIL, detail));
+            WaitForAsyncUtils.waitForFxEvents();
+            @SuppressWarnings("unchecked")
+            javafx.scene.control.ComboBox<Difficulty> box =
+                    (javafx.scene.control.ComboBox<Difficulty>)
+                            scene.getRoot().lookup(".question-difficulty");
+            assertThat(renderedButtonText(box))
+                    .as("difficulty " + difficulty + " must show in the box on the first open")
+                    .isEqualTo(BankCopy.difficulty(difficulty));
+        }
+    }
+
+    /** The text the ComboBox button cell actually displays (U-98). */
+    private static String renderedButtonText(javafx.scene.control.ComboBox<Difficulty> box) {
+        javafx.scene.control.ListCell<Difficulty> cell = box.getButtonCell();
+        if (cell != null && cell.getText() != null) {
+            return cell.getText();
+        }
+        return box.getValue() == null ? null : box.getConverter().toString(box.getValue());
     }
 
     @Test
