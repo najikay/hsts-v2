@@ -424,28 +424,42 @@ public final class StatChart extends VBox {
             double top = TOP_PAD;
             double base = TOP_PAD + plotHeight;
 
-            double meanX = LEFT_GUTTER + logic.meanX(plotWidth);
-            meanMarker.setStartX(meanX);
-            meanMarker.setEndX(meanX);
-            meanMarker.setStartY(top);
-            meanMarker.setEndY(base);
-            meanLabel.setText(logic.meanLabel());
-            meanLabel.autosize();
-            meanLabel.relocate(clampLabelX(meanX, meanLabel.getWidth()), 2);
-
-            double medianX = LEFT_GUTTER + logic.medianX(plotWidth);
-            medianMarker.setStartX(medianX);
-            medianMarker.setEndX(medianX);
-            medianMarker.setStartY(top);
-            medianMarker.setEndY(base);
-            medianLabel.setText(logic.medianLabel());
-            medianLabel.autosize();
-            medianLabel.relocate(clampLabelX(medianX, medianLabel.getWidth()), 15);
-
-            // REPORTS A2: one person's own score inside the class distribution, drawn only
-            // when the data carries one (the principal's by-student report; every other
-            // caller marks nothing and these nodes stay hidden).
+            // 2026-09-03, U-97: on the by-student report the chart carries her own marker,
+            // and the class mean and median are already stat cards directly above it - so
+            // there the mean and median MARKER lines are dropped, both to declutter and
+            // because three labels on one narrow axis collided. Elsewhere all three show.
             boolean marked = logic.hasSubjectScore();
+            boolean showClassMarkers = !marked;
+            meanMarker.setVisible(showClassMarkers);
+            meanLabel.setVisible(showClassMarkers);
+            medianMarker.setVisible(showClassMarkers);
+            medianLabel.setVisible(showClassMarkers);
+            if (!showClassMarkers) {
+                // A hidden marker carries no text: it stays out of the accessibility tree and
+                // out of any label census (U-97).
+                meanLabel.setText(null);
+                medianLabel.setText(null);
+            }
+            if (showClassMarkers) {
+                double meanX = LEFT_GUTTER + logic.meanX(plotWidth);
+                meanMarker.setStartX(meanX);
+                meanMarker.setEndX(meanX);
+                meanMarker.setStartY(top);
+                meanMarker.setEndY(base);
+                meanLabel.setText(logic.meanLabel());
+                meanLabel.autosize();
+                meanLabel.relocate(clampLabelX(meanX, meanLabel.getWidth()), 2);
+
+                double medianX = LEFT_GUTTER + logic.medianX(plotWidth);
+                medianMarker.setStartX(medianX);
+                medianMarker.setEndX(medianX);
+                medianMarker.setStartY(top);
+                medianMarker.setEndY(base);
+                medianLabel.setText(logic.medianLabel());
+                medianLabel.autosize();
+                medianLabel.relocate(clampLabelX(medianX, medianLabel.getWidth()), 15);
+            }
+
             subjectMarker.setVisible(marked);
             subjectLabel.setVisible(marked);
             if (marked) {
@@ -456,7 +470,12 @@ public final class StatChart extends VBox {
                 subjectMarker.setEndY(base);
                 subjectLabel.setText(logic.subjectLabel());
                 subjectLabel.autosize();
-                subjectLabel.relocate(clampLabelX(subjectX, subjectLabel.getWidth()), 28);
+                // Top slot, and offset clear of its own line: a label centred on the line
+                // had the line running through the text (U-97). The background pill masks
+                // any bar behind it.
+                double subjectLabelX = subjectX + 6;
+                double maxX = getWidth() - subjectLabel.getWidth();
+                subjectLabel.relocate(Math.max(0, Math.min(maxX, subjectLabelX)), 2);
             }
         }
 

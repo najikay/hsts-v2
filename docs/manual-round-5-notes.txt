@@ -98,3 +98,8 @@ Final round, three more (2026-09-02): U-94 System theme follows OS live (refresh
 window focus; was never called), U-95 bot Manage button removed (card click opens the detail
 pane), U-96 edit-question difficulty shows from the first render (StringConverter replaces the
 racing custom button cell; redrive hacks deleted).
+
+U-97: student histogram now shows only her marker (mean/median are the cards above it); her
+label pill sits clear of the line. Difficulty (U-96): the interaction test now proves the
+converter renders EASY/MEDIUM/HARD identically (value-independent, no race) - if the flaky
+behaviour persists it is a stale local build, so pull + clean package + relaunch before retesting.

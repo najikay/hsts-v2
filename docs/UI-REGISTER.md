@@ -736,3 +736,8 @@ five new entries, one reopening.
 **Root cause:** the difficulty ComboBox used a custom button cell that JavaFX refreshed only when it chose to, racing the skin on real Windows; the U-56/U-92 re-drive hacks papered over it and still lost the race often.
 **Fix:** a StringConverter instead of a custom button cell. The default button cell's text binding consults the converter on every setValue, so the value shows on the first render with no re-drive and no reopen. DifficultyCell and the redrive methods are deleted.
 **Status:** `DONE`
+
+### U-97 · UX · student histogram: her marker alone, mean/median to the cards
+**In Naji's words:** "the her score line on the histogram overlays on the her score text and it doesn't look too good... maybe we just remove the median and average?"
+**Ruling:** on the by-student histogram the mean and median MARKER lines are dropped - they are already stat cards directly above the chart - so only her accent marker is drawn inside the sigma band, and her label gets a solid pill and sits clear of its own line. The other two dimensions keep all three markers. A hidden marker now carries no text.
+**Status:** `DONE`

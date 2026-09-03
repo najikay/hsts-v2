@@ -254,6 +254,11 @@ class QuestionEditorInteractionTest extends ApplicationTest {
                 .as("and the converter renders it, so the button shows text from the jump "
                         + "with no re-drive and no reopen (U-96)")
                 .isEqualTo(BankCopy.difficulty(Difficulty.HARD));
+        // U-96 value-independence: the converter renders every difficulty the same way, so
+        // there is no "easy works, hard does not" - the pre-converter build's race signature.
+        for (Difficulty d : Difficulty.values()) {
+            assertThat(box.getConverter().toString(d)).isEqualTo(BankCopy.difficulty(d));
+        }
         assertThat(labelTexts(scene)).doesNotContain(QuestionEditorCopy.UNSAVED);
     }
 

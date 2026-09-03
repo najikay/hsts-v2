@@ -115,9 +115,11 @@ class StatChartInteractionTest extends ApplicationTest {
 
         assertThat(scene.getRoot().lookupAll(".stat-marker").stream()
                 .filter(javafx.scene.Node::isVisible).count())
-                .as("mean, median and her score")
-                .isEqualTo(3);
-        assertThat(labelTexts()).contains("Her score 60");
+                .as("U-97: on the student chart only HER marker is drawn; the class mean and "
+                        + "median are stat cards above it, so their marker lines are dropped "
+                        + "to declutter and to stop three labels colliding on one axis")
+                .isEqualTo(1);
+        assertThat(labelTexts()).contains("Her score 60").doesNotContain("Mean 72.5");
     }
 
     @Test

@@ -1578,7 +1578,12 @@
     -fx-text-fill: -hsts-muted;
 }
 .marker-label.median { -fx-text-fill: -hsts-text; }
-.marker-label.subject { -fx-text-fill: -hsts-accent; }
+.marker-label.subject {
+    -fx-text-fill: -hsts-on-accent;
+    -fx-background-color: -hsts-accent;
+    -fx-background-radius: 4px;
+    -fx-padding: 1px 6px;
+}
 /* U-90 full form: the student report's own headline over her cards. */
 .reports-student-headline { -fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -hsts-accent; }
 /* U-90 full form: the dedicated student report's hero and trail. */
